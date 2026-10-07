@@ -46,26 +46,23 @@
   <!-- CLI agents group -->
   <rect x="40" y="420" width="420" height="200" rx="12" fill="#f0fdf4" stroke="#16a34a"/>
   <text x="250" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#166534">CLI 代理 / CLI Agents</text>
-  <rect x="60" y="462" width="115" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="117" y="484" text-anchor="middle" font-size="12" fill="#14532d">CodeBuddy 国际版</text>
-  <text x="117" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">deepseek-v4.1-flash</text>
-  <rect x="187" y="462" width="115" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="244" y="484" text-anchor="middle" font-size="12" fill="#14532d">CodeBuddy 国内版</text>
-  <text x="244" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">deepseek-v4.1-flash</text>
-  <rect x="60" y="528" width="115" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="117" y="550" text-anchor="middle" font-size="12" fill="#14532d">Antigravity</text>
-  <text x="117" y="568" text-anchor="middle" font-size="11" fill="#4d7c0f">gemini-3.8-flash</text>
-  <rect x="187" y="528" width="115" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="244" y="550" text-anchor="middle" font-size="12" fill="#14532d">GitHub Copilot</text>
-  <text x="244" y="568" text-anchor="middle" font-size="11" fill="#4d7c0f">auto</text>
-  <rect x="315" y="462" width="125" height="120" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="377" y="490" text-anchor="middle" font-size="12" fill="#14532d">MiniMax (mmx)</text>
-  <text x="377" y="508" text-anchor="middle" font-size="11" fill="#4d7c0f">MiniMax-M3.1-Flash-Preview</text>
-  <text x="377" y="528" text-anchor="middle" font-size="11" fill="#64748b">API 聊天型 / chat-only</text>
-  <text x="377" y="548" text-anchor="middle" font-size="11" fill="#64748b">纯文本进 / 文本出</text>
-  <text x="377" y="566" text-anchor="middle" font-size="11" fill="#64748b">text in / text out</text>
-  <!-- failover dashed arrow -->
-  <path d="M 117 528 Q 150 505 185 490" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+  <rect x="60" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text x="120" y="484" text-anchor="middle" font-size="12" fill="#14532d">CodeBuddy</text>
+  <text x="120" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">国际版 / intl</text>
+  <rect x="190" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text x="250" y="484" text-anchor="middle" font-size="12" fill="#14532d">CodeBuddy</text>
+  <text x="250" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">国内版 / cn</text>
+  <rect x="320" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text x="380" y="484" text-anchor="middle" font-size="12" fill="#14532d">Antigravity</text>
+  <text x="380" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">gemini-3.8-flash</text>
+  <rect x="60" y="528" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text x="120" y="550" text-anchor="middle" font-size="12" fill="#14532d">GitHub Copilot</text>
+  <text x="120" y="568" text-anchor="middle" font-size="11" fill="#4d7c0f">auto</text>
+  <rect x="190" y="528" width="250" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text x="315" y="548" text-anchor="middle" font-size="12" fill="#14532d">MiniMax (mmx)</text>
+  <text x="315" y="564" text-anchor="middle" font-size="11" fill="#4d7c0f">MiniMax-M3.1-Flash-Preview</text>
+  <text x="315" y="578" text-anchor="middle" font-size="11" fill="#64748b">API 聊天型 / chat-only · 纯文本进 / 文本出</text>
+  <path d="M 178 486 Q 185 472 192 486" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr)"/>
   <text x="250" y="606" text-anchor="middle" font-size="11" fill="#dc2626">额度耗尽 → 自动改派 / auto failover on quota drain</text>
 
   <!-- desktop agents group -->
