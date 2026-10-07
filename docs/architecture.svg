@@ -66,7 +66,7 @@
   <text x="377" y="566" text-anchor="middle" font-size="11" fill="#64748b">text in / text out</text>
   <!-- failover dashed arrow -->
   <path d="M 117 528 Q 150 505 185 490" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr)"/>
-  <text x="96" y="606" text-anchor="middle" font-size="11" fill="#dc2626">额度耗尽 → 自动改派 / auto failover on quota drain</text>
+  <text x="250" y="606" text-anchor="middle" font-size="11" fill="#dc2626">额度耗尽 → 自动改派 / auto failover on quota drain</text>
 
   <!-- desktop agents group -->
   <rect x="520" y="420" width="400" height="200" rx="12" fill="#fffbeb" stroke="#d97706"/>
