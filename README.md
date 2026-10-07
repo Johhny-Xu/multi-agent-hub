@@ -108,6 +108,11 @@ cd console
 - hub 默认只绑定 `127.0.0.1`。若需局域网访问，请置于可信网络并配合防火墙规则；不要把未改 token 的实例直接暴露到公网。
 - `state/`、会话记录等数据目录包含智能体对话内容，注意备份与访问权限。
 
+### 反代会封号，本项目绝不封号
+
+- ❌ **逆向反代 / API 转发**：把网页端逆向成非官方 API 接口、绕过官方客户端调用——这是典型的违反服务条款滥用，也是封号重灾区。
+- ✅ **本项目**：只用各家**官方 CLI 的无头模式**（`codebuddy -p`、`copilot -p`、`mmx text chat`、`agy` 等）与你自己登录的官方桌面客户端（CDP 仅驱动你已登录的桌面应用）——和你在终端里手动敲命令是同一种合规使用方式，只是把"手动敲"交给了调度器。
+
 ## English
 
 Tired of tiptoeing around quota limits and constantly swapping "free-tier tokens" by hand? Worried about your local codebase being laid completely bare to third-party clouds? **Agent Hub** (`better-free-agent-teams`) has got you covered! Born out of pure frustration with juggling disposable free-tier AI accounts—getting cut off mid-task and having to reset everything—this project wires multiple AI agents (Trae, Antigravity, Copilot, and more) into a single self-hosted bus. It auto-fails over when quotas run dry and keeps your sessions and code strictly within your LAN.
@@ -211,6 +216,11 @@ The console listens on `8890` by default; override with the `HUBCONSOLE_HOST` / 
 - **Change the default token on first deployment**: hub↔console and agent↔bus communication is token-authenticated. Tokens in the example config are for local testing only — replace all of them before exposing the deployment to a LAN / the public internet.
 - The hub binds to `127.0.0.1` by default. For LAN access, keep it on a trusted network with firewall rules; never expose an instance with default tokens to the public internet.
 - `state/`, conversation records and other data directories contain agent conversations — mind backups and access permissions.
+
+### Reverse proxies get you banned — this project doesn't
+
+- ❌ **Reverse proxies / unofficial API shims**: re-engineering web clients into unofficial API endpoints and bypassing the official clients — a classic Terms-of-Service violation and the #1 cause of account bans.
+- ✅ **This project**: only uses each vendor's **official CLI headless mode** (`codebuddy -p`, `copilot -p`, `mmx text chat`, `agy`, ...) and your own logged-in official desktop apps (CDP merely drives the desktop apps you are already signed into) — exactly the same legitimate usage as typing the commands yourself in a terminal, just scheduled.
 
 ## 致谢 / Acknowledgements
 
