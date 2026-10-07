@@ -1917,6 +1917,155 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
+
+  /* ============ 视觉精修 / visual polish (2026-10-07, CSS-only) ============ */
+
+  /* — 平台列表项：呼吸感卡片 + 左侧激活条 — */
+  .platform-list { padding: 10px; gap: 8px; }
+  .platform-item {
+    border-radius: 10px; border: 1px solid transparent;
+    padding: 10px 12px; position: relative;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background-color .18s ease;
+  }
+  .platform-item:hover {
+    transform: translateX(2px);
+    background: var(--mcode-surface-hover);
+    box-shadow: var(--mcode-card-shadow);
+  }
+  .platform-item.active, .platform-item.selected {
+    background: var(--mcode-surface-hover);
+    border-color: var(--mcode-border);
+    box-shadow: var(--mcode-card-shadow);
+  }
+  .platform-item.active::before, .platform-item.selected::before {
+    content: ""; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 3px;
+    border-radius: 999px; background: var(--mcode-accent-gradient);
+    box-shadow: 0 0 8px var(--mcode-accent-glow);
+  }
+  .platform-msg-preview { color: var(--mcode-text-subtle); line-height: 1.4; }
+  .platform-time { color: var(--mcode-text-subtle); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .platform-avatar, .avatar-img, .agent-avatar-sm {
+    box-shadow: 0 0 0 1px var(--mcode-border-strong);
+  }
+
+  /* — 未读徽章：红点渐变 + 微光脉冲 — */
+  .platform-badge-pill, .chat-badge, .wb-count, .cb-activity-tab .dot {
+    background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+    color: #fff; box-shadow: 0 0 0 2px var(--mcode-bg-secondary), 0 2px 8px rgba(239, 68, 68, 0.45);
+    font-variant-numeric: tabular-nums;
+  }
+  @keyframes badgePulse { 0%,100% { box-shadow: 0 0 0 2px var(--mcode-bg-secondary), 0 2px 8px rgba(239,68,68,.35); } 50% { box-shadow: 0 0 0 3px var(--mcode-bg-secondary), 0 2px 14px rgba(239,68,68,.65); } }
+  .platform-badge-pill { animation: badgePulse 2.2s ease-in-out infinite; }
+  .platform-sess-pill, .session-selector-pill, .current-agent-pill {
+    border: 1px solid var(--mcode-border); background: var(--mcode-surface-muted);
+    border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+
+  /* — 聊天气泡：用户侧渐变、代理侧左边条、系统侧居中胶囊 — */
+  .chat-msgs, .msgs { scrollbar-gutter: stable; }
+  .bubble { border-radius: 14px; border: 1px solid transparent; transition: border-color .16s ease, box-shadow .16s ease; }
+  .bubble:hover { border-color: var(--mcode-border); box-shadow: var(--mcode-card-shadow); }
+  .bubble.user {
+    background: linear-gradient(135deg, rgba(37,99,235,.16) 0%, rgba(124,58,237,.14) 100%);
+    border-color: rgba(37,99,235,.25);
+  }
+  .bubble.agent { border-left: 3px solid var(--mcode-accent); }
+  .bubble.system {
+    background: var(--mcode-surface-muted); color: var(--mcode-text-subtle);
+    border-radius: 999px; font-size: 12px;
+  }
+  .bubble.md pre, .bubble pre {
+    background: var(--mcode-code-bg); border: 1px solid var(--mcode-border);
+    border-left: 3px solid var(--mcode-accent); border-radius: 8px; padding: 10px 12px;
+  }
+  .bubble a { color: var(--mcode-accent); }
+  .bubble code {
+    background: var(--mcode-code-bg); border: 1px solid var(--mcode-border);
+    border-radius: 5px; padding: 1px 5px; font-size: 12.5px;
+  }
+
+  /* — 输入卡：玻璃拟态 + 聚焦光环 — */
+  .composer-floating-wrap {
+    border: 1px solid var(--mcode-border-strong); border-radius: 16px;
+    background: color-mix(in srgb, var(--mcode-bg-secondary) 82%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--mcode-shadow);
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+  .composer-floating-wrap:focus-within {
+    border-color: var(--mcode-accent);
+    box-shadow: 0 0 0 3px var(--mcode-focus-ring), var(--mcode-shadow);
+  }
+  .composer textarea:focus { outline: none; }
+  .send-btn {
+    border-radius: 10px; font-weight: 600;
+    transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+  }
+  .send-btn:not(:disabled):hover {
+    transform: translateY(-1px); filter: brightness(1.12);
+    box-shadow: 0 4px 16px var(--mcode-accent-glow);
+  }
+
+  /* — 底部状态栏：胶囊分段 + 等宽数字 — */
+  .cb-status-bar-wrap {
+    border-top: 1px solid var(--mcode-border);
+    background: color-mix(in srgb, var(--mcode-bg-secondary) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .cb-status-bar { gap: 4px; font-variant-numeric: tabular-nums; }
+  .cb-status-seg {
+    border-radius: 999px; padding: 2px 9px; font-size: 12px;
+    transition: background-color .16s ease, color .16s ease;
+  }
+  .cb-status-seg:hover { background: var(--mcode-surface-hover); }
+  .cb-status-model, .cb-status-sys-toggle { color: var(--mcode-accent); font-weight: 500; }
+
+  /* — 配额卡片与配额条：渐变填充 + 明细清晰 — */
+  .cb-quota-plat-card {
+    border-radius: 12px; border: 1px solid var(--mcode-border);
+    box-shadow: var(--mcode-card-shadow);
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
+  .cb-quota-plat-card:hover { border-color: var(--mcode-border-strong); box-shadow: var(--mcode-shadow); }
+  .cb-quota-bar-wrap { height: 6px; border-radius: 999px; background: var(--mcode-surface-muted); overflow: hidden; }
+  .cb-quota-bar-fill {
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--mcode-success) 0%, var(--mcode-accent-from) 55%, var(--mcode-accent-to) 100%);
+    transition: width .6s cubic-bezier(.2,.8,.2,1);
+  }
+  .cb-quota-bar-fill.warn { background: linear-gradient(90deg, var(--mcode-warning) 0%, #f97316 100%); }
+  .cb-quota-bar-fill.danger { background: linear-gradient(90deg, var(--mcode-danger) 0%, #f97316 100%); }
+  .cb-quota-item-name { color: var(--mcode-text-muted); }
+  .cb-quota-item-stat { font-variant-numeric: tabular-nums; }
+  .cb-quota-plan-tag {
+    border: 1px solid var(--mcode-border); border-radius: 999px;
+    background: var(--mcode-surface-muted); font-size: 11px;
+  }
+
+  /* — 通用卡片 / 表格 / 模型面板 — */
+  .card {
+    border-radius: 12px; border: 1px solid var(--mcode-border);
+    box-shadow: var(--mcode-card-shadow);
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
+  .card:hover { border-color: var(--mcode-border-strong); }
+  .card-head { border-bottom: 1px solid var(--mcode-border); }
+  .table-wrap { border-radius: 10px; overflow: hidden; border: 1px solid var(--mcode-border); }
+  .model-popover-panel, .mp-model-list {
+    box-shadow: var(--mcode-shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .mp-model-item { border-radius: 8px; transition: background-color .14s ease; }
+  .mp-model-item:hover { background: var(--mcode-surface-hover); }
+  .mp-model-item.selected, .mp-model-item.active { border-left: 3px solid var(--mcode-accent); background: var(--mcode-surface-hover); }
+  .mp-tag-free { background: rgba(16,185,129,.16); color: var(--mcode-success); border: 1px solid rgba(16,185,129,.3); }
+  .mp-tag-depr { background: rgba(245,158,11,.14); color: var(--mcode-warning); border: 1px solid rgba(245,158,11,.3); }
+
+  /* — 数字与字距统一 — */
+  .kpi .mono, .tok-chip, .cb-pop-agent-tok, .cb-pop-sess-row .mono {
+    font-variant-numeric: tabular-nums; letter-spacing: -0.2px;
+  }
+  .empty-tip-card { border-radius: 12px; border: 1px dashed var(--mcode-border-strong); }
+  .chip, .att-chip { border-radius: 999px; border: 1px solid var(--mcode-border); }
 </style>
 </head>
 <body>
