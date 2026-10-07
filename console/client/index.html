@@ -780,7 +780,8 @@
     font-size: 12px;
     padding: 28px 0;
   }
-  .wb-edge-tab {
+  .wb-edge-tab, #wb-edge-tab {
+    display: none !important;
     position: absolute;
     right: 0;
     top: 64px;
@@ -2335,6 +2336,105 @@
   /* 隐藏代理面板的 KPI 概览横条与卡片内冗余的底层 meta 参数行 */
   #kpis, .kpi-row { display: none !important; }
   .card .meta { display: none !important; }
+
+  /* — 对话窗口中置 (居中列对齐规范) — */
+  .chat-msgs {
+    align-items: center;
+  }
+  .bubble {
+    width: 100%;
+    max-width: min(100%, 860px) !important;
+  }
+  .bubble.user {
+    align-self: center;
+    max-width: min(100%, 860px) !important;
+  }
+  .bubble.agent {
+    align-self: center;
+    max-width: min(100%, 860px) !important;
+  }
+  .bubble.system {
+    align-self: center;
+    max-width: min(100%, 860px) !important;
+  }
+  .chat-empty-state {
+    max-width: 860px;
+    width: 100%;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  .typing {
+    align-self: center;
+    max-width: min(100%, 860px);
+    width: 100%;
+  }
+  .composer-floating-wrap {
+    max-width: 860px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  .chat-head {
+    max-width: 100%;
+  }
+
+  /* — 思考过程折叠组件样式 (深色高质感思维链) — */
+  .thinking-box {
+    margin: 4px 0 10px 0;
+    border-radius: 10px;
+    background: var(--mcode-surface-muted, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--mcode-border);
+    overflow: hidden;
+    transition: all .16s ease;
+  }
+  .thinking-toggle-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: transparent;
+    border: none;
+    color: var(--mcode-text-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    min-height: 30px;
+    box-shadow: none !important;
+    border-radius: 0;
+    transition: background-color .15s ease, color .15s ease;
+  }
+  .thinking-toggle-btn:hover {
+    background: var(--mcode-surface-hover);
+    color: var(--mcode-text);
+  }
+  .thinking-icon {
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  .thinking-label {
+    flex: 1;
+    font-size: 12px;
+    letter-spacing: -0.1px;
+  }
+  .thinking-arrow {
+    font-size: 11px;
+    color: var(--mcode-text-subtle);
+    transition: transform .2s ease;
+  }
+  .thinking-body {
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--mcode-border);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--mcode-text-muted);
+    background: color-mix(in srgb, var(--mcode-code-bg) 60%, transparent);
+    border-left: 3px solid var(--mcode-accent);
+  }
+  .thinking-body p { margin: 0 0 6px; }
+  .thinking-body p:last-child { margin-bottom: 0; }
+  .thinking-body code { font-size: 12px; color: var(--mcode-accent); }
+
 </style>
 </head>
 <body>
@@ -3368,9 +3468,74 @@
     });
     bh.appendChild(copyBtn);
     b.appendChild(bh);
+
+  // ---------------- 思考过程提取与自动折叠
+  function parseThinking(text, m) {
+    var raw = String(text || '');
+    var thinking = '';
+    // 1. 优先提取对象的 reasoning 或 thought 字段
+    if (m && typeof m.reasoning === 'string' && m.reasoning.trim()) {
+      thinking = m.reasoning.trim();
+    } else if (m && typeof m.thought === 'string' && m.thought.trim()) {
+      thinking = m.thought.trim();
+    }
+    // 2. 检查文本中是否包含 <think>...</think> 或未闭合的 <think>
+    if (!thinking) {
+      var thinkMatch = /<think>([\s\S]*?)(?:<\/think>|$)/i.exec(raw);
+      if (thinkMatch) {
+        thinking = thinkMatch[1].trim();
+        raw = raw.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '').trim();
+      }
+    }
+    // 3. 检查开头是否有 ```thought 或 ```thinking 代码块
+    if (!thinking) {
+      var blockMatch = /^```(?:thought|thinking)\s*\n([\s\S]*?)\n```/i.exec(raw);
+      if (blockMatch) {
+        thinking = blockMatch[1].trim();
+        raw = raw.replace(/^```(?:thought|thinking)\s*\n[\s\S]*?\n```\s*/i, '').trim();
+      }
+    }
+    if (!thinking) {
+      return { hasThinking: false, thinkingText: '', cleanText: raw };
+    }
+    return { hasThinking: true, thinkingText: thinking, cleanText: raw };
+  }
+
     if (role === 'agent') {
+      var parsed = parseThinking(displayText, m);
+      if (parsed.hasThinking) {
+        var thinkBox = el('div', 'thinking-box');
+        var thinkBody = el('div', 'thinking-body');
+        thinkBody.setAttribute('hidden', '');
+        thinkBody.innerHTML = renderMd(parsed.thinkingText);
+
+        var toggleBtn = btn('', 'thinking-toggle-btn', function () {
+          var isHidden = thinkBody.hasAttribute('hidden');
+          if (isHidden) {
+            thinkBody.removeAttribute('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            arrow.textContent = '▴';
+            lbl.textContent = '收起思考过程';
+          } else {
+            thinkBody.setAttribute('hidden', '');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            arrow.textContent = '▾';
+            lbl.textContent = '思考过程';
+          }
+        });
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        var icon = el('span', 'thinking-icon', '💭');
+        var lbl = el('span', 'thinking-label', '思考过程');
+        var arrow = el('span', 'thinking-arrow', '▾');
+        toggleBtn.appendChild(icon);
+        toggleBtn.appendChild(lbl);
+        toggleBtn.appendChild(arrow);
+        thinkBox.appendChild(toggleBtn);
+        thinkBox.appendChild(thinkBody);
+        b.appendChild(thinkBox);
+      }
       var body = el('div');
-      body.innerHTML = renderMd(displayText);
+      body.innerHTML = renderMd(parsed.hasThinking ? parsed.cleanText : displayText);
       b.appendChild(body);
     } else {
       b.appendChild(el('div', null, m.text));
