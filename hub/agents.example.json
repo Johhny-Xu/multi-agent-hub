@@ -1,0 +1,131 @@
+{
+  "agents": {
+    "codebuddy": {
+      "role": "编码 worker 示例（CLI 无头模式）",
+      "description": "编码 worker 示例（CLI 无头模式）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": [
+        "/usr/local/bin/codebuddy-placeholder",
+        "--print-mode",
+        "-y"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "deepseek-v4.1-flash",
+        "luna": "gpt-5.6-luna",
+        "deepseekv41f": "deepseek-v4.1-flash",
+        "grok4.7": "grok-4.7",
+        "grok-4.7": "grok-4.7",
+        "trae": "custom-local:trae",
+        "v41f": "deepseek-v4.1-flash"
+      },
+      "async_default": true
+    },
+    "antigravity": {
+      "role": "编码 worker 示例（OAuth CLI）",
+      "description": "编码 worker 示例（OAuth CLI）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": [
+        "/usr/local/bin/antigravity-placeholder",
+        "--dangerously-skip-permissions",
+        "-p"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "gemini-3.8-flash-medium",
+        "gemini": "gemini-3.8-flash-high",
+        "pro": "gemini-3.1-pro-high",
+        "claude": "claude-sonnet-4-6",
+        "opus": "claude-opus-4-6-thinking",
+        "flash": "gemini-3.7-flash-medium",
+        "g38m": "gemini-3.8-flash-medium"
+      },
+      "async_default": true
+    },
+    "codebuddy-cn": {
+      "role": "编码 worker 示例（独立配置目录）",
+      "description": "编码 worker 示例（独立配置目录）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": [
+        "/usr/local/bin/codebuddy-cn-placeholder",
+        "--print-mode",
+        "-y"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "deepseek-v4.1-flash",
+        "v41f": "deepseek-v4.1-flash"
+      },
+      "workdir_via": "--add-dir",
+      "async_default": true
+    },
+    "traecode": {
+      "role": "桌面版 worker 示例（经专用网关派发, cli 为 null）",
+      "description": "桌面版 worker 示例（经专用网关派发, cli 为 null）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": null,
+      "model_arg": null,
+      "models": {
+        "default": "glm-5.3-flash"
+      }
+    },
+    "zcode": {
+      "role": "桌面版 worker 示例（CDP 驱动脚本）",
+      "description": "桌面版 worker 示例（CDP 驱动脚本）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": null,
+      "model_arg": null,
+      "models": {
+        "default": "GLM-5.3-Flash"
+      },
+      "async_default": true
+    },
+    "mimocode": {
+      "role": "编码 worker 示例（agentic CLI，--pure 反递归）",
+      "description": "编码 worker 示例（agentic CLI，--pure 反递归）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": [
+        "/usr/local/bin/mimocode-placeholder",
+        "run",
+        "--pure"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": "9router/trae"
+      },
+      "async_default": true
+    },
+    "github-copilot": {
+      "role": "编码 worker 示例（Copilot CLI）",
+      "description": "编码 worker 示例（Copilot CLI）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": [
+        "/usr/local/bin/github-copilot-placeholder",
+        "--silent",
+        "--allow-all-tools",
+        "-p",
+        "{task}"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "auto"
+      },
+      "async_default": true
+    },
+    "minimaxcode": {
+      "role": "文本/问答 worker 示例（聊天型 CLI）",
+      "description": "文本/问答 worker 示例（聊天型 CLI）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "cli": [
+        "/usr/local/bin/minimaxcode-placeholder",
+        "text",
+        "chat",
+        "--message",
+        "{task}",
+        "--output",
+        "text"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "MiniMax-M3.1-Flash-Preview",
+        "m3": "MiniMax-M3",
+        "m2.7": "MiniMax-M2.7",
+        "m2.5": "MiniMax-M2.5",
+        "m3.1fp": "MiniMax-M3.1-Flash-Preview"
+      },
+      "async_default": true
+    }
+  }
+}
