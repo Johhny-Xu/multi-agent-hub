@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+node_modules/
+*.log
+hub.env
+.env
+state/
+results/
+*.bak-*
+conversations.json
+external-refs-seen.json
+.DS_Store
