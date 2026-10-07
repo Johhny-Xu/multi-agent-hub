@@ -214,7 +214,7 @@ The console listens on `8890` by default; override with the `HUBCONSOLE_HOST` / 
 
 ## 致谢 / Acknowledgements
 
-- [TraeClaw](https://github.com/) — MIT License, © 2026 firerlAGI。`trae` 通道网关依赖该项目。/ The Trae channel gateway depends on this project.
+- [TraeClaw](https://github.com/firerlAGI/TraeClaw) — MIT License, © 2026 firerlAGI。`trae` 通道网关依赖该项目。/ The Trae channel gateway depends on this project.
 
 ## License / 许可证
 
