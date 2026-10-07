@@ -10,40 +10,23 @@
 
   <rect width="960" height="660" fill="#ffffff"/>
 
-  <!-- entry -->
+  <!-- ============ 第 1 层: 组件框 / component boxes ============ -->
   <rect x="40" y="40" width="230" height="86" rx="10" fill="#f1f5f9" stroke="#64748b"/>
   <text x="155" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#0f172a">你的入口 / Your entry</text>
   <text x="155" y="88" text-anchor="middle" font-size="12" fill="#334155">MCP 客户端 · 工作流 · 脚本</text>
   <text x="155" y="108" text-anchor="middle" font-size="11" fill="#64748b">MCP client / workflow / ask.mjs</text>
 
-  <!-- console -->
   <rect x="620" y="40" width="300" height="86" rx="10" fill="#f5f3ff" stroke="#7c3aed"/>
   <text x="770" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#5b21b6">Web 控制台 / Web Console</text>
   <text x="770" y="88" text-anchor="middle" font-size="12" fill="#4c1d95">console/server.mjs (:8890)</text>
   <text x="770" y="108" text-anchor="middle" font-size="11" fill="#6d28d9">会话线程 · 实时配额 · 派发记录 / sessions · quotas · records</text>
 
-  <!-- hub -->
   <rect x="300" y="205" width="380" height="120" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
   <text x="490" y="235" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e3a8a">任务总线 / Task Bus</text>
   <text x="490" y="260" text-anchor="middle" font-size="13" fill="#1e40af">hub/agent_hub.py — JSON-RPC MCP :8765</text>
   <text x="490" y="282" text-anchor="middle" font-size="12" fill="#1e40af">async_worker.py · 异步派发 / async dispatch</text>
   <text x="490" y="302" text-anchor="middle" font-size="12" fill="#1e40af">额度耗尽自动改派 / auto failover on quota drain</text>
 
-  <!-- arrows: entry <-> hub -->
-  <line x1="270" y1="83" x2="330" y2="225" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <rect x="238" y="128" width="122" height="26" rx="13" fill="#2563eb"/>
-  <text x="299" y="145" text-anchor="middle" font-size="12" fill="#ffffff">① dispatch 派发</text>
-  <line x1="330" y1="250" x2="272" y2="120" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <rect x="228" y="172" width="122" height="26" rx="13" fill="#475569"/>
-  <text x="289" y="189" text-anchor="middle" font-size="12" fill="#ffffff">④ collect 回收</text>
-
-  <!-- arrows: console <-> hub -->
-  <line x1="740" y1="130" x2="600" y2="205" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <line x1="640" y1="222" x2="770" y2="130" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <rect x="596" y="158" width="160" height="26" rx="13" fill="#7c3aed"/>
-  <text x="676" y="175" text-anchor="middle" font-size="12" fill="#ffffff">⑤ 总览 / poll &amp; show</text>
-
-  <!-- CLI agents group -->
   <rect x="40" y="420" width="420" height="200" rx="12" fill="#f0fdf4" stroke="#16a34a"/>
   <text x="250" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#166534">CLI 代理 / CLI Agents</text>
   <rect x="60" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
@@ -62,15 +45,12 @@
   <text x="315" y="548" text-anchor="middle" font-size="12" fill="#14532d">MiniMax (mmx)</text>
   <text x="315" y="564" text-anchor="middle" font-size="11" fill="#4d7c0f">MiniMax-M3.1-Flash-Preview</text>
   <text x="315" y="578" text-anchor="middle" font-size="11" fill="#64748b">API 聊天型 / chat-only · 纯文本进 / 文本出</text>
-  <path d="M 178 486 Q 185 472 192 486" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr)"/>
-  <text x="250" y="606" text-anchor="middle" font-size="11" fill="#dc2626">额度耗尽 → 自动改派 / auto failover on quota drain</text>
 
-  <!-- desktop agents group -->
   <rect x="520" y="420" width="400" height="200" rx="12" fill="#fffbeb" stroke="#d97706"/>
   <text x="720" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#92400e">桌面代理 / Desktop Agents（VNC）</text>
   <rect x="540" y="462" width="170" height="66" rx="8" fill="#ffffff" stroke="#d97706"/>
   <text x="625" y="486" text-anchor="middle" font-size="12" fill="#78350f">ZCode 桌面版 / desktop</text>
-  <text x="625" y="504" text-anchor="middle" font-size="11" fill="#b45309">GLM-5.3-Flash · CDP :9223</text>
+  <text x="625" y="504" text-anchor="middle" font-size="11" fill="#b45309">GLM-5.3-FlashX · CDP :9223</text>
   <rect x="730" y="462" width="170" height="66" rx="8" fill="#ffffff" stroke="#d97706"/>
   <text x="815" y="486" text-anchor="middle" font-size="12" fill="#78350f">TraeCode 桌面版 / desktop</text>
   <text x="815" y="504" text-anchor="middle" font-size="11" fill="#b45309">GLM-5.3-FlashX · CDP :9222</text>
@@ -78,22 +58,32 @@
   <text x="720" y="562" text-anchor="middle" font-size="12" fill="#92400e">drivers/*.js — CDP 派发与增量回复抓取</text>
   <text x="720" y="582" text-anchor="middle" font-size="11" fill="#b45309">CDP dispatch &amp; incremental reply capture</text>
 
-  <!-- arrows: hub -> agents -->
+  <!-- ============ 第 2 层: 连线 / connectors ============ -->
+  <line x1="270" y1="83" x2="330" y2="225" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+  <line x1="330" y1="250" x2="272" y2="120" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+  <line x1="740" y1="130" x2="600" y2="205" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+  <line x1="640" y1="222" x2="770" y2="130" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
   <line x1="380" y1="325" x2="250" y2="415" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <rect x="252" y="352" width="150" height="26" rx="13" fill="#2563eb"/>
-  <text x="327" y="369" text-anchor="middle" font-size="12" fill="#ffffff">② execute 执行</text>
   <line x1="600" y1="325" x2="720" y2="415" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <rect x="596" y="352" width="150" height="26" rx="13" fill="#2563eb"/>
-  <text x="671" y="369" text-anchor="middle" font-size="12" fill="#ffffff">② execute 执行</text>
-
-  <!-- arrows: agents -> hub (results) -->
   <line x1="300" y1="420" x2="420" y2="325" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <rect x="322" y="378" width="150" height="26" rx="13" fill="#475569"/>
-  <text x="397" y="395" text-anchor="middle" font-size="12" fill="#ffffff">③ results 回写 &lt;ref&gt;.json</text>
   <line x1="720" y1="420" x2="590" y2="325" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <rect x="600" y="378" width="150" height="26" rx="13" fill="#475569"/>
+  <path d="M 178 486 Q 185 472 192 486" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+
+  <!-- ============ 第 3 层(顶层): 徽章标签 / badges ============ -->
+  <rect x="238" y="128" width="122" height="26" rx="13" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  <text x="299" y="145" text-anchor="middle" font-size="12" fill="#ffffff">① dispatch 派发</text>
+  <rect x="228" y="172" width="122" height="26" rx="13" fill="#475569" stroke="#ffffff" stroke-width="2"/>
+  <text x="289" y="189" text-anchor="middle" font-size="12" fill="#ffffff">④ collect 回收</text>
+  <rect x="596" y="158" width="160" height="26" rx="13" fill="#7c3aed" stroke="#ffffff" stroke-width="2"/>
+  <text x="676" y="175" text-anchor="middle" font-size="12" fill="#ffffff">⑤ 总览 / poll &amp; show</text>
+  <rect x="252" y="352" width="150" height="26" rx="13" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  <text x="327" y="369" text-anchor="middle" font-size="12" fill="#ffffff">② execute 执行</text>
+  <rect x="596" y="352" width="150" height="26" rx="13" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  <text x="671" y="369" text-anchor="middle" font-size="12" fill="#ffffff">② execute 执行</text>
+  <rect x="322" y="378" width="150" height="26" rx="13" fill="#475569" stroke="#ffffff" stroke-width="2"/>
+  <text x="397" y="395" text-anchor="middle" font-size="12" fill="#ffffff">③ results 回写 &lt;ref&gt;.json</text>
+  <rect x="600" y="378" width="150" height="26" rx="13" fill="#475569" stroke="#ffffff" stroke-width="2"/>
   <text x="675" y="395" text-anchor="middle" font-size="12" fill="#ffffff">③ results 回写 &lt;ref&gt;.json</text>
 
-  <!-- footer flow -->
   <text x="480" y="646" text-anchor="middle" font-size="12" fill="#475569">数据流 / Data flow：① dispatch(task→ref) → ② execute(agent CLI/desktop) → ③ results → ④ collect(hub_wait_result) → ⑤ console 总览</text>
 </svg>
