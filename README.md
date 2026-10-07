@@ -2,9 +2,11 @@
 
 [中文](#中文) | [English](#english)
 
+![Agent Hub 架构与数据流 / Architecture & Data Flow](docs/architecture.svg)
+
 ## 中文
 
-Agent Hub 是一个自托管的多智能体协作枢纽：局域网内的多个 CLI / 桌面 AI 代理（如 ZCode、TraeCode 等）通过统一的 JSON-RPC 任务总线互相派活，并可用网页控制台总览各智能体的会话记录与实时配额。
+还在嫌各家白嫖配额用得提心吊胆、到处手动切“毒鸡蛋”太心累？还在担心本地代码被云端看了个一清二楚？**Agent Hub**（`better-free-agent-teams`）替你一站式解决！本项目源于日常薅各家 AI 额度时，受够了“额度一光满盘皆输、切号切环境切到怀疑人生”的糟心体验，索性把 Trae、Antigravity、Copilot 等多路 Agent 全接到一条本地总线上，自动故障转移与配额调度，代码和任务全在局域网内跑。
 
 ### 架构
 
@@ -108,7 +110,7 @@ cd console
 
 ## English
 
-Agent Hub is a self-hosted multi-agent collaboration hub: multiple CLI / desktop AI agents on your LAN (e.g. ZCode, TraeCode) dispatch tasks to each other through a unified JSON-RPC task bus, and a web console gives you full visibility into every agent's conversations and live model quotas.
+Tired of tiptoeing around quota limits and constantly swapping "free-tier tokens" by hand? Worried about your local codebase being laid completely bare to third-party clouds? **Agent Hub** (`better-free-agent-teams`) has got you covered! Born out of pure frustration with juggling disposable free-tier AI accounts—getting cut off mid-task and having to reset everything—this project wires multiple AI agents (Trae, Antigravity, Copilot, and more) into a single self-hosted bus. It auto-fails over when quotas run dry and keeps your sessions and code strictly within your LAN.
 
 ### Architecture
 
