@@ -2086,6 +2086,14 @@
   .platform-avatar { overflow: hidden; flex-shrink: 0; }
   .avatar-brand-svg { display: block; width: 100%; height: 100%; }
   .avatar-brand-svg text { fill: #fff; }
+
+  /* — 工作台计数是灰色信息文本，不是徽章（fix 红条误伤） — */
+  .wb-count {
+    background: none !important; box-shadow: none !important;
+    color: var(--mcode-text-subtle) !important;
+    font-size: 10.5px !important; font-weight: 400 !important;
+    border-radius: 0 !important; padding: 0 !important;
+  }
 </style>
 </head>
 <body>
