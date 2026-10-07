@@ -185,6 +185,7 @@ The console listens on `8890` by default; override with the `HUBCONSOLE_HOST` / 
 ## 致谢 / Acknowledgements
 
 - [TraeClaw](https://github.com/firerlAGI/TraeClaw) — MIT License, © 2026 firerlAGI。`trae` 通道网关依赖该项目。/ The Trae channel gateway depends on this project.
+- [lobehub icons](https://github.com/lobehub/lobe-icons) — MIT License。控制台品牌图标（Antigravity / MiniMax / CodeBuddy / Copilot / Trae 等）来自该项目。/ Brand icons used in the web console are from this project.
 
 ## License / 许可证
 
