@@ -2078,21 +2078,42 @@
   .empty-tip-card { border-radius: 12px; border: 1px dashed var(--mcode-border-strong); }
   .chip, .att-chip { border-radius: 999px; border: 1px solid var(--mcode-border); }
 
-  /* — 卡片头布局：名字优先占满第一行，头像按钮落到第二行（fix 名字被压成 2 字符） — */
-  .card-head { flex-wrap: wrap; }
-  .card-head > div:last-child {
-    flex-basis: 100% !important; flex-shrink: 0 !important; margin-top: 2px;
+  /* — 卡片头布局：单行精致排布，头像按钮移至右侧 — */
+  .card-head {
+    display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
   }
-  .card-head > div:last-child > button {
-    white-space: nowrap !important; flex-shrink: 0 !important;
-    min-height: 26px !important; padding: 3px 10px !important;
-    font-size: 12px !important; border-radius: 999px !important;
-    background: var(--mcode-surface-muted) !important;
-  }
-  .card-head > div:last-child > button:hover { background: var(--mcode-surface-hover) !important; }
   .card-head h3.mono {
-    flex: 1 1 auto; min-width: 4.5em; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
+    margin: 0; font-size: 14.5px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex-shrink: 1;
+  }
+  .card-head .pill { flex-shrink: 0; }
+  .card-head .btn-avatar-setting {
+    margin-left: auto; flex-shrink: 0;
+    font-size: 12px; font-weight: 500;
+    min-height: 24px; padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--mcode-border);
+    background: var(--mcode-surface-muted);
+    color: var(--mcode-text-muted);
+    cursor: pointer; white-space: nowrap;
+    transition: all .16s ease;
+  }
+  .card-head .btn-avatar-setting:hover {
+    color: var(--mcode-text);
+    background: var(--mcode-surface-hover);
+    border-color: var(--mcode-border-strong);
+  }
+  #modal-extra {
+    color: var(--mcode-text-muted);
+    font-size: 13px;
+    padding: 5px 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  #modal-extra:hover {
+    color: var(--mcode-danger, #ef4444);
   }
   .platform-avatar {
     overflow: hidden; flex-shrink: 0;
@@ -2217,7 +2238,7 @@
                 </button>
                 <button id="btn-chat-clear" class="text" type="button" title="清空当前会话">清空</button>
                 <button id="btn-chat-export" class="text" type="button" title="导出当前会话为本机文件">导出</button>
-                <button id="btn-mode-help" class="text" type="button" title="直通派发 / Trae会话 / 任务 / 私信 / 自动派发 说明">ⓘ 模式说明</button>
+                <button id="btn-workbench-toggle" class="text" type="button" title="展开或收起工作台">工作台</button>
               </div>
             </div>
 
@@ -2390,6 +2411,7 @@
   <form id="modal-form" method="dialog"></form>
   <div class="dlg-foot">
     <span class="err-note" id="modal-err" role="alert"></span>
+    <button type="button" id="modal-extra" class="text" style="display:none;margin-right:auto">恢复默认</button>
     <button value="cancel" type="button" id="modal-cancel">取消</button>
     <button value="ok" type="button" id="modal-ok" class="primary">确认</button>
   </div>
@@ -2467,7 +2489,8 @@
 
   // ---------------- 模态框
   var modalResolver = null;
-  function openModal(title, fields, submitLabel) {
+  var modalExtraAction = null;
+  function openModal(title, fields, submitLabel, extraBtn) {
     $('#modal-title').textContent = title;
     var form = $('#modal-form');
     form.textContent = '';
@@ -2507,14 +2530,30 @@
     $('#modal-err').style.display = 'none';
     $('#modal-err').textContent = '';
     $('#modal-ok').textContent = submitLabel || '确认';
+    var extraEl = $('#modal-extra');
+    if (extraEl) {
+      if (extraBtn && extraBtn.label) {
+        extraEl.textContent = extraBtn.label;
+        extraEl.style.display = 'inline-flex';
+        modalExtraAction = extraBtn.action || null;
+      } else {
+        extraEl.style.display = 'none';
+        modalExtraAction = null;
+      }
+    }
     $('#modal').showModal();
     setTimeout(function () { var first = form.querySelector('textarea,input,select'); if (first) first.focus(); }, 30);
     return new Promise(function (resolve) { modalResolver = { resolve: resolve, inputs: inputs, form: form }; });
   }
   function closeModal(result) {
+    modalExtraAction = null;
     if (modalResolver) { var r = modalResolver; modalResolver = null; $('#modal').close(); r.resolve(result); }
   }
   $('#modal-cancel').addEventListener('click', function () { closeModal(null); });
+  var extraBtnEl = $('#modal-extra');
+  if (extraBtnEl) extraBtnEl.addEventListener('click', function () {
+    if (typeof modalExtraAction === 'function') modalExtraAction();
+  });
   $('#modal').addEventListener('cancel', function () { closeModal(null); });
   $('#modal-ok').addEventListener('click', function () {
     if (!modalResolver) return;
@@ -4532,19 +4571,32 @@
       head.appendChild(av);
 
       head.appendChild(el('h3', 'mono', a.name));
-      head.appendChild(a.activation === 'online' || (!a.activation && a.online) ? el('span', 'pill ok', '在线') : el('span', 'pill', a.activation === 'standby' ? '待机·可直派' : (a.activation === 'queue-only' ? '仅队列' : '离线')));
+      if (a.activation === 'online' || (!a.activation && a.online)) {
+        head.appendChild(el('span', 'pill ok', '在线'));
+      }
       if (a.name === SELF) head.appendChild(el('span', 'pill acc', '本控制台'));
 
-      var avBtns = el('div', '');
-      avBtns.style.marginLeft = 'auto';
-      avBtns.style.display = 'flex';
-      avBtns.style.gap = '6px';
-      avBtns.appendChild(btn('头像', '', function () {
+      // 待机·可直派去掉，把头像设置按钮移到这里
+      var avatarBtn = btn('头像', 'btn-avatar-setting', function () {
         var curAv = (chat.avatars && chat.avatars[a.name]) || {};
         openModal('设置头像 · ' + a.name, [
           { name: 'emoji', label: 'Emoji 头像（如 🤖🛠️📐，留空忽略）', value: curAv.emoji || '' },
           { name: 'img', label: '图片 URL（/uploads/... 或 https://...，留空忽略）', value: curAv.img || '' }
-        ], '保存').then(function (vals) {
+        ], '保存', {
+          label: '恢复默认',
+          action: function () {
+            api('/api/avatars', { agent: a.name, emoji: '', img: '' }).then(function (res) {
+              chat.avatars = res || {};
+              renderPlatformList();
+              renderThreadView();
+              if (state.snap) renderAgents(state.snap);
+              toast('已恢复默认头像');
+              closeModal(null);
+            }).catch(function (e) {
+              toast((e && e.message) || '恢复默认失败', true);
+            });
+          }
+        }).then(function (vals) {
           if (!vals) return;
           api('/api/avatars', { agent: a.name, emoji: vals.emoji || '', img: vals.img || '' }).then(function (res) {
             chat.avatars = res || {};
@@ -4556,19 +4608,8 @@
             toast((e && e.message) || '设置头像失败', true);
           });
         });
-      }));
-      avBtns.appendChild(btn('清头像', '', function () {
-        api('/api/avatars', { agent: a.name, emoji: '', img: '' }).then(function (res) {
-          chat.avatars = res || {};
-          renderPlatformList();
-          renderThreadView();
-          if (state.snap) renderAgents(state.snap);
-          toast('头像已清除');
-        }).catch(function (e) {
-          toast((e && e.message) || '清除头像失败', true);
-        });
-      }));
-      head.appendChild(avBtns);
+      });
+      head.appendChild(avatarBtn);
       card.appendChild(head);
       card.appendChild(el('div', 'role', a.role || '未声明角色'));
       // 已精简：卡片内不再展示底层的 CLI 路径、model_arg、心跳提示与默认模型，界面保持紧凑清晰
@@ -4686,6 +4727,7 @@
 
   document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
     tab.addEventListener('click', function () {
+      var isCurrentActive = tab.classList.contains('active');
       document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (t2) {
         t2.setAttribute('aria-selected', t2 === tab ? 'true' : 'false');
         t2.classList.toggle('active', t2 === tab);
@@ -4695,6 +4737,14 @@
         p.classList.toggle('active', show);
         p.hidden = !show;
       });
+      // 需求：对话这个侧边栏按钮按下收起或者展开侧边栏
+      if (tab.id === 'tab-chat') {
+        if (isCurrentActive) {
+          togglePlatformsSidebar();
+        } else {
+          togglePlatformsSidebar(true);
+        }
+      }
     });
   });
 
@@ -4755,7 +4805,8 @@
     }
   });
   $('#usage-bar').addEventListener('click', showUsageDetail);
-  $('#btn-mode-help').addEventListener('click', showModeHelp);
+    var modeHelpBtn = $('#btn-mode-help');
+  if (modeHelpBtn) modeHelpBtn.addEventListener('click', showModeHelp);
 
   // 二级模型面板事件绑定
   var mpWrap = $('#model-picker-wrap');
@@ -4819,23 +4870,32 @@
     });
   }
 
+  // 通用侧栏展开/收起切换
+  function togglePlatformsSidebar(forceState) {
+    var sb = $('#chat-threads');
+    var exp = $('#btn-expand-sidebar');
+    if (!sb) return;
+    var willCollapse = (typeof forceState === 'boolean') ? !forceState : !sb.classList.contains('collapsed');
+    if (willCollapse) {
+      sb.classList.add('collapsed');
+      if (exp) exp.hidden = false;
+    } else {
+      sb.classList.remove('collapsed');
+      if (exp) exp.hidden = true;
+    }
+  }
+
   // 侧栏折叠/展开与返回
   var collapseBtn = $('#btn-collapse-sidebar');
   if (collapseBtn) collapseBtn.addEventListener('click', function () {
-    $('#chat-threads').classList.add('collapsed');
-    var exp = $('#btn-expand-sidebar');
-    if (exp) exp.hidden = false;
+    togglePlatformsSidebar(false);
   });
   var expandBtn = $('#btn-expand-sidebar');
   if (expandBtn) expandBtn.addEventListener('click', function () {
-    $('#chat-threads').classList.remove('collapsed');
-    expandBtn.hidden = true;
+    togglePlatformsSidebar(true);
   });
   $('#btn-chat-back').addEventListener('click', function () {
-    var sb = $('#chat-threads');
-    if (sb) sb.classList.remove('collapsed');
-    var exp = $('#btn-expand-sidebar');
-    if (exp) exp.hidden = true;
+    togglePlatformsSidebar(true);
   });
 
   // 搜索平台过滤
@@ -4900,6 +4960,13 @@
   var wbEdgeTab = $('#wb-edge-tab');
   if (wbEdgeTab) wbEdgeTab.addEventListener('click', function () {
     try { localStorage.setItem('agent_hub_wb_mode', 'open'); } catch (e) {}
+    renderWorkbench();
+  });
+  var wbToggleBtn = $('#btn-workbench-toggle');
+  if (wbToggleBtn) wbToggleBtn.addEventListener('click', function () {
+    var panel = $('#workbench');
+    var isHidden = !panel || panel.hidden;
+    try { localStorage.setItem('agent_hub_wb_mode', isHidden ? 'open' : 'closed'); } catch (e) {}
     renderWorkbench();
   });
 
