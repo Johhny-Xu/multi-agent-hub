@@ -10,27 +10,7 @@
 
 ### 架构
 
-```
-                 ┌────────────────────────────┐
-                 │      console/  Web 控制台   │
-                 │  server.mjs (Node 后端)     │
-                 │  client/index.html (SPA)   │
-                 └───────────┬────────────────┘
-                             │ HTTP / 轮询
-                             ▼
-┌──────────────┐   ┌────────────────────────────┐
-│ drivers/ 脚本│──▶│        hub/  任务总线       │
-│ CDP 驱动 VNC │   │  agent_hub.py (JSON-RPC     │
-│ 中的桌面 AI   │   │  MCP over HTTP, 默认        │
-│ (ZCode 等)   │   │  127.0.0.1:8765/mcp)        │
-└──────────────┘   │  async_worker.py 异步 worker│
-                   │  state/ 共享状态(文件)       │
-                   └───────────┬────────────────┘
-                               │ 派活 / 收结果
-                       ┌───────┴───────┐
-                       ▼               ▼
-                  CLI 代理 A        CLI 代理 B
-```
+架构与数据流图见本 README 顶部（双语标注）：任务总线统一接收派发，异步 worker 落到各 CLI / 桌面代理执行，结果回写后由控制台总览。
 
 三个组件的关系：
 
@@ -119,27 +99,7 @@ Tired of tiptoeing around quota limits and constantly swapping "free-tier tokens
 
 ### Architecture
 
-```
-                 ┌────────────────────────────┐
-                 │      console/  Web Console │
-                 │  server.mjs (Node backend) │
-                 │  client/index.html (SPA)   │
-                 └───────────┬────────────────┘
-                             │ HTTP / polling
-                             ▼
-┌──────────────┐   ┌────────────────────────────┐
-│ drivers/     │──▶│        hub/  Task Bus      │
-│ CDP drivers  │   │  agent_hub.py (JSON-RPC    │
-│ for desktop  │   │  MCP over HTTP, default    │
-│ AIs in VNC   │   │  127.0.0.1:8765/mcp)       │
-│ (ZCode etc.) │   │  async_worker.py workers   │
-└──────────────┘   │  state/ shared file state  │
-                   └───────────┬────────────────┘
-                               │ dispatch / collect
-                       ┌───────┴───────┐
-                       ▼               ▼
-                  CLI agent A      CLI agent B
-```
+See the architecture & data-flow diagram at the top of this README (bilingual labels): the task bus receives every dispatch, async workers fan tasks out to CLI / desktop agents, and results are written back and surfaced by the console.
 
 Three components:
 
