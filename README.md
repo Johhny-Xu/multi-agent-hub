@@ -1,8 +1,12 @@
 # Agent Hub
 
+[中文](#中文) | [English](#english)
+
+## 中文
+
 Agent Hub 是一个自托管的多智能体协作枢纽：局域网内的多个 CLI / 桌面 AI 代理（如 ZCode、TraeCode 等）通过统一的 JSON-RPC 任务总线互相派活，并可用网页控制台总览各智能体的会话记录与实时配额。
 
-## 架构
+### 架构
 
 ```
                  ┌────────────────────────────┐
@@ -32,7 +36,7 @@ Agent Hub 是一个自托管的多智能体协作枢纽：局域网内的多个 
 - **console/** —— Web 控制台。`server.mjs` 为 Node 后端（同样只用 Node 内置模块），`client/index.html` 为单页前端（CodeBuddy 风格三栏 UI），可查看各智能体会话记录与实时配额。
 - **drivers/** —— 桌面驱动脚本（5 个 js）。通过 CDP 驱动 VNC 中运行的 ZCode / TraeCode 桌面版，把 hub 里的任务落到真实桌面 AI 上执行。
 
-## 目录结构
+### 目录结构
 
 ```
 agenthub/
@@ -57,15 +61,15 @@ agenthub/
     └── dom_read.js
 ```
 
-## 快速开始
+### 安装教程
 
-### 依赖
+#### 依赖
 
 - Python 3.8+（仅标准库，无需 pip 安装）
-- Node.js 18+（仅内置模块，无需 npm install）
+- Node.js 22+（需原生 WebSocket，仅内置模块，无需 npm install）
 - 可选：VNC + Chromium 系桌面 AI（仅使用 drivers/ 时需要）
 
-### 1. 配置
+#### 1. 配置
 
 ```bash
 cd hub
@@ -75,7 +79,7 @@ cp agents.example.json agents.json   # 编辑智能体清单
 
 `.env` 中包含服务地址、认证 token 等配置，**首次部署务必修改默认 token**（见下方安全提示）。`agents.json` 定义接入总线的智能体（名称、接入方式、命令等）。
 
-### 2. 启动 hub
+#### 2. 启动 hub
 
 ```bash
 cd hub
@@ -86,7 +90,7 @@ python3 agent_hub.py --stdio
 python3 async_worker.py
 ```
 
-### 3. 启动 Web 控制台
+#### 3. 启动 Web 控制台
 
 ```bash
 cd console
@@ -96,12 +100,120 @@ cd console
 
 控制台默认监听 `8890`，可用 `HUBCONSOLE_HOST` / `HUBCONSOLE_PORT` / `HUBCONSOLE_DATA_DIR` 环境变量覆盖（`run.sh` 内含示例默认值）。浏览器打开 `http://<主机>:8890/dashboard` 即可查看各智能体会话与配额。
 
-## 安全提示
+### 安全提示
 
 - **首次部署务必修改默认 token**：hub 与 console 之间、以及各智能体接入总线时使用 token 认证，示例配置中的 token 仅供本地测试，公网 / 多人环境部署前必须全部更换。
 - hub 默认只绑定 `127.0.0.1`。若需局域网访问，请置于可信网络并配合防火墙规则；不要把未改 token 的实例直接暴露到公网。
 - `state/`、会话记录等数据目录包含智能体对话内容，注意备份与访问权限。
 
-## License
+## English
+
+Agent Hub is a self-hosted multi-agent collaboration hub: multiple CLI / desktop AI agents on your LAN (e.g. ZCode, TraeCode) dispatch tasks to each other through a unified JSON-RPC task bus, and a web console gives you full visibility into every agent's conversations and live model quotas.
+
+### Architecture
+
+```
+                 ┌────────────────────────────┐
+                 │      console/  Web Console │
+                 │  server.mjs (Node backend) │
+                 │  client/index.html (SPA)   │
+                 └───────────┬────────────────┘
+                             │ HTTP / polling
+                             ▼
+┌──────────────┐   ┌────────────────────────────┐
+│ drivers/     │──▶│        hub/  Task Bus      │
+│ CDP drivers  │   │  agent_hub.py (JSON-RPC    │
+│ for desktop  │   │  MCP over HTTP, default    │
+│ AIs in VNC   │   │  127.0.0.1:8765/mcp)       │
+│ (ZCode etc.) │   │  async_worker.py workers   │
+└──────────────┘   │  state/ shared file state  │
+                   └───────────┬────────────────┘
+                               │ dispatch / collect
+                       ┌───────┴───────┐
+                       ▼               ▼
+                  CLI agent A      CLI agent B
+```
+
+Three components:
+
+- **hub/** — the core task bus (Python standard library only, zero third-party dependencies). Provides a shared task queue, agent mailboxes, shared notes, a heartbeat registry and generic CLI dispatch; `async_worker.py` runs async tasks and idle reaping (with `reap_idle.sh`), and `vnc-watchdog.sh` guards desktop sessions. State lives in plain files under `state/` and can be shared by multiple hub processes.
+- **console/** — the web console. `server.mjs` is the Node backend (built-in Node modules only) and `client/index.html` is a single-page frontend (CodeBuddy-style three-column UI) showing every agent's conversation threads and live model quotas.
+- **drivers/** — desktop driver scripts (5 js files). They drive the ZCode / TraeCode desktop apps running inside a VNC display over CDP, so hub tasks execute on real desktop AIs.
+
+### Directory layout
+
+```
+agenthub/
+├── hub/                      # Task bus (MCP over HTTP / stdio)
+│   ├── agent_hub.py          # Main service: the four-tool hub MCP server
+│   ├── async_worker.py       # Async task worker
+│   ├── trae_mcp_server.py    # Trae-side MCP integration
+│   ├── reap_idle.sh          # Idle agent reaper
+│   ├── vnc-watchdog.sh       # VNC desktop session watchdog
+│   ├── agents.example.json   # Example agent registry (copy to agents.json)
+│   └── .env.example          # Environment variable example (copy to .env / hub.env)
+├── console/                  # Web console
+│   ├── server.mjs            # Node backend
+│   ├── client/index.html     # Single-page frontend (three-column UI)
+│   ├── run.sh                # Launch script
+│   └── miniapp-api.ts        # Frontend API type definitions
+└── drivers/                  # Desktop drivers (CDP → desktop AIs in VNC)
+    ├── zcode_dom.js
+    ├── zcode_read.js
+    ├── dom_probe.js
+    ├── dom_probe_zcode.js
+    └── dom_read.js
+```
+
+### Installation
+
+#### Prerequisites
+
+- Python 3.8+ (standard library only, no pip install needed)
+- Node.js 22+ (native WebSocket required; built-in modules only, no npm install needed)
+- Optional: VNC + a Chromium-based desktop AI (only required when using drivers/)
+
+#### 1. Configure
+
+```bash
+cd hub
+cp .env.example .env          # edit environment variables as needed
+cp agents.example.json agents.json   # edit the agent registry
+```
+
+`.env` holds the service addresses and auth tokens — **change the default token on first deployment** (see Security Notes). `agents.json` defines the agents attached to the bus (name, transport, command, etc.).
+
+#### 2. Start the hub
+
+```bash
+cd hub
+python3 agent_hub.py --http            # Streamable HTTP, defaults to 127.0.0.1:8765/mcp
+# or stdio mode (for CLI-type agents):
+python3 agent_hub.py --stdio
+# additionally, when you need async task execution:
+python3 async_worker.py
+```
+
+#### 3. Start the web console
+
+```bash
+cd console
+./run.sh
+# or directly: node server.mjs
+```
+
+The console listens on `8890` by default; override with the `HUBCONSOLE_HOST` / `HUBCONSOLE_PORT` / `HUBCONSOLE_DATA_DIR` environment variables (sample defaults live in `run.sh`). Open `http://<host>:8890/dashboard` to browse agent conversations and quotas.
+
+### Security Notes
+
+- **Change the default token on first deployment**: hub↔console and agent↔bus communication is token-authenticated. Tokens in the example config are for local testing only — replace all of them before exposing the deployment to a LAN / the public internet.
+- The hub binds to `127.0.0.1` by default. For LAN access, keep it on a trusted network with firewall rules; never expose an instance with default tokens to the public internet.
+- `state/`, conversation records and other data directories contain agent conversations — mind backups and access permissions.
+
+## 致谢 / Acknowledgements
+
+- [TraeClaw](https://github.com/) — MIT License, © 2026 firerlAGI。`trae` 通道网关依赖该项目。/ The Trae channel gateway depends on this project.
+
+## License / 许可证
 
 [MIT](./LICENSE) © agenthub contributors
