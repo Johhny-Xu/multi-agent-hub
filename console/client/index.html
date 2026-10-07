@@ -2337,25 +2337,44 @@
   #kpis, .kpi-row { display: none !important; }
   .card .meta { display: none !important; }
 
-  /* — 对话窗口中置 (居中列对齐规范) — */
+  /* — 对话窗口中置与己方对话右侧锚定自适应收窄规范 — */
   .chat-msgs {
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 24px;
+    scrollbar-gutter: stable;
   }
   .bubble {
+    box-sizing: border-box;
     width: 100%;
-    max-width: min(100%, 860px) !important;
-  }
-  .bubble.user {
-    align-self: center;
-    max-width: min(100%, 860px) !important;
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .bubble.agent {
-    align-self: center;
-    max-width: min(100%, 860px) !important;
+    align-self: center !important;
+    width: 100% !important;
+    max-width: 860px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  /* 己方对话：右侧对齐锚定，气泡长度从右向左计算，短文本紧凑，长文本收窄至540px */
+  .bubble.user {
+    align-self: flex-start !important;
+    width: fit-content !important;
+    max-width: min(70%, 540px) !important;
+    margin-left: auto !important;
+    margin-right: calc(max(0px, (100% - 860px) / 2)) !important;
+    text-align: left !important;
+    word-break: break-word !important;
+    border-radius: 16px 16px 4px 16px !important;
   }
   .bubble.system {
-    align-self: center;
-    max-width: min(100%, 860px) !important;
+    align-self: center !important;
+    width: fit-content !important;
+    max-width: min(85%, 700px) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
   .chat-empty-state {
     max-width: 860px;
@@ -2364,12 +2383,14 @@
     margin-right: auto !important;
   }
   .typing {
-    align-self: center;
-    max-width: min(100%, 860px);
-    width: 100%;
+    align-self: center !important;
+    max-width: 860px !important;
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
   .composer-floating-wrap {
-    max-width: 860px;
+    max-width: 860px !important;
     margin-left: auto !important;
     margin-right: auto !important;
   }
