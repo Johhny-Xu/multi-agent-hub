@@ -1914,34 +1914,36 @@
     .cb-status-sep-hide-sm, .cb-status-hide-sm { display: none !important; }
   }
 
-  /* 手机竖屏专用深度适配 (<= 640px) */
+  /* 手机竖屏专用深度适配 (<= 640px) — 彻底解决小屏空间挤爆、按钮缺失问题 */
   @media (max-width: 640px) {
-    /* 1. 顶部栏紧凑对齐，防止撑爆高度 */
+    /* 1. 顶部 Header 极简单行排布 */
     header.top {
-      padding: 8px 12px !important;
-      gap: 8px !important;
+      padding: 6px 10px !important;
+      gap: 6px !important;
       flex-wrap: nowrap !important;
-      height: 48px !important;
-      min-height: 48px !important;
+      height: 46px !important;
+      min-height: 46px !important;
       box-sizing: border-box !important;
     }
     header.top .brand-box {
-      gap: 8px !important;
+      gap: 6px !important;
       min-width: 0 !important;
       flex: 1 1 auto !important;
+      overflow: hidden !important;
     }
     header.top .brand-logo {
-      width: 28px !important;
-      height: 28px !important;
-      border-radius: 7px !important;
+      width: 26px !important;
+      height: 26px !important;
+      border-radius: 6px !important;
+      flex-shrink: 0 !important;
     }
     header.top .brand-logo-img {
-      width: 20px !important;
-      height: 20px !important;
+      width: 18px !important;
+      height: 18px !important;
     }
     header.top h1 {
-      font-size: 14.5px !important;
-      line-height: 20px !important;
+      font-size: 13.5px !important;
+      line-height: 18px !important;
       white-space: nowrap !important;
       overflow: hidden !important;
       text-overflow: ellipsis !important;
@@ -1950,21 +1952,23 @@
       display: none !important;
     }
     .top-actions {
-      gap: 5px !important;
+      gap: 4px !important;
       flex-shrink: 0 !important;
       margin-left: auto !important;
       flex-wrap: nowrap !important;
+      align-items: center !important;
     }
     .top-actions button {
-      min-height: 28px !important;
-      padding: 3px 8px !important;
-      font-size: 11.5px !important;
-    }
-    #endpoint {
-      max-width: 105px !important;
-      min-height: 28px !important;
+      min-height: 26px !important;
       padding: 2px 6px !important;
       font-size: 11px !important;
+      white-space: nowrap !important;
+    }
+    #endpoint {
+      max-width: 82px !important;
+      min-height: 26px !important;
+      padding: 2px 4px !important;
+      font-size: 10.5px !important;
     }
 
     /* 2. 工作区与活动栏：活动栏下沉为底部导航栏 */
@@ -2016,80 +2020,131 @@
       box-shadow: none !important;
     }
 
-    /* 4. 对话头部工具栏：避免横向挤出滚动条 */
+    /* 4. 对话头部工具栏：精细预算，确保 5 个操作项 100% 完整可见不丢失 */
     .chat-head {
-      padding: 6px 10px !important;
-      gap: 6px !important;
+      padding: 5px 8px !important;
+      gap: 4px !important;
       flex-wrap: nowrap !important;
       min-width: 0 !important;
+      overflow-x: auto !important;
+      scrollbar-width: none !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+    .chat-head::-webkit-scrollbar {
+      display: none !important;
     }
     .chat-head-left {
       min-width: 0 !important;
-      flex: 1 1 auto !important;
-      gap: 6px !important;
+      flex: 0 1 auto !important;
+      gap: 4px !important;
       overflow: hidden !important;
+    }
+    #btn-chat-back {
+      padding: 2px 4px !important;
+      font-size: 11px !important;
+      min-height: 24px !important;
+      white-space: nowrap !important;
     }
     .current-agent-pill {
       min-width: 0 !important;
-      padding: 2px 7px !important;
+      padding: 1px 6px !important;
+      gap: 4px !important;
+    }
+    .current-agent-pill .agent-avatar-sm {
+      width: 18px !important;
+      height: 18px !important;
+      font-size: 9px !important;
     }
     .current-agent-pill .agent-id-name {
-      max-width: 85px !important;
+      max-width: 65px !important;
       overflow: hidden !important;
       text-overflow: ellipsis !important;
       white-space: nowrap !important;
+      font-size: 11px !important;
     }
+    .current-agent-pill .agent-status-badge {
+      display: none !important; /* 手机端隐藏在线状态文字，腾出极其宝贵的横向空间 */
+    }
+
+    /* 右侧操作按钮组：紧凑排列，确保工作台、导出、清空、新建全部在视野中 */
     .chat-head-right {
       margin-left: auto !important;
       flex-shrink: 0 !important;
-      gap: 4px !important;
+      gap: 3px !important;
       flex-wrap: nowrap !important;
+      align-items: center !important;
     }
-    .chat-head-right button {
-      min-height: 26px !important;
-      padding: 2px 7px !important;
-      font-size: 11.5px !important;
+    .session-selector-pill {
+      padding: 1px 5px !important;
+      min-height: 24px !important;
+    }
+    .session-selector-pill select {
+      max-width: 72px !important;
+      font-size: 10.5px !important;
+      padding: 1px 2px !important;
+      min-height: 20px !important;
+    }
+    .session-selector-pill .clock-icon {
+      font-size: 11px !important;
+    }
+    #btn-new-chat {
+      min-height: 24px !important;
+      padding: 1px 6px !important;
+      font-size: 11px !important;
+      white-space: nowrap !important;
+    }
+    #btn-new-chat span {
+      display: inline !important;
+    }
+    #btn-chat-clear, #btn-chat-export, #btn-workbench-toggle {
+      min-height: 24px !important;
+      padding: 1px 5px !important;
+      font-size: 11px !important;
       white-space: nowrap !important;
     }
 
     /* 5. 消息气泡与输入卡：自适应紧凑 */
     .chat-msgs, .msgs {
-      padding: 10px 8px 10px 8px !important;
+      padding: 8px 6px 8px 6px !important;
     }
     .bubble {
-      max-width: 95% !important;
-      padding: 8px 12px !important;
-      font-size: 13.5px !important;
+      max-width: 96% !important;
+      padding: 8px 10px !important;
+      font-size: 13px !important;
+    }
+    .bubble.user {
+      max-width: 82% !important;
+      margin-right: 0 !important;
     }
     .composer-floating-wrap {
-      margin: 4px 8px 4px 8px !important;
+      margin: 3px 6px 3px 6px !important;
       border-radius: 12px !important;
     }
     .composer {
-      padding: 6px 10px !important;
+      padding: 6px 8px !important;
     }
     .composer textarea {
-      min-height: 42px !important;
-      font-size: 14px !important;
+      min-height: 40px !important;
+      font-size: 13.5px !important;
     }
     .composer-bottom-bar {
-      margin-top: 4px !important;
-      gap: 6px !important;
+      margin-top: 3px !important;
+      gap: 4px !important;
     }
     .send-btn {
-      padding: 5px 12px !important;
-      font-size: 13px !important;
+      padding: 4px 10px !important;
+      font-size: 12.5px !important;
     }
     .cb-status-bar-wrap {
-      padding: 2px 8px !important;
+      padding: 2px 6px !important;
     }
     .cb-status-bar {
-      font-size: 11px !important;
+      font-size: 10.5px !important;
       gap: 2px !important;
     }
     .cb-status-seg {
-      padding: 1px 5px !important;
-      font-size: 11px !important;
+      padding: 1px 4px !important;
+      font-size: 10.5px !important;
     }
 
     /* 6. 工作台抽屉：全宽侧滑展示 */
@@ -2106,34 +2161,29 @@
 
     /* 7. 代理页面：单列卡片整屏自适应 */
     #panel-agents {
-      padding: 10px 8px 60px 8px !important;
+      padding: 8px 6px 60px 6px !important;
       overflow-y: auto !important;
     }
     .grid#agents {
       grid-template-columns: 1fr !important;
-      gap: 10px !important;
+      gap: 8px !important;
     }
     .card {
-      padding: 12px 10px !important;
+      padding: 10px 8px !important;
     }
     .card-head h3.mono {
-      font-size: 14px !important;
-      max-width: 140px !important;
+      font-size: 13.5px !important;
+      max-width: 130px !important;
     }
 
     /* 8. 弹窗模态框：居中适配移动端宽度 */
     dialog#modal {
-      width: calc(100% - 24px) !important;
-      max-width: calc(100% - 24px) !important;
+      width: calc(100% - 20px) !important;
+      max-width: calc(100% - 20px) !important;
       margin: auto !important;
-      padding: 16px 14px !important;
+      padding: 14px 12px !important;
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; animation: none !important; }
-  }
-
-  /* ============ 视觉精修 / visual polish (2026-10-07, CSS-only) ============ */
 
   /* — 平台列表项：呼吸感卡片 + 左侧激活条 — */
   .platform-list { padding: 10px; gap: 8px; }
