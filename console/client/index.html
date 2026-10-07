@@ -2108,6 +2108,9 @@
     font-size: 10.5px !important; font-weight: 400 !important;
     border-radius: 0 !important; padding: 0 !important;
   }
+  /* 隐藏代理面板的 KPI 概览横条与卡片内冗余的底层 meta 参数行 */
+  #kpis, .kpi-row { display: none !important; }
+  .card .meta { display: none !important; }
 </style>
 </head>
 <body>
@@ -2341,7 +2344,7 @@
 
       <!-- 子代理面板 -->
       <section class="tabpanel" id="panel-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
-        <div class="kpi-row" id="kpis" aria-label="枢纽概览"></div>
+        <div class="kpi-row" id="kpis" aria-label="枢纽概览" style="display:none"></div>
         <div class="grid" id="agents"></div>
         <div class="inflight">
           <h2 style="font-size:16px;font-weight:500;margin:8px 0 0">异步任务（本控制台派发）</h2>
@@ -4506,17 +4509,9 @@
   }
 
   function renderKpis(snap) {
+    // 代理页 KPI 概览已精简隐藏
     var host = $('#kpis');
-    host.textContent = '';
-    var online = snap.agents.filter(function (a) { return a.online; }).length;
-    var open = snap.tasks.filter(function (t) { return t.status === 'open'; }).length;
-    var inflightRun = state.inflight.filter(function (x) { return x.status === 'running' || x.status === 'pending'; }).length;
-    [[snap.agents.length, '注册子代理'], [online, '在线（' + snap.onlineWindowNote + '）'], [open, '待认领任务'], [snap.notes.length, '共享笔记'], [inflightRun, '异步执行中']].forEach(function (p) {
-      var k = el('div', 'kpi');
-      k.appendChild(el('div', 'n mono', p[0]));
-      k.appendChild(el('div', 't', p[1]));
-      host.appendChild(k);
-    });
+    if (host) { host.textContent = ''; host.style.display = 'none'; }
   }
 
   function renderAgents(snap) {
@@ -4576,15 +4571,7 @@
       head.appendChild(avBtns);
       card.appendChild(head);
       card.appendChild(el('div', 'role', a.role || '未声明角色'));
-      if (a.activationNote) { var anot = el('div', 'meta', 'ℹ ' + a.activationNote); anot.title = anot.textContent; card.appendChild(anot); }
-      var meta1 = el('div', 'meta', a.cli ? ('CLI: ' + a.cli) : '无直通 CLI（走队列认领或专用通道）');
-      meta1.title = meta1.textContent;
-      card.appendChild(meta1);
-      var meta2 = el('div', 'meta', 'model_arg: ' + (a.modelArg || '未配置') + (a.modelNote ? ' · ' + a.modelNote : ''));
-      card.appendChild(meta2);
-      var metaDft = el('div', 'meta', '默认模型：' + (a.defaultModel || '（未设置）'));
-      metaDft.title = metaDft.textContent;
-      card.appendChild(metaDft);
+      // 已精简：卡片内不再展示底层的 CLI 路径、model_arg、心跳提示与默认模型，界面保持紧凑清晰
       if (a.models && a.models.length) {
         var validChips = a.models.filter(function (mm) { return mm.alias !== '默认' && mm.alias !== 'default'; });
         if (validChips.length) {
