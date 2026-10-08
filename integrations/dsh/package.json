@@ -1,0 +1,16 @@
+{
+  "name": "dsh-plugin-multi-agent-hub",
+  "version": "1.0.0",
+  "description": "Multi-Agent Hub 官方插件：整合 8 大 AI 代理 (CodeBuddy/Antigravity/Copilot/MiniMax/TraeCode/ZCode) 的调度总线、原生预设与工作流",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

@@ -40,12 +40,27 @@
 
 ---
 
-### ⚡ 一键安装
+### ⚡ 一键安装与网址输入安装
 
-#### Windows
-双击运行当前目录下的 **`install.bat`** 即可自动完成安装与注入！
+#### 方式 1：Windows 双击一键安装（最推荐）
+直接双击运行本目录下的 **`install.bat`**：
+- 自动将 `dsh-plugin-multi-agent-hub` 注册进 DSH 当前 profile 的 `package.json`（插件设置面板立即可见！）；
+- 自动注入 MCP 任务总线与全量 8 大子代理预设；
+- 写入前自动生成带时间戳的安全备份。
 
-#### Linux / macOS
+#### 方式 2：在 DSH 客户端“安装插件”输入框中输入安装
+如果你希望在 DSH 图形界面的“插件”设置面板输入框里安装：
+- **输入本地路径**：
+  ```
+  file:<USER_HOME>/Desktop/agenthub/integrations/dsh
+  ```
+- **输入 Git 仓库网址**（在仓库公开后）：
+  ```
+  https://github.com/Johhny-Xu/multi-agent-hub.git
+  ```
+DSH 底层 pnpm 即可自动读取本目录的 `package.json` 与 `cordis.patch.yml` 并完成安装！
+
+#### 方式 3：Linux / macOS
 ```bash
 chmod +x install.sh
 ./install.sh
