@@ -10,9 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.4.0] - 2026-10-07
 
 ### 发展路线图与生态规划 / Roadmap & Ecosystem
-- **发布官方发展路线图矢量图 (`docs/roadmap.svg`)**：
-  - 清晰标注系统演进 5 大阶段（Phase 1~3 已就绪、Phase 4 积极适配中、Phase 5 下阶段规划）；
-  - 核心明确：当前全力完善 ZCode 官方插件，重点积极适配 DeepSeek Harness (DSH) 原生生态，后续推进 Codex 生态。
+- **更新官方发展路线图矢量图 (`docs/roadmap.svg`)**：
+  - 清晰标注系统演进 6 大阶段（Phase 1~3 已就绪、Phase 4 积极适配中、Phase 5 暂缓搁置·排在 DSH 后推进、Phase 6 规划中）；
+  - 核心明确：优先做好 Windows 本地开箱即用体验（Windows-First），全力攻坚 DeepSeek Harness (DSH) 原生生态；Linux 复杂服务化启动暂时搁置，排在 DSH 适配之后、Codex 适配之前集中重构。
 - **开源跨平台解耦与极简按需配置支持 / Cross-Platform Decoupling & Minimal Setup**：
   - 彻底清除历史硬编码路径与特定系统解释器路径（`/usr/bin/python3`、`/usr/bin/node`、`~/agent-hub`、`~/TraeClaw`），全面切换为动态自包含解析与 `sys.executable`；
   - 优化 Windows 与 Unix 跨平台异步进程组生命周期管理，避免僵尸进程；

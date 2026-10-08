@@ -72,25 +72,20 @@ multi-agent-hub/
 - **Node.js 20+**（内置模块，需原生 WebSocket，无需 npm install）
 - （可选）VNC + Chromium 系桌面 AI（仅使用 `drivers/` 驱动桌面客户端时需要）
 
-#### Linux / macOS
+#### Windows（🌟 官方首推 / 重点支持）
+1. 将 `.env.example` 复制一份并重命名为 `.env`（本地回环直接使用默认值即可）；
+2. 双击运行 **`start.bat`** 即可一键拉起任务总线与 Web 控制台！
+3. 浏览器打开 **`http://localhost:8890/dashboard`** 即可进入一体化控制台；
+4. 停止服务随时双击运行 **`stop.bat`**。
+
+#### Linux 部署（⏸️ 暂缓搁置·排在 DSH 适配后重构）
+> 💡 **优先级调整公告**：为确保核心功能扎实稳定，团队当前全力攻坚 Windows 平台的极致开箱体验与 DeepSeek Harness (DSH) 原生适配，Linux 的生产级服务化启动（如 systemd 守护进程、跨发行版环境自检）**暂时搁置，排在 DSH 适配完成之后集中推进**。
+> Linux 开发者仍可测试运行：
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/Johhny-Xu/multi-agent-hub.git
-cd multi-agent-hub
-
-# 2. 准备配置（本地回环可直接使用默认值）
 cp .env.example .env
-
-# 3. 一键启动！
 ./start.sh
+# 停止服务随时运行: ./stop.sh
 ```
-启动成功后，浏览器打开 **`http://localhost:8890/dashboard`** 即可进入一体化控制台！
-停止服务随时运行：`./stop.sh`
-
-#### Windows
-1. 将 `.env.example` 复制一份并重命名为 `.env`；
-2. 双击运行 **`start.bat`** 即可一键拉起！
-3. 停止服务双击运行 **`stop.bat`**。
 
 ---
 
@@ -201,26 +196,20 @@ multi-agent-hub/
 - **Node.js 20+** (native WebSocket required, built-in modules only, no npm install needed)
 - Optional: VNC + Chromium-based desktop AI clients (only needed for desktop drivers)
 
-#### Linux / macOS
+#### Windows (🌟 Primary Recommended Platform)
+1. Copy `.env.example` to `.env` (defaults work out-of-the-box for localhost).
+2. Double-click **`start.bat`** to start both the Task Bus and Web Console in one second!
+3. Open **`http://localhost:8890/dashboard`** in your browser.
+4. To stop the services, double-click **`stop.bat`**.
+
+#### Linux Deployment (⏸️ Paused / Scheduled after DSH)
+> 💡 **Strategic Realignment**: The development team is prioritizing a seamless Windows out-of-the-box experience and native DeepSeek Harness (DSH) adaptation. Production-grade Linux service automation (systemd daemons, multi-distro dependency checks) is **temporarily paused and scheduled right after DSH adaptation**.
+> Linux developers can still test via scripts:
 ```bash
-# 1. Clone the repository
-git clone https://github.com/Johhny-Xu/multi-agent-hub.git
-cd multi-agent-hub
-
-# 2. Copy environment template
 cp .env.example .env
-
-# 3. Launch everything!
-chmod +x start.sh stop.sh
 ./start.sh
+# To stop: ./stop.sh
 ```
-Once launched, open **`http://localhost:8890/dashboard`** in your browser!
-To stop the services: `./stop.sh`
-
-#### Windows
-1. Copy `.env.example` to `.env`.
-2. Double-click **`start.bat`** to start both the Task Bus and Web Console.
-3. Double-click **`stop.bat`** to stop the services.
 
 ---
 
