@@ -1,5 +1,5 @@
 # ==============================================================================
-# All-in-One Agent Hub for DeepSeek Harness (DSH)
+# Multi-Agent Hub for DeepSeek Harness (DSH)
 # 完整原生支持层：MCP 工具总线 + 全量 8 大原生子代理预设 (Agent Presets)
 # ==============================================================================
 
@@ -29,7 +29,7 @@
         name: "@deepseek-ai/dsh-persona"
         config:
           prefix: >
-            你是连接 All-in-One Agent Hub 的全能协同中枢。
+            你是连接 Multi-Agent Hub 的全能协同中枢。
             遇到具体任务时，请调用已挂载的 mcp__agenthub__hub_ask 工具派发给最合适的子代理：
             - antigravity: 复杂算法、长思维链推演、数学证明、深入反思
             - codebuddy: 国际版全栈工程代码编写、项目重构、Bug 修复

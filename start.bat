@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-title All-in-One Agent Hub Launcher
+title Multi-Agent Hub Launcher
 
 echo ==========================================================
-echo           🚀 Starting All-in-One Agent Hub (Windows)...   
+echo           🚀 Starting Multi-Agent Hub (Windows)...   
 echo ==========================================================
 
 set ROOT_DIR=%~dp0
@@ -25,18 +25,18 @@ set HUBCONSOLE_HOST=0.0.0.0
 set HUBCONSOLE_PORT=8890
 
 echo [1/2] 正在启动 Task Bus (Python MCP Server :8765)...
-start "All-in-One Hub - Task Bus" /min python hub\agent_hub.py --http %AGENTHUB_PORT% --host %AGENTHUB_HOST%
+start "Multi-Agent Hub - Task Bus" /min python hub\agent_hub.py --http %AGENTHUB_PORT% --host %AGENTHUB_HOST%
 
 echo [2/2] 正在启动 Web Console (Node.js :8890)...
 cd /d "%ROOT_DIR%console"
-start "All-in-One Hub - Web Console" /min node server.mjs
+start "Multi-Agent Hub - Web Console" /min node server.mjs
 cd /d "%ROOT_DIR%"
 
 timeout /t 2 >nul
 
 echo.
 echo ==========================================================
-echo   ✅ All-in-One Agent Hub 已在后台启动！
+echo   ✅ Multi-Agent Hub 已在后台启动！
 echo ==========================================================
 echo   🌐 Web 控制台地址 : http://localhost:%HUBCONSOLE_PORT%/dashboard
 echo   📡 MCP 任务总线地址 : http://%AGENTHUB_HOST%:%AGENTHUB_PORT%/mcp

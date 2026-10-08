@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================
-# All-in-One Agent Hub - DSH (DeepSeek Harness) Plugin Installer
+# Multi-Agent Hub - DSH (DeepSeek Harness) Plugin Installer
 # ==============================================================
 set -e
 

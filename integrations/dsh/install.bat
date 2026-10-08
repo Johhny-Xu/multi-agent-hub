@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title All-in-One Agent Hub - DSH Plugin Installer
+title Multi-Agent Hub - DSH Plugin Installer
 
 echo ==========================================================
 echo   正在为 DeepSeek Harness (DSH) 安装 Agent Hub 插件...

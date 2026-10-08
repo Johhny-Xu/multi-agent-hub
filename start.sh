@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================
-# All-in-One Agent Hub 一键启动脚本 / Launcher
+# Multi-Agent Hub 一键启动脚本 / Launcher
 # ==============================================================
 set -e
 
@@ -48,7 +48,7 @@ if [ -f "$ROOT_DIR/stop.sh" ]; then
 fi
 
 echo "=========================================================="
-echo "          🚀 Starting All-in-One Agent Hub...             "
+echo "          🚀 Starting Multi-Agent Hub...             "
 echo "=========================================================="
 
 # 5. 启动 Task Bus (Python MCP Server)
@@ -82,7 +82,7 @@ fi
 
 echo ""
 echo "=========================================================="
-echo "  ✅ All-in-One Agent Hub 已成功启动！"
+echo "  ✅ Multi-Agent Hub 已成功启动！"
 echo "=========================================================="
 echo "  🌐 Web 控制台地址 : http://localhost:${HUBCONSOLE_PORT}/dashboard"
 if [ "$HUBCONSOLE_HOST" = "0.0.0.0" ]; then
