@@ -16,7 +16,17 @@ from pathlib import Path
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
 SERVER_NAME = "agenthub"
 PLUGIN_ID = "mcp-agenthub"
-PRESET_IDS = ["preset-agenthub-all", "preset-agenthub-antigravity", "preset-agenthub-codebuddy", "preset-agenthub-zcode"]
+PRESET_IDS = [
+    "preset-agenthub-all",
+    "preset-agenthub-antigravity",
+    "preset-agenthub-codebuddy",
+    "preset-agenthub-codebuddy-cn",
+    "preset-agenthub-zcode",
+    "preset-agenthub-traecode",
+    "preset-agenthub-copilot",
+    "preset-agenthub-minimaxcode",
+    "preset-agenthub-mimocode",
+]
 
 def get_dsh_home() -> Path:
     env_home = os.environ.get("DSH_HOME")
@@ -162,11 +172,16 @@ def main():
     print("      - mcp__agenthub__hub_dispatch (异步派发)")
     print("      - mcp__agenthub__hub_fetch    (状态与结果轮询)")
     print("      - mcp__agenthub__hub_status   (总线在线状态)")
-    print("  • 2. 注入 DSH 原生子代理 (Presets) :")
-    print("      - agenthub-all         (全能中枢预设)")
-    print("      - agenthub-antigravity (专精算法证明与长思维链)")
-    print("      - agenthub-codebuddy   (专精全栈工程代码实现)")
-    print("      - agenthub-zcode       (专精 Linux 运维与系统脚本)")
+    print("  • 2. 注入 DSH 原生子代理 (Presets) 全量 8 大通道 :")
+    print("      - agenthub-all         (全能协同总线)")
+    print("      - agenthub-antigravity (专精算法证明与长思维链 - Gemini/Claude)")
+    print("      - agenthub-codebuddy   (专精工业全栈代码 - DeepSeek-V4.1-Flash 国际版)")
+    print("      - agenthub-codebuddy-cn(专精国内全栈代码 - DeepSeek-V4.1-Flash 国内版)")
+    print("      - agenthub-zcode       (专精 Linux 运维与桌面端 AI - GLM-5.3-Flash)")
+    print("      - agenthub-traecode    (专精极速代码审查 - GLM-5.3-FlashX)")
+    print("      - agenthub-copilot     (GitHub Copilot Auto)")
+    print("      - agenthub-minimaxcode (专精长文本问答与生成 - MiniMax-M3.1-Flash-Preview)")
+    print("      - agenthub-mimocode    (小米 MiMo 架构编程代理)")
     print("  • 3. 配套 DSH 原生工作流脚本 :")
     print("      - workflows/hub-fanout.dsh.js       (多代理并发扇出)")
     print("      - workflows/code-audit.dsh.js       (双代理流水线代码审查)")
