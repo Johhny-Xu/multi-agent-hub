@@ -94,6 +94,24 @@ cp .env.example .env
 
 ---
 
+### 🧩 按需启用：本地只有 1~2 个 Agent 可以跑吗？（以 MiniMax + Trae 为例）
+
+**完全可以，支持任意 Agent 组合或单 Agent 极简运行！**
+
+本项目各 Agent 通道完全解耦：
+- **无需配齐全部 8 个环境**：如果你本地只安装了 MiniMax 官方 CLI（`minimaxcode`）和 TraeCode 桌面端（`traecode`），或者只有 GitHub Copilot，完全不需要强行安装其他工具。
+- **开箱极简配置**：
+  ```bash
+  # 复制极简配置模板（仅启用 minimaxcode + traecode）
+  cp hub/agents.minimal.example.json hub/agents.json
+  ```
+- **自动优雅降级**：
+  - Web 控制台只会加载并展示你实际配置了的 Agent 平台；
+  - 自动调度模式（Auto）会自动在当前已配置且在线的 Worker 间轮转，绝不会把任务错派给未启用的 Agent；
+  - 若在外部工作流中偶然调用了未配置的 Agent，总线会返回友好提示（如 `xx 未配置 CLI` 或 `Trae 网关未连接`），绝不会导致总线崩溃或静默卡死。
+
+---
+
 ### 高级手动分步启动
 
 若需要将总线与控制台部署在不同机器，可手动分步运行：
@@ -203,6 +221,24 @@ To stop the services: `./stop.sh`
 1. Copy `.env.example` to `.env`.
 2. Double-click **`start.bat`** to start both the Task Bus and Web Console.
 3. Double-click **`stop.bat`** to stop the services.
+
+---
+
+### 🧩 Minimal / Partial Setup: Can I run with only 1 or 2 Agents? (e.g. MiniMax + Trae)
+
+**Absolutely! Any combination or single-agent setup is fully supported.**
+
+Every agent channel in Multi-Agent Hub is completely decoupled:
+- **No need to install all 8 agents**: If you only have the official MiniMax CLI (`minimaxcode`) and TraeCode desktop (`traecode`), or only GitHub Copilot, you do NOT need to set up the rest.
+- **Minimal Configuration Template**:
+  ```bash
+  # Copy the minimal template (only enables minimaxcode + traecode)
+  cp hub/agents.minimal.example.json hub/agents.json
+  ```
+- **Graceful Degradation**:
+  - The Web Console only renders and tracks your actively configured agents.
+  - The Auto-dispatch algorithm rotates only among configured, online agents and will never route tasks to missing tools.
+  - If an unconfigured agent is called externally, the hub returns a clean informative message (e.g., `CLI not configured` or `Trae gateway unreachable`) instead of crashing or hanging.
 
 ---
 

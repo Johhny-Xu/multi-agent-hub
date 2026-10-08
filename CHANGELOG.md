@@ -13,6 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **发布官方发展路线图矢量图 (`docs/roadmap.svg`)**：
   - 清晰标注系统演进 5 大阶段（Phase 1~3 已就绪、Phase 4 积极适配中、Phase 5 下阶段规划）；
   - 核心明确：当前全力完善 ZCode 官方插件，重点积极适配 DeepSeek Harness (DSH) 原生生态，后续推进 Codex 生态。
+- **开源跨平台解耦与极简按需配置支持 / Cross-Platform Decoupling & Minimal Setup**：
+  - 彻底清除历史硬编码路径与特定系统解释器路径（`/usr/bin/python3`、`/usr/bin/node`、`~/agent-hub`、`~/TraeClaw`），全面切换为动态自包含解析与 `sys.executable`；
+  - 优化 Windows 与 Unix 跨平台异步进程组生命周期管理，避免僵尸进程；
+  - 增强 TraeClaw 网关异常捕获与友好降级提示，杜绝未启动网关时崩溃抛错；
+  - 提供 `hub/agents.minimal.example.json` 极简模板，支持仅配置 MiniMax 与 Trae 等任意 1~2 个 Agent 的轻量环境，未安装的 Agent 完全零干扰。
 - **深度完善 ZCode 官方插件与工作流集成 (`agenthub-workers`)**：
   - 完善 8 大子智能体原生注册与自然语言缩写自动路由映射；
   - 借助 `hub-bridge` MCP（`hub_ask`、`hub_dispatch`、`hub_fetch`）彻底破除工作流 30 秒超时上限；
