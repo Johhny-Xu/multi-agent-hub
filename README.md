@@ -56,6 +56,8 @@ all-in-one-agent-hub/
 │   ├── dom_probe.js
 │   ├── dom_probe_zcode.js
 │   └── dom_read.js
+├── integrations/             # 官方宿主客户端扩展与插件
+│   └── dsh/                  # DeepSeek Harness (DSH) 一键插件与适配器
 └── docs/                     # 架构设计图与品牌资产
     ├── architecture.svg
     └── logo.png
@@ -119,6 +121,18 @@ node server.mjs
 - ❌ **逆向反代 / 非官方 API 转发**：将 Web 网页端逆向破解为非官方 API 接口、跳过客户端签名与风控调用——这是各大厂商明确打击的违规行为，也是批量封号的头号元凶。
 - ✅ **本项目**：只使用各大厂商**官方 CLI 的无头执行模式**（如 `codebuddy -p`、`copilot -p`、`mmx text chat`、`antigravity` 等）与你自己登录的官方桌面应用（CDP 仅负责驱动本机窗口）——与你在终端手动敲命令、在桌面正常操作属于同一种完全合规的交互形式，只是将“手动触发”交由总线自动化调度。
 
+### 🔌 官方客户端插件与集成 / Integrations & Plugins
+
+除了使用独立的 Web 控制台与命令行调用外，本项目还提供了面向各主流 AI 宿主客户端的原生插件：
+
+1. **DeepSeek Harness (DSH) 官方桌面端插件**：
+   - 目录：[`integrations/dsh/`](integrations/dsh/)
+   - 基于 DSH 的 Cordis 微内核架构，一键将 Agent Hub 注册为原生工具提供方。
+   - 安装：Windows 双击 `integrations/dsh/install.bat`，Linux/macOS 运行 `bash integrations/dsh/install.sh`。
+2. **ZCode 桌面端插件**：
+   - 目录：`plugins/agenthub-workers`
+   - 将 8 大代理注册为 ZCode 原生子智能体类型，支持多 Agent 并发工作流编排与 `/hub-status` 状态命令。
+
 ---
 
 ## English
@@ -148,6 +162,8 @@ all-in-one-agent-hub/
 ├── hub/                      # Task bus (Python MCP over HTTP / stdio)
 ├── console/                  # Web console (Node.js + responsive SPA)
 ├── drivers/                  # Desktop CDP drivers for VNC
+├── integrations/             # Native client integrations & plugins
+│   └── dsh/                  # DeepSeek Harness (DSH) one-click plugin
 └── docs/                     # Architecture diagrams and assets
 ```
 
@@ -190,6 +206,17 @@ To stop the services: `./stop.sh`
 
 - ❌ **Reverse proxies / unofficial API wrappers**: Re-engineering web applications into unofficial API endpoints bypasses provider rate limits and risk controls, which violates terms of service and is the leading cause of account bans.
 - ✅ **This project**: Uses only each vendor's **official CLI in headless mode** (`codebuddy -p`, `copilot -p`, `mmx text chat`, `antigravity`, etc.) and official desktop clients that you have logged into personally. It operates in the exact same legitimate manner as running commands in your own terminal.
+
+### 🔌 Client Integrations & Plugins
+
+In addition to the standalone web console and CLI tools, native plugins are provided for popular AI desktop hosts:
+
+1. **DeepSeek Harness (DSH) Integration**:
+   - Location: [`integrations/dsh/`](integrations/dsh/)
+   - Native integration via DSH's Cordis microkernel loader.
+   - Install: Double-click `integrations/dsh/install.bat` (Windows) or run `bash integrations/dsh/install.sh` (Linux/macOS).
+2. **ZCode Desktop Plugin**:
+   - Registers all 8 agents as native ZCode subagent types with workflow orchestration support.
 
 ---
 

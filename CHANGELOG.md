@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - 统一根目录 `.env.example` 配置中心，集中管理总线端口、Web 控制台及认证 Token，告别多级子目录割裂配置。
   - Web 控制台全面更名与视觉升格为 `All-in-One Agent Hub`。
   - 手机端竖屏排版重构：解决超窄屏下顶部 Header 与工具栏按钮被截断问题，全部操作项 100% 完整可见。
+- **新增 DeepSeek Harness (DSH) 官方桌面端原生插件适配 / DSH Native Integration**：
+  - 目录 `integrations/dsh/`：提供基于 Cordis 微内核架构的标准加载层配置补丁与跨平台安装工具。
+  - 支持 Windows（双击 `install.bat`）与 Linux/macOS（`install.sh` / `install-dsh.py`）一键自动安装、状态检查与无损备份卸载。
+  - 安装后在 DSH 内直接原生调用 Agent Hub 全部 8 大 AI 代理工具（`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`）。
 
 ---
 
