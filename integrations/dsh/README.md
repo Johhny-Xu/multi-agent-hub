@@ -76,8 +76,8 @@ chmod +x install.sh
 # 默认安装（自动注入 MCP 与 8 大原生子代理预设）
 python3 install-dsh.py
 
-# 远程总线 (指定 URL 与 Token)
-python3 install-dsh.py --url http://127.0.0.1:8765/mcp --token your_token_here
+# 远程总线 (指定远程局域网 URL 与 Token)
+python3 install-dsh.py --url http://192.168.1.100:8765/mcp --token your_token_here
 
 # 检查当前集成状态
 python3 install-dsh.py --check

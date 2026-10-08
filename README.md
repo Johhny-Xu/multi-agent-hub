@@ -141,6 +141,7 @@ node server.mjs
 除了使用独立的 Web 控制台与命令行调用外，本项目深度适配各大主流 AI 开发桌面端：
 
 1. **ZCode 桌面端插件 (`agenthub-workers`)【✅ 完全就绪 / Production Ready】**：
+   - **一键安装**：打开 ZCode **设置 ➔ 插件管理 ➔ 发现**，点击右上角 **`+`** 按钮，直接粘贴 GitHub 仓库地址 `https://github.com/Johhny-Xu/multi-agent-hub.git`，即可在卡片列表中点击“获取”一键安装！
    - **8 大原生子智能体类型**：深度无缝接入 ZCode 子智能体体系，支持自然语言与简称自动识别（`agy` ➔ Antigravity、`cb` ➔ CodeBuddy 国际版、`cbcn` ➔ CodeBuddy 国内版、`zcode` ➔ Linux ZCode、`trae` ➔ TraeCode、`gcp` ➔ GitHub Copilot、`mmx` ➔ MiniMax、`mimo` ➔ MiMoCode）。
    - **突破工作流 30 秒超时限制**：内置专门打造的 `hub-bridge` MCP 工具面（`hub_ask`、`hub_dispatch`、`hub_fetch`），以“秒级返回 ref + 增量异步轮询”机制彻底攻克工作流子代理 30s 框架调用上限，支撑高并发扇出压测与复杂流水线。
    - **状态探活与调度技能**：内置 `/hub-status` 快捷指令及 `dispatch-hub` 协同编排技能。
@@ -246,6 +247,7 @@ Every agent channel in Multi-Agent Hub is completely decoupled:
 In addition to the standalone web console and CLI tools, native integrations are designed for major AI development desktop environments:
 
 1. **ZCode Desktop Plugin (`agenthub-workers`)【✅ Production Ready】**:
+   - **One-Click Install**: Open ZCode **Settings ➔ Plugin Management ➔ Discover**, click the top-right **`+`** button, paste the GitHub repository URL `https://github.com/Johhny-Xu/multi-agent-hub.git`, and click "Get" on the card to install!
    - **8 Native Subagent Types**: Deeply integrated into ZCode's subagent ecosystem, with automatic alias routing (`agy` ➔ Antigravity, `cb` ➔ CodeBuddy International, `cbcn` ➔ CodeBuddy CN, `zcode` ➔ Linux ZCode, `trae` ➔ TraeCode, `gcp` ➔ GitHub Copilot, `mmx` ➔ MiniMax, `mimo` ➔ MiMoCode).
    - **Bypassing 30-Second Workflow Timeout**: Dedicated `hub-bridge` MCP suite (`hub_ask`, `hub_dispatch`, `hub_fetch`) utilizing instant ref return + incremental async polling to conquer workflow timeout ceilings.
    - **Heartbeat & Dispatch Skills**: Integrated `/hub-status` command and `dispatch-hub` orchestration skill.
