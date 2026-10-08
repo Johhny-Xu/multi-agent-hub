@@ -3,7 +3,10 @@
 """
 Multi-Agent Hub - DeepSeek Harness (DSH) 插件一键安装与适配器
 跨平台 (Windows / macOS / Linux)，零外部依赖。
-支持：DSH MCP 工具总线 + 8 大原生子代理预设 (Presets) + 原生工作流示例
+功能：
+1. 注册 DSH 插件包：将 dsh-plugin-multi-agent-hub 写入 profile package.json，显示在界面插件列表中
+2. 注入 Cordis 配置：MCP 任务总线工具 + 8 大原生子代理预设 (Presets)
+3. 注入原生工作流：提供开箱即用的 DSH 工作流脚本
 """
 
 import os
@@ -12,11 +15,13 @@ import argparse
 import shutil
 import time
 import re
+import json
 from pathlib import Path
 
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
 SERVER_NAME = "agenthub"
 PLUGIN_ID = "mcp-agenthub"
+BUNDLE_NAME = "dsh-plugin-multi-agent-hub"
 PRESET_IDS = [
     "preset-agenthub-all",
     "preset-agenthub-antigravity",
@@ -45,6 +50,16 @@ def find_target_patch_file(dsh_home: Path, profile_name: str) -> Path:
     profiles_dir = dsh_home / "profiles"
     if profiles_dir.exists():
         for p in profiles_dir.glob("*/cordis.patch.yml"):
+            return p
+    return target
+
+def find_target_package_json(dsh_home: Path, profile_name: str) -> Path:
+    target = dsh_home / "profiles" / profile_name / "package.json"
+    if target.exists():
+        return target
+    profiles_dir = dsh_home / "profiles"
+    if profiles_dir.exists():
+        for p in profiles_dir.glob("*/package.json"):
             return p
     return target
 
@@ -122,6 +137,42 @@ def validate_yaml(content: str):
     except Exception as e:
         raise ValueError(f"YAML 语法校验未通过: {e}")
 
+def update_profile_package_json(pkg_file: Path, install: bool = True) -> bool:
+    """将插件包注册到 DSH profile 的 package.json，使其在界面插件列表中可见。"""
+    if not pkg_file.parent.exists():
+        return False
+    
+    plugin_dir = Path(__file__).resolve().parent.as_posix()
+    data = {}
+    if pkg_file.exists():
+        try:
+            data = json.loads(pkg_file.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    
+    if "dependencies" not in data or not isinstance(data["dependencies"], dict):
+        data["dependencies"] = {}
+    if "dsh" not in data or not isinstance(data["dsh"], dict):
+        data["dsh"] = {}
+    if "profile" not in data["dsh"] or not isinstance(data["dsh"]["profile"], dict):
+        data["dsh"]["profile"] = {}
+    if "bundles" not in data["dsh"]["profile"] or not isinstance(data["dsh"]["profile"]["bundles"], list):
+        data["dsh"]["profile"]["bundles"] = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]
+
+    bundles = data["dsh"]["profile"]["bundles"]
+
+    if install:
+        data["dependencies"][BUNDLE_NAME] = f"file:{plugin_dir}"
+        if BUNDLE_NAME not in bundles:
+            bundles.append(BUNDLE_NAME)
+    else:
+        data["dependencies"].pop(BUNDLE_NAME, None)
+        if BUNDLE_NAME in bundles:
+            bundles.remove(BUNDLE_NAME)
+
+    pkg_file.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description="为 DeepSeek Harness (DSH) 安装 Multi-Agent Hub 插件")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"Agent Hub 任务总线地址 (默认: {DEFAULT_URL})")
@@ -138,6 +189,7 @@ def main():
         sys.exit(1)
 
     patch_file = find_target_patch_file(dsh_home, args.profile)
+    pkg_file = find_target_package_json(dsh_home, args.profile)
     print(f"📁 DSH 配置路径: {patch_file}")
 
     if args.check:
@@ -145,27 +197,23 @@ def main():
             content = patch_file.read_text(encoding="utf-8")
             if is_installed(content):
                 print(f"✅ Multi-Agent Hub 插件已安装在 DSH 中 (profile: {patch_file.parent.name})")
-                print("   已启用能力: MCP 工具总线 + 原生子代理预设 (Presets)")
+                print("   已启用能力: 界面插件列表显示 + MCP 工具总线 + 原生子代理预设 (Presets)")
                 sys.exit(0)
         print("ℹ️ DSH 中尚未安装 Multi-Agent Hub 插件。")
         sys.exit(0)
 
     if args.uninstall:
-        if not patch_file.exists():
-            print("配置文件不存在，无需卸载。")
-            return
-        content = patch_file.read_text(encoding="utf-8")
-        if not is_installed(content):
-            print("DSH 中未发现 Agent Hub 配置，无需卸载。")
-            return
-        bak = patch_file.with_suffix(f".yml.bak-{time.strftime('%Y%m%d-%H%M%S')}")
-        shutil.copy2(patch_file, bak)
-        clean_content = strip_managed_content(content) + "\n"
-        validate_yaml(clean_content)
-        patch_file.write_text(clean_content, encoding="utf-8")
-        print(f"✅ 已成功从 DSH 卸载 Agent Hub 插件！")
-        print(f"   原配置已备份至: {bak}")
-        print("   重启 DeepSeek Harness 客户端即可生效。")
+        if patch_file.exists():
+            content = patch_file.read_text(encoding="utf-8")
+            if is_installed(content):
+                bak = patch_file.with_suffix(f".yml.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+                shutil.copy2(patch_file, bak)
+                clean_content = strip_managed_content(content) + "\n"
+                validate_yaml(clean_content)
+                patch_file.write_text(clean_content, encoding="utf-8")
+                print(f"✅ 已成功从 DSH cordis.patch.yml 卸载配置 (备份至: {bak.name})")
+        update_profile_package_json(pkg_file, install=False)
+        print("✅ 已从 DSH 界面插件列表中注销！重启 DeepSeek Harness 即可生效。")
         return
 
     # 安装 / 更新
@@ -179,14 +227,12 @@ def main():
     else:
         existing_content = "# DSH Cordis profile patch layer\n[]\n"
 
-    # 清理旧版本以实现幂等更新
     clean_base = strip_managed_content(existing_content)
     clean_lines = [l for l in clean_base.splitlines() if l.strip() != "[]"]
     clean_base = "\n".join(clean_lines).rstrip()
 
     template_payload = load_template_yaml(args.url, args.token).strip()
     
-    # 组合为带明确注释块的最终 YAML
     final_content = (
         clean_base
         + f"\n\n{BLOCK_BEGIN}\n"
@@ -197,18 +243,23 @@ def main():
     validate_yaml(final_content)
     patch_file.write_text(final_content, encoding="utf-8")
 
+    # 同时注册到 profile package.json，让 DSH 界面插件列表显示出来
+    update_profile_package_json(pkg_file, install=True)
+
     print("==========================================================")
     print("  🎉 Multi-Agent Hub 插件已成功安装到 DeepSeek Harness！")
     print("==========================================================")
     print(f"  • 宿主环境 : DeepSeek Harness ({patch_file.parent.name})")
     print(f"  • 服务端点 : {args.url}")
     print(f"  • 认证状态 : {'[已配置 Token]' if args.token else '[未启用 Token, 本机回环]'}")
-    print("  • 1. 注入 MCP 工具面 :")
+    print("  • 1. 注册 DSH 插件列表 (Plugins Panel) :")
+    print(f"      - 包名: {BUNDLE_NAME} (已出现在 DSH 插件设置列表中)")
+    print("  • 2. 注入 MCP 工具面 :")
     print("      - mcp__agenthub__hub_ask      (单调用直达任意 Agent 并出结果)")
     print("      - mcp__agenthub__hub_dispatch (异步派发)")
     print("      - mcp__agenthub__hub_fetch    (状态与结果轮询)")
     print("      - mcp__agenthub__hub_status   (总线在线状态)")
-    print("  • 2. 注入 DSH 原生子代理 (Presets) 全量 8 大通道 :")
+    print("  • 3. 注入 DSH 原生子代理 (Presets) 全量 8 大通道 :")
     print("      - agenthub-all         (全能协同总线)")
     print("      - agenthub-antigravity (专精算法证明与长思维链 - Gemini/Claude)")
     print("      - agenthub-codebuddy   (专精工业全栈代码 - DeepSeek-V4.1-Flash 国际版)")
@@ -218,7 +269,7 @@ def main():
     print("      - agenthub-copilot     (GitHub Copilot Auto)")
     print("      - agenthub-minimaxcode (专精长文本问答与生成 - MiniMax-M3.1-Flash-Preview)")
     print("      - agenthub-mimocode    (小米 MiMo 架构编程代理)")
-    print("  • 3. 配套 DSH 原生工作流脚本 :")
+    print("  • 4. 配套 DSH 原生工作流脚本 :")
     print("      - workflows/hub-fanout.dsh.js       (多代理并发扇出)")
     print("      - workflows/code-audit.dsh.js       (双代理流水线代码审查)")
     print("      - workflows/competitive-solve.dsh.js(多模型交叉解题验证)")
