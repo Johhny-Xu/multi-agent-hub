@@ -2,8 +2,10 @@ __pycache__/
 *.pyc
 node_modules/
 *.log
-hub.env
-.env
+logs/
+.run/
+hub/agents.json
+hub/.env
 state/
 results/
 *.bak-*
