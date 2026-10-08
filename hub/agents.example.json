@@ -62,7 +62,7 @@
       "cli": null,
       "model_arg": null,
       "models": {
-        "default": "glm-5.3-flash"
+        "default": "GLM-5.3-FlashX"
       }
     },
     "zcode": {

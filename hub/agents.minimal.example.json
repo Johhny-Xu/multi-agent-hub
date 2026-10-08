@@ -1,0 +1,36 @@
+{
+  "_comment": "极简配置示例：仅启用 MiniMax CLI (minimaxcode) 与 TraeCode 桌面端 (traecode)。本项目完全支持按需启用，无需配齐全部 8 个 Agent！",
+  "agents": {
+    "minimaxcode": {
+      "role": "文本/问答 worker (MiniMax CLI)",
+      "description": "基于 MiniMax 官方 mmx 命令行工具 (纯文本/代码生成)",
+      "cli": [
+        "mmx",
+        "text",
+        "chat",
+        "--message",
+        "{task}",
+        "--output",
+        "text"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "MiniMax-M3.1-Flash-Preview",
+        "m3": "MiniMax-M3",
+        "m2.7": "MiniMax-M2.7",
+        "m2.5": "MiniMax-M2.5",
+        "m3.1fp": "MiniMax-M3.1-Flash-Preview"
+      },
+      "async_default": true
+    },
+    "traecode": {
+      "role": "桌面版 worker (TraeCode 桌面端)",
+      "description": "通过 TraeClaw 专用网关派发到 TraeCode 桌面客户端执行",
+      "cli": null,
+      "model_arg": null,
+      "models": {
+        "default": "GLM-5.3-FlashX"
+      }
+    }
+  }
+}

@@ -22,19 +22,38 @@
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
-HOME = os.path.expanduser("~")
-RESULTS = os.path.join(HOME, "agent-hub", "results")
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+DRIVERS_DIR = ROOT / "drivers"
+STATE_DIR = HERE / "state"
+
+RESULTS = (
+    os.environ.get("HUB_RESULTS_DIR", "").strip()
+    or (os.path.expanduser("~/agent-hub/results") if os.path.isdir(os.path.expanduser("~/agent-hub/results")) else str(STATE_DIR / "results"))
+)
 GATEWAY = os.environ.get("TRAE_GATEWAY", "http://127.0.0.1:8787").rstrip("/")
-NODE = "/usr/bin/node"
-DOM_READ_TRAE = os.path.join(HOME, "TraeClaw", "dom_read.js")
-DOM_READ_ZCODE = os.path.join(HOME, "TraeClaw", "zcode_read.js")
+NODE = shutil.which("node") or "node"
+DOM_READ_TRAE = (
+    os.environ.get("TRAE_DOM_READ", "").strip()
+    or (str(DRIVERS_DIR / "dom_read.js") if (DRIVERS_DIR / "dom_read.js").exists() else os.path.expanduser("~/TraeClaw/dom_read.js"))
+)
+DOM_READ_ZCODE = (
+    os.environ.get("ZCODE_READER", "").strip()
+    or (str(DRIVERS_DIR / "zcode_read.js") if (DRIVERS_DIR / "zcode_read.js").exists() else os.path.expanduser("~/TraeClaw/zcode_read.js"))
+)
+DOM_DRIVER_ZCODE = (
+    os.environ.get("ZCODE_DOM_DRIVER", "").strip()
+    or (str(DRIVERS_DIR / "zcode_dom.js") if (DRIVERS_DIR / "zcode_dom.js").exists() else os.path.expanduser("~/TraeClaw/zcode_dom.js"))
+)
 
 # 单个任务的最长执行时间 (秒), 超过即判定超时并回收, 防止进程无限吊起
 TRAE_TIMEOUT = 900
@@ -215,10 +234,10 @@ def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT):
 
 
 def zcode_run(task, session_id, ref, timeout=ZCODE_TIMEOUT):
-    driver = os.path.join(HOME, "TraeClaw", "zcode_dom.js")
-    reader = os.path.join(HOME, "TraeClaw", "zcode_read.js")
+    driver = DOM_DRIVER_ZCODE
+    reader = DOM_READ_ZCODE
     if not os.path.exists(driver):
-        raise RuntimeError(f"ZCode 驱动不存在: {driver}")
+        raise RuntimeError(f"ZCode 驱动不存在: {driver}。请确保 drivers/ 目录已包含 zcode_dom.js")
     box = {}
 
     def worker():
@@ -248,8 +267,12 @@ def run_cmd_mode(cmd_list, taskfile, ref):
     proc = None
     try:
         with open(tmpout, "w", encoding="utf-8") as fo:
-            proc = subprocess.Popen(cmd_list, stdout=fo, stderr=subprocess.STDOUT,
-                                    start_new_session=True)
+            popen_kwargs = {"stdout": fo, "stderr": subprocess.STDOUT}
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                popen_kwargs["start_new_session"] = True
+            proc = subprocess.Popen(cmd_list, **popen_kwargs)
             last = ""
             while proc.poll() is None:
                 time.sleep(5)

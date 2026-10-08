@@ -41,6 +41,29 @@ HUB_TOKEN = os.environ.get("HUB_TOKEN", "").strip()
 HERE = Path(__file__).resolve().parent
 STATE = HERE / "state"
 AGENTS_JSON = HERE / "agents.json"
+DRIVERS_DIR = HERE.parent / "drivers"
+
+# 结果目录：优先读取环境变量 HUB_RESULTS_DIR，缺省自包含在 state/results
+RESULTS_DIR = (
+    os.environ.get("HUB_RESULTS_DIR", "").strip()
+    or (os.path.expanduser("~/agent-hub/results") if os.path.isdir(os.path.expanduser("~/agent-hub/results")) else str(STATE / "results"))
+)
+# 异步任务 worker 脚本：优先使用本仓库自带的 async_worker.py
+ASYNC_WORKER_SCRIPT = (
+    os.environ.get("HUB_ASYNC_WORKER", "").strip()
+    or (str(HERE / "async_worker.py") if (HERE / "async_worker.py").exists() else os.path.expanduser("~/agent-hub/async_worker.py"))
+)
+# Node 可执行文件解析
+NODE_BIN = shutil.which("node") or "node"
+# Trae 与 ZCode 桌面端辅助驱动脚本
+TRAE_DOM_READ = (
+    os.environ.get("TRAE_DOM_READ", "").strip()
+    or (str(DRIVERS_DIR / "dom_read.js") if (DRIVERS_DIR / "dom_read.js").exists() else os.path.expanduser("~/TraeClaw/dom_read.js"))
+)
+ZCODE_DOM_DRIVER = (
+    os.environ.get("ZCODE_DOM_DRIVER", "").strip()
+    or (str(DRIVERS_DIR / "zcode_dom.js") if (DRIVERS_DIR / "zcode_dom.js").exists() else os.path.expanduser("~/TraeClaw/zcode_dom.js"))
+)
 
 _locks_guard = threading.Lock()
 _locks = {}
@@ -438,10 +461,14 @@ def tool_hub_dispatch_cli(args):
         tf = os.path.join(RESULTS_DIR, ref + ".task")
         with open(tf, "w", encoding="utf-8") as f:
             json.dump({"cmd": cmd, "callback_url": cb}, f, ensure_ascii=False)
+        popen_kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
         subprocess.Popen(
-            ["/usr/bin/python3", TRAE_ASYNC_WORKER, "cmd", ref, tf, ""],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, start_new_session=True)
+            [sys.executable, ASYNC_WORKER_SCRIPT, "cmd", ref, tf, ""],
+            **popen_kwargs)
         cb_note = f"\n完成后将回调: {cb}" if cb else ""
         return (f"[{agent}/{ref}] 任务已异步受理 (此类任务耗时长, 不阻塞等待)。{cb_note}\n"
                 f"查询结果: hub_result(ref=\"{ref}\")\n"
@@ -488,25 +515,36 @@ def tool_hub_list_models(args):
 
 # ---------------- Trae 桥接 (经 TraeClaw 网关驱动 TraeCode CN 桌面) ----------------
 TRAE_GATEWAY = os.environ.get("TRAE_GATEWAY", "http://127.0.0.1:8787").rstrip("/")
-TRAE_DOM_READ = os.path.expanduser("~/TraeClaw/dom_read.js")
 
 
 def _trae_gw_post(path, payload, timeout=270):
     import urllib.request
+    import urllib.error
     req = urllib.request.Request(
         TRAE_GATEWAY + path,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        return {"error": f"无法连接 Trae 网关 ({TRAE_GATEWAY}{path}): {e}。请确认 TraeCode 桌面端及网关已就绪，或检查 TRAE_GATEWAY 配置。"}
+    except Exception as e:
+        return {"error": f"Trae 网关请求异常: {e}"}
 
 
 def _trae_gw_get(path, timeout=15):
     import urllib.request
-    with urllib.request.urlopen(TRAE_GATEWAY + path, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    import urllib.error
+    try:
+        with urllib.request.urlopen(TRAE_GATEWAY + path, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        return {"error": f"无法连接 Trae 网关 ({TRAE_GATEWAY}): {e}。请确认 TraeCode 桌面端及网关已就绪，或检查 TRAE_GATEWAY 配置。"}
+    except Exception as e:
+        return {"error": f"Trae 网关请求异常: {e}"}
 
 
 def tool_hub_wait_result(args):
@@ -557,14 +595,14 @@ def tool_hub_result(args):
 
 def tool_trae_status(args):
     h = _trae_gw_get("/health")
+    if "error" in h:
+        return f"TraeClaw 网关: 未连接 ({h['error']})"
     data = h.get("data", {})
     auto = data.get("automation", {})
     tgt = (auto.get("target") or {}).get("title", "")
     return f"TraeClaw 网关: {data.get('status', '?')} | CDP 自动化: {'就绪' if auto.get('ready') else '未就绪'} | 目标窗口: {tgt}"
 
 
-RESULTS_DIR = os.path.expanduser("~/agent-hub/results")
-TRAE_ASYNC_WORKER = os.path.expanduser("~/agent-hub/async_worker.py")
 # 服务端阻塞等待的内部回查时刻表 (秒, 累计): 0秒先查一次(快任务/旧ref秒回),
 # 之后 3/6/12/25/45/70/95 秒递进 — 快任务几秒命中, 长任务 110s 预算尽返回进度
 WAIT_CHECK_SCHEDULE = [0, 3, 6, 12, 25, 45, 70, 95]
@@ -618,11 +656,14 @@ def tool_trae_delegate(args):
             json.dump({"task": content,
                        "new_chat": _as_bool(args.get("new_chat"), False)},
                       f, ensure_ascii=False)
-        import subprocess
+        popen_kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
         subprocess.Popen(
-            ["/usr/bin/python3", TRAE_ASYNC_WORKER, "trae", ref, tf, sid or ""],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, start_new_session=True)
+            [sys.executable, ASYNC_WORKER_SCRIPT, "trae", ref, tf, sid or ""],
+            **popen_kwargs)
         return (f"[trae/{ref}] 已异步受理, status=running。\n"
                 f"查询结果: trae_result(ref=\"{ref}\")")
     payload = {"content": content}
@@ -632,6 +673,8 @@ def tool_trae_delegate(args):
     if _as_bool(args.get("new_chat"), False):
         payload["newChat"] = True
     resp = _trae_gw_post("/v1/chat", payload, timeout=max(timeout, 30) + 30)
+    if "error" in resp:
+        return f"[trae 派发失败] {resp['error']}"
     data = resp.get("data", {})
     sess = data.get("session", {})
     result = data.get("result") or {}
@@ -639,9 +682,8 @@ def tool_trae_delegate(args):
     status = sess.get("status") or result.get("status")
     sid = sid or sess.get("sessionId", "new")
     if not text.strip() and os.path.exists(TRAE_DOM_READ):
-        import subprocess
         try:
-            p = subprocess.run(["/usr/bin/node", TRAE_DOM_READ], capture_output=True,
+            p = subprocess.run([NODE_BIN, TRAE_DOM_READ], capture_output=True,
                                text=True, timeout=100)
             if p.stdout.strip():
                 text = p.stdout.strip()
@@ -692,18 +734,20 @@ def tool_zcode_delegate(args):
         # 同 trae_delegate: 任务文件必须是 JSON, 否则 async_worker 解析崩溃
         with open(tf, "w", encoding="utf-8") as f:
             json.dump({"task": content}, f, ensure_ascii=False)
-        import subprocess
+        popen_kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
         subprocess.Popen(
-            ["/usr/bin/python3", TRAE_ASYNC_WORKER, "zcode", ref, tf, ""],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, start_new_session=True)
+            [sys.executable, ASYNC_WORKER_SCRIPT, "zcode", ref, tf, ""],
+            **popen_kwargs)
         return (f"[zcode/{ref}] 已异步受理, status=running。\n"
                 f"查询结果: zcode_result(ref=\"{ref}\")")
-    import subprocess
-    driver = os.path.expanduser("~/TraeClaw/zcode_dom.js")
+    driver = ZCODE_DOM_DRIVER
     if not os.path.exists(driver):
-        raise ValueError("ZCode 驱动不存在: " + driver)
-    p = subprocess.run(["/usr/bin/node", driver, content], capture_output=True,
+        return f"[zcode] 驱动脚本不存在: {driver}。请确认 drivers/ 目录已包含 zcode_dom.js 脚本。"
+    p = subprocess.run([NODE_BIN, driver, content], capture_output=True,
                        text=True, encoding="utf-8", errors="replace", timeout=300)
     text = (p.stdout or "").strip()[-2500:]
     _save_result("zcode-last", agent="zcode", status="completed", text=text)
