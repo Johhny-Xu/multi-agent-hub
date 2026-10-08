@@ -3,7 +3,10 @@
 // 通道事实（2026-10-06 实测）：CLI worker 走 hub_dispatch_cli；traecode 无 CLI 走 trae_delegate(wait:false)，
 // 其 ref 前缀是 trae-<hex>（其余 <规范名>-<hex>）；回收统一 hub_wait_result，对 trae ref 同样有效。
 
-export const HUB = process.env.AGENTHUB_URL || "http://127.0.0.1:8765/mcp?token=EXAMPLE_REDACTED_TOKEN";
+export const HUB =
+  process.env.AGENTHUB_URL ||
+  process.env.HUB_MCP_URL ||
+  (process.env.HUB_TOKEN ? `http://127.0.0.1:8765/mcp?token=${process.env.HUB_TOKEN}` : "http://127.0.0.1:8765/mcp");
 
 const ALIASES = {
   agy: "antigravity", antigravity: "antigravity",
