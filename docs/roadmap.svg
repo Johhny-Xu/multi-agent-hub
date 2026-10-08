@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="680" viewBox="0 0 1020 680" font-family="Segoe UI, PingFang SC, Microsoft YaHei, -apple-system, sans-serif">
+  <defs>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <linearGradient id="progGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 全局背景 -->
+  <rect width="1020" height="680" fill="#f8fafc"/>
+
+  <!-- 顶部标题区 -->
+  <rect x="40" y="24" width="940" height="76" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <text x="70" y="56" font-size="20" font-weight="bold" fill="#0f172a">Multi-Agent Hub 发展路线图 / Development Roadmap</text>
+  <text x="70" y="80" font-size="12" fill="#64748b">构建覆盖全生态的多智能体自托管协作调度中枢 · 当前重点：完善 ZCode，积极适配 DSH，接下来推进 Codex</text>
+  
+  <!-- 状态图例 (右上角) -->
+  <rect x="700" y="44" width="82" height="24" rx="12" fill="#dcfce7" stroke="#86efac"/>
+  <text x="741" y="60" text-anchor="middle" font-size="11" font-weight="bold" fill="#15803d">已完成 Done</text>
+
+  <rect x="792" y="44" width="94" height="24" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="839" y="60" text-anchor="middle" font-size="11" font-weight="bold" fill="#1d4ed8">进行中 Active</text>
+
+  <rect x="896" y="44" width="72" height="24" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="932" y="60" text-anchor="middle" font-size="11" font-weight="bold" fill="#475569">计划 Planned</text>
+
+  <!-- 时间轴中轴线 -->
+  <line x1="80" y1="130" x2="80" y2="610" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="6 4"/>
+
+  <!-- ======================================================== -->
+  <!-- Phase 1: 核心总线与 8 大 Agent [已完成]                     -->
+  <!-- ======================================================== -->
+  <circle cx="80" cy="155" r="9" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+  <rect x="110" y="125" width="870" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2" filter="url(#cardShadow)"/>
+  <rect x="110" y="125" width="6" height="78" rx="3" fill="#10b981"/>
+  <text x="130" y="150" font-size="14" font-weight="bold" fill="#0f172a">Phase 1: 核心任务总线与 8 大 Agent 原生无头通道 / Core Task Bus &amp; 8 Headless Agents</text>
+  <rect x="870" y="138" width="92" height="22" rx="11" fill="#dcfce7" stroke="#86efac"/>
+  <text x="916" y="153" text-anchor="middle" font-size="11" font-weight="bold" fill="#15803d">✅ 已完成 v0.1</text>
+  <text x="130" y="172" font-size="12" fill="#334155">• 基于 Python 标准库开发零依赖 JSON-RPC MCP 任务总线 (:8765) 与异步 Worker 执行器</text>
+  <text x="130" y="190" font-size="11" fill="#64748b">• 接入 CodeBuddy(国内/国际)、Antigravity、Copilot、MiMoCode、MiniMax、TraeCode、ZCode，支持额度耗尽自动改派</text>
+
+  <!-- ======================================================== -->
+  <!-- Phase 2: Web 控制台与移动端竖屏 [已完成]                    -->
+  <!-- ======================================================== -->
+  <circle cx="80" cy="250" r="9" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+  <rect x="110" y="220" width="870" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2" filter="url(#cardShadow)"/>
+  <rect x="110" y="220" width="6" height="78" rx="3" fill="#10b981"/>
+  <text x="130" y="245" font-size="14" font-weight="bold" fill="#0f172a">Phase 2: All-in-One Web 控制台与多端自适应 / Web Console &amp; Mobile Responsive Layout</text>
+  <rect x="870" y="233" width="92" height="22" rx="11" fill="#dcfce7" stroke="#86efac"/>
+  <text x="916" y="248" text-anchor="middle" font-size="11" font-weight="bold" fill="#15803d">✅ 已完成 v0.2</text>
+  <text x="130" y="267" font-size="12" fill="#334155">• CodeBuddy 风格三栏深色 UI，全平台历史会话归组浏览，实时模型配额与连接监控</text>
+  <text x="130" y="285" font-size="11" fill="#64748b">• 手机浏览器竖屏专属排版（底部导航栏、双行自适应工具栏）、思维链(&lt;think&gt;)自动折叠、对话中置对齐</text>
+
+  <!-- ======================================================== -->
+  <!-- Phase 3: ZCode 插件与原生工作流集成 [已完成·重点完善]         -->
+  <!-- ======================================================== -->
+  <circle cx="80" cy="345" r="9" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+  <rect x="110" y="315" width="870" height="84" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <rect x="110" y="315" width="6" height="84" rx="3" fill="#10b981"/>
+  <text x="130" y="340" font-size="14" font-weight="bold" fill="#065f46">Phase 3: ZCode 桌面端原生插件与工作流深度集成 / ZCode Native Subagents &amp; Workflows</text>
+  <rect x="860" y="328" width="102" height="22" rx="11" fill="#dcfce7" stroke="#86efac"/>
+  <text x="911" y="343" text-anchor="middle" font-size="11" font-weight="bold" fill="#15803d">✅ 现已就绪 v0.3</text>
+  <text x="130" y="362" font-size="12" fill="#334155">• agenthub-workers 插件将 8 大代理注册为 ZCode 原生子智能体类型，支持 /hub-status 命令</text>
+  <text x="130" y="380" font-size="12" fill="#334155">• 提供 hub-bridge MCP (hub_ask/hub_dispatch/hub_fetch) 解决 30s 超时，配套 hub-fanout 全局工作流</text>
+  <text x="130" y="394" font-size="10.5" fill="#059669">🌟 持续完善：强化 Linux ZCode 运行时体验、离线 Base64 资产规范与高并发长任务鲁棒性</text>
+
+  <!-- ======================================================== -->
+  <!-- Phase 4: 积极适配 DeepSeek Harness (DSH) [当前重点进行中] -->
+  <!-- ======================================================== -->
+  <circle cx="80" cy="450" r="10" fill="#2563eb" stroke="#ffffff" stroke-width="3"/>
+  <rect x="110" y="415" width="870" height="92" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="2" filter="url(#cardShadow)"/>
+  <rect x="110" y="415" width="6" height="92" rx="3" fill="url(#progGrad)"/>
+  <text x="130" y="440" font-size="14" font-weight="bold" fill="#1d4ed8">Phase 4: 积极适配 DeepSeek Harness (DSH) 原生生态 / Actively Adapting DSH Ecosystem</text>
+  <rect x="840" y="428" width="122" height="24" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="901" y="444" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1d4ed8">🚀 积极适配中 In Progress</text>
+  <text x="130" y="463" font-size="12.5" font-weight="600" fill="#1e293b">• 深度适配 DSH 官方 Cordis 微内核架构与 @deepseek-ai/dsh-mcp-client 客户端规范</text>
+  <text x="130" y="481" font-size="12" fill="#334155">• 研发 DSH 原生子代理预设 (Agent Presets)：agenthub-all、antigravity、codebuddy 等一键切换</text>
+  <text x="130" y="498" font-size="11.5" fill="#2563eb">• 适配 DSH 原生工作流 (dsh-workflow)：纯 JS 编排、parallel() 扇出与流水线代码审查脚本</text>
+
+  <!-- ======================================================== -->
+  <!-- Phase 5: 进军 Codex 生态 [下阶段规划]                       -->
+  <!-- ======================================================== -->
+  <circle cx="80" cy="555" r="9" fill="#94a3b8" stroke="#ffffff" stroke-width="2"/>
+  <rect x="110" y="525" width="870" height="78" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 2" filter="url(#cardShadow)"/>
+  <rect x="110" y="525" width="6" height="78" rx="3" fill="#94a3b8"/>
+  <text x="130" y="550" font-size="14" font-weight="bold" fill="#475569">Phase 5: 适配 Codex 智能体协同生态 / Upcoming: Codex Ecosystem Integration</text>
+  <rect x="860" y="538" width="102" height="22" rx="11" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="911" y="553" text-anchor="middle" font-size="11" font-weight="bold" fill="#475569">⏳ 下阶段规划 Planned</text>
+  <text x="130" y="572" font-size="12" fill="#475569">• 对接 Codex 扩展体系与上下文协议，实现跨平台智能体双向桥接</text>
+  <text x="130" y="590" font-size="11" fill="#64748b">• 支持 Codex 客户端内一键分发任务至 Multi-Agent Hub 8 大 Worker 并取回增量结果</text>
+
+  <!-- 底部说明 -->
+  <text x="510" y="650" text-anchor="middle" font-size="12" fill="#64748b">节奏规划：稳定核心总线 ➔ 持续精进 ZCode 原生工作流 ➔ 全力攻坚 DSH 生态 ➔ 拓展 Codex 等全球开发者平台</text>
+</svg>

@@ -2,6 +2,11 @@
 
 [中文](#中文) | [English](#english)
 
+> 💡 **适配状态公告 / Adaptation Status**：
+> 本模块目前处于 **积极适配与优化阶段 (Under Active Adaptation)**。核心工作流与预设原型代码均已就绪（详见下文），团队正在全面测试适配 DSH 官方桌面端的 Cordis 微内核多环境隔离机制，以确保生产环境的绝对稳定与平滑体验。欢迎关注主仓库路线图获取最新进展！
+>
+> This module is currently **under active adaptation & testing**. The native presets, workflows, and bridge definitions are available below, while we finalize smooth integration with DSH's Cordis microkernel layer.
+
 ---
 
 ## 中文

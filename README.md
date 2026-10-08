@@ -9,6 +9,8 @@
 
 ![Multi-Agent Hub 架构与数据流 / Architecture & Data Flow](docs/architecture.svg)
 
+![Multi-Agent Hub 发展路线图 / Development Roadmap](docs/roadmap.svg)
+
 ---
 
 ## 中文
@@ -123,16 +125,22 @@ node server.mjs
 
 ### 🔌 官方客户端插件与集成 / Integrations & Plugins
 
-除了使用独立的 Web 控制台与命令行调用外，本项目还提供了面向各主流 AI 宿主客户端的原生插件：
+除了使用独立的 Web 控制台与命令行调用外，本项目深度适配各大主流 AI 开发桌面端：
 
-1. **DeepSeek Harness (DSH) 官方桌面端插件（支持原生子代理与原生工作流）**：
+1. **ZCode 桌面端插件 (`agenthub-workers`)【✅ 完全就绪 / Production Ready】**：
+   - **8 大原生子智能体类型**：深度无缝接入 ZCode 子智能体体系，支持自然语言与简称自动识别（`agy` ➔ Antigravity、`cb` ➔ CodeBuddy 国际版、`cbcn` ➔ CodeBuddy 国内版、`zcode` ➔ Linux ZCode、`trae` ➔ TraeCode、`gcp` ➔ GitHub Copilot、`mmx` ➔ MiniMax、`mimo` ➔ MiMoCode）。
+   - **突破工作流 30 秒超时限制**：内置专门打造的 `hub-bridge` MCP 工具面（`hub_ask`、`hub_dispatch`、`hub_fetch`），以“秒级返回 ref + 增量异步轮询”机制彻底攻克工作流子代理 30s 框架调用上限，支撑高并发扇出压测与复杂流水线。
+   - **状态探活与调度技能**：内置 `/hub-status` 快捷指令及 `dispatch-hub` 协同编排技能。
+   - **免服务器双击运行保障**：产物输出严格遵循无依赖单文件规范（CSS/JS 内联，Base64/Web Audio 程序化资产），支持在操作系统文件管理器中直接双击 HTML 文件（`file://` 协议）离线流畅运行。
+
+2. **DeepSeek Harness (DSH) 原生适配套件【🚀 积极适配中 / Under Active Adaptation】**：
    - 目录：[`integrations/dsh/`](integrations/dsh/)
-   - **原生子代理预设 (Presets)**：通过 `@deepseek-ai/dsh-agent-preset` 声明并注入 `agenthub-all`、`agenthub-antigravity`、`agenthub-codebuddy`、`agenthub-zcode` 4 大原生子代理预设。
-   - **原生工作流套件 (Workflows)**：基于 DSH 官方 `@deepseek-ai/dsh-workflow`（纯 JavaScript 编排），提供 `hub-fanout.dsh.js`（多 Agent 并发扇出）、`code-audit.dsh.js`（双代理流水线代码审查）、`competitive-solve.dsh.js`（多模型交叉解题验证）三大开箱即用工作流。
-   - 安装：Windows 双击 `integrations/dsh/install.bat`，Linux/macOS 运行 `bash integrations/dsh/install.sh`。
-2. **ZCode 桌面端插件**：
-   - 目录：`plugins/agenthub-workers`
-   - 将 8 大代理注册为 ZCode 原生子智能体类型，支持多 Agent 并发工作流编排与 `/hub-status` 状态命令。
+   - **Cordis 微内核与预设方案**：基于 `@deepseek-ai/dsh-agent-preset` 与 `@deepseek-ai/dsh-mcp-client` 规范，预研打造全量子代理预设（Presets）与 MCP 桥接。
+   - **原生工作流模板库**：包含 `hub-fanout.dsh.js`（多 Agent 并发扇出）、`code-audit.dsh.js`（双代理流水线代码审查）、`competitive-solve.dsh.js`（多模型交叉解题验证）三大开箱即用脚本。
+   - **适配进展**：团队正全面进行 Cordis 微内核多环境隔离测试，以确保在生产环境中的平滑免损注入与极致稳定性。
+
+3. **Codex 生态适配【⏳ 下阶段规划 / Planned】**：
+   - 计划实现与 Codex 扩展协议的深度打通，实现跨平台智能体双向任务流转与上下文无缝衔接。
 
 ---
 
@@ -210,14 +218,22 @@ To stop the services: `./stop.sh`
 
 ### 🔌 Client Integrations & Plugins
 
-In addition to the standalone web console and CLI tools, native plugins are provided for popular AI desktop hosts:
+In addition to the standalone web console and CLI tools, native integrations are designed for major AI development desktop environments:
 
-1. **DeepSeek Harness (DSH) Integration (Native Subagents & Workflows)**:
+1. **ZCode Desktop Plugin (`agenthub-workers`)【✅ Production Ready】**:
+   - **8 Native Subagent Types**: Deeply integrated into ZCode's subagent ecosystem, with automatic alias routing (`agy` ➔ Antigravity, `cb` ➔ CodeBuddy International, `cbcn` ➔ CodeBuddy CN, `zcode` ➔ Linux ZCode, `trae` ➔ TraeCode, `gcp` ➔ GitHub Copilot, `mmx` ➔ MiniMax, `mimo` ➔ MiMoCode).
+   - **Bypassing 30-Second Workflow Timeout**: Dedicated `hub-bridge` MCP suite (`hub_ask`, `hub_dispatch`, `hub_fetch`) utilizing instant ref return + incremental async polling to conquer workflow timeout ceilings.
+   - **Heartbeat & Dispatch Skills**: Integrated `/hub-status` command and `dispatch-hub` orchestration skill.
+   - **Zero-Server Direct Launch**: Generated artifacts adhere strictly to self-contained single-file HTML standards (inline CSS/JS, Base64/Web Audio data), allowing double-click execution directly via `file://`.
+
+2. **DeepSeek Harness (DSH) Native Integration【🚀 Under Active Adaptation】**:
    - Location: [`integrations/dsh/`](integrations/dsh/)
-   - Native integration via DSH's Cordis microkernel loader with built-in subagent presets and JS workflow templates.
-   - Install: Double-click `integrations/dsh/install.bat` (Windows) or run `bash integrations/dsh/install.sh` (Linux/macOS).
-2. **ZCode Desktop Plugin**:
-   - Registers all 8 agents as native ZCode subagent types with workflow orchestration support.
+   - **Cordis Microkernel & Presets**: Pre-architected native subagent presets via `@deepseek-ai/dsh-agent-preset` and `@deepseek-ai/dsh-mcp-client`.
+   - **Native Workflows**: Includes ready-to-run workflow templates: `hub-fanout.dsh.js`, `code-audit.dsh.js`, and `competitive-solve.dsh.js`.
+   - **Status**: The engineering team is actively testing and hardening multi-profile Cordis integration to ensure zero-risk desktop stability.
+
+3. **Codex Ecosystem Integration【⏳ Planned】**:
+   - Scheduled cross-platform bidirectional agent orchestration and streaming context bridging with Codex.
 
 ---
 
