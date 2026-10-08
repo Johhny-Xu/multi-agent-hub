@@ -1,16 +1,81 @@
 # ==============================================================================
 # All-in-One Agent Hub for DeepSeek Harness (DSH)
-# Cordis Loader Patch Layer
+# 完整原生支持层：MCP 工具总线 + 8 大原生子代理预设 (Agent Presets)
 # ==============================================================================
-# 将本条目添加到 ~/.dsh/profiles/desktop/cordis.patch.yml 即可完成集成。
-# Add this entry to ~/.dsh/profiles/desktop/cordis.patch.yml to enable integration.
 
+# 1. 挂载 Agent Hub 核心任务总线 (MCP Client)
 - id: mcp-agenthub
   name: "@deepseek-ai/dsh-mcp-client"
   config:
     serverName: agenthub
     transport: streamable-http
     url: http://127.0.0.1:8765/mcp
-    # 如果总线设置了 HUB_TOKEN，请取消下两行注释并填入你的 Token:
+    # 若启用了 Token 认证，取消下两行注释并填写：
     # headers:
     #   Authorization: "Bearer your_token_here"
+
+# 2. 注册 DSH 原生子代理 (Agent Presets)
+# 会话中可在顶部预设下拉直接切换，或在会话中通过子代理委派机制调用
+- id: preset-agenthub-all
+  name: "@deepseek-ai/dsh-agent-preset"
+  config:
+    id: agenthub-all
+    name: "AgentHub 协同总线"
+    description: "一站式中枢：按任务难度自动向 Antigravity/CodeBuddy/Trae/ZCode 派发"
+    order: 20
+    plugins:
+      - id: persona
+        name: "@deepseek-ai/dsh-persona"
+        config:
+          prefix: >
+            你是连接 All-in-One Agent Hub 的主控中枢。
+            遇到具体开发、复杂算法、长逻辑推演或桌面操作任务时，请调用 mcp__agenthub__hub_ask 工具派发给相应的子代理：
+            - antigravity: 复杂算法、长思维链推演、数学分析
+            - codebuddy: 全栈工程代码编写、项目重构、Bug 修复
+            - zcode: Linux 服务器运维排查、环境构建
+            - traecode: 极速代码审查、轻量生成
+
+- id: preset-agenthub-antigravity
+  name: "@deepseek-ai/dsh-agent-preset"
+  config:
+    id: agenthub-antigravity
+    name: "Antigravity (算法/推理)"
+    description: "专精长思维链、算法证明与深度推理 (Google Antigravity / Gemini)"
+    order: 21
+    plugins:
+      - id: persona
+        name: "@deepseek-ai/dsh-persona"
+        config:
+          prefix: >
+            你是专精算法与逻辑证明的 Antigravity 代理通道。
+            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "antigravity") 执行核心深度推理任务并回传精炼结果。
+
+- id: preset-agenthub-codebuddy
+  name: "@deepseek-ai/dsh-agent-preset"
+  config:
+    id: agenthub-codebuddy
+    name: "CodeBuddy (全栈开发)"
+    description: "专精工业级代码开发、项目构建与错误修复 (DeepSeek-V4.1-Flash)"
+    order: 22
+    plugins:
+      - id: persona
+        name: "@deepseek-ai/dsh-persona"
+        config:
+          prefix: >
+            你是专精全栈代码编写与工程实现的 CodeBuddy 代理通道。
+            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "codebuddy") 执行代码编写、重构与排障任务。
+
+- id: preset-agenthub-zcode
+  name: "@deepseek-ai/dsh-agent-preset"
+  config:
+    id: agenthub-zcode
+    name: "ZCode (运维/桌面)"
+    description: "专精 Linux 远端运维、系统级脚本与桌面 AI 协同 (GLM-5.3-Flash)"
+    order: 23
+    plugins:
+      - id: persona
+        name: "@deepseek-ai/dsh-persona"
+        config:
+          prefix: >
+            你是专精系统级操作与 Linux 远端调度的 ZCode 代理通道。
+            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "zcode") 执行系统检查、构建脚本与运维操作。

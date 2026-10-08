@@ -6,21 +6,39 @@
 
 ## 中文
 
-本项目为 **DeepSeek Harness (DSH)** 官方桌面客户端提供一站式插件适配集成。
-安装后，DeepSeek Harness 内的 AI 助手将直接获得调用 All-in-One Agent Hub 背后 **8 大 AI 代理**（CodeBuddy、Antigravity、GitHub Copilot、MiniMax、TraeCode、ZCode 等）的能力。
+本项目为 **DeepSeek Harness (DSH)** 官方桌面客户端提供全能插件与扩展集成。
+不仅支持 MCP 工具面直通，还完整支持 **DSH 原生工作流 (Workflow)** 与 **DSH 原生子代理预设 (Agent Presets)**！
+安装后，DeepSeek 助手可直接协同调用 All-in-One Agent Hub 背后 **8 大 AI 代理**（CodeBuddy、Antigravity、GitHub Copilot、MiniMax、TraeCode、ZCode 等）。
 
-### 核心原理
-DeepSeek Harness 采用基于 Cordis 的微内核插件系统，其内置了官方 `@deepseek-ai/dsh-mcp-client` 扩展。
-本插件通过向 `~/.dsh/profiles/desktop/cordis.patch.yml` 注入标准化配置，将 Agent Hub 注册为原生工具提供方：
-- `mcp__agenthub__hub_ask`：将任务单调用直派给任意子代理并阻塞带回结果；
-- `mcp__agenthub__hub_dispatch`：异步秒级派发；
-- `mcp__agenthub__hub_fetch`：结果与状态轮询；
-- `mcp__agenthub__hub_status`：查看各代理实时在线情况。
+### 核心能力体系
+
+1. **DSH 原生子代理 (Native Presets)**：
+   - 基于 `@deepseek-ai/dsh-agent-preset` 标准，注入 4 个专属子代理预设：
+     - `agenthub-all`：AgentHub 全能协同中枢
+     - `agenthub-antigravity`：专精复杂算法推演与长思维链
+     - `agenthub-codebuddy`：专精全栈工程代码实现与 Bug 修复
+     - `agenthub-zcode`：专精 Linux 远端运维与系统级脚本
+   - 在 DSH 顶部预设下拉中可直接切换，或在会话中通过 `@` 引用。
+
+2. **DSH 原生工作流 (Native Workflows)**：
+   - 适配 DSH 官方 `@deepseek-ai/dsh-workflow` 规范（纯 JavaScript 编排脚本）；
+   - 支持 DSH 原生全局钩子：`agent()`、`parallel()`、`pipeline()`、`phase()`、`log()`；
+   - 随包提供 3 个开箱即用的工作流模板（位于 [`workflows/`](workflows/)）：
+     - [`hub-fanout.dsh.js`](workflows/hub-fanout.dsh.js)：多智能体并发扇出与结果汇流
+     - [`code-audit.dsh.js`](workflows/code-audit.dsh.js)：双代理流水线代码架构与安全审查
+     - [`competitive-solve.dsh.js`](workflows/competitive-solve.dsh.js)：多模型交叉竞速解题与一致性验证
+
+3. **MCP 原生工具面**：
+   - `mcp__agenthub__hub_ask`：单调用直派任意 Agent 并阻塞带回最终结果；
+   - `mcp__agenthub__hub_dispatch` / `hub_fetch`：异步派发与状态轮询；
+   - `mcp__agenthub__hub_status`：查看各代理实时在线情况。
+
+---
 
 ### ⚡ 一键安装
 
 #### Windows
-双击运行当前目录下的 **`install.bat`** 即可自动完成安装！
+双击运行当前目录下的 **`install.bat`** 即可自动完成安装与注入！
 
 #### Linux / macOS
 ```bash
@@ -30,52 +48,54 @@ chmod +x install.sh
 
 #### 高级参数（Python 命令行）
 ```bash
-# 默认安装（连接本机 127.0.0.1:8765）
+# 默认安装（自动注入 MCP 与 8 大原生子代理预设）
 python3 install-dsh.py
 
-# 如果总线部署在局域网服务器且启用了 Token
+# 远程总线 (指定 URL 与 Token)
 python3 install-dsh.py --url http://127.0.0.1:8765/mcp --token your_token_here
 
-# 检查当前安装状态
+# 检查当前集成状态
 python3 install-dsh.py --check
 
-# 卸载插件（自动恢复备份）
+# 一键卸载与配置还原
 python3 install-dsh.py --uninstall
 ```
 
-### 手动安装方式
-若不想运行脚本，也可手动打开 `~/.dsh/profiles/desktop/cordis.patch.yml`，在末尾添加：
+---
 
-```yaml
-- id: mcp-agenthub
-  name: "@deepseek-ai/dsh-mcp-client"
-  config:
-    serverName: agenthub
-    transport: streamable-http
-    url: http://127.0.0.1:8765/mcp
-```
+### 如何在 DSH 中调用原生工作流？
 
-### 验证与使用
-1. 完全重启 DeepSeek Harness 客户端；
-2. 新开会话，在对话中直接发送：
-   > `调用 agenthub 查一下当前在线的代理列表`
-   或
-   > `让 antigravity 帮我写一个快速排序算法`
-3. 模型将自动调用 `mcp__agenthub__hub_ask` 完成任务并回传结果！
+在 DeepSeek Harness 客户端中，直接向 AI 助手发送以下指令即可启动原生工作流：
+
+#### 场景 1：全代理并发扇出 (hub-fanout)
+> “请使用 workflow 工具运行 `hub-fanout.dsh.js` 工作流，参数 task='写一个高效的 LRU Cache 实现'，workers='antigravity,codebuddy,traecode'”
+
+#### 场景 2：双代理流水线代码审查 (code-audit)
+> “请使用 workflow 工具运行 `code-audit.dsh.js` 工作流，审查当前工作区的核心业务代码”
 
 ---
 
 ## English
 
 This integration connects **All-in-One Agent Hub** natively into the official **DeepSeek Harness (DSH)** desktop application.
-Once installed, your DeepSeek assistant can orchestrate all 8 AI agents (CodeBuddy, Antigravity, GitHub Copilot, MiniMax, TraeCode, ZCode, etc.) directly as first-class tools.
+It provides full native support for **DSH Workflows** and **DSH Subagent Presets**!
 
-### Architecture
-DeepSeek Harness runs a Cordis microkernel loader with built-in `@deepseek-ai/dsh-mcp-client`. This integration injects a streamable-http MCP client entry into `~/.dsh/profiles/desktop/cordis.patch.yml`:
-- `mcp__agenthub__hub_ask`: One-call blocking execution on any agent;
-- `mcp__agenthub__hub_dispatch`: Instant async dispatch;
-- `mcp__agenthub__hub_fetch`: Status poll & result retrieval;
-- `mcp__agenthub__hub_status`: Overview of registered agents.
+### Core Capabilities
+
+1. **DSH Native Subagent Presets**:
+   - Built on `@deepseek-ai/dsh-agent-preset`, injecting native presets:
+     - `agenthub-all`: General orchestration hub
+     - `agenthub-antigravity`: Complex algorithm proof & deep reasoning
+     - `agenthub-codebuddy`: Production full-stack code implementation
+     - `agenthub-zcode`: Remote Linux operations & desktop tasks
+2. **DSH Native Workflows**:
+   - Built for DSH's `@deepseek-ai/dsh-workflow` engine (pure JS orchestration scripts with `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()`).
+   - Includes 3 ready-to-run workflows in [`workflows/`](workflows/):
+     - `hub-fanout.dsh.js`: Multi-agent parallel fan-out & result aggregation
+     - `code-audit.dsh.js`: Pipeline multi-agent architecture and security audit
+     - `competitive-solve.dsh.js`: Multi-model competitive problem solving
+3. **MCP Tool Suite**:
+   - `mcp__agenthub__hub_ask`, `hub_dispatch`, `hub_fetch`, `hub_status`.
 
 ### ⚡ One-Click Installation
 
@@ -86,19 +106,4 @@ Double-click **`install.bat`** to install automatically.
 ```bash
 chmod +x install.sh
 ./install.sh
-```
-
-#### Custom CLI Options
-```bash
-# Standard local install (connects to 127.0.0.1:8765)
-python3 install-dsh.py
-
-# Remote bus with auth token
-python3 install-dsh.py --url http://127.0.0.1:8765/mcp --token your_token_here
-
-# Check status
-python3 install-dsh.py --check
-
-# Uninstall
-python3 install-dsh.py --uninstall
 ```

@@ -125,9 +125,10 @@ node server.mjs
 
 除了使用独立的 Web 控制台与命令行调用外，本项目还提供了面向各主流 AI 宿主客户端的原生插件：
 
-1. **DeepSeek Harness (DSH) 官方桌面端插件**：
+1. **DeepSeek Harness (DSH) 官方桌面端插件（支持原生子代理与原生工作流）**：
    - 目录：[`integrations/dsh/`](integrations/dsh/)
-   - 基于 DSH 的 Cordis 微内核架构，一键将 Agent Hub 注册为原生工具提供方。
+   - **原生子代理预设 (Presets)**：通过 `@deepseek-ai/dsh-agent-preset` 声明并注入 `agenthub-all`、`agenthub-antigravity`、`agenthub-codebuddy`、`agenthub-zcode` 4 大原生子代理预设。
+   - **原生工作流套件 (Workflows)**：基于 DSH 官方 `@deepseek-ai/dsh-workflow`（纯 JavaScript 编排），提供 `hub-fanout.dsh.js`（多 Agent 并发扇出）、`code-audit.dsh.js`（双代理流水线代码审查）、`competitive-solve.dsh.js`（多模型交叉解题验证）三大开箱即用工作流。
    - 安装：Windows 双击 `integrations/dsh/install.bat`，Linux/macOS 运行 `bash integrations/dsh/install.sh`。
 2. **ZCode 桌面端插件**：
    - 目录：`plugins/agenthub-workers`
@@ -211,9 +212,9 @@ To stop the services: `./stop.sh`
 
 In addition to the standalone web console and CLI tools, native plugins are provided for popular AI desktop hosts:
 
-1. **DeepSeek Harness (DSH) Integration**:
+1. **DeepSeek Harness (DSH) Integration (Native Subagents & Workflows)**:
    - Location: [`integrations/dsh/`](integrations/dsh/)
-   - Native integration via DSH's Cordis microkernel loader.
+   - Native integration via DSH's Cordis microkernel loader with built-in subagent presets and JS workflow templates.
    - Install: Double-click `integrations/dsh/install.bat` (Windows) or run `bash integrations/dsh/install.sh` (Linux/macOS).
 2. **ZCode Desktop Plugin**:
    - Registers all 8 agents as native ZCode subagent types with workflow orchestration support.

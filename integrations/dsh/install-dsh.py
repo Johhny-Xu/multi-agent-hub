@@ -3,6 +3,7 @@
 """
 All-in-One Agent Hub - DeepSeek Harness (DSH) 插件一键安装与适配器
 跨平台 (Windows / macOS / Linux)，零外部依赖。
+支持：DSH MCP 工具总线 + 8 大原生子代理预设 (Presets) + 原生工作流示例
 """
 
 import os
@@ -15,7 +16,7 @@ from pathlib import Path
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
 SERVER_NAME = "agenthub"
 PLUGIN_ID = "mcp-agenthub"
-PLUGIN_PACKAGE = "@deepseek-ai/dsh-mcp-client"
+PRESET_IDS = ["preset-agenthub-all", "preset-agenthub-antigravity", "preset-agenthub-codebuddy", "preset-agenthub-zcode"]
 
 def get_dsh_home() -> Path:
     env_home = os.environ.get("DSH_HOME")
@@ -27,42 +28,58 @@ def find_target_patch_file(dsh_home: Path, profile_name: str) -> Path:
     target = dsh_home / "profiles" / profile_name / "cordis.patch.yml"
     if target.exists():
         return target
-    # 尝试在 profiles 下搜寻其他存在的 cordis.patch.yml
     profiles_dir = dsh_home / "profiles"
     if profiles_dir.exists():
         for p in profiles_dir.glob("*/cordis.patch.yml"):
             return p
     return target
 
-def build_entry_yaml(url: str, token: str = "") -> str:
-    lines = [
-        f"- id: {PLUGIN_ID}",
-        f"  name: \"{PLUGIN_PACKAGE}\"",
-        f"  config:",
-        f"    serverName: {SERVER_NAME}",
-        f"    transport: streamable-http",
-        f"    url: {url}",
-    ]
+def load_template_yaml(url: str, token: str = "") -> str:
+    tpl_file = Path(__file__).resolve().parent / "cordis.patch.yml"
+    if not tpl_file.exists():
+        # 兜底
+        lines = [
+            f"- id: {PLUGIN_ID}",
+            f"  name: \"@deepseek-ai/dsh-mcp-client\"",
+            f"  config:",
+            f"    serverName: {SERVER_NAME}",
+            f"    transport: streamable-http",
+            f"    url: {url}",
+        ]
+        if token:
+            lines.append("    headers:")
+            lines.append(f"      Authorization: \"Bearer {token}\"")
+        return "\n".join(lines) + "\n"
+    
+    content = tpl_file.read_text(encoding="utf-8")
+    # 替换 URL
+    if url != DEFAULT_URL:
+        content = content.replace("url: http://127.0.0.1:8765/mcp", f"url: {url}")
+    # 替换 Token
     if token:
-        lines.append("    headers:")
-        lines.append(f"      Authorization: \"Bearer {token}\"")
-    return "\n".join(lines) + "\n"
+        content = content.replace("# headers:\n    #   Authorization: \"Bearer your_token_here\"",
+                                  f"headers:\n      Authorization: \"Bearer {token}\"")
+    return content
 
 def is_installed(content: str) -> bool:
-    return f"id: {PLUGIN_ID}" in content or f"serverName: {SERVER_NAME}" in content
+    return (f"id: {PLUGIN_ID}" in content or 
+            f"serverName: {SERVER_NAME}" in content or
+            any(pid in content for pid in PRESET_IDS))
 
 def remove_installed(content: str) -> str:
     lines = content.splitlines()
     out = []
-    in_entry = False
+    in_managed_block = False
+    all_target_ids = [PLUGIN_ID] + PRESET_IDS
     for line in lines:
-        if line.strip().startswith(f"- id: {PLUGIN_ID}") or line.strip().startswith(f"- id: \"{PLUGIN_ID}\""):
-            in_entry = True
+        stripped = line.strip()
+        is_target_entry = any(stripped.startswith(f"- id: {tid}") or stripped.startswith(f"- id: \"{tid}\"") for tid in all_target_ids)
+        if is_target_entry:
+            in_managed_block = True
             continue
-        if in_entry:
-            # 如果遇到新的顶级列表项 (- id:)，说明旧条目结束
-            if line.strip().startswith("- "):
-                in_entry = False
+        if in_managed_block:
+            if stripped.startswith("- "):
+                in_managed_block = False
                 out.append(line)
             continue
         out.append(line)
@@ -91,6 +108,7 @@ def main():
             content = patch_file.read_text(encoding="utf-8")
             if is_installed(content):
                 print(f"✅ All-in-One Agent Hub 插件已安装在 DSH 中 (profile: {patch_file.parent.name})")
+                print("   已启用能力: MCP 工具总线 + 原生子代理预设 (Presets)")
                 sys.exit(0)
         print("ℹ️ DSH 中尚未安装 All-in-One Agent Hub 插件。")
         sys.exit(0)
@@ -103,7 +121,6 @@ def main():
         if not is_installed(content):
             print("DSH 中未发现 Agent Hub 配置，无需卸载。")
             return
-        # 备份并清理
         bak = patch_file.with_suffix(f".yml.bak-{time.strftime('%Y%m%d-%H%M%S')}")
         shutil.copy2(patch_file, bak)
         new_content = remove_installed(content)
@@ -118,7 +135,6 @@ def main():
     existing_content = ""
     if patch_file.exists():
         existing_content = patch_file.read_text(encoding="utf-8")
-        # 备份
         bak = patch_file.with_suffix(f".yml.bak-{time.strftime('%Y%m%d-%H%M%S')}")
         shutil.copy2(patch_file, bak)
         print(f"🛡️  已自动备份原配置至: {bak.name}")
@@ -127,12 +143,11 @@ def main():
 
     # 清理旧版本以实现幂等更新
     clean_content = remove_installed(existing_content)
-    # 如果文件末尾是空数组 []，去除以支持追加列表项
     clean_lines = [l for l in clean_content.splitlines() if l.strip() != "[]"]
     clean_content = "\n".join(clean_lines).rstrip() + "\n"
 
-    entry = build_entry_yaml(args.url, args.token)
-    final_content = clean_content + "\n" + entry
+    template_payload = load_template_yaml(args.url, args.token)
+    final_content = clean_content + "\n\n" + template_payload.strip() + "\n"
 
     patch_file.write_text(final_content, encoding="utf-8")
 
@@ -142,11 +157,20 @@ def main():
     print(f"  • 宿主环境 : DeepSeek Harness ({patch_file.parent.name})")
     print(f"  • 服务端点 : {args.url}")
     print(f"  • 认证状态 : {'[已配置 Token]' if args.token else '[未启用 Token, 本机回环]'}")
-    print("  • 注入工具 :")
+    print("  • 1. 注入 MCP 工具面 :")
     print("      - mcp__agenthub__hub_ask      (单调用直达任意 Agent 并出结果)")
     print("      - mcp__agenthub__hub_dispatch (异步派发)")
     print("      - mcp__agenthub__hub_fetch    (状态与结果轮询)")
     print("      - mcp__agenthub__hub_status   (总线在线状态)")
+    print("  • 2. 注入 DSH 原生子代理 (Presets) :")
+    print("      - agenthub-all         (全能中枢预设)")
+    print("      - agenthub-antigravity (专精算法证明与长思维链)")
+    print("      - agenthub-codebuddy   (专精全栈工程代码实现)")
+    print("      - agenthub-zcode       (专精 Linux 运维与系统脚本)")
+    print("  • 3. 配套 DSH 原生工作流脚本 :")
+    print("      - workflows/hub-fanout.dsh.js       (多代理并发扇出)")
+    print("      - workflows/code-audit.dsh.js       (双代理流水线代码审查)")
+    print("      - workflows/competitive-solve.dsh.js(多模型交叉解题验证)")
     print("----------------------------------------------------------")
     print("  👉 下一步：启动或完全重启 DeepSeek Harness 客户端即可生效！")
     print("==========================================================")
