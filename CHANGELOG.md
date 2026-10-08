@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.0] - 2026-10-07
+
+### 重构与升级 / Major Refactor & Upgrade
+- **项目正式升级为 All-in-One Agent Hub（`all-in-one-agent-hub`）**：
+  - 品牌与架构由分散组件全面进化为“一站式多智能体调度与协作总线”。
+  - 提供根目录一键启动与停止工具（`start.sh` / `stop.sh`、`start.bat` / `stop.bat`），单命令并发拉起任务总线、Web 控制台并完成健康检查。
+  - 统一根目录 `.env.example` 配置中心，集中管理总线端口、Web 控制台及认证 Token，告别多级子目录割裂配置。
+  - Web 控制台全面更名与视觉升格为 `All-in-One Agent Hub`。
+  - 手机端竖屏排版重构：解决超窄屏下顶部 Header 与工具栏按钮被截断问题，全部操作项 100% 完整可见。
+
+---
+
 ## [0.3.2] - 2026-10-07
 
 ### 新增 / Added
