@@ -9,6 +9,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.4.0] - 2026-10-07
 
+### 发展路线图与生态规划 / Roadmap & Ecosystem
+- **发布官方发展路线图矢量图 (`docs/roadmap.svg`)**：
+  - 清晰标注系统演进 5 大阶段（Phase 1~3 已就绪、Phase 4 积极适配中、Phase 5 下阶段规划）；
+  - 核心明确：当前全力完善 ZCode 官方插件，重点积极适配 DeepSeek Harness (DSH) 原生生态，后续推进 Codex 生态。
+- **深度完善 ZCode 官方插件与工作流集成 (`agenthub-workers`)**：
+  - 完善 8 大子智能体原生注册与自然语言缩写自动路由映射；
+  - 借助 `hub-bridge` MCP（`hub_ask`、`hub_dispatch`、`hub_fetch`）彻底破除工作流 30 秒超时上限；
+  - 坚决保障所有交付物免服务器单文件直接双击运行。
+- **DeepSeek Harness (DSH) 原生生态积极适配推进中 / DSH Active Adaptation**：
+  - 在 `integrations/dsh/` 提供 Cordis 微内核架构原生子代理预设（Presets）与工作流（Workflows）工程化源码；
+  - 当前全面开展 Cordis 多 Profile 环境隔离与平滑注入测试。
+- **规划 Codex 生态打通 (Phase 5 / Planned)**：
+  - 规划跨平台双向智能体总线与流式上下文集成。
+
 ### 重构与升级 / Major Refactor & Upgrade
 - **项目正式升级为 Multi-Agent Hub（`multi-agent-hub`）**：
   - 品牌与架构由分散组件全面进化为“一站式多智能体调度与协作总线”。
@@ -16,12 +30,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - 统一根目录 `.env.example` 配置中心，集中管理总线端口、Web 控制台及认证 Token，告别多级子目录割裂配置。
   - Web 控制台全面更名与视觉升格为 `Multi-Agent Hub`。
   - 手机端竖屏排版重构：解决超窄屏下顶部 Header 与工具栏按钮被截断问题，全部操作项 100% 完整可见。
-- **新增 DeepSeek Harness (DSH) 原生子代理与原生工作流深度支持 / DSH Native Subagents & Workflows**：
-  - 目录 `integrations/dsh/`：提供基于 Cordis 微内核架构的标准加载层配置补丁与跨平台安装工具。
-  - **原生子代理预设 (Agent Presets)**：通过 `@deepseek-ai/dsh-agent-preset` 声明并注入 `agenthub-all`、`agenthub-antigravity`、`agenthub-codebuddy`、`agenthub-zcode` 4 大原生子代理预设。
-  - **原生工作流套件 (Native Workflows)**：基于 DSH 官方 `@deepseek-ai/dsh-workflow`（纯 JavaScript 编排），提供 `hub-fanout.dsh.js`（多 Agent 并发扇出）、`code-audit.dsh.js`（双代理流水线代码审查）、`competitive-solve.dsh.js`（多模型交叉解题验证）三大开箱即用工作流。
-  - 支持 Windows（双击 `install.bat`）与 Linux/macOS（`install.sh` / `install-dsh.py`）一键自动安装、状态检查与无损备份卸载。
-  - 安装后在 DSH 内直接原生调用 Agent Hub 全部 8 大 AI 代理工具（`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`）。
 
 ---
 
