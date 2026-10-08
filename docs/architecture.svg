@@ -1,89 +1,198 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="660" viewBox="0 0 960 660" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="720" viewBox="0 0 1020 720" font-family="Segoe UI, PingFang SC, Microsoft YaHei, -apple-system, sans-serif">
   <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
-    </marker>
     <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
     </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
   </defs>
 
-  <rect width="960" height="660" fill="#ffffff"/>
+  <!-- 全局背景 -->
+  <rect width="1020" height="720" fill="#f8fafc"/>
 
-  <!-- ============ 第 1 层: 组件框 / component boxes ============ -->
-  <rect x="40" y="40" width="230" height="86" rx="10" fill="#f1f5f9" stroke="#64748b"/>
-  <text x="155" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#0f172a">你的入口 / Your entry</text>
-  <text x="155" y="88" text-anchor="middle" font-size="12" fill="#334155">MCP 客户端 · 工作流 · 脚本</text>
-  <text x="155" y="108" text-anchor="middle" font-size="11" fill="#64748b">MCP client / workflow / ask.mjs</text>
+  <!-- ======================================================== -->
+  <!-- 顶层：客户端与入口 (Clients & Entrances)                   -->
+  <!-- ======================================================== -->
+  
+  <!-- 入口大容器 (左侧 3 个接入选项) -->
+  <rect x="40" y="30" width="560" height="116" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <rect x="40" y="30" width="560" height="32" rx="14" fill="#f1f5f9"/>
+  <rect x="40" y="50" width="560" height="12" fill="#f1f5f9"/>
+  <text x="56" y="52" font-size="12" font-weight="bold" fill="#334155" letter-spacing="0.2">AI 宿主客户端与调用入口 / Clients &amp; Integrations</text>
 
-  <rect x="620" y="40" width="300" height="86" rx="10" fill="#f5f3ff" stroke="#7c3aed"/>
-  <text x="770" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#5b21b6">Web 控制台 / Web Console</text>
-  <text x="770" y="88" text-anchor="middle" font-size="12" fill="#4c1d95">console/server.mjs (:8890)</text>
-  <text x="770" y="108" text-anchor="middle" font-size="11" fill="#6d28d9">会话线程 · 实时配额 · 派发记录 / sessions · quotas · records</text>
+  <!-- 选项 1: DeepSeek Harness (DSH) 原生插件 -->
+  <rect x="52" y="70" width="168" height="66" rx="9" fill="#f8fafc" stroke="#3b82f6" stroke-width="1.2"/>
+  <text x="136" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e3a8a">DeepSeek Harness</text>
+  <text x="136" y="110" text-anchor="middle" font-size="11" font-weight="600" fill="#2563eb">DSH 原生插件 · 8 预设</text>
+  <text x="136" y="125" text-anchor="middle" font-size="10" fill="#64748b">Cordis Presets &amp; Workflows</text>
 
-  <rect x="300" y="205" width="380" height="120" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-  <text x="490" y="235" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e3a8a">任务总线 / Task Bus</text>
-  <text x="490" y="260" text-anchor="middle" font-size="13" fill="#1e40af">hub/agent_hub.py — JSON-RPC MCP :8765</text>
-  <text x="490" y="282" text-anchor="middle" font-size="12" fill="#1e40af">async_worker.py · 异步派发 / async dispatch</text>
-  <text x="490" y="302" text-anchor="middle" font-size="12" fill="#1e40af">额度耗尽自动改派 / auto failover on quota drain</text>
+  <!-- 选项 2: ZCode 原生插件 -->
+  <rect x="232" y="70" width="168" height="66" rx="9" fill="#f8fafc" stroke="#10b981" stroke-width="1.2"/>
+  <text x="316" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#065f46">ZCode 客户端</text>
+  <text x="316" y="110" text-anchor="middle" font-size="11" font-weight="600" fill="#059669">ZCode 原生子智能体</text>
+  <text x="316" y="125" text-anchor="middle" font-size="10" fill="#64748b">Native Subagents &amp; DWF</text>
 
-  <rect x="40" y="420" width="420" height="200" rx="12" fill="#f0fdf4" stroke="#16a34a"/>
-  <text x="250" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#166534">CLI 代理 / CLI Agents</text>
-  <rect x="60" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="120" y="484" text-anchor="middle" font-size="12" fill="#14532d">CodeBuddy</text>
-  <text x="120" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">国际版 / intl</text>
-  <rect x="190" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="250" y="484" text-anchor="middle" font-size="12" fill="#14532d">CodeBuddy</text>
-  <text x="250" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">国内版 / cn</text>
-  <rect x="320" y="462" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="380" y="484" text-anchor="middle" font-size="12" fill="#14532d">Antigravity</text>
-  <text x="380" y="502" text-anchor="middle" font-size="11" fill="#4d7c0f">gemini-3.8-flash</text>
-  <rect x="60" y="528" width="120" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="120" y="550" text-anchor="middle" font-size="12" fill="#14532d">GitHub Copilot</text>
-  <text x="120" y="568" text-anchor="middle" font-size="11" fill="#4d7c0f">auto</text>
-  <rect x="190" y="528" width="250" height="54" rx="8" fill="#ffffff" stroke="#16a34a"/>
-  <text x="315" y="548" text-anchor="middle" font-size="12" fill="#14532d">MiniMax (mmx)</text>
-  <text x="315" y="564" text-anchor="middle" font-size="11" fill="#4d7c0f">MiniMax-M3.1-Flash-Preview</text>
-  <text x="315" y="578" text-anchor="middle" font-size="11" fill="#64748b">API 聊天型 / chat-only · 纯文本进 / 文本出</text>
+  <!-- 选项 3: 通用 MCP 客户端与脚本 -->
+  <rect x="412" y="70" width="176" height="66" rx="9" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"/>
+  <text x="500" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e293b">通用 MCP / CLI / 脚本</text>
+  <text x="500" y="110" text-anchor="middle" font-size="11" fill="#475569">Cursor · Claude · 终端</text>
+  <text x="500" y="125" text-anchor="middle" font-size="10" fill="#64748b">mcp/ask.mjs · CI/CD · API</text>
 
-  <rect x="520" y="420" width="400" height="200" rx="12" fill="#fffbeb" stroke="#d97706"/>
-  <text x="720" y="446" text-anchor="middle" font-size="14" font-weight="bold" fill="#92400e">桌面代理 / Desktop Agents（VNC）</text>
-  <rect x="540" y="462" width="170" height="66" rx="8" fill="#ffffff" stroke="#d97706"/>
-  <text x="625" y="486" text-anchor="middle" font-size="12" fill="#78350f">ZCode 桌面版 / desktop</text>
-  <text x="625" y="504" text-anchor="middle" font-size="11" fill="#b45309">GLM-5.3-FlashX · CDP :9223</text>
-  <rect x="730" y="462" width="170" height="66" rx="8" fill="#ffffff" stroke="#d97706"/>
-  <text x="815" y="486" text-anchor="middle" font-size="12" fill="#78350f">TraeCode 桌面版 / desktop</text>
-  <text x="815" y="504" text-anchor="middle" font-size="11" fill="#b45309">GLM-5.3-FlashX · CDP :9222</text>
-  <rect x="540" y="540" width="360" height="58" rx="8" fill="#fef3c7" stroke="#d97706" stroke-dasharray="5 3"/>
-  <text x="720" y="562" text-anchor="middle" font-size="12" fill="#92400e">drivers/*.js — CDP 派发与增量回复抓取</text>
-  <text x="720" y="582" text-anchor="middle" font-size="11" fill="#b45309">CDP dispatch &amp; incremental reply capture</text>
+  <!-- 右侧: Web 控制台 -->
+  <rect x="640" y="30" width="340" height="116" rx="14" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <rect x="640" y="30" width="340" height="32" rx="14" fill="#faf5ff"/>
+  <rect x="640" y="50" width="340" height="12" fill="#faf5ff"/>
+  <text x="656" y="52" font-size="12" font-weight="bold" fill="#6b21a8" letter-spacing="0.2">Web 可视化控制台 / All-in-One Console</text>
+  <text x="810" y="86" text-anchor="middle" font-size="15" font-weight="bold" fill="#5b21b6">Web 控制台 (console/ :8890)</text>
+  <text x="810" y="108" text-anchor="middle" font-size="12" fill="#6d28d9">8 平台实时对话 · 会话管理 · 实时配额仪表</text>
+  <text x="810" y="127" text-anchor="middle" font-size="11" fill="#7c3aed">多端竖屏全自适应 · 思维链自动折叠</text>
 
-  <!-- ============ 第 2 层: 连线 / connectors ============ -->
-  <line x1="270" y1="83" x2="330" y2="225" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <line x1="330" y1="250" x2="272" y2="120" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <line x1="740" y1="130" x2="600" y2="205" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <line x1="640" y1="222" x2="770" y2="130" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <line x1="380" y1="325" x2="250" y2="415" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <line x1="600" y1="325" x2="720" y2="415" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
-  <line x1="300" y1="420" x2="420" y2="325" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <line x1="720" y1="420" x2="590" y2="325" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
-  <path d="M 178 486 Q 185 472 192 486" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr)"/>
 
-  <!-- ============ 第 3 层(顶层): 徽章标签 / badges ============ -->
-  <rect x="238" y="128" width="122" height="26" rx="13" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
-  <text x="299" y="145" text-anchor="middle" font-size="12" fill="#ffffff">① dispatch 派发</text>
-  <rect x="228" y="172" width="122" height="26" rx="13" fill="#475569" stroke="#ffffff" stroke-width="2"/>
-  <text x="289" y="189" text-anchor="middle" font-size="12" fill="#ffffff">④ collect 回收</text>
-  <rect x="596" y="158" width="160" height="26" rx="13" fill="#7c3aed" stroke="#ffffff" stroke-width="2"/>
-  <text x="676" y="175" text-anchor="middle" font-size="12" fill="#ffffff">⑤ 总览 / poll &amp; show</text>
-  <rect x="252" y="352" width="150" height="26" rx="13" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
-  <text x="327" y="369" text-anchor="middle" font-size="12" fill="#ffffff">② execute 执行</text>
-  <rect x="596" y="352" width="150" height="26" rx="13" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
-  <text x="671" y="369" text-anchor="middle" font-size="12" fill="#ffffff">② execute 执行</text>
-  <rect x="322" y="378" width="150" height="26" rx="13" fill="#475569" stroke="#ffffff" stroke-width="2"/>
-  <text x="397" y="395" text-anchor="middle" font-size="12" fill="#ffffff">③ results 回写 &lt;ref&gt;.json</text>
-  <rect x="600" y="378" width="150" height="26" rx="13" fill="#475569" stroke="#ffffff" stroke-width="2"/>
-  <text x="675" y="395" text-anchor="middle" font-size="12" fill="#ffffff">③ results 回写 &lt;ref&gt;.json</text>
+  <!-- ======================================================== -->
+  <!-- 中间层：任务总线 (Core Task Bus)                          -->
+  <!-- ======================================================== -->
 
-  <text x="480" y="646" text-anchor="middle" font-size="12" fill="#475569">数据流 / Data flow：① dispatch(task→ref) → ② execute(agent CLI/desktop) → ③ results → ④ collect(hub_wait_result) → ⑤ console 总览</text>
+  <rect x="290" y="225" width="440" height="135" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2" filter="url(#cardShadow)"/>
+  <rect x="290" y="225" width="440" height="34" rx="14" fill="#eff6ff"/>
+  <rect x="290" y="245" width="440" height="14" fill="#eff6ff"/>
+  <text x="510" y="248" text-anchor="middle" font-size="14" font-weight="bold" fill="#1d4ed8">Multi-Agent Hub 核心任务总线 / Core Task Bus</text>
+
+  <text x="510" y="284" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e293b">hub/agent_hub.py (:8765/mcp) + async_worker.py</text>
+  <text x="510" y="308" text-anchor="middle" font-size="12" fill="#334155">统一 JSON-RPC MCP 协议 · 异步任务队列 · 代理邮箱 · 共享状态</text>
+  <text x="510" y="328" text-anchor="middle" font-size="12" font-weight="600" fill="#dc2626">⚡ 额度耗尽自动改派 · 故障转移 (Auto Failover) · 任务不出局域网</text>
+  <text x="510" y="347" text-anchor="middle" font-size="11" fill="#64748b">官方无头 CLI 模式运行 (Official Headless) · 绝对零封号风险</text>
+
+
+  <!-- ======================================================== -->
+  <!-- 底部层：执行代理群 (Execution Agents)                     -->
+  <!-- ======================================================== -->
+
+  <!-- 左大框: 官方无头 CLI 代理群 (6 个) -->
+  <rect x="40" y="440" width="530" height="210" rx="14" fill="#ffffff" stroke="#16a34a" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <rect x="40" y="440" width="530" height="32" rx="14" fill="#f0fdf4"/>
+  <rect x="40" y="460" width="530" height="12" fill="#f0fdf4"/>
+  <text x="56" y="462" font-size="12" font-weight="bold" fill="#15803d">官方无头 CLI 代理 / Headless CLI Workers</text>
+
+  <!-- 第一排 3 个 -->
+  <!-- CodeBuddy 国际版 -->
+  <rect x="56" y="484" width="158" height="66" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="135" y="506" text-anchor="middle" font-size="12" font-weight="bold" fill="#0f172a">CodeBuddy 国际版</text>
+  <text x="135" y="524" text-anchor="middle" font-size="11" fill="#16a34a">deepseek-v4.1-flash</text>
+  <text x="135" y="539" text-anchor="middle" font-size="10" fill="#64748b">全栈工程开发 (intl)</text>
+
+  <!-- CodeBuddy 国内版 -->
+  <rect x="226" y="484" width="158" height="66" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="305" y="506" text-anchor="middle" font-size="12" font-weight="bold" fill="#0f172a">CodeBuddy 国内版</text>
+  <text x="305" y="524" text-anchor="middle" font-size="11" fill="#16a34a">deepseek-v4.1-flash</text>
+  <text x="305" y="539" text-anchor="middle" font-size="10" fill="#64748b">国内独立部署 (cn)</text>
+
+  <!-- Antigravity -->
+  <rect x="396" y="484" width="158" height="66" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="475" y="506" text-anchor="middle" font-size="12" font-weight="bold" fill="#0f172a">Antigravity (agy)</text>
+  <text x="475" y="524" text-anchor="middle" font-size="11" fill="#2563eb">gemini-3.8-flash</text>
+  <text x="475" y="539" text-anchor="middle" font-size="10" fill="#64748b">Claude / 深度逻辑推理</text>
+
+  <!-- 第二排 3 个 -->
+  <!-- GitHub Copilot -->
+  <rect x="56" y="562" width="158" height="68" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="135" y="584" text-anchor="middle" font-size="12" font-weight="bold" fill="#0f172a">GitHub Copilot</text>
+  <text x="135" y="602" text-anchor="middle" font-size="11" fill="#7c3aed">Auto 自动选型</text>
+  <text x="135" y="618" text-anchor="middle" font-size="10" fill="#64748b">copilot CLI 无头</text>
+
+  <!-- MiMoCode -->
+  <rect x="226" y="562" width="158" height="68" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="305" y="584" text-anchor="middle" font-size="12" font-weight="bold" fill="#0f172a">MiMoCode (mimo)</text>
+  <text x="305" y="602" text-anchor="middle" font-size="11" fill="#0891b2">Baseline Pure 模式</text>
+  <text x="305" y="618" text-anchor="middle" font-size="10" fill="#64748b">小米 MiMo 架构编程</text>
+
+  <!-- MiniMax -->
+  <rect x="396" y="562" width="158" height="68" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="475" y="584" text-anchor="middle" font-size="12" font-weight="bold" fill="#0f172a">MiniMax (mmx)</text>
+  <text x="475" y="602" text-anchor="middle" font-size="11" fill="#e11d48">M3.1-Flash-Preview</text>
+  <text x="475" y="618" text-anchor="middle" font-size="10" fill="#64748b">纯文本长文生成与问答</text>
+
+  <!-- 右大框: 桌面代理群 (2 个 + 驱动层) -->
+  <rect x="600" y="440" width="380" height="210" rx="14" fill="#ffffff" stroke="#d97706" stroke-width="1.5" filter="url(#cardShadow)"/>
+  <rect x="600" y="440" width="380" height="32" rx="14" fill="#fffbeb"/>
+  <rect x="600" y="460" width="380" height="12" fill="#fffbeb"/>
+  <text x="616" y="462" font-size="12" font-weight="bold" fill="#b45309">桌面端 AI 代理 / Desktop Agents (VNC / CDP)</text>
+
+  <!-- ZCode 桌面版 (明确标明 GLM-5.3-Flash) -->
+  <rect x="616" y="484" width="166" height="74" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="699" y="506" text-anchor="middle" font-size="13" font-weight="bold" fill="#0f172a">ZCode 桌面版</text>
+  <text x="699" y="525" text-anchor="middle" font-size="12" font-weight="600" fill="#d97706">GLM-5.3-Flash</text>
+  <text x="699" y="542" text-anchor="middle" font-size="11" fill="#64748b">CDP 端口 :9223</text>
+
+  <!-- TraeCode 桌面版 (明确标明 GLM-5.3-FlashX) -->
+  <rect x="798" y="484" width="166" height="74" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="881" y="506" text-anchor="middle" font-size="13" font-weight="bold" fill="#0f172a">TraeCode 桌面版</text>
+  <text x="881" y="525" text-anchor="middle" font-size="12" font-weight="600" fill="#059669">GLM-5.3-FlashX</text>
+  <text x="881" y="542" text-anchor="middle" font-size="11" fill="#64748b">CDP 端口 :9222</text>
+
+  <!-- CDP 驱动层 -->
+  <rect x="616" y="568" width="348" height="62" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-dasharray="4 3"/>
+  <text x="790" y="592" text-anchor="middle" font-size="12" font-weight="bold" fill="#92400e">drivers/*.js — CDP 自动化驱动与增量回复抓取</text>
+  <text x="790" y="612" text-anchor="middle" font-size="11" fill="#b45309">TraeClaw 网关桥接 · 智能会话基线增量提取 · 窗口聚焦</text>
+
+
+  <!-- ======================================================== -->
+  <!-- 连线层 (Connectors)                                       -->
+  <!-- ======================================================== -->
+
+  <!-- 入口 -> 总线 -->
+  <line x1="380" y1="146" x2="420" y2="225" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+  <line x1="445" y1="225" x2="410" y2="146" stroke="#475569" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
+
+  <!-- 控制台 <-> 总线 -->
+  <line x1="750" y1="146" x2="620" y2="225" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+  <line x1="640" y1="225" x2="770" y2="146" stroke="#475569" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
+
+  <!-- 总线 -> CLI 代理 -->
+  <line x1="420" y1="360" x2="310" y2="440" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+  <line x1="340" y1="440" x2="445" y2="360" stroke="#475569" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
+
+  <!-- 总线 -> 桌面代理 -->
+  <line x1="600" y1="360" x2="730" y2="440" stroke="#2563eb" stroke-width="2" marker-end="url(#arrB)"/>
+  <line x1="705" y1="440" x2="575" y2="360" stroke="#475569" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
+
+
+  <!-- ======================================================== -->
+  <!-- 顶层徽章标签 (Badges on Top)                             -->
+  <!-- ======================================================== -->
+
+  <!-- 入口 -> 总线 派发 -->
+  <rect x="330" y="160" width="110" height="24" rx="12" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  <text x="385" y="176" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">① 派发 dispatch</text>
+
+  <!-- 总线 -> 入口 回收 -->
+  <rect x="420" y="186" width="110" height="24" rx="12" fill="#475569" stroke="#ffffff" stroke-width="2"/>
+  <text x="475" y="202" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">④ 回收 collect</text>
+
+  <!-- 控制台 <-> 总线 统计 -->
+  <rect x="670" y="170" width="140" height="24" rx="12" fill="#7c3aed" stroke="#ffffff" stroke-width="2"/>
+  <text x="740" y="186" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">⑤ 实时监控 overview</text>
+
+  <!-- 总线 -> CLI 执行 -->
+  <rect x="300" y="380" width="116" height="24" rx="12" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  <text x="358" y="396" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">② 执行 CLI 命令</text>
+
+  <!-- CLI -> 总线 回写 -->
+  <rect x="360" y="408" width="126" height="24" rx="12" fill="#475569" stroke="#ffffff" stroke-width="2"/>
+  <text x="423" y="424" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">③ 回写 results/*.json</text>
+
+  <!-- 总线 -> 桌面 执行 -->
+  <rect x="650" y="380" width="126" height="24" rx="12" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  <text x="713" y="396" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">② 驱动 CDP 桌面</text>
+
+  <!-- 桌面 -> 总线 回写 -->
+  <rect x="590" y="408" width="126" height="24" rx="12" fill="#475569" stroke="#ffffff" stroke-width="2"/>
+  <text x="653" y="424" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">③ 抓取增量回复</text>
+
+  <!-- 底部汇总文字说明 -->
+  <rect x="180" y="675" width="660" height="28" rx="14" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="510" y="694" text-anchor="middle" font-size="12" fill="#475569" font-weight="500">数据流闭环：① 客户端/工作流派发 ➔ ② 对应 Agent 无头/CDP 执行 ➔ ③ 落盘结果 ➔ ④ 阻塞/轮询回收 ➔ ⑤ 控制台总览</text>
 </svg>
