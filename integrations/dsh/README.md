@@ -12,12 +12,17 @@
 
 ### 核心能力体系
 
-1. **DSH 原生子代理 (Native Presets)**：
-   - 基于 `@deepseek-ai/dsh-agent-preset` 标准，注入 4 个专属子代理预设：
-     - `agenthub-all`：AgentHub 全能协同中枢
-     - `agenthub-antigravity`：专精复杂算法推演与长思维链
-     - `agenthub-codebuddy`：专精全栈工程代码实现与 Bug 修复
-     - `agenthub-zcode`：专精 Linux 远端运维与系统级脚本
+1. **DSH 原生子代理 (Native Presets 全量 8 通道)**：
+   - 基于 `@deepseek-ai/dsh-agent-preset` 标准，注入全套子代理预设：
+     - `agenthub-all`：AgentHub 全能协同总线
+     - `agenthub-antigravity`：专精复杂算法推演与长思维链 (Gemini 3.8 Flash / Claude 思维链)
+     - `agenthub-codebuddy`：专精工业全栈代码实现与 Bug 修复 (DeepSeek-V4.1-Flash 国际版)
+     - `agenthub-codebuddy-cn`：专精国内全栈工程代码编写 (DeepSeek-V4.1-Flash 国内版)
+     - `agenthub-zcode`：专精 Linux 远端运维排查与系统脚本 (GLM-5.3-Flash)
+     - `agenthub-traecode`：专精极速并发代码审查与轻量生成 (GLM-5.3-FlashX)
+     - `agenthub-copilot`：专精 GitHub Copilot 自动选型编程代理 (Auto 模式)
+     - `agenthub-minimaxcode`：专精长文本问答与创作 (MiniMax-M3.1-Flash-Preview)
+     - `agenthub-mimocode`：专精小米 MiMo 架构编程代理 (Baseline Pure 模式)
    - 在 DSH 顶部预设下拉中可直接切换，或在会话中通过 `@` 引用。
 
 2. **DSH 原生工作流 (Native Workflows)**：
@@ -82,12 +87,17 @@ It provides full native support for **DSH Workflows** and **DSH Subagent Presets
 
 ### Core Capabilities
 
-1. **DSH Native Subagent Presets**:
+1. **DSH Native Subagent Presets (All 8 Channels)**:
    - Built on `@deepseek-ai/dsh-agent-preset`, injecting native presets:
      - `agenthub-all`: General orchestration hub
-     - `agenthub-antigravity`: Complex algorithm proof & deep reasoning
-     - `agenthub-codebuddy`: Production full-stack code implementation
-     - `agenthub-zcode`: Remote Linux operations & desktop tasks
+     - `agenthub-antigravity`: Complex algorithm proof & deep reasoning (Gemini/Claude)
+     - `agenthub-codebuddy`: Production full-stack code implementation (DeepSeek-V4.1-Flash Intl)
+     - `agenthub-codebuddy-cn`: Domestic full-stack code implementation (DeepSeek-V4.1-Flash CN)
+     - `agenthub-zcode`: Remote Linux operations & desktop AI tasks (GLM-5.3-Flash)
+     - `agenthub-traecode`: High-speed code review & lightweight generation (GLM-5.3-FlashX)
+     - `agenthub-copilot`: GitHub Copilot auto-routing agent
+     - `agenthub-minimaxcode`: Long-text generation & Q&A (MiniMax-M3.1-Flash-Preview)
+     - `agenthub-mimocode`: MiMoCode architecture programming agent
 2. **DSH Native Workflows**:
    - Built for DSH's `@deepseek-ai/dsh-workflow` engine (pure JS orchestration scripts with `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()`).
    - Includes 3 ready-to-run workflows in [`workflows/`](workflows/):
