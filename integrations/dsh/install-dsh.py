@@ -65,28 +65,22 @@ def find_target_package_json(dsh_home: Path, profile_name: str) -> Path:
 
 def load_template_yaml(url: str, token: str = "") -> str:
     tpl_file = Path(__file__).resolve().parent / "cordis.patch.yml"
+    mcp_script = (Path(__file__).resolve().parent / "mcp" / "server.mjs").as_posix()
     if not tpl_file.exists():
         lines = [
             f"- id: {PLUGIN_ID}",
             f"  name: \"@deepseek-ai/dsh-mcp-client\"",
             f"  config:",
             f"    serverName: {SERVER_NAME}",
-            f"    transport: streamable-http",
-            f"    url: {url}",
+            f"    transport: stdio",
+            f"    command: node",
+            f"    args:",
+            f"      - \"{mcp_script}\"",
         ]
-        if token:
-            lines.append("    headers:")
-            lines.append(f"      Authorization: \"Bearer {token}\"")
         return "\n".join(lines) + "\n"
     
     content = tpl_file.read_text(encoding="utf-8")
-    if url != DEFAULT_URL:
-        content = content.replace("url: http://127.0.0.1:8765/mcp", f"url: {url}")
-    if token:
-        content = content.replace(
-            "# headers:\n    #   Authorization: \"Bearer your_token_here\"",
-            f"headers:\n      Authorization: \"Bearer {token}\""
-        )
+    content = content.replace("${MCP_SERVER_SCRIPT}", mcp_script)
     return content
 
 def is_installed(content: str) -> bool:

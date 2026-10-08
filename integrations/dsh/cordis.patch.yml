@@ -3,16 +3,15 @@
 # 完整原生支持层：MCP 工具总线 + 全量 8 大原生子代理预设 (Agent Presets)
 # ==============================================================================
 
-# 1. 挂载 Agent Hub 核心任务总线 (MCP Client)
+# 1. 挂载 Multi-Agent Hub 核心任务总线 (采用 stdio 本地桥接，自带 Token、无需本地开端口)
 - id: mcp-agenthub
   name: "@deepseek-ai/dsh-mcp-client"
   config:
     serverName: agenthub
-    transport: streamable-http
-    url: http://127.0.0.1:8765/mcp
-    # 若启用了 Token 认证，取消下两行注释并填写：
-    # headers:
-    #   Authorization: "Bearer your_token_here"
+    transport: stdio
+    command: node
+    args:
+      - "${MCP_SERVER_SCRIPT}"
 
 # 2. 注册 DSH 全量原生子代理 (Agent Presets)
 # 会话中可在顶部预设下拉直接切换，或在会话中通过子代理委派机制调用
