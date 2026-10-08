@@ -11,6 +11,7 @@ import sys
 import argparse
 import shutil
 import time
+import re
 from pathlib import Path
 
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
@@ -27,6 +28,9 @@ PRESET_IDS = [
     "preset-agenthub-minimaxcode",
     "preset-agenthub-mimocode",
 ]
+
+BLOCK_BEGIN = "# >>> Multi-Agent Hub BEGIN >>>"
+BLOCK_END = "# <<< Multi-Agent Hub END <<<"
 
 def get_dsh_home() -> Path:
     env_home = os.environ.get("DSH_HOME")
@@ -47,7 +51,6 @@ def find_target_patch_file(dsh_home: Path, profile_name: str) -> Path:
 def load_template_yaml(url: str, token: str = "") -> str:
     tpl_file = Path(__file__).resolve().parent / "cordis.patch.yml"
     if not tpl_file.exists():
-        # 兜底
         lines = [
             f"- id: {PLUGIN_ID}",
             f"  name: \"@deepseek-ai/dsh-mcp-client\"",
@@ -62,38 +65,62 @@ def load_template_yaml(url: str, token: str = "") -> str:
         return "\n".join(lines) + "\n"
     
     content = tpl_file.read_text(encoding="utf-8")
-    # 替换 URL
     if url != DEFAULT_URL:
         content = content.replace("url: http://127.0.0.1:8765/mcp", f"url: {url}")
-    # 替换 Token
     if token:
-        content = content.replace("# headers:\n    #   Authorization: \"Bearer your_token_here\"",
-                                  f"headers:\n      Authorization: \"Bearer {token}\"")
+        content = content.replace(
+            "# headers:\n    #   Authorization: \"Bearer your_token_here\"",
+            f"headers:\n      Authorization: \"Bearer {token}\""
+        )
     return content
 
 def is_installed(content: str) -> bool:
-    return (f"id: {PLUGIN_ID}" in content or 
+    return (BLOCK_BEGIN in content or 
+            f"id: {PLUGIN_ID}" in content or 
             f"serverName: {SERVER_NAME}" in content or
             any(pid in content for pid in PRESET_IDS))
 
-def remove_installed(content: str) -> str:
+def strip_managed_content(content: str) -> str:
+    """安全剥离所有由本安装器注入的内容，保护用户原始 YAML 结构。"""
+    if BLOCK_BEGIN in content and BLOCK_END in content:
+        pattern = re.compile(rf"\n*{re.escape(BLOCK_BEGIN)}.*?" + rf"{re.escape(BLOCK_END)}\n*", re.S)
+        content = pattern.sub("\n", content)
+    
     lines = content.splitlines()
     out = []
-    in_managed_block = False
+    in_managed_top_entry = False
     all_target_ids = [PLUGIN_ID] + PRESET_IDS
+
     for line in lines:
-        stripped = line.strip()
-        is_target_entry = any(stripped.startswith(f"- id: {tid}") or stripped.startswith(f"- id: \"{tid}\"") for tid in all_target_ids)
-        if is_target_entry:
-            in_managed_block = True
-            continue
-        if in_managed_block:
-            if stripped.startswith("- "):
-                in_managed_block = False
+        if line.startswith("- "):
+            is_our_entry = any(f"id: {tid}" in line or f"id: \"{tid}\"" in line for tid in all_target_ids)
+            if is_our_entry:
+                in_managed_top_entry = True
+                continue
+            else:
+                in_managed_top_entry = False
                 out.append(line)
+                continue
+        
+        if in_managed_top_entry:
             continue
+        
+        if line.startswith("      - id: persona") or line.strip() == "- id: persona":
+            continue
+        
         out.append(line)
-    return "\n".join(out).strip() + "\n"
+
+    return "\n".join(out).strip()
+
+def validate_yaml(content: str):
+    """尝试加载 YAML，防止损坏用户配置。"""
+    try:
+        import yaml
+        yaml.safe_load(content)
+    except ImportError:
+        pass
+    except Exception as e:
+        raise ValueError(f"YAML 语法校验未通过: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="为 DeepSeek Harness (DSH) 安装 Multi-Agent Hub 插件")
@@ -133,8 +160,9 @@ def main():
             return
         bak = patch_file.with_suffix(f".yml.bak-{time.strftime('%Y%m%d-%H%M%S')}")
         shutil.copy2(patch_file, bak)
-        new_content = remove_installed(content)
-        patch_file.write_text(new_content, encoding="utf-8")
+        clean_content = strip_managed_content(content) + "\n"
+        validate_yaml(clean_content)
+        patch_file.write_text(clean_content, encoding="utf-8")
         print(f"✅ 已成功从 DSH 卸载 Agent Hub 插件！")
         print(f"   原配置已备份至: {bak}")
         print("   重启 DeepSeek Harness 客户端即可生效。")
@@ -152,13 +180,21 @@ def main():
         existing_content = "# DSH Cordis profile patch layer\n[]\n"
 
     # 清理旧版本以实现幂等更新
-    clean_content = remove_installed(existing_content)
-    clean_lines = [l for l in clean_content.splitlines() if l.strip() != "[]"]
-    clean_content = "\n".join(clean_lines).rstrip() + "\n"
+    clean_base = strip_managed_content(existing_content)
+    clean_lines = [l for l in clean_base.splitlines() if l.strip() != "[]"]
+    clean_base = "\n".join(clean_lines).rstrip()
 
-    template_payload = load_template_yaml(args.url, args.token)
-    final_content = clean_content + "\n\n" + template_payload.strip() + "\n"
+    template_payload = load_template_yaml(args.url, args.token).strip()
+    
+    # 组合为带明确注释块的最终 YAML
+    final_content = (
+        clean_base
+        + f"\n\n{BLOCK_BEGIN}\n"
+        + template_payload
+        + f"\n{BLOCK_END}\n"
+    )
 
+    validate_yaml(final_content)
     patch_file.write_text(final_content, encoding="utf-8")
 
     print("==========================================================")
