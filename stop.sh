@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================
-# All-in-One Agent Hub 一键停止脚本 / Stopper
+# Multi-Agent Hub 一键停止脚本 / Stopper
 # ==============================================================
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,7 +9,7 @@ if [ "${1:-}" = "--silent" ]; then
   SILENT=1
 fi
 
-[ $SILENT -eq 0 ] && echo "正在停止 All-in-One Agent Hub 服务..."
+[ $SILENT -eq 0 ] && echo "正在停止 Multi-Agent Hub 服务..."
 
 # 1. 按 PID 停止
 if [ -f "$ROOT_DIR/.run/console.pid" ]; then

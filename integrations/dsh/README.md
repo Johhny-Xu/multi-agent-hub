@@ -1,4 +1,4 @@
-# All-in-One Agent Hub for DeepSeek Harness (DSH)
+# Multi-Agent Hub for DeepSeek Harness (DSH)
 
 [中文](#中文) | [English](#english)
 
@@ -8,7 +8,7 @@
 
 本项目为 **DeepSeek Harness (DSH)** 官方桌面客户端提供全能插件与扩展集成。
 不仅支持 MCP 工具面直通，还完整支持 **DSH 原生工作流 (Workflow)** 与 **DSH 原生子代理预设 (Agent Presets)**！
-安装后，DeepSeek 助手可直接协同调用 All-in-One Agent Hub 背后 **8 大 AI 代理**（CodeBuddy、Antigravity、GitHub Copilot、MiniMax、TraeCode、ZCode 等）。
+安装后，DeepSeek 助手可直接协同调用 Multi-Agent Hub 背后 **8 大 AI 代理**（CodeBuddy、Antigravity、GitHub Copilot、MiniMax、TraeCode、ZCode 等）。
 
 ### 核心能力体系
 
@@ -82,7 +82,7 @@ python3 install-dsh.py --uninstall
 
 ## English
 
-This integration connects **All-in-One Agent Hub** natively into the official **DeepSeek Harness (DSH)** desktop application.
+This integration connects **Multi-Agent Hub** natively into the official **DeepSeek Harness (DSH)** desktop application.
 It provides full native support for **DSH Workflows** and **DSH Subagent Presets**!
 
 ### Core Capabilities

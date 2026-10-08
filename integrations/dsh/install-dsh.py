@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-All-in-One Agent Hub - DeepSeek Harness (DSH) 插件一键安装与适配器
+Multi-Agent Hub - DeepSeek Harness (DSH) 插件一键安装与适配器
 跨平台 (Windows / macOS / Linux)，零外部依赖。
 支持：DSH MCP 工具总线 + 8 大原生子代理预设 (Presets) + 原生工作流示例
 """
@@ -96,7 +96,7 @@ def remove_installed(content: str) -> str:
     return "\n".join(out).strip() + "\n"
 
 def main():
-    parser = argparse.ArgumentParser(description="为 DeepSeek Harness (DSH) 安装 All-in-One Agent Hub 插件")
+    parser = argparse.ArgumentParser(description="为 DeepSeek Harness (DSH) 安装 Multi-Agent Hub 插件")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"Agent Hub 任务总线地址 (默认: {DEFAULT_URL})")
     parser.add_argument("--token", default="", help="Hub 认证 Token (如有)")
     parser.add_argument("--profile", default="desktop", help="DSH profile 名称 (默认: desktop)")
@@ -117,10 +117,10 @@ def main():
         if patch_file.exists():
             content = patch_file.read_text(encoding="utf-8")
             if is_installed(content):
-                print(f"✅ All-in-One Agent Hub 插件已安装在 DSH 中 (profile: {patch_file.parent.name})")
+                print(f"✅ Multi-Agent Hub 插件已安装在 DSH 中 (profile: {patch_file.parent.name})")
                 print("   已启用能力: MCP 工具总线 + 原生子代理预设 (Presets)")
                 sys.exit(0)
-        print("ℹ️ DSH 中尚未安装 All-in-One Agent Hub 插件。")
+        print("ℹ️ DSH 中尚未安装 Multi-Agent Hub 插件。")
         sys.exit(0)
 
     if args.uninstall:
@@ -162,7 +162,7 @@ def main():
     patch_file.write_text(final_content, encoding="utf-8")
 
     print("==========================================================")
-    print("  🎉 All-in-One Agent Hub 插件已成功安装到 DeepSeek Harness！")
+    print("  🎉 Multi-Agent Hub 插件已成功安装到 DeepSeek Harness！")
     print("==========================================================")
     print(f"  • 宿主环境 : DeepSeek Harness ({patch_file.parent.name})")
     print(f"  • 服务端点 : {args.url}")

@@ -1,19 +1,19 @@
-# All-in-One Agent Hub
+# Multi-Agent Hub
 
 [中文](#中文) | [English](#english)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
 [![Node.js 20+](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-all--in--one--agent--hub-blue)](https://github.com/Johhny-Xu/all-in-one-agent-hub)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-all--in--one--agent--hub-blue)](https://github.com/Johhny-Xu/multi-agent-hub)
 
-![All-in-One Agent Hub 架构与数据流 / Architecture & Data Flow](docs/architecture.svg)
+![Multi-Agent Hub 架构与数据流 / Architecture & Data Flow](docs/architecture.svg)
 
 ---
 
 ## 中文
 
-还在嫌各家白嫖配额用得提心吊胆、到处手动切“毒鸡蛋”太心累？还在担心本地代码被云端看了个一清二楚？**All-in-One Agent Hub**（`all-in-one-agent-hub`）替你一站式解决！本项目源于日常薅各家 AI 额度时，受够了“额度一光满盘皆输、切号切环境切到怀疑人生”的糟心体验，索性把 Trae、Antigravity、Copilot 等多路 Agent 全接到一条本地总线上，自动故障转移与配额调度，代码和任务全在局域网内跑。
+还在嫌各家白嫖配额用得提心吊胆、到处手动切“毒鸡蛋”太心累？还在担心本地代码被云端看了个一清二楚？**Multi-Agent Hub**（`multi-agent-hub`）替你一站式解决！本项目源于日常薅各家 AI 额度时，受够了“额度一光满盘皆输、切号切环境切到怀疑人生”的糟心体验，索性把 Trae、Antigravity、Copilot 等多路 Agent 全接到一条本地总线上，自动故障转移与配额调度，代码和任务全在局域网内跑。
 
 ### 架构与核心组件
 
@@ -28,7 +28,7 @@
 ### 目录结构
 
 ```
-all-in-one-agent-hub/
+multi-agent-hub/
 ├── start.sh                  # ⚡ Linux/macOS 一键拉起全部服务
 ├── stop.sh                   # ⏹ Linux/macOS 一键安全停止
 ├── start.bat                 # ⚡ Windows 一键启动
@@ -73,8 +73,8 @@ all-in-one-agent-hub/
 #### Linux / macOS
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/Johhny-Xu/all-in-one-agent-hub.git
-cd all-in-one-agent-hub
+git clone https://github.com/Johhny-Xu/multi-agent-hub.git
+cd multi-agent-hub
 
 # 2. 准备配置（本地回环可直接使用默认值）
 cp .env.example .env
@@ -138,20 +138,20 @@ node server.mjs
 
 ## English
 
-Tired of tiptoeing around quota limits and constantly swapping "free-tier tokens" by hand? Worried about your local codebase being laid completely bare to third-party clouds? **All-in-One Agent Hub** (`all-in-one-agent-hub`) has got you covered! Born out of pure frustration with juggling disposable free-tier AI accounts—getting cut off mid-task and having to reset everything—this project wires multiple AI agents (Trae, Antigravity, Copilot, and more) into a single self-hosted bus. It auto-fails over when quotas run dry and keeps your sessions and code strictly within your LAN.
+Tired of tiptoeing around quota limits and constantly swapping "free-tier tokens" by hand? Worried about your local codebase being laid completely bare to third-party clouds? **Multi-Agent Hub** (`multi-agent-hub`) has got you covered! Born out of pure frustration with juggling disposable free-tier AI accounts—getting cut off mid-task and having to reset everything—this project wires multiple AI agents (Trae, Antigravity, Copilot, and more) into a single self-hosted bus. It auto-fails over when quotas run dry and keeps your sessions and code strictly within your LAN.
 
 ### Architecture & Components
 
 See the bilingual architecture & data-flow diagram at the top of this README.
 
 - **hub/** — **Core Task Bus** (Python standard library only, zero third-party dependencies). Provides unified JSON-RPC MCP endpoints, shared task queue, agent mailboxes, shared notes, heartbeat registry, and generic CLI dispatch; `async_worker.py` handles background async execution, and `reap_idle.sh` cleans up idle processes.
-- **console/** — **All-in-One Web Console**. Built with lightweight Node.js (zero npm install required) and a single-page frontend. Features real-time multi-agent conversation streams, live quota tracking, collapsible reasoning chains, and full responsive vertical mobile support.
+- **console/** — **Multi-Agent Web Console**. Built with lightweight Node.js (zero npm install required) and a single-page frontend. Features real-time multi-agent conversation streams, live quota tracking, collapsible reasoning chains, and full responsive vertical mobile support.
 - **drivers/** — **Desktop CDP Drivers** (5 standalone JS scripts). Automates official ZCode and TraeCode desktop applications in VNC environments via Chrome DevTools Protocol, bridging desktop-only AIs into the task bus.
 
 ### Directory Layout
 
 ```
-all-in-one-agent-hub/
+multi-agent-hub/
 ├── start.sh                  # ⚡ One-command launcher for Linux/macOS
 ├── stop.sh                   # ⏹ One-command stopper for Linux/macOS
 ├── start.bat                 # ⚡ One-click launcher for Windows
@@ -178,8 +178,8 @@ all-in-one-agent-hub/
 #### Linux / macOS
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Johhny-Xu/all-in-one-agent-hub.git
-cd all-in-one-agent-hub
+git clone https://github.com/Johhny-Xu/multi-agent-hub.git
+cd multi-agent-hub
 
 # 2. Copy environment template
 cp .env.example .env
