@@ -1,0 +1,16 @@
+# ==============================================================================
+# All-in-One Agent Hub for DeepSeek Harness (DSH)
+# Cordis Loader Patch Layer
+# ==============================================================================
+# 将本条目添加到 ~/.dsh/profiles/desktop/cordis.patch.yml 即可完成集成。
+# Add this entry to ~/.dsh/profiles/desktop/cordis.patch.yml to enable integration.
+
+- id: mcp-agenthub
+  name: "@deepseek-ai/dsh-mcp-client"
+  config:
+    serverName: agenthub
+    transport: streamable-http
+    url: http://127.0.0.1:8765/mcp
+    # 如果总线设置了 HUB_TOKEN，请取消下两行注释并填入你的 Token:
+    # headers:
+    #   Authorization: "Bearer your_token_here"
