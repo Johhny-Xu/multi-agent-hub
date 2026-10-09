@@ -45,7 +45,8 @@ def discover_cli(*, home: Path | str | None = None, env=None) -> str | None:
     on_path = shutil.which("codearts", path=env.get("PATH", ""))
     if on_path:
         candidates.append(Path(on_path))
-    candidates.extend((home / ".local/bin/codearts", home / ".codeartsdoer/installers/codearts", home / ".codeartsdoer/installers/bin/codearts"))
+    candidates.extend((home / ".local/bin/codearts", home / ".codeartsdoer/installers/bin/codearts.exe",
+                       home / ".codeartsdoer/installers/codearts", home / ".codeartsdoer/installers/bin/codearts"))
     # The IDE copies its official kernel here. Pick the most recently installed
     # kernel, avoiding assumptions about vendor version-number widths.
     kernel_dir = home / ".codeartsdoer/CodeArts_Agent"
@@ -85,7 +86,7 @@ def diagnostic_error(text: str) -> AdapterError | None:
         return AdapterError("CODEARTS_PROVIDER_UNAVAILABLE", "blocked_auth")
     if re.search(r"(?:model[^\r\n]{0,80}(?:not found|unavailable)|ProviderModelNotFoundError)", text, re.I):
         return AdapterError("CODEARTS_MODEL_UNAVAILABLE", "blocked_model")
-    if re.search(r"permission requested:[^\r\n]*auto-rejecting|permission[^\r\n]{0,80}(?:denied|rejected)", text, re.I):
+    if re.search(r"文件夹未被信任|permission requested:[^\r\n]*auto-rejecting|permission[^\r\n]{0,80}(?:denied|rejected)", text, re.I):
         return AdapterError("CODEARTS_PERMISSION_REQUIRED", "blocked_permission")
     return None
 
@@ -200,6 +201,20 @@ def runtime_environment(cli: Path, runtime: Path, *, env=None, home=None) -> dic
         result.update(SCENARIO="codeartsdoer", PLUGIN_ENV="hc", IS_PROD="true",
                       KERNEL_CONFIG_DIR=str(config), KERNEL_DATA_DIR=str(data),
                       OPENCODE_CONFIG=str(data / "codearts.json"), OPENCODE_CONFIG_FILE="codearts.json")
+    elif cli.name.lower() == "codearts.exe":
+        # The official Windows installer exposes a .cmd wrapper, but this
+        # adapter executes only the executable with shell=False. Mirror the
+        # wrapper's CLI profile selection without disabling TLS verification.
+        # The IDE kernel is a separate GUI build; pointing it at cli-data does
+        # not turn it into the official CLI or initialize CLI authentication.
+        config = home / ".codeartsdoer"
+        result.update(SCENARIO="codeartsdoer", PLUGIN_ENV="hc", OPENCODE_MODE="tui",
+                      KERNEL_CONFIG_DIR=str(config), KERNEL_DATA_DIR=str(config / "cli-data"),
+                      OPENCODE_CONFIG=str(config / "codearts_cli.json"),
+                      OPENCODE_CONFIG_FILE="codearts_cli.json,codearts_cli.jsonc",
+                      OPENCODE_CHANNEL="latest", OPENCODE_DISABLE_MODELS_FETCH="1",
+                      OPENCODE_ALWAYS_NOTIFY_UPDATE="false", KERNEL_ACP="",
+                      CODEAGENT_USE_MESSAGE_FEEDBACK="false", OMO_SEND_ANONYMOUS_TELEMETRY="0")
     # Prevent accidentally opening or migrating a different installed OpenCode
     # database. Official credentials are neither read nor copied by this code.
     result.update(OPENCODE_DB=str(runtime / "session.db"), KERNEL_LOG_DIR=str(runtime / "log"),
@@ -210,17 +225,35 @@ def runtime_environment(cli: Path, runtime: Path, *, env=None, home=None) -> dic
     return result
 
 
+def _inherits_hub_group():
+    # Standalone/library callers retain a private child group. The marker alone
+    # is insufficient: only the session/group leader launched by spawn_owned
+    # may keep its CLI in the enclosing Hub-owned group.
+    if os.name == "nt" or os.environ.get("AGENTHUB_OWNED_POSIX_GROUP") != "1":
+        return False
+    pid = os.getpid()
+    return os.getpgrp() == pid and os.getsid(0) == pid
+
+
 def _terminate_owned(child: subprocess.Popen):
-    if child.poll() is not None:
-        return
     if os.name == "nt":
+        if child.poll() is not None:
+            return
         # Only the fresh child still owned by this Popen is eligible.
         subprocess.run(["taskkill.exe", "/PID", str(child.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW, check=False)
     else:
-        try:
-            os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        pgid = getattr(child, "_agenthub_pgid", None)
+        if pgid is not None:
+            # Reclaim grandchildren even after the leader exits; consume the
+            # private group once so repeated cleanup cannot signal a reused ID.
+            child._agenthub_pgid = None
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        # In the inherited case only this direct child belongs to this Popen.
+        # The Hub owns the enclosing group and reclaims it after driver exit,
+        # including when the Hub cancels us before this finally block can run.
     if child.poll() is None:
         child.kill()
     child.wait(timeout=5)
@@ -230,18 +263,18 @@ def _capture(command, *, cwd, env, timeout, stdin=""):
     # Disk-backed private capture bounds memory and prevents raw vendor logs or
     # credentials from reaching the Hub output stream.
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        private_group = os.name != "nt" and not _inherits_hub_group()
         child = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE,
                                  stdout=out, stderr=err, shell=False,
-                                 start_new_session=os.name != "nt",
+                                 start_new_session=private_group,
                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        child._agenthub_pgid = child.pid if private_group else None
         try:
             child.communicate(stdin.encode("utf-8"), timeout=timeout)
         except subprocess.TimeoutExpired:
-            _terminate_owned(child)
             raise AdapterError("CODEARTS_TIMEOUT", "timeout") from None
-        except BaseException:
+        finally:
             _terminate_owned(child)
-            raise
         if out.tell() + err.tell() > MAX_OUTPUT:
             raise AdapterError("CODEARTS_OUTPUT_LIMIT")
         out.seek(0)

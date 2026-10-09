@@ -11,6 +11,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### CodeArts IDE 接入体验
+
+- 修复 Windows 官方 CLI 的发现：驱动和一键安装器识别 `installers/bin/codearts.exe`，避免只发现 `.cmd` 后误选 IDE AgentKernel。直接运行官方 exe 时使用 CLI 专用配置及 `cli-data` 环境，保留外部认证和独立任务数据库，不关闭 TLS 校验。
+- 安装结果展示稳定插件目录、版本及每个 MCP 配置路径；明确当前工作区登记、宿主重载与真实工具调用的区别。独立安装器使用默认 IDE 路径时提示尚未核实当前工作区，CLI-only 安装不会提示配置 IDE。
+- 补充新工作区复用既有 Hub 连接的步骤，并将官方“文件夹未被信任”诊断识别为权限受阻，保留脱敏错误且不修改信任设置。
+- CodeArts 原生代理明确区分直接注册与懒加载 MCP 的调用方式，等待原 ref 的终态并核对真实答案；权限拒绝后停止该动作，不再改工具名或重复请求。
+- 修复 Linux CodeArts 驱动另建进程组导致外层取消无法回收后代的问题：仅在确认 Hub 进程组归属时继承外层组，独立运行仍隔离并清理自己的组。真实进程夹具覆盖取消、超时、父进程先退出和无关进程保护。
+- 修复 Windows 服务归属查询失败被误判为停止的问题：元数据查询最多重试两次，持续失败报错并保留进程记录；身份不匹配仍拒绝接管或停止。新增服务身份确认失败时清理已持有的直接子进程。
+- Windows 已登录 IDE 真实查询 Hub，并以 DeepSeek v4.1 Flash 原生子代理派发 MiMo；远端答案 `45`，IDE 后续结果查询受宿主权限限制。Linux CodeArts 显式 GLM-5.2 返回 `51`；部署修复后新单次任务返回 `52`，核验组归属与进程回收。此前超时保留为失败。详情见 [IDE 优先适配与实测](docs/codearts-ide-followup.md)。
+- 最终 Windows 32/32 组、Linux 29/29 组回归通过，两端真实 SDK 0.1.21 协议验证通过。Linux 已同步 27 个源码文件和 CodeArts 原生组件；6 份受保护配置与 355 个旧任务结果逐字节校验未变。
+- 本轮修改属于 v0.9.9 发布后的跟进，既有标签和安装包保持原版本内容。
+
 ## [0.9.9] - 2026-10-09
 
 Hub、安装包、共享 MCP 和 Codex / ZCode / CodeArts / Antigravity 插件统一为 0.9.9；DSH 独立包为 1.4.0。Windows 32/32 组、Linux 29/29 组全量回归通过，后续修复通过对应增量验证并同步 Linux Hub；原生客户端实测及账号限制见 [0.9.9 交付记录](docs/release-0.9.9.md)。

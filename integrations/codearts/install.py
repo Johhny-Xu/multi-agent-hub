@@ -313,6 +313,16 @@ def install(home, plugin_dir, config_file, *, node='node', targets=('ide', 'cli'
               'agents': len(WORKERS), 'commands': 3, 'skills': 1, 'native_hooks': 1,
               'files': changes, 'conflicts': conflicts, 'backup_directory': None,
               'requires_reload': bool(any(item['action'] != 'unchanged' for item in changes))}
+    if 'ide' in targets and ide_settings is None:
+        report['warnings'] = [
+            'IDE settings default to <home>/mcp/mcp_settings.json; '
+            'the current CodeArts workspace has not been verified.'
+        ]
+        report['next_step'] = (
+            'Open Configure MCP in the current CodeArts workspace and confirm its actual settings path. '
+            'Rerun with --ide-settings PATH, then reload that IDE window and verify multi-agent-hub tools. '
+            'File registration does not confirm host loading.'
+        )
     if not apply or conflicts:
         return report
     changed = [path for path in writes if snapshot[path] != writes[path]]

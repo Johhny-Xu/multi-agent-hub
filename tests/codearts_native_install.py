@@ -54,6 +54,33 @@ class NativeInstall(unittest.TestCase):
         self.assertTrue(all(item['action'] == 'unchanged' for item in again['files']))
         self.assertIsNone(again['backup_directory'])
 
+    def test_default_ide_path_keeps_behavior_but_warns_workspace_is_unverified(self):
+        report = installer.install(self.home, self.plugin, self.config, targets=('ide',), apply=True)
+        expected = self.home / 'mcp/mcp_settings.json'
+        self.assertTrue(report['ok'])
+        self.assertTrue(expected.is_file())
+        self.assertEqual(report['registrations'], [
+            {'target': 'ide', 'path': str(expected), 'key': 'mcpServers.multi-agent-hub'}])
+        self.assertIn('workspace has not been verified', ' '.join(report['warnings']))
+        self.assertIn('--ide-settings PATH', report['next_step'])
+        self.assertIn('does not confirm host loading', report['next_step'])
+        self.assertFalse(self.settings.exists())
+
+    def test_explicit_workspace_path_does_not_report_fallback_warning(self):
+        report = self.run_install(targets=('ide',), apply=True)
+        self.assertTrue(report['ok'])
+        self.assertTrue(self.settings.exists())
+        self.assertNotIn('warnings', report)
+        self.assertFalse((self.home / 'mcp/mcp_settings.json').exists())
+
+    def test_cli_only_without_ide_settings_does_not_warn_about_ide(self):
+        report = installer.install(self.home, self.plugin, self.config, targets=('cli',), apply=True)
+        self.assertTrue(report['ok'])
+        self.assertEqual([item['target'] for item in report['registrations']], ['cli'])
+        self.assertNotIn('warnings', report)
+        self.assertNotIn('next_step', report)
+        self.assertFalse((self.home / 'mcp/mcp_settings.json').exists())
+
     def test_preserves_comments_other_servers_and_private_backup(self):
         self.home.mkdir(parents=True)
         cli_path = self.home / 'codearts_cli.jsonc'

@@ -365,5 +365,195 @@ class DistributionTests(unittest.TestCase):
                 build.package_files('hub')
 
 
+class WindowsOwnershipProbes(unittest.TestCase):
+    """Probe failures must not erase ownership or masquerade as stopped."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='agenthub-ownership-probes-')
+        self.addCleanup(self.temporary.cleanup)
+        self.prefix = Path(self.temporary.name)
+        self.config = self.prefix / 'private-config'
+        self.record_path = self.config / 'run/hub.json'
+        self.entry = self.prefix / 'app/hub/agent_hub.py'
+        service.atomic_json(self.prefix / 'install.json', {'config_dir': str(self.config)})
+        service.atomic_json(self.record_path, {'prefix': str(self.prefix.resolve()), 'pid': 12345,
+                                              'identity': '123456', 'entry': str(self.entry)})
+
+    def failed_probe(self, kind):
+        if kind == 'timeout':
+            raise subprocess.TimeoutExpired('private-probe-fixture', 5)
+        if kind == 'oserror':
+            raise OSError('private-probe-fixture')
+        return SimpleNamespace(returncode=1, stdout='', stderr='private-probe-fixture')
+
+    def test_transient_command_probe_failure_recovers_without_losing_ownership(self):
+        for kind in ('timeout', 'oserror', 'exit'):
+            with self.subTest(kind=kind):
+                command_calls = []
+
+                def probe(argv, **kwargs):
+                    if 'Get-CimInstance' not in argv[-1]:
+                        return SimpleNamespace(returncode=0, stdout='123456\n', stderr='')
+                    command_calls.append(kwargs['timeout'])
+                    if len(command_calls) == 1:
+                        return self.failed_probe(kind)
+                    self.assertLessEqual(len(command_calls), 2, 'Probe retried without a bound')
+                    return SimpleNamespace(returncode=0, stdout='python "' + str(self.entry) + '"', stderr='')
+
+                with patch.object(service, 'os', SimpleNamespace(name='nt')), patch.object(service, 'run', side_effect=probe):
+                    self.assertEqual(service.status(self.prefix), {'hub': True, 'console': False})
+                self.assertEqual(len(command_calls), 2)
+
+    def test_exhausted_probes_report_unknown_and_preserve_stop_record(self):
+        for target in ('identity', 'command'):
+            for kind in ('timeout', 'oserror', 'exit'):
+                with self.subTest(target=target, kind=kind):
+                    before = self.record_path.read_bytes()
+                    failing_calls = []
+
+                    def probe(argv, **kwargs):
+                        is_command = 'Get-CimInstance' in argv[-1]
+                        if (target == 'command') == is_command:
+                            failing_calls.append(kwargs['timeout'])
+                            self.assertLessEqual(len(failing_calls), 2, 'Probe retried without a bound')
+                            return self.failed_probe(kind)
+                        return SimpleNamespace(returncode=0, stdout='123456\n', stderr='')
+
+                    with patch.object(service, 'os', SimpleNamespace(name='nt')), \
+                            patch.object(service, 'run', side_effect=probe), \
+                            patch.object(service, 'stop_windows_tree') as stop:
+                        for operation in (lambda: service.status(self.prefix),
+                                          lambda: service.stop_record(self.record_path, self.prefix)):
+                            failing_calls.clear()
+                            failure = None
+                            try:
+                                operation()
+                            except Exception as error:
+                                failure = error
+                            self.assertIsInstance(failure, service.SetupError)
+                            self.assertNotIn('private-probe-fixture', str(failure))
+                            self.assertEqual(len(failing_calls), 2)
+                            self.assertEqual(self.record_path.read_bytes(), before)
+                        stop.assert_not_called()
+
+    def test_probe_retries_share_ten_second_total_budget(self):
+        clock, timeouts = [100.0], []
+
+        def probe(_argv, **kwargs):
+            timeouts.append(kwargs['timeout'])
+            clock[0] += 7 if len(timeouts) == 1 else 3
+            raise subprocess.TimeoutExpired('private-probe-fixture', kwargs['timeout'])
+
+        with patch.object(service, 'os', SimpleNamespace(name='nt')), \
+                patch.object(service.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(service, 'run', side_effect=probe):
+            failure = None
+            try:
+                service.command_matches(12345, self.entry)
+            except Exception as error:
+                failure = error
+            self.assertIsInstance(failure, service.SetupError)
+        self.assertEqual(len(timeouts), 2)
+        self.assertLessEqual(sum(timeouts), 10)
+        self.assertLessEqual(timeouts[1], 3)
+
+    def test_reused_identity_or_different_entry_never_adopts_or_kills_process(self):
+        for wrong_identity in (True, False):
+            with self.subTest(wrong_identity=wrong_identity):
+                service.atomic_json(self.record_path, {'prefix': str(self.prefix.resolve()), 'pid': 12345,
+                                                      'identity': '123456', 'entry': str(self.entry)})
+
+                def probe(argv, **_kwargs):
+                    if 'Get-CimInstance' in argv[-1]:
+                        self.assertFalse(wrong_identity, 'A reused PID must short-circuit before checking its command')
+                        return SimpleNamespace(returncode=0, stdout='python unrelated-fixture.py', stderr='')
+                    return SimpleNamespace(returncode=0, stdout='654321' if wrong_identity else '123456', stderr='')
+
+                with patch.object(service, 'os', SimpleNamespace(name='nt')), \
+                        patch.object(service, 'run', side_effect=probe), \
+                        patch.object(service, 'stop_windows_tree') as stop:
+                    self.assertEqual(service.status(self.prefix), {'hub': False, 'console': False})
+                    service.stop_record(self.record_path, self.prefix)
+                    stop.assert_not_called()
+                self.assertFalse(self.record_path.exists(), 'Confirmed stale records should still be removable')
+
+    def test_failed_new_service_identity_does_not_leave_its_child_running(self):
+        self.record_path.unlink()
+        self.entry.parent.mkdir(parents=True)
+        self.entry.write_text('Fixture path only; never executed.')
+        service.atomic_json(self.config / 'hub.json', {'bind': '127.0.0.1', 'port': free_port(),
+                                                     'token': 'SYNTHETIC_TEST_TOKEN', 'python': {'argv': [sys.executable]}})
+        real_popen, children = subprocess.Popen, []
+
+        def child(_argv, **kwargs):
+            process = real_popen([sys.executable, '-c', 'import time; time.sleep(60)'], **kwargs)
+            children.append(process)
+            return process
+
+        try:
+            with patch.object(service.subprocess, 'Popen', side_effect=child), \
+                    patch.object(service, 'identity', side_effect=service.SetupError('Ownership probe unavailable')):
+                with self.assertRaises(service.SetupError):
+                    service.start(self.prefix)
+            self.assertEqual(len(children), 1)
+            self.assertIsNotNone(children[0].poll(), 'New service child survived failed identity confirmation')
+        finally:
+            for process in children:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+
+    @unittest.skipUnless(os.name == 'nt', 'Actual Windows PowerShell error semantics')
+    def test_existing_cim_row_with_unreadable_command_preserves_ownership(self):
+        real_run = service.run
+        rows = {'null': '[pscustomobject]@{CommandLine=$null}',
+                'empty': "[pscustomobject]@{CommandLine=''}",
+                'whitespace': "[pscustomobject]@{CommandLine='   '}",
+                'missing_field': '[pscustomobject]@{ProcessId=12345}',
+                'no_row': 'return'}
+        for kind, expression in rows.items():
+            with self.subTest(kind=kind):
+                before = self.record_path.read_bytes()
+
+                def probe(argv, **kwargs):
+                    if 'Get-CimInstance' not in argv[-1]:
+                        return SimpleNamespace(returncode=0, stdout='123456', stderr='')
+                    command = list(argv)
+                    command[-1] = ("function Get-CimInstance { [CmdletBinding()] "
+                                   "param([string]$ClassName, [string]$Filter) " + expression + ' }; ' + command[-1])
+                    return real_run(command, **kwargs)
+
+                with patch.object(service, 'run', side_effect=probe), \
+                        patch.object(service, 'stop_windows_tree') as stop:
+                    if kind == 'no_row':
+                        self.assertEqual(service.status(self.prefix), {'hub': False, 'console': False})
+                        service.stop_record(self.record_path, self.prefix)
+                        self.assertFalse(self.record_path.exists())
+                    else:
+                        with self.assertRaises(service.SetupError):
+                            service.status(self.prefix)
+                        with self.assertRaises(service.SetupError):
+                            service.stop_record(self.record_path, self.prefix)
+                        self.assertEqual(self.record_path.read_bytes(), before)
+                    stop.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'nt', 'Actual Windows PowerShell error semantics')
+    def test_nonterminating_cim_error_is_not_a_successful_empty_query(self):
+        real_run = service.run
+
+        def probe(argv, **kwargs):
+            if 'Get-CimInstance' not in argv[-1]:
+                return SimpleNamespace(returncode=0, stdout='123456', stderr='')
+            command = list(argv)
+            command[-1] = ("function Get-CimInstance { [CmdletBinding()] param([string]$ClassName, [string]$Filter) "
+                           "Write-Error 'private-probe-fixture' }; " + command[-1])
+            return real_run(command, **kwargs)
+
+        with patch.object(service, 'run', side_effect=probe):
+            with self.assertRaises(service.SetupError) as caught:
+                service.status(self.prefix)
+            self.assertNotIn('private-probe-fixture', str(caught.exception))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

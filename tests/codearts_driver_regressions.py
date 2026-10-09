@@ -1,11 +1,16 @@
 """CodeArts CLI boundary regressions; fixtures are not live-provider evidence."""
 import importlib.util
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("codearts_cli", ROOT / "drivers/codearts_cli.py")
@@ -23,6 +28,130 @@ def success(text="answer"):
         event("text", {"id": "part-test", "type": "text", "text": text, "time": {"end": 1}}),
         event("step_finish", {"type": "step-finish", "reason": "stop"}),
     ])
+
+
+def containment_fixture(role, case, directory):
+    """Private Linux sleep processes only; a separate supervisor reaps orphans."""
+    directory = Path(directory)
+
+    def identity(pid):
+        try:
+            value = (Path('/proc') / str(pid) / 'stat').read_text()
+            fields = value[value.rfind(')') + 2:].split()
+            return dict(pid=pid, state=fields[0], pgid=int(fields[2]), sid=int(fields[3]),
+                        start=int(fields[19]))
+        except (OSError, ValueError, IndexError):
+            return None
+
+    def alive(row):
+        current = identity(row['pid'])
+        return bool(current and current['start'] == row['start'] and current['state'] != 'Z')
+
+    def save(name, value):
+        temporary = directory / (name + '.tmp')
+        temporary.write_text(json.dumps(value))
+        temporary.replace(directory / name)
+
+    def await_file(name):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if (directory / name).exists():
+                return json.loads((directory / name).read_text())
+            time.sleep(0.01)
+        raise AssertionError('Fixture readiness timeout: ' + name)
+
+    def command(next_role):
+        return [sys.executable, str(Path(__file__).resolve()), '--containment-fixture',
+                next_role, case, str(directory)]
+
+    if role != 'supervisor':
+        save(role + '.pid.json', identity(os.getpid()))
+        if role == 'runner':
+            try:
+                driver._capture(command('child'), cwd=str(directory), env=dict(os.environ),
+                                timeout=1 if 'timeout' in case else 15)
+                result = 'returned'
+            except driver.AdapterError as exc:
+                result = exc.code
+            save('result.json', result)
+        elif role == 'child':
+            subprocess.Popen(command('grandchild'))
+            await_file('grandchild.pid.json')
+            if 'root_exit' not in case and case != 'forged_marker':
+                time.sleep(30)
+        else:
+            time.sleep(30)
+        return
+
+    # Scope subreaper behavior to this test supervisor, never the unittest host.
+    import ctypes
+    assert ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) == 0
+    sys.path.insert(0, str(ROOT / 'hub'))
+    import command_runtime as runtime
+    inherited = case.startswith('outer_') or case.startswith('inherited_')
+    env = dict(os.environ)
+    env.pop('AGENTHUB_OWNED_POSIX_GROUP', None)
+    if case == 'forged_marker':
+        env['AGENTHUB_OWNED_POSIX_GROUP'] = '1'
+    runner = bystander = None
+    try:
+        bystander = subprocess.Popen(command('bystander'), env=env, start_new_session=True)
+        await_file('bystander.pid.json')
+        if inherited:
+            runner = runtime.spawn_owned(command('runner'), env=env)
+        else:
+            runner = subprocess.Popen(command('runner'), env=env,
+                                      start_new_session=case != 'forged_marker')
+        grandchild = await_file('grandchild.pid.json')
+        child = await_file('child.pid.json')
+        root = await_file('runner.pid.json')
+        if case.startswith('outer_'):
+            os.killpg(runner.pid, signal.SIGTERM if case == 'outer_term' else signal.SIGKILL)
+        runner.wait(timeout=6)
+        if inherited:
+            runtime.terminate_owned(runner)
+        deadline = time.monotonic() + 3
+        while any(alive(row) for row in (child, grandchild)) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        result_path = directory / 'result.json'
+        report = dict(case=case, runner=root, child=child, grandchild=grandchild,
+                      children_stopped=all(not alive(row) for row in (child, grandchild)),
+                      bystander_untouched=bystander.poll() is None,
+                      result=json.loads(result_path.read_text()) if result_path.exists() else None)
+    finally:
+        # This also cleans the old broken implementation when a regression fails.
+        rows = [json.loads(path.read_text()) for path in directory.glob('*.pid.json')]
+        for row in rows:
+            if not alive(row):
+                continue
+            if hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'):
+                try:
+                    handle = os.pidfd_open(row['pid'])
+                except ProcessLookupError:
+                    continue
+                try:
+                    if alive(row):
+                        signal.pidfd_send_signal(handle, signal.SIGKILL)
+                finally:
+                    os.close(handle)
+            elif alive(row):
+                os.kill(row['pid'], signal.SIGKILL)
+        for process in (runner, bystander):
+            if process is not None:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                pid, _ = os.waitpid(-1, os.WNOHANG)
+                if not pid:
+                    time.sleep(0.01)
+            except ChildProcessError:
+                break
+        assert all(not alive(row) for row in rows), 'Fixture cleanup incomplete'
+    report['fixture_cleanup_complete'] = True
+    print(json.dumps(report))
 
 
 class CodeArtsDriver(unittest.TestCase):
@@ -43,6 +172,14 @@ class CodeArtsDriver(unittest.TestCase):
         self.assertEqual(driver.parse_events(pending, "", 0)["status"], "unknown")
         self.assertTrue(driver.parse_events("", "", 0)["is_error"])
         self.assertTrue(driver.parse_events(success(), "", 1)["is_error"])
+
+    def test_untrusted_folder_is_permission_block_without_private_diagnostics(self):
+        result = driver.parse_events("", "文件夹未被信任: private-workspace", 1)
+        self.assertEqual(result["status"], "blocked_permission")
+        self.assertEqual(result["error"]["code"], "CODEARTS_PERMISSION_REQUIRED")
+        self.assertNotIn("private-workspace", json.dumps(result))
+        answer = driver.parse_events(success("文件夹未被信任 is a permission diagnostic."), "", 0)
+        self.assertFalse(answer["is_error"])
 
     def test_only_public_text_not_reasoning_tools_or_plaintext(self):
         extra = [event("reasoning", {"text": "private thought"}), event("tool_use", {"state": {"output": "private tool"}})]
@@ -183,6 +320,38 @@ class CodeArtsDriver(unittest.TestCase):
             self.assertEqual(driver.discover_cli(home=root, env={"PATH": ""}), str(kernel))
             self.assertIsNone(driver.discover_cli(home=root, env={"PATH": "", "AGENTHUB_CODEARTS_CLI": str(root / "missing")}))
 
+    def test_official_windows_cli_exe_is_preferred_to_ide_kernel(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            exe = root / ".codeartsdoer/installers/bin/codearts.exe"
+            exe.parent.mkdir(parents=True)
+            exe.write_bytes(b"official-cli-fixture")
+            kernel = root / ".codeartsdoer/CodeArts_Agent/AgentKernel_test.exe"
+            kernel.parent.mkdir(parents=True)
+            kernel.write_bytes(b"ide-fixture")
+            self.assertEqual(driver.discover_cli(home=root, env={"PATH": ""}), str(exe))
+
+    def test_official_windows_exe_uses_cli_profile_without_relaxing_tls(self):
+        home, runtime = Path("/home/test"), Path("/isolated")
+        result = driver.runtime_environment(
+            home / ".codeartsdoer/installers/bin/codearts.exe", runtime, home=home,
+            env={"CODEARTS_CLI_AK": "fixture-external", "NODE_TLS_REJECT_UNAUTHORIZED": "1"})
+        self.assertEqual(result["SCENARIO"], "codeartsdoer")
+        self.assertEqual(result["PLUGIN_ENV"], "hc")
+        self.assertEqual(Path(result["KERNEL_DATA_DIR"]), home / ".codeartsdoer/cli-data")
+        self.assertEqual(Path(result["KERNEL_CONFIG_DIR"]), home / ".codeartsdoer")
+        self.assertEqual(Path(result["OPENCODE_CONFIG"]), home / ".codeartsdoer/codearts_cli.json")
+        self.assertEqual(result["OPENCODE_CONFIG_FILE"], "codearts_cli.json,codearts_cli.jsonc")
+        self.assertEqual(result["OPENCODE_MODE"], "tui")
+        self.assertEqual(result["OPENCODE_DISABLE_MODELS_FETCH"], "1")
+        self.assertEqual(result["CODEARTS_CLI_AK"], "fixture-external")
+        self.assertEqual(result["NODE_TLS_REJECT_UNAUTHORIZED"], "1")
+        self.assertEqual(Path(result["OPENCODE_DB"]), runtime / "session.db")
+        self.assertEqual(Path(result["KERNEL_LOG_DIR"]), runtime / "log")
+        self.assertEqual(result["AGENTHUB_WORKER_ID"], "codearts")
+        fresh = driver.runtime_environment(Path("codearts.exe"), runtime, home=home, env={})
+        self.assertNotIn("NODE_TLS_REJECT_UNAUTHORIZED", fresh)
+
     def test_kernel_env_keeps_credentials_external_and_isolates_database(self):
         result = driver.runtime_environment(Path("AgentKernel_test.exe"), Path("/runtime"), home=Path("/home/test"), env={"CODEARTS_CLI_AK": "fixture-external", "OPENCODE_AUTO_SHARE": "true"})
         self.assertEqual(result["SCENARIO"], "codeartsdoer")
@@ -200,6 +369,40 @@ class CodeArtsDriver(unittest.TestCase):
             driver._capture([sys.executable, "-c", "import time;time.sleep(30)"], cwd=str(ROOT), env=dict(driver.os.environ), timeout=0.1)
         self.assertEqual(raised.exception.code, "CODEARTS_TIMEOUT")
 
+    def test_posix_group_ownership_is_consumed_once_even_after_leader_exits(self):
+        child = SimpleNamespace(_agenthub_pgid=234567, poll=lambda: 0, wait=lambda timeout=None: 0)
+        with patch.object(driver.os, 'name', 'posix'), \
+                patch.object(driver.os, 'killpg', create=True) as killpg, \
+                patch.object(signal, 'SIGKILL', 9, create=True):
+            driver._terminate_owned(child)
+            driver._terminate_owned(child)
+        killpg.assert_called_once_with(234567, signal.SIGKILL if os.name != 'nt' else 9)
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux real process-group fixtures')
+    def test_linux_owned_capture_tree_cleanup(self):
+        for case in ('outer_term', 'outer_kill', 'inherited_timeout', 'inherited_root_exit',
+                     'standalone_timeout', 'standalone_root_exit', 'forged_marker'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory(prefix='agenthub-codearts-tree-') as temp:
+                completed = subprocess.run(
+                    [sys.executable, str(Path(__file__).resolve()), '--containment-fixture',
+                     'supervisor', case, temp], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, start_new_session=True, timeout=25)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                report = json.loads(completed.stdout)
+                self.assertTrue(report['fixture_cleanup_complete'])
+                self.assertTrue(report['bystander_untouched'])
+                self.assertTrue(report['children_stopped'], report)
+                inherited = case.startswith('outer_') or case.startswith('inherited_')
+                if inherited:
+                    self.assertEqual(report['runner']['pgid'], report['child']['pgid'])
+                    self.assertEqual(report['runner']['sid'], report['child']['sid'])
+                else:
+                    self.assertNotEqual(report['runner']['pgid'], report['child']['pgid'])
+                if 'timeout' in case:
+                    self.assertEqual(report['result'], 'CODEARTS_TIMEOUT')
+                elif not case.startswith('outer_'):
+                    self.assertEqual(report['result'], 'returned')
+
     def test_hub_parser_understands_envelope(self):
         sys.path.insert(0, str(ROOT / "hub"))
         from output_parser import parse_output
@@ -210,4 +413,7 @@ class CodeArtsDriver(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    if len(sys.argv) > 1 and sys.argv[1] == '--containment-fixture':
+        containment_fixture(*sys.argv[2:])
+    else:
+        unittest.main(verbosity=2)

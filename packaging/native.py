@@ -39,7 +39,8 @@ def discover(node, overrides=None):
                         str(home / '.local/bin/agy'), '/opt/Antigravity/antigravity',
                         '/opt/antigravity/antigravity', '/usr/share/antigravity/antigravity'],
         'codearts': [os.environ.get('CODEARTS_CLI'), shutil.which('codearts'),
-                     str(home / '.local/bin/codearts'), str(home / '.codeartsdoer/installers/codearts'),
+                     str(home / '.local/bin/codearts'), str(home / '.codeartsdoer/installers/bin/codearts.exe'),
+                     str(home / '.codeartsdoer/installers/codearts'),
                      str(home / '.codeartsdoer/installers/bin/codearts'),
                      str(Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / 'CodeArts Agent/codearts-agent.exe'),
                      '/opt/CodeArts Agent/codearts-agent', '/usr/share/codearts-agent/codearts-agent'],
@@ -227,9 +228,23 @@ def register(app, config_dir, node, selected='auto', project=None, profile='agen
                                          backup_dir=backup, apply=True)
                 if not isinstance(outcome, dict) or outcome.get('ok') is not True:
                     raise SetupError('CodeArts registration preserved conflicting or invalid user configuration; review its installer plan')
+                if pending:
+                    next_step = ('Restart CodeArts CLI and verify its multi-agent-hub tools. '
+                                 'IDE registration is pending: use --project or --codearts-ide-settings '
+                                 'for the current workspace, then reload that IDE window.')
+                elif 'ide' in targets:
+                    next_step = ('Reload the CodeArts IDE window for the recorded workspace MCP settings '
+                                 'and verify that multi-agent-hub tools are loaded.')
+                    if 'cli' in targets:
+                        next_step += ' Restart CodeArts CLI to load its registration.'
+                else:
+                    next_step = 'Restart CodeArts CLI and verify that multi-agent-hub tools are loaded.'
+                next_step += ' Configuration registration does not confirm host loading.'
                 records.append({'host': name, 'status': 'registered', 'reload_required': True,
                                 'targets': list(targets), 'pending_targets': pending,
-                                **({'next_step': 'Use --project or --codearts-ide-settings to register the IDE MCP connection'} if pending else {}),
+                                'version': outcome['version'], 'plugin_directory': outcome['plugin_directory'],
+                                'registrations': outcome['registrations'], 'host_loaded_verified': False,
+                                'next_step': next_step,
                                 'configuration_backups': str(backup) if backup.exists() else None})
             except (SetupError, OSError, ValueError, ImportError) as error:
                 records.append({'host': name, 'status': 'failed', 'error': str(error)})

@@ -28,8 +28,8 @@
 
 | 验证项目 | 实际结果 | 状态说明 |
 | --- | --- | --- |
-| Windows 回归测试 | ✅ 通过 (32组) | 维护者报告 Windows 32 组回归通过，非全量付费模型实测证明 |
-| Linux 回归测试 | ✅ 通过 (29组) | 维护者报告 Linux 29 组回归通过，非全量付费模型实测证明 |
+| Windows 回归测试 | ✅ 通过 (32组) | 2026-10-10 跟进修复后完整复测通过，包含真实 SDK 0.1.21 协议验证；非全量付费模型实测证明 |
+| Linux 回归测试 | ✅ 通过 (29组) | 同一冻结源码完整复测通过，包含真实 SDK 0.1.21 协议验证；非全量付费模型实测证明 |
 | Linux 生产 Hub 0.9.9 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，已有配置、任务历史与鉴权平滑保留 |
 | Linux Antigravity CLI 1.3.1 | ✅ 真实调用通过 | gemini-3.8-flash-medium 精确标记通过，插件模式校验通过（4技能/9代理/1MCP）；真实模型调用 `hub_status` 成功返回 9 种 worker，完整原生子代理 `hub-mimocode` 派发成功（返回 `ref=mimocode-79e2416c91`，`completed`，`answer=95`） |
 | Linux ZCode CLI 0.16.9 | ✅ 真实调用通过 | 原生 `agenthub-workers:mimocode` 子代理经插件派发，原 ref 续查返回 `73` |
@@ -38,7 +38,9 @@
 | Windows Antigravity | ⚠️ 待桌面重启验证 | 0.9.9 原生资产及连接桥已验证，桌面自主调用尚未验收 |
 | Linux Codex & DSH CLI | ❌ 未安装 (not_installed) | Linux 实机未找到 CLI 可执行文件，未执行实测，不作通过宣称 |
 | CodeArts 原生组件与通道 | ✅ 通过 | Windows 正式内核识别组件；Linux CLI 原生文件及 MCP 已安装校验通过；Windows ↔ Linux 局域网直连与 SSH 通道建立正常 |
-| CodeArts 自身模型调用 | ⚠️ 官方认证初始化受阻 | 9router 两端认证及模型列表有效；Windows 独立内核未完成自定义 provider 注册，Linux CLI 仍要求华为 AK/SK。这不表示你的 IDE 账号无权限，也不能把 9router 登录当作华为授权 |
+| Windows CodeArts IDE | ⚠️ 原生派发通过，结果回收受权限限制 | DeepSeek v4.1 Flash 真实调用 `hub-mimocode`，唯一回执 `mimocode-d5f1337f8a`；Linux 实际答案为 `45`，但 IDE 后续 `hub_fetch` 被宿主拒绝，不计为完整验收 |
+| Linux CodeArts 自身模型调用 | ✅ GLM-5.2 真实任务通过 | 显式 `huaweicloud-maas/GLM-5.2` 返回 `51`；更新服务后再次单次派发返回 `52`，回执 `codearts-715254f098`，核验 driver 与 CLI 共用进程组，完成后所属进程全部退出 |
+| Windows 独立 CodeArts CLI | ⚠️ 尚未通过模型验收 | 已修复官方 exe 发现及 CLI 专用配置；独立目录探针受到文件夹信任限制，不替代已登录 IDE 的使用状态 |
 
 > **边界与差异说明**：
 > 1. **回归测试 ≠ 全量付费实测**：Windows 32 组与 Linux 29 组回归通过为框架逻辑与离线回归，不能视为每个服务商、模型或原生宿主均已跑通真实付费任务。
@@ -48,6 +50,8 @@
 > 5. **本地与网络隐私**：客户端选定单个 Hub 并非跨 Hub 联邦；提示词与附件在调用对应 worker 时仍会发送至官方模型服务商。
 
 完整任务回执、源码哈希、失败记录及修复后两端各 83 项增量检查见 [0.9.9 验收记录](docs/release-0.9.9.md)。
+
+CodeArts 的 IDE 优先适配、官方认证修复及后续测试见 [2026-10-10 跟进记录](docs/codearts-ide-followup.md)。这些修复属于发布后跟进，原 `v0.9.9` 标签及已构建 ZIP 保留原内容。
 
 示例：仅安装 CodeArts 客户端并连接远端 Hub：
 
@@ -150,7 +154,7 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765
 | **MiniMax** | MiniMax-M3.1-Flash-Preview | 仅支持图文读取，不支持关闭思考与本地写文件 |
 | **TraeCode** | GLM-5.3-FlashX | 快速代码辅助 |
 | **ZCode** | GLM-5.3-Flash | 显式思考切换与未验证正文流式默认禁用 |
-| **CodeArts** | 沿用官方 CLI 配置 | 需华为账号认证及可用模型权限；本轮真实模型调用仍受阻 |
+| **CodeArts** | 沿用官方 CLI 配置 | Linux 已认证 GLM-5.2 显式任务通过；IDE 与独立 CLI 的认证、模型目录及权限分别验证 |
 
 上表是新安装的默认配置。已有服务器保留原模型；本轮 Linux MiMo 实测使用其既有 `9router/trae`，不代表 `26f` 已实测。
 

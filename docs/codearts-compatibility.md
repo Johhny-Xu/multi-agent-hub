@@ -1,6 +1,6 @@
 # CodeArts 双向接入与验证边界
 
-本页保留 0.9.0 接入阶段的历史结果，该实现随后随 v0.9.1 源码标签发布。最新部署、修复及验收见 [0.9.9 交付记录](release-0.9.9.md)，自定义路由接入步骤见 [CodeArts 私有模型配置](codearts-custom-provider.md)。
+本页保留 0.9.0 接入阶段的历史结果，该实现随后随 v0.9.1 源码标签发布。发布部署见 [0.9.9 交付记录](release-0.9.9.md)，IDE 原生调用和 Linux GLM-5.2 成功任务见 [2026-10-10 跟进记录](codearts-ide-followup.md)，自定义路由接入步骤见 [CodeArts 私有模型配置](codearts-custom-provider.md)。
 
 检查日期：2026-10-09。实现版本：multi-agent-hub 0.9.0。
 

@@ -1,8 +1,12 @@
 // Official CodeArts Agent Hooks API; no third-party runtime dependencies.
 // This hook never opens a listener or changes the host's tool permissions.
 export const ROUTING_INSTRUCTIONS = `multi-agent-hub provides external workers through its MCP tools.
+Use directly registered MCP tools directly when the host exposes them. If the CodeArts IDE exposes MCP tools through its lazy tool registry, first use tool_search to discover the tool, then tool_describe(id=...) to load its schema, and tool_call(id=..., args=...) to execute it using that schema. A discovered MCP name is not automatically a directly callable tool; do not repeat direct calls after the host says it is not directly callable.
+If permission for an action is denied or rejected, stop that action immediately and report blocked_permission with the original ref (if available). Do not retry it under another tool name, through another transport, or from the parent agent; resume only after explicit authorization. Never change permission settings or add automatic approval.
 Inspect hub_capabilities before choosing model, thinking, stream or attachments. Do not invent support.
-Dispatch each task once. Preserve its ref, and use hub_fetch for running or unknown results.
+Dispatch each task once. Preserve its worker, host and ref.
+Within the total waiting budget, keep querying the original ref with hub_fetch until completed or a definite failure, with a short delay between checks. On budget exhaustion, return running or unknown with the original ref so the parent can continue within its authorized budget. A running result is not completed. A permission denial stops recovery as described above; handing off the ref does not authorize a parent retry. A timeout or unknown result never justifies redispatch.
+Only report completed with a nonempty worker answer that meets the acceptance criteria; a completed agent turn or tool call alone is insufficient.
 Native hub-* agents route tasks; their own narration is not an external worker result.
 CodeArts-to-CodeArts routing requires the user's explicit selection of a different remote Hub host.
 Never automatically route a task back to the same CodeArts worker or recursively spawn routing agents.

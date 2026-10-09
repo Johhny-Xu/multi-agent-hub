@@ -16,6 +16,10 @@ import time
 from pathlib import Path
 
 
+# Internal containment hint for standalone adapters, never an authorization token.
+OWNED_POSIX_GROUP_ENV = "AGENTHUB_OWNED_POSIX_GROUP"
+
+
 def prepare_command(argv, env=None):
     if isinstance(argv, (str, bytes)) or not argv:
         raise ValueError("command must be a nonempty argument list")
@@ -142,7 +146,14 @@ class _WindowsJob:
 
 def spawn_owned(argv, **kwargs):
     """Start an owned process group/job, without touching existing processes."""
-    command = prepare_command(argv, env=kwargs.get("env"))
+    child_env = dict(os.environ if kwargs.get("env") is None else kwargs["env"])
+    child_env.pop(OWNED_POSIX_GROUP_ENV, None)
+    if os.name != "nt" and kwargs.get("start_new_session", True):
+        # Adapters must also verify they are this session/group's leader before
+        # keeping descendants in the group that our finally block reclaims.
+        child_env[OWNED_POSIX_GROUP_ENV] = "1"
+    kwargs["env"] = child_env
+    command = prepare_command(argv, env=child_env)
     if os.name == "nt":
         job = _WindowsJob()
         proc = None
