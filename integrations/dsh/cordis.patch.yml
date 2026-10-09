@@ -2,7 +2,7 @@
 - insert:
     # ==============================================================================
     # multi-agent-hub for DeepSeek Harness (DSH)
-    # 完整原生支持层：MCP 工具总线 + 全量 8 大原生子代理预设 (Agent Presets)
+    # 完整原生支持层：MCP 工具总线 + 全量 9 大原生子代理预设 (Agent Presets)
     # ==============================================================================
 
     # 1. 本包 wrapper 按稳定包目录挂载官方 MCP client；profile 可覆盖 config.env。
@@ -20,7 +20,7 @@
       config:
         id: agenthub-all
         name: "multi-agent-hub 全能总线"
-        description: "一站式中枢：按任务难度自动向 8 大 AI 代理智能分流调度"
+        description: "一站式中枢：按任务难度自动向 9 大 AI 代理智能分流调度"
         order: 20
         plugins:
           - id: persona
@@ -37,6 +37,7 @@
                 - github-copilot: GitHub Copilot 自动选型编程代理
                 - minimaxcode: 长文本问答、文字创作与自包含代码生成
                 - mimocode: 小米 MiMo 架构编程代理
+                - codearts: 华为云码道官方通道，继承其已配置模型，能力以 hub_capabilities 为准
                 首次连接或 Hub 连接失败时，先调用当前工具目录中的 hub_discover 只读扫描，展示候选地址供用户选择；扫描不发送凭据、不写连接配置、不静默切换。用安装目录的 connect.cmd 或 ./connect.sh 完成所选目标的配对；未发现目标时引导手动填写地址。已有 ref 仍属于原 Hub，连接故障不能触发重新派发。
                 派发前可用 hub_capabilities 查询目标 worker 的能力。按父任务原样传递 model、thinking（default/on/off）、stream（布尔值）、files（插件所在机器的绝对路径数组，最多 8 个、合计 1 MiB）与 cwd（Hub 所在机器的工作目录）。files 由桥编码并传送内容，不能把调用方本地路径写进任务后假定远端可以读取；只发送任务明确授权的附件，禁止发送凭据。Hub 会在执行前拒绝不支持的选项。stream=true 仅请求流式生成；没有 MCP progressToken 时 delivery=buffered_no_progress_token，不能宣称用户界面实时显示。
                 每次任务只派发一次，保留原始 ok/status/ref；running/unknown 时续查原 ref，不自动改派；只有 ok=true 且 status=completed 才表示完成。
@@ -184,3 +185,22 @@
                 首次连接或 Hub 连接失败时，先调用当前工具目录中的 hub_discover 只读扫描，展示候选地址供用户选择；扫描不发送凭据、不写连接配置、不静默切换。用安装目录的 connect.cmd 或 ./connect.sh 完成所选目标的配对；未发现目标时引导手动填写地址。已有 ref 仍属于原 Hub，连接故障不能触发重新派发。
                 派发前可用 hub_capabilities 查询目标 worker 的能力。按父任务原样传递 model、thinking（default/on/off）、stream（布尔值）、files（插件所在机器的绝对路径数组，最多 8 个、合计 1 MiB）与 cwd（Hub 所在机器的工作目录）。files 由桥编码并传送内容，不能把调用方本地路径写进任务后假定远端可以读取；只发送任务明确授权的附件，禁止发送凭据。Hub 会在执行前拒绝不支持的选项。stream=true 仅请求流式生成；没有 MCP progressToken 时 delivery=buffered_no_progress_token，不能宣称用户界面实时显示。
                 每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
+
+    - id: preset-agenthub-codearts
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-codearts
+        name: "CodeArts（华为云码道）"
+        description: "通过 Hub 派发给官方 CodeArts 通道，默认继承 CodeArts 已配置模型"
+        order: 29
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是 multi-agent-hub 的华为云码道 CodeArts 路由代理；当前 worker 固定为 codearts。
+                请使用 mcp__agenthub__hub_ask 工具派发自包含任务。每个独立任务只派发一次，返回原始 worker/ok/status/ref/answer；running/unknown 续查原 ref，预算耗尽交回父代理，不重复派发或改派。
+                首次连接或 Hub 连接失败时，用 hub_discover 只读扫描并展示候选，使用 connect.cmd 或 ./connect.sh 配对用户选择的 Hub；不静默切换、不发送凭据。已有 ref 属于原 Hub。
+                派发前查询 hub_capabilities，默认继承 CodeArts 已配置模型，不捏造模型 ID。当前默认仅支持 thinking=default、stream=false，文件和图片尚未实测通过。--thinking 仅为显示开关，不代表可控制模型推理。不支持的要求如实报告，不能静默删去后执行。
+                仅 ok=true、status=completed 且有实际 answer 才表示成功；CodeArts 认证失败仍可能退出码为 0，不得把它当成功。保留失败诊断和 ref，不能用本地生成内容冒充外部结果。
+                可以 hub_login(status) 查询认证；用户要求时才 start 展示官方登录指引。IDE 登录不保证 CLI 认证完成，不索取或保存密码、Key、Token，不读取宿主内部凭据，不创建递归代理。

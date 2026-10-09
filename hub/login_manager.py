@@ -18,11 +18,11 @@ from urllib.parse import urlsplit, parse_qsl, urlencode, urlunsplit
 from command_runtime import prepare_command, spawn_owned, terminate_owned
 
 WORKERS = {"codebuddy", "codebuddy-cn", "minimaxcode", "github-copilot",
-           "antigravity", "mimocode", "zcode", "traecode"}
+           "antigravity", "mimocode", "zcode", "traecode", "codearts"}
 COMMANDS = {"codebuddy": "codebuddy", "codebuddy-cn": "codebuddy",
             "minimaxcode": "mmx", "github-copilot": "copilot",
             "antigravity": "agy", "mimocode": "mimo", "zcode": "zcode",
-            "traecode": "traecli"}
+            "traecode": "traecli", "codearts": "codearts"}
 HOSTS = {"codebuddy": ("codebuddy.ai", "copilot.tencent.com"),
          "codebuddy-cn": ("codebuddy.ai", "copilot.tencent.com"),
          "minimaxcode": ("minimax.io", "minimaxi.com", "minimax.cn"),
@@ -152,6 +152,10 @@ class LoginManager:
                 return self._reply(old or {"worker": worker, "status": "cancelled"}, action)
             if old and old["status"] in ACTIVE:
                 return self._reply(old, action)
+        if worker == "codearts":
+            return {"ok": False, "worker": worker, "action": action, "status": "manual_required",
+                    "instructions": "在 Hub 主机使用 CodeArts 官方登录与模型配置。当前 CLI 非交互模式可能要求 CODEARTS_CLI_AK/CODEARTS_CLI_SK；IDE 登录不能证明 CLI 已认证。凭据只在本机官方环境中配置，不要发到聊天或写入项目。配置后刷新 hub_capabilities 并执行真实任务验证。",
+                    "login_url": "https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_0034.html"}
         if worker == "antigravity":
             return {"ok": False, "worker": worker, "action": action, "status": "manual_required",
                     "instructions": f"Run {COMMANDS[worker]} in a local terminal and use its official account/provider login. This CLI has no verified noninteractive login-link/status interface."}

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Deterministic host runner: each stage calls the bridge once; no intermediate LLM.
-import { ask, resolveWorker } from "../mcp/hub.mjs";
+import { ask, resolveWorker, CANONICAL } from "../mcp/hub.mjs";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { workflowOptions } from "./options.mjs";
@@ -29,7 +29,7 @@ export async function runWorkflow(mode, input, invoke = ask) {
     const task = nonempty(input.task, "task");
     const raw = input.workers ?? ["antigravity", "codebuddy", "traecode"];
     const list = typeof raw === "string" ? raw.split(/[,，\s]+/).filter(Boolean) : raw;
-    if (!Array.isArray(list) || !list.length || list.length > 8) throw new Error("workers must contain 1 to 8 workers");
+    if (!Array.isArray(list) || !list.length || list.length > CANONICAL.length) throw new Error(`workers must contain 1 to ${CANONICAL.length} workers`);
     const workers = [...new Set(list.map((worker) => {
       const canonical = typeof worker === "string" && resolveWorker(worker);
       if (!canonical) throw new Error("Unknown worker");

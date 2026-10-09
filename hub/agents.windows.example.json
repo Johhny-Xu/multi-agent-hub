@@ -1,6 +1,21 @@
 {
   "_comment": "Windows 配置模板。把 C:/PATH/TO 替换为官方 CLI 的稳定安装位置；用 npm root -g 定位 npm 包。只保留已安装的 worker。未含凭据或临时下载路径。真实账号、模型权限与额度仍需实测。",
   "agents": {
+    "codearts": {
+      "role": "华为云码道 CodeArts 官方 Windows 通道",
+      "description": "填写本仓库驱动的稳定绝对路径；驱动查找官方 CodeArts CLI 或 IDE kernel。默认继承 CodeArts 已配置模型，认证失败明确返回，不读取或写入仓库凭据。",
+      "cli": [
+        "python",
+        "C:/PATH/TO/multi-agent-hub/drivers/codearts_cli.py",
+        "--task",
+        "{task}"
+      ],
+      "model_arg": "--model",
+      "models": {"default": ""},
+      "timeout_arg": "--timeout",
+      "workdir_via": "--cwd",
+      "async_default": true
+    },
     "codebuddy": {
       "role": "腾讯 CodeBuddy 国际版 CLI",
       "description": "官方 npm CLI；使用 node + 入口脚本，避免 Windows npm shim 的差异。",

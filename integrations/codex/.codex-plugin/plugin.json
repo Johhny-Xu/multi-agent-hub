@@ -1,12 +1,12 @@
 {
   "name": "agenthub-workers",
-  "version": "0.8.0",
-  "description": "Codex workflows, read-only Hub discovery and an MCP bridge to eight multi-agent-hub workers.",
+  "version": "0.9.0",
+  "description": "Codex workflows, read-only Hub discovery and an MCP bridge to nine multi-agent-hub workers.",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "multi-agent-hub Workers",
-    "shortDescription": "Coordinate eight external workers through a self-hosted Hub.",
+    "shortDescription": "Coordinate nine external workers through a self-hosted Hub.",
     "longDescription": "Dispatch work once, retain result references, and collect verified results with research, implementation review, and consultation workflows.",
     "developerName": "multi-agent-hub Contributors",
     "category": "Developer Tools"

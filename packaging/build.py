@@ -8,7 +8,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = '0.8.0'
+VERSION = '0.9.0'
 COMMON = ['README.md', 'install.cmd', 'install.sh', 'start.cmd', 'start.sh', 'stop.cmd', 'stop.sh', 'status.cmd', 'status.sh', 'connect.cmd', 'connect.sh',
           'packaging/install.py', 'packaging/runtime.py', 'packaging/service.py', 'packaging/native.py',
           'packaging/bootstrap.ps1', 'packaging/launch.sh', 'packaging/README.md', 'packaging/connect.py', 'packaging/discovery.py']
@@ -24,6 +24,7 @@ def package_files(component):
             if source.suffix == '.py' or source.name in ('capabilities.json', 'agents.example.json', 'agents.windows.example.json', 'agents.minimal.example.json'):
                 files['payload/hub/' + source.name] = source
         files['payload/drivers/zcode_rpc.mjs'] = ROOT / 'drivers/zcode_rpc.mjs'
+        files['payload/drivers/codearts_cli.py'] = ROOT / 'drivers/codearts_cli.py'
         files['payload/console/server.mjs'] = ROOT / 'console/server.mjs'
         for source in (ROOT / 'console/client').rglob('*'):
             if source.is_file() and source.suffix.lower() in ('.html', '.mjs', '.js', '.css', '.png', '.ico', '.svg'):
@@ -31,7 +32,7 @@ def package_files(component):
     if component in ('plugins', 'both'):
         files['payload/packaging/README.md'] = ROOT / 'packaging/README.md'
         files['payload/LICENSE'] = ROOT / 'LICENSE'
-        for directory in ('integrations/codex', 'integrations/dsh', 'plugins/agenthub-workers'):
+        for directory in ('integrations/codex', 'integrations/dsh', 'integrations/codearts', 'plugins/agenthub-workers'):
             for source in (ROOT / directory).rglob('*'):
                 if source.is_file() and source.suffix.lower() in ('.json', '.mjs', '.js', '.toml', '.md', '.yml', '.yaml', '.py', '.sh', '.bat', '.png'):
                     if any(part in ('node_modules', '__pycache__', 'cache', 'data', 'sessions') for part in source.relative_to(ROOT).parts):

@@ -289,7 +289,7 @@ class DistributionTests(unittest.TestCase):
             def __getattr__(self, key):
                 return getattr(os, key)
         actual_which = shutil.which
-        def discovery(command):
+        def discovery(command, **kwargs):
             return '/isolated/systemctl' if command == 'systemctl' else actual_which(command)
         with patch.object(install, 'os', LinuxView()), \
              patch.dict(os.environ, {'XDG_CONFIG_HOME': str(self.case / 'xdg')}), \

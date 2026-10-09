@@ -137,7 +137,7 @@ class CodexAdapterTests(unittest.TestCase):
 
     def test_native_agents_parse_and_inherit_models_and_permissions(self):
         files = list((PACKAGE / "templates" / ".codex" / "agents").glob("*.toml"))
-        self.assertEqual(len(files), 8)
+        self.assertEqual(len(files), 9)
         names = set()
         for path in files:
             agent = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -146,7 +146,7 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertTrue(agent["description"])
             self.assertTrue(agent["developer_instructions"])
             names.add(agent["name"])
-        self.assertEqual(len(names), 8)
+        self.assertEqual(len(names), 9)
 
     def test_bundled_bridge_is_byte_identical_to_canonical_mcp(self):
         for name in installer.MCP_FILES:
@@ -184,7 +184,7 @@ class CodexAdapterTests(unittest.TestCase):
         (codex / "config.toml").write_bytes(existing)
         plugin = self.install()
         self.assertEqual((codex / "config.toml").read_bytes(), existing)
-        self.assertEqual(len(list((codex / "agents").glob("*.toml"))), 8)
+        self.assertEqual(len(list((codex / "agents").glob("*.toml"))), 9)
         fragment = tomllib.loads((codex / "agenthub.config.fragment.toml").read_text(encoding="utf-8"))
         self.assertEqual(fragment["agents"]["max_concurrent_threads_per_session"], 8)
         self.assertEqual(fragment["mcp_servers"]["agenthub"]["env_vars"], list(installer.FORWARDED_ENV))

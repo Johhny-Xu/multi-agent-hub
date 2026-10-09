@@ -1,5 +1,20 @@
 {
   "agents": {
+    "codearts": {
+      "role": "华为云码道 CodeArts 官方通道",
+      "description": "通过驱动调用已安装的官方 CodeArts CLI 或 IDE kernel；默认继承 CodeArts 本机配置的模型。需要为所选正式通道完成认证，不将桌面登录视为 CLI 已授权。",
+      "cli": [
+        "python3",
+        "/PATH/TO/multi-agent-hub/drivers/codearts_cli.py",
+        "--task",
+        "{task}"
+      ],
+      "model_arg": "--model",
+      "models": {"default": ""},
+      "timeout_arg": "--timeout",
+      "workdir_via": "--cwd",
+      "async_default": true
+    },
     "codebuddy": {
       "role": "编码 worker 示例（CLI 无头模式）",
       "description": "编码 worker 示例（CLI 无头模式）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",

@@ -32,6 +32,9 @@ const AGENT_ALIASES = {
   copilot: 'github-copilot',
   mmx: 'minimaxcode',
   trae: 'traecode',
+  ca: 'codearts',
+  codearts: 'codearts',
+  'huawei-codearts': 'codearts',
 };
 const canonicalAgent = (value) => AGENT_ALIASES[String(value || '').trim().toLowerCase()] || String(value || '').trim();
 // 子代理直通端点绑定地址: 默认仅回环; 设 0.0.0.0 才暴露给局域网(无鉴权, 慎用)
@@ -78,6 +81,9 @@ const DISPATCH_OVERRIDES = { traecode: { tool: 'trae_delegate', asyncFlag: { wai
  * 2026-10-05 实测模型目录 (逐一在各 CLI 交互界面查证, 替代 agents.json 旧表)
  */
 const MODEL_CATALOG = {
+  codearts: [
+    { id: '', name: '默认（继承 CodeArts 已配置模型）', default: true },
+  ],
   'github-copilot': [
     { id: 'auto', name: 'Auto (Copilot 自动选型)', default: true },
   ],
