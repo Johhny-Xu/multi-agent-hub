@@ -6,6 +6,7 @@ Git 发布日期：2026-10-09。按下表顺序独立提交、打标签并逐次
 | --- | --- | ---: | --- |
 | v0.5.0 | agenthub-stage01-before-20261008-175905.zip | 133 | `5f59cbde7113747d41797b58853c014d7fe37cb006c4755afc3e7a1b2ef79474` |
 | v0.6.0 | agenthub-stage06-final-verified-20261008-192350.zip | 222 | `6e5cead3ad48d89b7dff6d1985686d0739394e94d386f43db2592d62cf1ed233` |
+| v0.7.0 | agenthub-stage10-final-release-20261008-202551.zip | 272 | `cffd002dabe9ff05ebc22d9021c176f68422c2946f974f855b58931b251f8a57` |
 
 0.5.0 使用最早保存的 stage01：其中 ZCode/MCP 为 0.5.0，但已包含标为 0.6.0 的 Codex 初稿。该标签如实保存这一混合阶段，不改写组件版本，也不称为历史正式安装包。
 

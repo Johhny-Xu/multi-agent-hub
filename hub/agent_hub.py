@@ -15,6 +15,7 @@ import os
 import random
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -25,11 +26,12 @@ from pathlib import Path
 from command_runtime import atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
 from state_store import StateFileLock, safe_component
 from result_store import read_result, update_result
-from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task
+from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task, platform_name, public_model_capabilities, resolve_model
+from availability_store import local_availability, record_outcome, refresh as refresh_availability, signature as profile_signature
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "0.6.0"
+SERVER_VERSION = "0.7.0"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -394,12 +396,25 @@ def tool_hub_dispatch_cli(args):
     if not cli:
         return (f"{agent} 未配置 CLI (agents.json 中 cli 为 null)。"
                 f"确认该工具的无头调用命令后, 填入 agents.json 的 cli 字段即可。")
+    model = resolve_model(prof, args.get("model"))
+    available = local_availability(agent, prof, model, STATE)
+    if not available["enabled"]:
+        raise ValueError("UNAVAILABLE: " + available["code"] + ": " + available["reason"])
     plan = prepare_task(agent, prof, dict(args, task=task), STATE / "attachments")
     try:
         return _dispatch_prepared_cli(args, agent, prof, plan)
     finally:
         if not plan.get("async_started"):
             cleanup_attachments(plan["staging"], STATE / "attachments")
+
+
+def _record_cli_outcome(agent, profile, model, status, text=""):
+    try:
+        record_outcome(STATE, agent, model, status, text, profile_signature(profile))
+    except (OSError, ValueError, TimeoutError):
+        # Failure hints are optional; a state-cache problem must not erase an
+        # already executed task's real answer or encourage duplicate execution.
+        pass
 
 
 def _dispatch_prepared_cli(args, agent, prof, plan):
@@ -437,8 +452,13 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         if cmd[prompt_at + 1:prompt_at + 2] != ["{task}"]:
             raise ValueError("messages_file 附件的 --message 后必须是 {task}")
         del cmd[prompt_at:prompt_at + 2]
+    if plan.get("input_file"):
+        prompt_at = next((i for i, item in enumerate(cmd) if item == "{task}"), None)
+        if prompt_at is None or prompt_at == 0 or cmd[prompt_at - 1] not in ("-p", "--print"):
+            raise ValueError("stdin_json 输入要求 CLI 以 -p/--print {task} 配置")
+        del cmd[prompt_at]
     prompt_tail = None
-    if prof.get("options_before_prompt"):
+    if prof.get("options_before_prompt") and not plan.get("input_file"):
         if len(cmd) < 2 or cmd[-1] != "{task}" or not cmd[-2].startswith("-"):
             raise ValueError("options_before_prompt 要求 CLI 以提示词参数和 {task} 结尾")
         prompt_tail = cmd[-2:]
@@ -449,7 +469,10 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         cmd = merge_cli_arguments(cmd, [str(prof["model_arg"]), str(model)])
     if prof.get("timeout_arg"):
         cmd = merge_cli_arguments(cmd, [str(prof["timeout_arg"]), str(timeout)])
+    cmd = [item for item in cmd if item not in plan.get("remove_args", [])]
     cmd = merge_cli_arguments(cmd, plan["extra_args"])
+    if agent in ("codebuddy", "codebuddy-cn") and plan["staging"] and any(item["kind"] == "image" for item in plan["metadata"].get("attachments", [])):
+        cmd.extend(["--add-dir", plan["staging"]])
     extra_args = args.get("extra_args")
     if extra_args:
         if isinstance(extra_args, (list, tuple)):
@@ -491,6 +514,7 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
             ref = _start_async(agent, "cmd", task,
                                {"cmd": cmd, "callback_url": cb, "cwd": cwd, "timeout_s": timeout,
                                 "attachment_dir": plan["staging"], "attachment_parent": str((STATE / "attachments").resolve()),
+                                "input_file": plan.get("input_file"), "availability_state": str(STATE), "profile_signature": profile_signature(prof),
                                 "public_options": dict(plan["metadata"], model=model)},
                                env=process_env)
         except (OSError, RuntimeError) as exc:
@@ -503,23 +527,30 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
     # workdir_via: 某些 CLI 的登录态绑定特定目录 (如 codebuddy-cn 绑 home),
     # 用 --add-dir 把真实目标目录挂进工作区, 而进程本身固定在 prof.cwd 下运行
     proc = None
+    input_stream = None
     try:
-        proc = spawn_owned(cmd, cwd=cwd, env=process_env, stdin=subprocess.DEVNULL,
+        if plan.get("input_file"):
+            input_stream = open(plan["input_file"], "rb")
+        proc = spawn_owned(cmd, cwd=cwd, env=process_env, stdin=input_stream or subprocess.DEVNULL,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            text=True, encoding="utf-8", errors="replace")
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        _record_cli_outcome(agent, prof, model, "timeout")
         return f"{agent} CLI 执行超时 (> {timeout}s)。"
     except OSError as e:
         return f"{agent} CLI 启动失败: {e}"
     finally:
         terminate_owned(proc)
+        if input_stream:
+            input_stream.close()
     parsed = parse_output(stdout or "")
     out = parsed["error"] or parsed["text"] or stderr or ""
     code = proc.returncode or (1 if parsed["error"] else 0)
     if code == 0 and not parsed["text"].strip():
         code = 1
         out = parsed["error"] or "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。"
+    _record_cli_outcome(agent, prof, model, "completed" if code == 0 else "error", out)
     tag = f"{agent}/{model}" if model else agent
     return _truncate(f"[{tag}] exit={code}\n{out or '(无输出)'}")
 
@@ -554,21 +585,41 @@ def tool_hub_login(args):
 
 
 def tool_hub_capabilities(args):
-    wanted = _resolve_agent(str(args.get("agent") or ""))
+    wanted = _resolve_agent(str(args.get("agent") or args.get("worker") or ""))
+    if not isinstance(args.get("refresh", False), bool):
+        raise ValueError("refresh must be a boolean")
+    selected = str(args.get("model") or "").strip()
+    profiles = _load_agents()
+    if args.get("refresh"):
+        if wanted and selected:
+            refresh_availability(STATE, wanted, resolve_model(profiles.get(wanted) or {}, selected))
+        else:
+            refresh_availability(STATE, wanted or None)
     workers = {}
-    for agent, profile in _load_agents().items():
+    for agent, profile in profiles.items():
         if wanted and agent != wanted:
             continue
-        caps = capabilities(agent, profile) if profile.get("cli") else {}
-        default_model = (profile.get("models") or {}).get("default")
-        thinking = [mode for mode, config in (caps.get("thinking") or {}).items()
-                    if not config.get("models") or default_model in config["models"]]
+        aliases = profile.get("models") or {}
+        default_model = aliases.get("default")
+        identifiers = list(dict.fromkeys(str(item) for item in aliases.values() if item))
+        if selected:
+            identifiers = [resolve_model(profile, selected)]
+        models = []
+        for model in identifiers:
+            item = {"id": model, "aliases": [key for key, value in aliases.items() if value == model],
+                    "availability": local_availability(agent, profile, model, STATE),
+                    **public_model_capabilities(agent, profile, model)}
+            if model not in aliases.values() and profile.get("allow_unlisted_models") is not True:
+                item["availability"] = {"enabled": False, "code": "model_not_configured", "reason": "所选模型未在本机 worker 配置中声明。", "refreshable": False}
+            models.append(item)
+        defaults = public_model_capabilities(agent, profile, default_model or "")
         workers[agent] = {"configured": bool(profile.get("cli")), "default_model": default_model,
                           "model_selection": bool(profile.get("model_arg")),
-                          "thinking": ["default"] + thinking,
+                          "availability": local_availability(agent, profile, None), "models": models,
+                          "thinking": defaults["thinking"]["allowed"],
                           "stream": "stdout_progress" if profile.get("cli") else "gui_snapshot",
-                          "attachments": {kind: item.get("mode") for kind, item in (caps.get("attachments") or {}).items()}}
-    return json.dumps({"workers": workers, "attachment_limit_bytes": 1024 * 1024,
+                          "attachments": {kind: item.get("mode") for kind, item in defaults["attachments"].items() if item["supported"]}}
+    return json.dumps({"schema_version": 2, "platform": platform_name(), "workers": workers, "attachment_limit_bytes": 1024 * 1024,
                        "scope": "configured_capabilities_not_a_login_or_generation_check"}, ensure_ascii=False)
 
 
@@ -695,7 +746,7 @@ def _start_async(agent, mode, task, metadata, session_id="", env=None):
     task_path = Path(RESULTS_DIR) / (ref + ".task")
     process_env = dict(os.environ if env is None else env)
     process_env.update(HUB_RESULTS_DIR=str(RESULTS_DIR), TRAE_GATEWAY=TRAE_GATEWAY,
-                       TRAE_DOM_READ=TRAE_DOM_READ, ZCODE_DOM_DRIVER=ZCODE_DOM_DRIVER)
+                       HUB_STATE_DIR=str(STATE), TRAE_DOM_READ=TRAE_DOM_READ, ZCODE_DOM_DRIVER=ZCODE_DOM_DRIVER)
     _save_result(ref, agent=agent, status="running", task=task, **metadata.get("public_options", {}))
     try:
         atomic_write_json(task_path, metadata)
@@ -908,7 +959,8 @@ TOOL_DEFS = [
       "extra_args": {"type": "array", "items": {"type": "string"}, "description": "追加到命令尾部的额外参数列表"},
       "cwd": {"type": "string"}, "timeout_s": {"type": "number"}, **OPTIONS_SCHEMA}, ["agent", "task"]),
     ("hub_capabilities", "查询 worker 已配置的模型与思考、流式、附件能力；不返回运行环境或凭据。",
-     {"agent": {"type": "string"}}, []),
+     {"agent": {"type": "string"}, "worker": {"type": "string"}, "model": {"type": "string"},
+      "refresh": {"type": "boolean", "description": "只清除本机最近失败状态；不登录、不执行推理"}}, []),
     ("hub_list_models", "查看各 worker 可用的模型别名表和模型参数名。",
      {"agent": {"type": "string", "description": "只看某个 worker"}}, []),
     ("hub_login", "获取官方 worker CLI 登录链接、查看登录状态或取消本次等待；凭据由官方 CLI 保存到 Hub 主机，不回传密码、Token 或 API Key。",
@@ -1130,6 +1182,17 @@ class _HTTPHandler(BaseHTTPRequestHandler):
         sys.stderr.write("[agent-hub.http] %s\n" % (fmt % safe_args))
 
 
+class HubHTTPServer(ThreadingHTTPServer):
+    """One listener owns a Windows port; retain normal POSIX restart reuse."""
+    allow_reuse_address = os.name != "nt"
+    allow_reuse_port = False
+
+    def server_bind(self):
+        if os.name == "nt":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def run_http(port: int, host: str = "127.0.0.1"):
     try:
         sys.stderr.reconfigure(line_buffering=True)  # 保证强杀进程后日志已落盘
@@ -1137,7 +1200,7 @@ def run_http(port: int, host: str = "127.0.0.1"):
         pass
     if host not in ("127.0.0.1", "localhost", "::1") and not HUB_TOKEN:
         raise SystemExit("拒绝启动: 非回环监听必须设置 HUB_TOKEN 环境变量 (防裸奔)")
-    server = ThreadingHTTPServer((host, port), _HTTPHandler)
+    server = HubHTTPServer((host, port), _HTTPHandler)
     auth = "已启用 token 鉴权" if HUB_TOKEN else "未鉴权 (仅限本机回环!)"
     sys.stderr.write("[agent-hub] HTTP MCP 端点: http://%s:%d/mcp (%s)\n" % (host, port, auth))
     sys.stderr.write("[agent-hub] 状态目录: %s\n" % STATE)

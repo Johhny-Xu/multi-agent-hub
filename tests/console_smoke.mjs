@@ -22,6 +22,21 @@ const results = new Map();
 let inbox = '';
 let agentsOverride = null;
 let modelsOverride = null;
+let capabilitiesOverride = null;
+let latestCapabilityArgs = null;
+function workerCapability(id, { thinking = ['default', 'on', 'off'], stream = true, image = true, file = true, enabled = true } = {}) {
+  return { configured: true, default_model: id, availability: { enabled, reason: enabled ? '' : 'synthetic model blocked' }, models: [{ id, aliases: ['fixture-alias'],
+    availability: { enabled }, thinking: { allowed: thinking, default: 'default', reasons: { on: 'thinking on unsupported', off: 'thinking off unsupported' } },
+    stream: { supported: stream, semantics: 'answer_deltas', reason: 'stream unsupported' }, attachments: { image: { supported: image, reason: 'image unsupported' }, file: { supported: file, reason: 'file unsupported' } } }] };
+}
+function capabilityDocument() {
+  return { schema_version: 2, platform: 'linux', attachment_limit_bytes: 1024 * 1024, workers: {
+    probe: workerCapability('synthetic'),
+    mimocode: workerCapability('xiaomi/mimo-v2.6-flash'),
+    minimaxcode: workerCapability('MiniMax-M3.1-Flash-Preview', { thinking: ['default', 'on'] }),
+    zcode: workerCapability('GLM-5.3-Flash', { enabled: false }),
+  } };
+}
 const hub = http.createServer(async (req, res) => {
   let body = '';
   for await (const part of req) body += part;
@@ -42,6 +57,10 @@ const hub = http.createServer(async (req, res) => {
   } else if (name === 'hub_list_agents') text = agentsOverride || '已注册代理:\n- probe [在线] 角色: synthetic | CLI: probe.exe';
   else if (name === 'hub_list_tasks') text = '没有匹配的任务。';
   else if (name === 'hub_list_models') text = modelsOverride || '各 worker 可选模型:\n- probe: model_arg=--model | 默认→synthetic';
+  else if (name === 'hub_capabilities') {
+    latestCapabilityArgs = rpc.params.arguments;
+    text = JSON.stringify(capabilitiesOverride || capabilityDocument());
+  }
   else if (name === 'hub_note_get') text = '全部笔记: (空)';
   else text = 'synthetic ok';
   res.writeHead(200, { 'content-type': 'application/json' });
@@ -341,6 +360,152 @@ test('queue mode rejects unsupported attachment or thinking controls before disp
     assert.equal(sent.status, 400);
     assert.equal(dispatches, before);
   } finally { await stop(); }
+});
+
+test('thinking and model restrictions are enforced on both HTTP dispatch routes before recording a task', async () => {
+  capabilitiesOverride = capabilityDocument();
+  capabilitiesOverride.workers.probe.models.push({ ...workerCapability('other', { thinking: ['default'] }).models[0], aliases: [] });
+  await boot();
+  try {
+    const before = dispatches;
+    const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    for (const path of ['/api/chat/send', '/api/dispatch']) {
+      const response = await api(path, { agent: 'probe', sessionId: session, mode: 'dispatch', text: 'synthetic forbidden', task: 'synthetic forbidden', model: 'other', thinking: 'on' });
+      assert.equal(response.status, 400, JSON.stringify(response));
+      assert.match(response.body.error, /thinking on unsupported/);
+    }
+    assert.equal((await api('/api/dispatch', { agent: 'minimaxcode', task: 'synthetic off', thinking: 'off' })).status, 400);
+    assert.equal(dispatches, before);
+    const thread = (await api(`/api/chat/thread?agent=probe&session=${session}`)).body.thread;
+    assert.equal(thread.messages.length, 0);
+    assert.equal((await api('/api/dispatch', { agent: 'probe', task: 'synthetic allowed', model: 'fixture-alias', thinking: 'on' })).status, 200);
+    assert.equal(dispatches, before + 1);
+  } finally { capabilitiesOverride = null; await stop(); }
+});
+
+test('stream and attachment checks use current capability and stored upload MIME', async () => {
+  capabilitiesOverride = capabilityDocument();
+  capabilitiesOverride.workers.probe = workerCapability('synthetic', { stream: false, image: false });
+  await boot();
+  try {
+    const before = dispatches;
+    const upload = await api('/api/upload', { name: 'fixture.png', base64: Buffer.from('SYNTHETIC_IMAGE').toString('base64') });
+    assert.equal(upload.status, 200);
+    const invalidStream = await api('/api/dispatch', { agent: 'probe', task: 'synthetic stream', stream: true });
+    assert.equal(invalidStream.status, 400);
+    const image = await api('/api/dispatch', { agent: 'probe', task: 'synthetic image', attachments: [{ url: upload.body.url, name: 'fixture.txt', isImage: false }] });
+    assert.equal(image.status, 400);
+    assert.match(image.body.error, /image unsupported/);
+    assert.equal(dispatches, before);
+    assert.equal((await api('/api/dispatch', { agent: 'probe', task: 'synthetic terminal', stream: false })).status, 200);
+  } finally { capabilitiesOverride = null; await stop(); }
+});
+
+test('Auto excludes an online worker that cannot satisfy the requested task options', async () => {
+  agentsOverride = '已注册代理:\n- limited [在线] 角色: synthetic | CLI: limited.exe\n- capable [离线] 角色: synthetic | CLI: capable.exe';
+  capabilitiesOverride = { schema_version: 2, platform: 'windows', workers: {
+    limited: workerCapability('synthetic', { thinking: ['default'], image: false }), capable: workerCapability('synthetic'),
+  } };
+  await boot();
+  try {
+    dispatchTextOverride = '[capable] exit=0\nsynthetic accepted once';
+    const before = dispatches;
+    const upload = await api('/api/upload', { name: 'fixture.png', base64: Buffer.from('SYNTHETIC_IMAGE').toString('base64') });
+    const session = (await api('/api/chat/new-session', { agent: 'console' })).body.thread.id;
+    const sent = await api('/api/chat/send', { agent: 'console', sessionId: session, mode: 'auto', text: 'synthetic auto', thinking: 'off', stream: true,
+      attachments: [{ url: upload.body.url, name: 'fixture.png' }] });
+    assert.equal(sent.status, 200, JSON.stringify(sent));
+    assert.equal(latestDispatchArgs.agent, 'capable');
+    assert.equal(dispatches, before + 1);
+    capabilitiesOverride.workers.capable.availability.enabled = false;
+    const rejected = await api('/api/chat/send', { agent: 'console', sessionId: session, mode: 'auto', text: 'synthetic auto rejected', thinking: 'off' });
+    assert.equal(rejected.status, 400);
+    assert.equal(dispatches, before + 1);
+  } finally { agentsOverride = capabilitiesOverride = null; dispatchTextOverride = null; await stop(); }
+});
+
+test('unknown capabilities fail closed and legacy effort or context cannot bypass preflight', async () => {
+  await boot();
+  try {
+    const before = dispatches;
+    for (const option of [{ effort: 'high' }, { contextTier: 'long_context' }, { autoTier: 'intelligence' }, { extra_args: ['--effort', 'high'] }]) {
+      assert.equal((await api('/api/dispatch', { agent: 'probe', task: 'synthetic invalid control', ...option })).status, 400);
+    }
+    capabilitiesOverride = { schema_version: 1, workers: {} };
+    assert.equal((await api('/api/dispatch', { agent: 'probe', task: 'synthetic unknown capability' })).status, 400);
+    const snap = (await api('/api/snapshot')).body;
+    assert.equal(snap.capabilities, null);
+    assert.equal(snap.agents[0].dispatchable, false);
+    assert.deepEqual(snap.modelCatalog, {});
+    assert.equal(dispatches, before);
+  } finally { capabilitiesOverride = null; await stop(); }
+});
+
+test('subagent HTTP and MCP also reject unsupported capability requests without model calls', async () => {
+  const dataDir = await boot();
+  try {
+    capabilitiesOverride = capabilityDocument();
+    capabilitiesOverride.workers.probe = workerCapability('synthetic', { thinking: ['default'] });
+    const endpoint = JSON.parse(await readFile(join(dataDir, 'subagent-endpoint.json'), 'utf8'));
+    const before = dispatches;
+    const request = { agent: 'probe', task: 'synthetic forbidden subagent', thinking: 'on' };
+    const httpResult = await fetch(endpoint.url + '/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
+    assert.equal(httpResult.status, 400);
+    const mcp = await fetch(endpoint.mcp, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'subagent_run', arguments: request } }) });
+    assert.ok((await mcp.json()).error);
+    assert.equal(dispatches, before);
+  } finally { capabilitiesOverride = null; await stop(); }
+});
+
+test('snapshot exposes Hub platform and sanitized model capabilities without static unconfigured models', async () => {
+  capabilitiesOverride = capabilityDocument();
+  capabilitiesOverride.accessToken = 'SYNTHETIC_SECRET_NOT_PUBLIC';
+  capabilitiesOverride.workers.probe.models[0].password = 'SYNTHETIC_SECRET_NOT_PUBLIC';
+  await boot();
+  try {
+    const snap = (await api('/api/snapshot')).body;
+    assert.equal(snap.platform, 'linux');
+    assert.equal(snap.modelCatalog.codebuddy, undefined);
+    assert.equal(snap.capabilities.workers.minimaxcode.models[0].thinking.allowed.includes('off'), false);
+    assert.deepEqual(snap.workerParams, {});
+    assert.ok(!JSON.stringify(snap).includes('SYNTHETIC_SECRET_NOT_PUBLIC'));
+  } finally { capabilitiesOverride = null; await stop(); }
+});
+
+test('blocked default model does not disable an available alternative and aliases keep their canonical worker', async () => {
+  const dataDir = await boot();
+  try {
+    capabilitiesOverride = capabilityDocument();
+    capabilitiesOverride.workers.probe.models[0].availability = { enabled: false, reason: 'default model unavailable' };
+    capabilitiesOverride.workers.probe.models.push(workerCapability('alternate').models[0]);
+    const before = dispatches;
+    assert.equal((await api('/api/dispatch', { agent: 'probe', task: 'blocked default' })).status, 400);
+    assert.equal((await api('/api/dispatch', { agent: 'probe', model: 'alternate', task: 'available alternate' })).status, 200);
+    assert.equal(dispatches, before + 1);
+    assert.equal((await api('/api/dispatch', { agent: 'mimo', task: 'canonical alias' })).status, 200);
+    assert.equal(latestDispatchArgs.agent, 'mimocode');
+    const endpoint = JSON.parse(await readFile(join(dataDir, 'subagent-endpoint.json'), 'utf8'));
+    dispatchTextOverride = '[mimocode] exit=0\nsynthetic alias response';
+    const result = await fetch(endpoint.url + '/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent: 'mimo', task: 'canonical subagent' }) });
+    assert.equal(result.status, 200);
+    assert.equal((await result.json()).status, 'completed');
+    assert.equal(latestDispatchArgs.agent, 'mimocode');
+  } finally { capabilitiesOverride = null; dispatchTextOverride = null; await stop(); }
+});
+
+test('clearing a recent failure is explicit, model-scoped, and never dispatches a task', async () => {
+  await boot();
+  try {
+    const before = dispatches;
+    assert.equal((await api('/api/capabilities/refresh', { agent: 'probe', model: 'synthetic' })).status, 400);
+    capabilitiesOverride = capabilityDocument();
+    capabilitiesOverride.workers.probe.models[0].availability = { enabled: false, refreshable: true, reason: 'recent authentication failure' };
+    const cleared = await api('/api/capabilities/refresh', { agent: 'probe', model: 'fixture-alias' });
+    assert.equal(cleared.status, 200);
+    assert.deepEqual(latestCapabilityArgs, { agent: 'probe', model: 'synthetic', refresh: true });
+    assert.match(cleared.body.note, /不验证登录/);
+    assert.equal(dispatches, before);
+  } finally { capabilitiesOverride = null; await stop(); }
 });
 
 test.after(async () => {

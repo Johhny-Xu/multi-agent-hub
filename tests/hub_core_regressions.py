@@ -42,6 +42,29 @@ class HubCoreRegressions(unittest.TestCase):
         hub.tool_hub_post_task({"from_agent": "owner", "to_agent": "cb", "title": "fixture"})
         return json.loads((hub.STATE / "tasks.json").read_text(encoding="utf-8"))["tasks"][0]["id"]
 
+    def test_production_http_port_cannot_be_bound_by_a_second_process(self):
+        for handler in (hub._HTTPHandler, trae.Handler):
+            with self.subTest(service=handler.__name__):
+                server = hub.HubHTTPServer(("127.0.0.1", 0), handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                port = server.server_port
+                script = "import sys; sys.path.insert(0,sys.argv[1]); import agent_hub as h; import trae_mcp_server as t; handler=h._HTTPHandler if sys.argv[3]=='hub' else t.Handler\ntry:\n s=h.HubHTTPServer(('127.0.0.1',int(sys.argv[2])),handler)\nexcept OSError:\n print('BLOCKED')\nelse:\n s.server_close(); print('SECOND_LISTENER'); sys.exit(1)\n"
+                try:
+                    child = subprocess.run([sys.executable, "-c", script, str(ROOT / "hub"), str(port), "hub" if handler is hub._HTTPHandler else "trae"], capture_output=True, text=True, timeout=5)
+                    self.assertEqual(child.returncode, 0, child.stderr)
+                    self.assertEqual(child.stdout.strip(), "BLOCKED")
+                    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+                    try:
+                        connection.request("GET", "/health")
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(json.loads(response.read())["status"], "ok")
+                    finally:
+                        connection.close()
+                finally:
+                    server.shutdown(); server.server_close(); thread.join(timeout=2)
+
     def test_transient_result_sharing_failure_preserves_existing_metadata(self):
         original = {'agent': 'fixture-worker', 'status': 'running', 'task': 'original task'}
         with patch.object(Path, 'read_text', side_effect=[PermissionError('busy'), json.dumps(original)]):
@@ -154,6 +177,12 @@ class HubCoreRegressions(unittest.TestCase):
             time.sleep(.02)
         self.assertEqual((result["status"], result["agent"], result["task"]), ("completed", "codebuddy", "original task"))
         self.assertIn("ASYNC_IDENTITY_FIXTURE", result["text"])
+        # Terminal result visibility precedes optional availability metadata
+        # and worker exit. Join this task's reaper before deleting its state.
+        for thread in threading.enumerate():
+            if thread.name == "hub-worker-" + ref:
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive(), "Owned worker must finish cleanup")
 
     def test_gui_timeout_is_passed_to_async_metadata(self):
         with patch.object(hub, "_start_async", return_value="fixture") as spawn:

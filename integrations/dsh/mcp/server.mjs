@@ -5,7 +5,7 @@
 import { createInterface } from "node:readline";
 import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef } from "./hub.mjs";
 
-const SERVER = { name: "agenthub-hub-bridge", version: "0.6.0" };
+const SERVER = { name: "agenthub-hub-bridge", version: "0.7.0" };
 const TASK_OPTIONS = {
   model: { type: "string", description: "模型别名或具体 ID；省略则使用 Hub 配置的默认模型" },
   thinking: { type: "string", enum: ["default", "on", "off"], default: "default", description: "思考模式；不支持的模式在派发前拒绝，可先查 hub_capabilities" },
@@ -41,7 +41,10 @@ const TOOLS = [
   {
     name: "hub_capabilities",
     description: "查询 worker 默认模型以及思考、流式和附件能力，不返回凭据。",
-    inputSchema: { type: "object", properties: { worker: { type: "string" } }, additionalProperties: false },
+    inputSchema: { type: "object", properties: {
+      worker: { type: "string" }, model: { type: "string", description: "查询指定型号的实际选项" },
+      refresh: { type: "boolean", description: "清除当前登录/型号失败记录并重新读取配置；不会自动调用模型" },
+    }, additionalProperties: false },
   },
   {
     name: "hub_login",
@@ -170,7 +173,7 @@ async function handleRequest(req) {
         return ok(id, { content: [{ type: "text", text }] });
       }
       if (name === "hub_capabilities") {
-        const result = await hubCapabilities(args.worker);
+        const result = await hubCapabilities(args.worker, { model: args.model, refresh: args.refresh });
         return ok(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
       }
       if (name === "hub_login") {

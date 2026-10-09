@@ -3,12 +3,10 @@
 // 发布时同步 root mcp 与 integrations/dsh/mcp；tests/mcp_bridge.test.mjs 防止独立安装包漂移。
 import { open } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { loadConnection } from "./config.mjs";
 
-function hubUrl() {
-  const endpoint = process.env.AGENTHUB_URL || process.env.HUB_MCP_URL || "http://127.0.0.1:8765/mcp";
-  return endpoint;
-}
-export const HUB = hubUrl();
+const CONNECTION = await loadConnection();
+export const HUB = CONNECTION.url;
 
 const ALIASES = {
   agy: "antigravity", antigravity: "antigravity",
@@ -57,6 +55,7 @@ function validTimeout(value) {
 function message(error) {
   let text = String(error?.message || error).replace(/([?&]token=)[^&\s]+/gi, "$1[REDACTED]");
   if (process.env.HUB_TOKEN) text = text.replaceAll(process.env.HUB_TOKEN, "[REDACTED]");
+  if (CONNECTION.token) text = text.replaceAll(CONNECTION.token, "[REDACTED]");
   return text.slice(0, 500);
 }
 
@@ -115,7 +114,7 @@ async function callTool(name, args, timeoutMs, allowToolError = false) {
   const id = ++nextRequestId;
   const payload = JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
   const target = new URL(HUB);
-  const token = target.searchParams.get("token") || process.env.HUB_TOKEN;
+  const token = target.searchParams.get("token") || CONNECTION.token;
   target.searchParams.delete("token");
   const resp = await fetch(target, {
     method: "POST",
@@ -262,10 +261,15 @@ export async function hubStatus() {
   return callTool("hub_list_agents", {}, 30_000);
 }
 
-export async function hubCapabilities(workerRaw) {
+export async function hubCapabilities(workerRaw, options = {}) {
   const worker = workerRaw === undefined ? null : resolveWorker(workerRaw);
   if (workerRaw !== undefined && !worker) throw new Error("Unknown worker");
-  return JSON.parse(await callTool("hub_capabilities", worker ? { agent: worker } : {}, 30000));
+  if (options.model !== undefined && (typeof options.model !== 'string' || !options.model.trim())) throw new Error('model must be a nonempty string');
+  if (options.refresh !== undefined && typeof options.refresh !== 'boolean') throw new Error('refresh must be a boolean');
+  return JSON.parse(await callTool("hub_capabilities", {
+    ...(worker ? { agent: worker } : {}), ...(options.model !== undefined ? { model: options.model } : {}),
+    ...(options.refresh !== undefined ? { refresh: options.refresh } : {}),
+  }, 30000));
 }
 
 const LOGIN_STATUSES = new Set([

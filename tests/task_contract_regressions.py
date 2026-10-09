@@ -158,7 +158,7 @@ class TaskContractTests(unittest.TestCase):
         script = self.root / "fixture.py"
         script.write_text("import sys,time\nfrom pathlib import Path\np=Path(sys.argv[sys.argv.index('--file')+1])\nprint('FIRST_PROGRESS',flush=True)\ntime.sleep(.65)\nprint(p.read_text(encoding='utf-8'),flush=True)\n", encoding="utf-8")
         profile = {"cli": [sys.executable, str(script), "{task}"], "async_default": True,
-                   "capabilities": {"attachments": {"file": {"mode": "cli", "flag": "--file"}}}}
+                   "capabilities": {"stream": {"on": {"args": []}}, "attachments": {"file": {"mode": "cli", "flag": "--file"}}}}
         config = self.root / "agents.json"
         config.write_text(json.dumps({"agents": {"fixture": profile}}), encoding="utf-8")
         with patch.object(hub, "STATE", self.root / "state"), patch.object(hub, "AGENTS_JSON", config), patch.object(hub, "RESULTS_DIR", str(self.root / "results")):

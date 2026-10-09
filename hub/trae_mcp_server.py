@@ -10,7 +10,6 @@ import json
 import os
 import sys
 import urllib.parse
-from http.server import ThreadingHTTPServer
 import agent_hub as hub
 from rpc_protocol import handle_request as dispatch
 
@@ -68,7 +67,7 @@ def main():
     host = argv[argv.index("--host") + 1] if "--host" in argv else os.environ.get("TRAE_MCP_HOST", "127.0.0.1")
     if host not in ("127.0.0.1", "localhost", "::1") and not TOKEN:
         raise SystemExit("非回环监听必须设置 TRAE_MCP_TOKEN 或 HUB_TOKEN")
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = hub.HubHTTPServer((host, port), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

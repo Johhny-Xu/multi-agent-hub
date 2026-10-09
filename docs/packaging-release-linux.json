@@ -1,0 +1,518 @@
+{
+  "kind": "windows-built-release-zips-installed-on-real-linux",
+  "platform": "linux",
+  "model_calls": 0,
+  "native_hosts_registered": 0,
+  "existing_services_or_configurations_modified": false,
+  "temporary_directory": "/tmp/agenthub-release-validation-8z9CnJod",
+  "extractor": "busybox unzip",
+  "permission_repairs_applied": false,
+  "artifacts": [
+    {
+      "component": "hub",
+      "file": "agenthub-0.7.0-hub.zip",
+      "checks": [
+        {
+          "name": "transferred_zip_sha256_matches_windows",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "zip_unix_shell_script_execution_metadata",
+          "passed": true,
+          "evidence": {
+            "agenthub-0.7.0-hub/install.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-hub/packaging/launch.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-hub/start.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-hub/status.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-hub/stop.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "unix_shell_script_lf_without_crlf",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "actual_unzip_extraction",
+          "passed": true,
+          "evidence": {
+            "exit": 0
+          }
+        },
+        {
+          "name": "extracted_install_start_and_service_scripts_executable",
+          "passed": true,
+          "evidence": {
+            "install.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "start.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "stop.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "status.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "packaging/launch.sh": {
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "root_install_sh_succeeds",
+          "passed": true,
+          "evidence": {
+            "ok": true,
+            "version": "0.7.0",
+            "component": "hub",
+            "token_values_printed": false,
+            "native_hosts": [],
+            "started": {
+              "ok": true,
+              "hub_url": "http://127.0.0.1:49657/mcp",
+              "console": false
+            },
+            "exit": 0
+          }
+        },
+        {
+          "name": "no_native_host_registration",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "dedicated_prefix_config_and_components",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "selected_components_exist",
+          "passed": true,
+          "evidence": {
+            "hub": true,
+            "three_host_plugins": false
+          }
+        },
+        {
+          "name": "installed_scripts_keep_executable_permissions",
+          "passed": true,
+          "evidence": {
+            "install.sh": true,
+            "start.sh": true,
+            "stop.sh": true,
+            "status.sh": true
+          }
+        },
+        {
+          "name": "installed_status_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": true,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "real_auto_started_hub_health",
+          "passed": true,
+          "evidence": {
+            "service": "agent-hub",
+            "status": "ok"
+          }
+        },
+        {
+          "name": "hub_pid_and_owned_process_count",
+          "passed": true,
+          "evidence": {
+            "owned_process_count": 1
+          }
+        },
+        {
+          "name": "hub_only_no_console",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_stop_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "ok": true
+          }
+        },
+        {
+          "name": "status_after_stop",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": false,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "hub_listener_released",
+          "passed": true,
+          "evidence": null
+        }
+      ],
+      "cleanup": {
+        "stop_exit": 0,
+        "owned_processes_remaining": [],
+        "port_listening_after": false
+      },
+      "sha256": "8b9ed04d8053b82d8a3079bdaaad1d4d4771a1af5e3252a8e006ede8a082d4b3",
+      "windows_sha256": "8b9ed04d8053b82d8a3079bdaaad1d4d4771a1af5e3252a8e006ede8a082d4b3",
+      "bytes": 268771,
+      "passed": true
+    },
+    {
+      "component": "plugins",
+      "file": "agenthub-0.7.0-plugins.zip",
+      "checks": [
+        {
+          "name": "transferred_zip_sha256_matches_windows",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "zip_unix_shell_script_execution_metadata",
+          "passed": true,
+          "evidence": {
+            "agenthub-0.7.0-plugins/install.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-plugins/packaging/launch.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-plugins/payload/integrations/dsh/install.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-plugins/start.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-plugins/status.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-plugins/stop.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "unix_shell_script_lf_without_crlf",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "actual_unzip_extraction",
+          "passed": true,
+          "evidence": {
+            "exit": 0
+          }
+        },
+        {
+          "name": "extracted_install_start_and_service_scripts_executable",
+          "passed": true,
+          "evidence": {
+            "install.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "start.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "stop.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "status.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "packaging/launch.sh": {
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "root_install_sh_succeeds",
+          "passed": true,
+          "evidence": {
+            "ok": true,
+            "version": "0.7.0",
+            "component": "plugins",
+            "token_values_printed": false,
+            "native_hosts": [],
+            "started": null,
+            "exit": 0
+          }
+        },
+        {
+          "name": "no_native_host_registration",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "dedicated_prefix_config_and_components",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "selected_components_exist",
+          "passed": true,
+          "evidence": {
+            "hub": false,
+            "three_host_plugins": true
+          }
+        },
+        {
+          "name": "installed_scripts_keep_executable_permissions",
+          "passed": true,
+          "evidence": {
+            "install.sh": true,
+            "start.sh": true,
+            "stop.sh": true,
+            "status.sh": true
+          }
+        },
+        {
+          "name": "installed_status_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": false,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "no_start_has_no_owned_process",
+          "passed": true,
+          "evidence": {
+            "owned_process_count": 0
+          }
+        },
+        {
+          "name": "no_start_result_is_null",
+          "passed": true,
+          "evidence": null
+        }
+      ],
+      "cleanup": {
+        "stop_exit": 0,
+        "owned_processes_remaining": []
+      },
+      "sha256": "3ea65c5bcc00e1020911cbc26904a4a7ad6d43ed7e8788432ecaaac3235bd747",
+      "windows_sha256": "3ea65c5bcc00e1020911cbc26904a4a7ad6d43ed7e8788432ecaaac3235bd747",
+      "bytes": 374155,
+      "passed": true
+    },
+    {
+      "component": "both",
+      "file": "agenthub-0.7.0-both.zip",
+      "checks": [
+        {
+          "name": "transferred_zip_sha256_matches_windows",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "zip_unix_shell_script_execution_metadata",
+          "passed": true,
+          "evidence": {
+            "agenthub-0.7.0-both/install.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-both/packaging/launch.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-both/payload/integrations/dsh/install.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-both/start.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-both/status.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            },
+            "agenthub-0.7.0-both/stop.sh": {
+              "create_system": 3,
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "unix_shell_script_lf_without_crlf",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "actual_unzip_extraction",
+          "passed": true,
+          "evidence": {
+            "exit": 0
+          }
+        },
+        {
+          "name": "extracted_install_start_and_service_scripts_executable",
+          "passed": true,
+          "evidence": {
+            "install.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "start.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "stop.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "status.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "packaging/launch.sh": {
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "root_install_sh_succeeds",
+          "passed": true,
+          "evidence": {
+            "ok": true,
+            "version": "0.7.0",
+            "component": "both",
+            "token_values_printed": false,
+            "native_hosts": [],
+            "started": null,
+            "exit": 0
+          }
+        },
+        {
+          "name": "no_native_host_registration",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "dedicated_prefix_config_and_components",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "selected_components_exist",
+          "passed": true,
+          "evidence": {
+            "hub": true,
+            "three_host_plugins": true
+          }
+        },
+        {
+          "name": "installed_scripts_keep_executable_permissions",
+          "passed": true,
+          "evidence": {
+            "install.sh": true,
+            "start.sh": true,
+            "stop.sh": true,
+            "status.sh": true
+          }
+        },
+        {
+          "name": "installed_status_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": false,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "no_start_has_no_owned_process",
+          "passed": true,
+          "evidence": {
+            "owned_process_count": 0
+          }
+        },
+        {
+          "name": "no_start_result_is_null",
+          "passed": true,
+          "evidence": null
+        }
+      ],
+      "cleanup": {
+        "stop_exit": 0,
+        "owned_processes_remaining": []
+      },
+      "sha256": "d76b0d9549186068c1ea105af62f3bf1254b6107842841ff65e3421b54c89365",
+      "windows_sha256": "d76b0d9549186068c1ea105af62f3bf1254b6107842841ff65e3421b54c89365",
+      "bytes": 613563,
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "checks_total": 43,
+  "checks_passed": 43
+}

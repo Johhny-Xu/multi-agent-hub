@@ -132,8 +132,6 @@ def load_template_yaml(url=None, token=None, settings=None):
             raise ValueError("Invalid Hub URL")
         env["AGENTHUB_URL"] = url
         config.pop("url", None)
-    elif "AGENTHUB_URL" not in env and "url" not in config:
-        env["AGENTHUB_URL"] = DEFAULT_URL
     if token is not None:
         env["HUB_TOKEN"] = token
         config.pop("token", None)
@@ -200,7 +198,7 @@ def update_profile_package_json(pkg_file, install=True):
     _atomic_write(pkg_file, package_content(pkg_file, install))
     return True
 
-def prepare_profile(dsh_home, name, url=None, token=None, uninstall=False):
+def prepare_profile(dsh_home, name, url=None, token=None, uninstall=False, config_file=None, command=None):
     patch = find_target_patch_file(dsh_home, name)
     package = find_target_package_json(dsh_home, name)
     if not package.is_file():
@@ -208,6 +206,23 @@ def prepare_profile(dsh_home, name, url=None, token=None, uninstall=False):
     package_text = package_content(package, not uninstall)  # Validate before any mutation.
     original = patch.read_bytes().decode("utf-8") if patch.exists() else ""
     settings = existing_settings(original) if not uninstall else {}
+    if config_file is not None and not uninstall:
+        if url is not None or token is not None:
+            raise ValueError("Choose --config-file or explicit --url/--token, not both")
+        settings.pop("url", None)
+        settings.pop("token", None)
+        env = settings.setdefault("env", {})
+        for key in ("AGENTHUB_URL", "HUB_MCP_URL", "HUB_TOKEN", "AGENTHUB_CONFIG_FILE"):
+            env.pop(key, None)
+        env["AGENTHUB_CONFIG"] = str(Path(config_file).expanduser().resolve())
+        env["AGENTHUB_CONNECTION_MODE"] = "file"
+    elif not uninstall and (url is not None or token is not None):
+        # An explicit legacy connection leaves the authoritative file mode.
+        settings.get("env", {}).pop("AGENTHUB_CONNECTION_MODE", None)
+    if command is not None and not uninstall:
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError("command must be a nonempty executable path")
+        settings["command"] = command
     cleaned = strip_managed_content(original)
     active = [line.strip() for line in cleaned.splitlines() if line.strip() and not line.lstrip().startswith("#")]
     if active == ["[]"]:
@@ -240,6 +255,7 @@ def main():
     parser.add_argument("--profile", default="web", help="Existing profile name; never falls back to another profile")
     parser.add_argument("--url", default=None, help="Override Hub URL; omission preserves existing value")
     parser.add_argument("--token", default=None, help="Override Hub token; omission preserves existing env/token")
+    parser.add_argument("--config-file", type=Path, help="External client.json; no token copied into the profile")
     parser.add_argument("--uninstall", action="store_true")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
@@ -254,7 +270,7 @@ def main():
             print("AgentHub profile configuration: " + ("present" if is_installed(content) else "absent"))
             print("This check does not launch or verify a DSH host.")
             return 0
-        prepare_profile(home, args.profile, args.url, args.token, args.uninstall)
+        prepare_profile(home, args.profile, args.url, args.token, args.uninstall, args.config_file)
         print("Prepared profile: " + args.profile)
         print("User patches preserved; configuration backups saved.")
         package_path = Path(__file__).resolve().parent.as_posix()

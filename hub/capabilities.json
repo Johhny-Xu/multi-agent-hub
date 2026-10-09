@@ -12,15 +12,19 @@
         "args": [
           "--output-format",
           "json"
+        ],
+        "remove_args": [
+          "--include-partial-messages"
         ]
       }
     },
     "attachments": {
       "file": {
-        "mode": "prompt_path"
+        "mode": "stdin_json"
       },
       "image": {
-        "mode": "prompt_path"
+        "mode": "prompt_path",
+        "requires_read_authorization": true
       }
     },
     "thinking": {
@@ -48,7 +52,13 @@
           "deepseek-v4.1-flash"
         ]
       }
-    }
+    },
+    "task_args": [
+      "--agent",
+      "standard"
+    ],
+    "stream_semantics": "answer_deltas",
+    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified."
   },
   "codebuddy-cn": {
     "stream": {
@@ -63,15 +73,19 @@
         "args": [
           "--output-format",
           "json"
+        ],
+        "remove_args": [
+          "--include-partial-messages"
         ]
       }
     },
     "attachments": {
       "file": {
-        "mode": "prompt_path"
+        "mode": "stdin_json"
       },
       "image": {
-        "mode": "prompt_path"
+        "mode": "prompt_path",
+        "requires_read_authorization": true
       }
     },
     "thinking": {
@@ -99,7 +113,13 @@
           "deepseek-v4.1-flash"
         ]
       }
-    }
+    },
+    "task_args": [
+      "--agent",
+      "standard"
+    ],
+    "stream_semantics": "answer_deltas",
+    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified."
   },
   "github-copilot": {
     "thinking": {
@@ -107,7 +127,9 @@
         "args": [
           "--reasoning-effort",
           "none"
-        ]
+        ],
+        "supported": false,
+        "reason": "auto routes to changing models; accepting none is not evidence of a strict thinking-off guarantee. Pin and verify a specific model before declaring this control."
       }
     },
     "stream": {
@@ -137,7 +159,8 @@
         "flag": "--attachment"
       }
     },
-    "notes": "Default auto rejects explicit high reasoning effort; on is not declared supported."
+    "notes": "auto exposes default thinking only. Per-model thinking controls must be explicitly verified and declared in the local profile.",
+    "stream_semantics": "answer_deltas"
   },
   "mimocode": {
     "stream": {
@@ -183,7 +206,8 @@
           "MIMOCODE_CONFIG_CONTENT": "{\"provider\":{\"xiaomi\":{\"models\":{\"mimo-v2.6-flash\":{\"options\":{\"thinking\":{\"type\":\"disabled\"}}}}}}}"
         }
       }
-    }
+    },
+    "stream_semantics": "answer_snapshots"
   },
   "minimaxcode": {
     "thinking": {
@@ -206,6 +230,9 @@
         "args": [
           "--output",
           "json"
+        ],
+        "remove_args": [
+          "--stream"
         ]
       }
     },
@@ -217,7 +244,8 @@
         "mode": "messages_file"
       }
     },
-    "notes": "MiniMax-M3.1-Flash-Preview always uses thinking; off is unsupported."
+    "notes": "MiniMax-M3.1-Flash-Preview always uses thinking; off is unsupported.",
+    "stream_semantics": "answer_deltas"
   },
   "zcode": {
     "attachments": {
@@ -229,7 +257,24 @@
         "mode": "cli",
         "flag": "--attach"
       }
-    }
+    },
+    "stream": {
+      "on": {
+        "args": [
+          "--stream",
+          "on"
+        ],
+        "supported": false,
+        "reason": "The official app-server returned only terminal results in the verified run; real-time deltas were not observed."
+      },
+      "off": {
+        "args": [
+          "--stream",
+          "off"
+        ]
+      }
+    },
+    "stream_semantics": "terminal_only"
   },
   "antigravity": {},
   "traecode": {}

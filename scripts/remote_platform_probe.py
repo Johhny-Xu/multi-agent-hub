@@ -16,7 +16,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "hub"))
 from command_runtime import spawn_owned, terminate_owned, atomic_write_json
-FOLDERS = ("hub", "mcp", "console", "drivers", "plugins/agenthub-workers", "integrations/codex", "integrations/dsh", "tests", "scripts")
+FOLDERS = ("hub", "mcp", "console", "drivers", "plugins/agenthub-workers", "integrations/codex", "integrations/dsh", "tests", "scripts", "packaging")
 EXCLUDE = {".git", "node_modules", "__pycache__", "state", "results", "logs", ".run", "data", "dist", "build"}
 
 
@@ -49,7 +49,7 @@ def ssh(alias, source, timeout=45):
 
 
 def archive(destination):
-    files = [ROOT / name for name in ("start.sh", "stop.sh", ".env.example")]
+    files = [ROOT / name for name in ("start.sh", "stop.sh", ".env.example", "LICENSE", "README.md")]
     for folder in FOLDERS:
         files.extend(path for path in (ROOT / folder).rglob("*") if path.is_file() and not path.is_symlink()
                      and not set(path.relative_to(ROOT).parts) & EXCLUDE
@@ -101,7 +101,7 @@ commands=[('linux_launcher',['python3','tests/platform_linux_smoke.py']),('isola
 for name,command in commands:
  p=subprocess.Popen(command,cwd=root,env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
  try:
-  stdout,_=p.communicate(timeout=120);text=stdout.decode('utf-8','replace');entry={'suite':name,'exit':p.returncode,'passed':p.returncode==0,'output_tail':text[-5500:]}
+  stdout,_=p.communicate(timeout=300);text=stdout.decode('utf-8','replace');entry={'suite':name,'exit':p.returncode,'passed':p.returncode==0,'output_tail':text[-5500:]}
  except subprocess.TimeoutExpired:entry={'suite':name,'passed':False,'status':'timeout'}
  finally:
   import signal
@@ -112,7 +112,7 @@ for name,command in commands:
 result={'system':platform.system(),'python':platform.python_version(),'suites':out,'existing_suite_report':json.loads((state/'regressions.json').read_text()) if (state/'regressions.json').is_file() else None}
 print(json.dumps(result))
 '''.replace("DEPLOYMENT", repr(deployment))
-    report["linux"] = redacted(json.loads(ssh(args.ssh_alias, remote, timeout=280)))
+    report["linux"] = redacted(json.loads(ssh(args.ssh_alias, remote, timeout=360)))
     atomic_write_json(args.report, report)
     print(json.dumps({"report": str(args.report), "deployment": deployment,
                       "suites": [{k: item[k] for k in ("suite", "passed")} for item in report["linux"]["suites"]]}))

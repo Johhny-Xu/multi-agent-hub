@@ -2,6 +2,8 @@
 
 本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
+DSH 包版本为 1.1.0，随 AgentHub 0.7.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
+
 回归使用模拟 Hub、工作流 VM 与临时 profile。另在 Windows `0.2.0-rc.2` 的真实 DSH 宿主中安装本包、读取原生注册服务，并复用官方登录运行主模型；未修改用户的个人 DSH 配置。子代理/工作流实际模型派发受官方账户 `402 ACCOUNT_QUOTA` 余额不足阻塞，不能据此认定插件不可用或标记端到端通过，详见 [原生验证报告](../../docs/native-plugins-windows.md)。
 
 ## 安装到指定 profile
@@ -15,7 +17,7 @@ dsh --profile web --dump-config
 
 官方 CLI 负责安装依赖、链接包和启用 bundle；新 profile 的创建规则也由官方 CLI 决定。确认组合配置里出现 AgentHub layer 后再启动该 profile。仓库根目录网址不能代替这个子目录包。[官方 bundle/profile 安装说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)
 
-bundle 使用 Cordis 的 insert 操作新增桥和预设。桥入口通过包内绝对路径启动 MCP server，并调用官方 MCP client 的命名导出 apply。默认单次 MCP 调用上限为 310 秒，覆盖默认 300 秒的 hub_ask；更长任务适合使用 hub_dispatch 与 hub_fetch。DSH 会过滤继承环境中的敏感变量，因此 bundle 显式传入 AGENTHUB_URL 与 HUB_TOKEN。[官方 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)
+bundle 使用 Cordis 的 insert 操作新增桥和预设。桥入口通过包内绝对路径启动 MCP server，并调用官方 MCP client 的命名导出 apply。默认单次 MCP 调用上限为 310 秒，覆盖默认 300 秒的 hub_ask；更长任务适合使用 hub_dispatch 与 hub_fetch。DSH 会过滤部分继承环境，安装器因此显式传递外部连接文件路径；旧版显式 AGENTHUB_URL / HUB_TOKEN 仍可用，没有显式值时不再注入 localhost 或空 token 去覆盖连接文件。[官方 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)
 
 `web`/`desktop` 默认 profile 已提供原生预设注册服务。实测 `headless` 默认 profile 没有 `agentPresets`，仅安装本包会使 9 个预设等待该服务；需要在所选 profile 的外部覆盖 patch 中加入 `@deepseek-ai/dsh-agent-preset-registry`，config.default 可设为 `agenthub-all`，不要在已有注册服务的 profile 重复添加。官方账户模型路由与 API Key 路由也不同，保留所选 profile 的原有登录与模型设置。
 
@@ -42,7 +44,7 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 
 ## MCP 与预设
 
-桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_login。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode，以及 agenthub-all。模型与可用性以 Hub 配置和状态返回为准。
+桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。
 
 派发后保留原始 ok、status、ref：
 
