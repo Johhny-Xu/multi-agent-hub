@@ -1,5 +1,24 @@
 import assert from 'node:assert/strict';
+import { readFile, readdir } from 'node:fs/promises';
 import { MultiAgentHubPlugin, ROUTING_INSTRUCTIONS, isHubDispatch } from '../integrations/codearts/plugin.js';
+
+// Native guidance is shipped separately to hooks, skills and every agent. Keep
+// the host-specific tool route and permission boundary present in each entry.
+const agentRoot = new URL('../integrations/codearts/agents/', import.meta.url);
+const agentFiles = (await readdir(agentRoot)).filter(name => /^hub-.*\.md$/.test(name));
+assert.equal(agentFiles.length, 9);
+const guidance = [
+  ['hook', ROUTING_INSTRUCTIONS],
+  ['skill', await readFile(new URL('../integrations/codearts/skills/dispatch-hub/SKILL.md', import.meta.url), 'utf8')],
+  ...await Promise.all(agentFiles.map(async name => [name, await readFile(new URL(name, agentRoot), 'utf8')])),
+];
+for (const [name, text] of guidance) {
+  assert.match(text, /directly registered.*directly/i, `${name}: keep directly registered hosts supported`);
+  assert.match(text, /tool_search[\s\S]*tool_describe[\s\S]*tool_call/, `${name}: describe the lazy tool route`);
+  assert.match(text, /permission.*denied[\s\S]*blocked_permission[\s\S]*original ref/i, `${name}: stop on denial and preserve the reference`);
+  assert.match(text, /Do not retry.*another tool name[\s\S]*explicit authorization/i, `${name}: forbid alternate-tool permission bypass`);
+  assert.match(text, /total waiting budget[\s\S]*running[\s\S]*not.*completed/i, `${name}: bounded polling must not promote running to completed`);
+}
 
 const hooks = await MultiAgentHubPlugin();
 const system = { system: ['original system'] };

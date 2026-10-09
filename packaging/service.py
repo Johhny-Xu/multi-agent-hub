@@ -83,12 +83,33 @@ Stop-OwnedProcessRows @(Get-OwnedProcessRows $snapshot $rootId)
         raise SetupError('Could not stop all owned service processes; the process record was preserved')
 
 
+def _windows_ownership_probe(script):
+    # Query failures are unknown ownership, not evidence that a service stopped.
+    # Both attempts share a deadline; retrying never relaxes PID/entry checks.
+    deadline = time.monotonic() + 10
+    for _ in range(2):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            result = run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                         timeout=min(5, remaining))
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return result.stdout
+    raise SetupError('Windows service ownership query failed; process records were preserved') from None
+
+
 def identity(pid):
     if os.name == 'nt':
-        result = run(['powershell.exe', '-NoProfile', '-Command',
-                      '$p=Get-Process -Id ' + str(int(pid)) + ' -ErrorAction SilentlyContinue; if($p){$p.StartTime.ToUniversalTime().Ticks.ToString()}'], timeout=5)
-        value = result.stdout.strip()
-        return value if value.isdigit() else None
+        script = ("$ErrorActionPreference='Stop'; try {$p=Get-Process -Id " + str(int(pid)) +
+                  " -ErrorAction Stop} catch {if ($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId*') "
+                  "{exit 0}; throw}; if($p){$p.StartTime.ToUniversalTime().Ticks.ToString()}")
+        value = _windows_ownership_probe(script).strip()
+        if value and not value.isdigit():
+            raise SetupError('Windows service ownership query failed; process records were preserved')
+        return value or None
     try:
         text = Path('/proc/' + str(int(pid)) + '/stat').read_text()
         fields = text[text.rfind(')') + 2:].split()
@@ -99,12 +120,11 @@ def identity(pid):
 
 def command_matches(pid, entry):
     if os.name == 'nt':
-        try:
-            result = run(['powershell.exe', '-NoProfile', '-Command',
-                          '(Get-CimInstance Win32_Process -Filter "ProcessId = ' + str(int(pid)) + '").CommandLine'], timeout=5)
-            return str(entry).lower() in result.stdout.lower()
-        except (OSError, subprocess.TimeoutExpired):
-            return False
+        script = ("$ErrorActionPreference='Stop'; $row=Get-CimInstance Win32_Process -Filter \"ProcessId = " +
+                  str(int(pid)) + '\" -ErrorAction Stop; if ($null -eq $row) {return}; '
+                  "if ([string]::IsNullOrWhiteSpace($row.CommandLine)) {throw 'Process command line is unavailable'}; "
+                  '$row.CommandLine')
+        return str(entry).lower() in _windows_ownership_probe(script).lower()
     try:
         return os.fsencode(str(entry)) in Path('/proc/' + str(int(pid)) + '/cmdline').read_bytes().split(b'\0')
     except OSError:
@@ -370,10 +390,20 @@ def start(prefix, with_console=False):
                                            start_new_session=os.name != 'nt', creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
             finally:
                 output.close(); error.close()
-            stamp = identity(process.pid)
-            if not stamp:
-                process.terminate(); process.wait(timeout=5)
-                raise SetupError('Could not identify the newly started service')
+            try:
+                stamp = identity(process.pid)
+                if not stamp:
+                    raise SetupError('Could not identify the newly started service')
+            except SetupError:
+                # This Popen still owns its process handle even when a system
+                # query failed. Do not infer descendants from an unknown PID.
+                if process.poll() is None:
+                    process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill(); process.wait(timeout=5)
+                raise
             atomic_json(record_path, {'prefix': str(Path(prefix).resolve()), 'pid': process.pid, 'identity': stamp, 'entry': str(entry)})
             started.append(record_path)
             wait_health(process, port, url, expected, entry=entry, stamp=stamp)

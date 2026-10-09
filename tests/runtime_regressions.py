@@ -26,6 +26,23 @@ class RuntimeRegressions(unittest.TestCase):
     def setUp(self):
         self.base = Path(tempfile.mkdtemp(prefix="agenthub-runtime-regression-"))
 
+    def test_owned_group_marker_is_private_to_the_spawn_environment(self):
+        key = 'AGENTHUB_OWNED_POSIX_GROUP'
+        for new_session in (True, False):
+            with self.subTest(new_session=new_session):
+                env = dict(os.environ, AGENTHUB_OWNED_POSIX_GROUP='stale')
+                probe = ('import json,os;print(json.dumps(dict(marker=os.getenv(' + repr(key) + '))))')
+                proc = runtime.spawn_owned([sys.executable, '-c', probe], env=env,
+                                           start_new_session=new_session, stdout=-1, stderr=-1)
+                try:
+                    out, err = proc.communicate(timeout=5)
+                    self.assertEqual(proc.returncode, 0, err)
+                    self.assertEqual(json.loads(out)['marker'],
+                                     '1' if os.name != 'nt' and new_session else None)
+                    self.assertEqual(env[key], 'stale')
+                finally:
+                    runtime.terminate_owned(proc)
+
     @unittest.skipUnless(os.name == "nt" and shutil.which("node"), "Windows npm shim fixture")
     def test_command_uses_child_path_and_extensionless_npm_entrypoint(self):
         name = "agenthub-runtime-path-fixture"

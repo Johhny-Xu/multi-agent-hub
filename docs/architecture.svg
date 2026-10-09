@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">multi-agent-hub 0.9.9：五种客户端、九种 worker，Windows 与 Linux 双向连接</title>
-  <desc id="architecture-desc">客户端原生插件经过 MCP 桥选择并连接 Windows 或 Linux Hub。Hub 管理任务与结果，再调用九种 worker 的官方 CLI。插件与 Hub 独立安装，可以同机或跨机；Windows 到 Linux 可直接连接，Linux 到 Windows 已通过 SSH 反向转发验证。Antigravity 与 CodeArts 均具有原生客户端角色，CodeArts 亦可作为 worker（但独立调用受认证限制）。当前重点是优化连接、能力提示与故障反馈体验。</desc>
+  <desc id="architecture-desc">客户端原生插件经过 MCP 桥选择并连接 Windows 或 Linux Hub。Hub 管理任务与结果，再调用九种 worker 的官方 CLI。插件与 Hub 独立安装，可以同机或跨机；Windows 到 Linux 可直接连接，Linux 到 Windows 已通过 SSH 反向转发验证。Antigravity 与 CodeArts 均具有原生客户端角色，CodeArts Linux worker 已通过 GLM-5.2 实际任务；Windows IDE 已原生派发，结果回收受宿主权限限制。当前重点是优化连接、能力提示与故障反馈体验。</desc>
   <defs>
     <style>
       text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
@@ -92,7 +92,7 @@
     <text x="886" y="455" class="body">TraeCode</text><text x="1224" y="455" text-anchor="end" class="small muted">trae</text>
     <text x="886" y="487" class="body">ZCode</text><text x="1224" y="487" text-anchor="end" class="small muted">zcode</text>
     <rect x="880" y="502" width="350" height="34" rx="8" fill="#fffbeb"/>
-    <text x="886" y="527" class="body" font-weight="700">CodeArts</text><text x="1218" y="526" text-anchor="end" class="small amber">模型认证受阻</text>
+    <text x="886" y="527" class="body" font-weight="700">CodeArts</text><text x="1218" y="526" text-anchor="end" class="small muted">Linux GLM 已实测</text>
     <text x="886" y="573" class="small muted">收到任务后调用对应模型服务</text>
   </g>
   <path d="M290 352H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>

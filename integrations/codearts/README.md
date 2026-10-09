@@ -20,6 +20,14 @@ python3 integrations/codearts/install.py --home "$HOME/.codeartsdoer" --plugin-d
 
 IDE 原生 MCP 使用 `mcpServers`，`command`、`args`、`env`；CLI 使用 `mcp`，`type: local`、数组 `command`、`environment`。两者仅注入 `AGENTHUB_CONFIG` 和 `AGENTHUB_CONNECTION_MODE=file`，不把 Token 写入源码。IDE 的项目设置路径因版本和工作区而异，安装时必须以“配置 MCP”打开的实际路径为准。
 
+### 换工作区后连接 Hub
+
+CodeArts IDE 26.9.501 从当前工作区的 `.codeartsdoer/mcp/mcp_settings.json` 加载 MCP。用户目录中的子代理和 Hooks 可以共用，但旧项目的 MCP 设置不会自动应用到新项目。只升级稳定插件目录，也不会为当前项目补上连接。
+
+在当前 IDE 打开“配置 MCP”确认路径，复用原来的 `--home`、稳定 `--plugin-dir` 和外部 `--config`，将 `--ide-settings` 改成当前项目路径，再以 `--target ide --apply` 登记。无需重新输入 Hub 令牌，也不必启动本机 Hub。不要移动或删除稳定插件目录。
+
+登记后用 IDE 的“开发人员：重新加载窗口”加载更新的子代理和 Hooks，再让智能体调用一次 `hub_status`。安装报告只证明配置已写入；以宿主的实际工具调用验证连接。`hub_status` 的心跳离线不等同于按需 CLI 不可调用，派发前应检查 `hub_capabilities`。
+
 ## 使用
 
 在 CodeArts 中使用 `/hub-status`、`/hub-discover` 或 `/hub-login`。子智能体为 `hub-antigravity`、`hub-codebuddy`、`hub-codebuddy-cn`、`hub-github-copilot`、`hub-mimocode`、`hub-minimaxcode`、`hub-traecode`、`hub-zcode`、`hub-codearts`。使用 `@hub-mimocode` 等委派任务，或让主智能体按 `dispatch-hub` 技能组织并行任务。
