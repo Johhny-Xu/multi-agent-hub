@@ -1,135 +1,118 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1120" viewBox="0 0 1280 1120" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 0.8：插件与 Hub 独立部署架构</title>
-  <desc id="architecture-desc">Codex、ZCode、DSH 插件可运行在 Windows 或 Linux，通过自动发现与鉴权配对选择本机或远端 Hub。Hub 按 worker、平台和模型能力派发任务到八种适配器，官方通道可能向模型服务商发送提示词、附件和工具结果。每个插件进程连接一个配置的 Hub，安装组件本身不触发模型调用。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">multi-agent-hub 0.9：四种客户端、九种 worker，Windows 与 Linux 双向连接</title>
+  <desc id="architecture-desc">客户端原生插件经过 MCP 桥选择并连接 Windows 或 Linux Hub。Hub 管理任务与结果，再调用九种 worker 的官方 CLI。插件与 Hub 独立安装，可以同机或跨机；Windows 到 Linux 可直接连接，Linux 到 Windows 已通过 SSH 反向转发验证。CodeArts 同时具有客户端和 worker 角色，但当前独立 worker 模型调用仍受认证限制。当前重点是优化连接、能力提示与故障反馈体验。</desc>
   <defs>
-    <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#2563eb"/></marker>
     <style>
-      text { font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif; fill: #172b46; }
-      .title { font-size: 32px; font-weight: 700; }
-      .heading { font-size: 21px; font-weight: 700; }
-      .body { font-size: 17px; }
-      .small { font-size: 14px; }
+      text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
+      .title { font-size: 34px; font-weight: 700; }
+      .heading { font-size: 25px; font-weight: 700; }
+      .body { font-size: 21px; }
+      .small { font-size: 19px; }
       .muted { fill: #52647b; }
-      .mono { font-family: Consolas, 'Liberation Mono', monospace; font-size: 14px; }
       .blue { fill: #1d4ed8; }
-      .green { fill: #047857; }
+      .green { fill: #0f766e; }
+      .amber { fill: #92400e; }
+      .label { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
     </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#2563eb"/></marker>
   </defs>
-  <rect width="1280" height="1120" fill="#f8fafc"/>
-  <text x="40" y="56" class="title">multi-agent-hub：插件在你手边，任务在 Hub 执行</text>
-  <text x="40" y="86" class="body muted">Windows / Linux 同机或跨机部署 · 客户端选择连接位置 · 0.8.0</text>
-  <rect x="1090" y="32" width="150" height="34" rx="17" fill="#dbeafe"/>
-  <text x="1165" y="55" text-anchor="middle" class="small blue" font-weight="700">更新 2026-10-09</text>
+  <rect width="1280" height="980" rx="24" fill="#f8fafc"/>
+  <text x="32" y="58" class="title">multi-agent-hub · 一张图看懂任务怎样运行</text>
+  <rect x="1112" y="26" width="136" height="40" rx="20" fill="#dbeafe"/>
+  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v0.9.0</text>
+  <text x="32" y="94" class="body muted">4 种客户端 · 9 种 worker · 插件与 Hub 独立部署 · Windows / Linux 双向连接</text>
 
-  <!-- Three independently installable distributions. -->
-  <rect x="40" y="112" width="1200" height="56" rx="12" fill="#ffffff" stroke="#dbe3ed"/>
-  <text x="62" y="147" class="body"><tspan font-weight="700" class="blue">plugins</tspan><tspan>  只装宿主插件与桥</tspan></text>
-  <line x1="422" y1="126" x2="422" y2="154" stroke="#dbe3ed"/>
-  <text x="450" y="147" class="body"><tspan font-weight="700" class="green">hub</tspan><tspan>  只装任务服务与适配器</tspan></text>
-  <line x1="824" y1="126" x2="824" y2="154" stroke="#dbe3ed"/>
-  <text x="850" y="147" class="body"><tspan font-weight="700">both</tspan><tspan>  两端组件一起安装</tspan></text>
-
-  <!-- Client and Hub are separate machines or colocated components. -->
-  <rect x="40" y="196" width="392" height="606" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
-  <rect x="472" y="196" width="768" height="606" rx="18" fill="#ffffff" stroke="#a7cfbf"/>
-  <text x="64" y="232" class="heading">插件端</text>
-  <text x="410" y="231" text-anchor="end" class="small muted">Windows / Linux</text>
-  <text x="498" y="232" class="heading">Hub 端</text>
-  <text x="1214" y="231" text-anchor="end" class="small muted">本机或服务器 · Windows / Linux</text>
-
-  <rect x="64" y="254" width="104" height="68" rx="10" fill="#eff6ff"/>
-  <text x="116" y="283" text-anchor="middle" font-size="18" font-weight="700">Codex</text>
-  <text x="116" y="306" text-anchor="middle" class="small muted">子代理 / 技能</text>
-  <rect x="184" y="254" width="104" height="68" rx="10" fill="#eff6ff"/>
-  <text x="236" y="283" text-anchor="middle" font-size="18" font-weight="700">ZCode</text>
-  <text x="236" y="306" text-anchor="middle" class="small muted">代理 / 工作流</text>
-  <rect x="304" y="254" width="104" height="68" rx="10" fill="#eff6ff"/>
-  <text x="356" y="283" text-anchor="middle" font-size="18" font-weight="700">DSH</text>
-  <text x="356" y="306" text-anchor="middle" class="small muted">预设 / 工作流</text>
-
-  <rect x="64" y="352" width="344" height="204" rx="12" fill="#f8fafc" stroke="#dbe3ed"/>
-  <text x="84" y="382" class="body" font-weight="700">共享 MCP 桥 · 7 个工具</text>
-  <text x="84" y="417" class="mono">hub_ask</text><text x="254" y="417" class="mono">hub_dispatch</text>
-  <text x="84" y="444" class="mono">hub_fetch</text><text x="254" y="444" class="mono">hub_status</text>
-  <text x="84" y="471" class="mono">hub_capabilities</text><text x="254" y="471" class="mono">hub_login</text>
-  <text x="84" y="498" class="mono">hub_discover</text><text x="254" y="498" class="small muted">只读发现</text>
-  <text x="84" y="534" class="small muted">由宿主启动 Node 桥，不另启本地 Hub</text>
-
-  <rect x="64" y="584" width="344" height="190" rx="12" fill="#eff6ff"/>
-  <text x="84" y="615" class="body blue" font-weight="700">先扫描，再选择与配对</text>
-  <text x="84" y="645" class="small">1. 扫描本机 / 局域网，UDP 18766</text>
-  <text x="84" y="672" class="small">2. 选择目标；没找到则手动填写 URL</text>
-  <text x="84" y="699" class="small">3. 使用 token 文件或隐藏输入完成鉴权</text>
-  <text x="84" y="735" class="small muted">一个插件进程按配置连接一个 Hub</text>
-  <text x="84" y="757" class="small muted">已有连接保留，可用 connect 向导切换</text>
-
-  <rect x="504" y="254" width="704" height="150" rx="12" fill="#ecfdf5" stroke="#b3dfcd"/>
-  <text x="526" y="286" class="heading green">Python 任务总线 · HTTP / MCP</text>
-  <text x="526" y="315" class="body">异步任务 / ref 查询 / 结果与状态管理</text>
-  <text x="526" y="342" class="body">按 Hub 系统、worker、模型预检能力与可用性</text>
-  <text x="526" y="382" class="small muted">默认单服务；Web 控制台可选；Linux 支持用户级 systemd</text>
-
-  <!-- The connection crosses the deployment boundary in both directions. -->
-  <path d="M 410 365 H 501" fill="none" stroke="#2563eb" stroke-width="2" marker-start="url(#arch-arrow)" marker-end="url(#arch-arrow)"/>
-  <rect x="417" y="334" width="78" height="22" rx="6" fill="#ffffff"/>
-  <text x="456" y="350" text-anchor="middle" font-size="12" class="blue">HTTP / MCP</text>
-  <rect x="420" y="378" width="72" height="22" rx="6" fill="#ffffff"/>
-  <text x="456" y="394" text-anchor="middle" font-size="12" class="muted">任务 / 结果</text>
-
-  <text x="504" y="440" class="body" font-weight="700">8 个 worker 适配器</text>
-  <text x="1208" y="440" text-anchor="end" class="small muted">以下为配置默认模型；实际可用性需预检</text>
-  <g>
-    <rect x="504" y="460" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="520" y="485" font-size="16" font-weight="600">Antigravity · agy</text>
-    <text x="520" y="508" class="mono muted">gemini-3.8-flash-medium</text>
+  <!-- Read from left to right; each arrow carries tasks and their results. -->
+  <g id="clients">
+    <rect x="32" y="144" width="252" height="452" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="32" y="144" width="252" height="8" rx="4" fill="#2563eb"/>
+    <text x="54" y="185" class="label blue">01 · 客户端</text>
+    <text x="54" y="224" class="heading">你使用的原生宿主</text>
+    <rect x="52" y="250" width="102" height="60" rx="10" fill="#eff6ff"/>
+    <text x="103" y="288" text-anchor="middle" class="body" font-weight="700">Codex</text>
+    <rect x="164" y="250" width="100" height="60" rx="10" fill="#eff6ff"/>
+    <text x="214" y="288" text-anchor="middle" class="body" font-weight="700">ZCode</text>
+    <rect x="52" y="322" width="102" height="60" rx="10" fill="#eff6ff"/>
+    <text x="103" y="360" text-anchor="middle" class="body" font-weight="700">DSH</text>
+    <rect x="164" y="322" width="100" height="60" rx="10" fill="#eff6ff"/>
+    <text x="214" y="360" text-anchor="middle" font-size="20" font-weight="700">CodeArts</text>
+    <text x="54" y="420" class="body">原生插件与子代理</text>
+    <text x="54" y="451" class="body">命令、技能与工作流</text>
+    <line x1="54" y1="480" x2="262" y2="480" stroke="#e2e8f0"/>
+    <text x="54" y="515" class="small muted">Windows / Linux</text>
+    <text x="54" y="547" class="small muted">客户端可只装 plugins</text>
+    <text x="54" y="577" class="small blue">CodeArts 也可调度</text>
   </g>
-  <g>
-    <rect x="864" y="460" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="880" y="485" font-size="16" font-weight="600">CodeBuddy 国际版 · cb</text>
-    <text x="880" y="508" class="mono muted">deepseek-v4.1-flash</text>
-  </g>
-  <g>
-    <rect x="504" y="537" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="520" y="562" font-size="16" font-weight="600">CodeBuddy 国内版 · cbcn</text>
-    <text x="520" y="585" class="mono muted">deepseek-v4.1-flash</text>
-  </g>
-  <g>
-    <rect x="864" y="537" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="880" y="562" font-size="16" font-weight="600">GitHub Copilot · gcp</text>
-    <text x="880" y="585" class="mono muted">auto</text>
-  </g>
-  <g>
-    <rect x="504" y="614" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="520" y="639" font-size="16" font-weight="600">MiMoCode · mimo</text>
-    <text x="520" y="662" class="mono muted">xiaomi/mimo-v2.6-flash (26f)</text>
-  </g>
-  <g>
-    <rect x="864" y="614" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="880" y="639" font-size="16" font-weight="600">MiniMax · mmx</text>
-    <text x="880" y="662" class="mono muted">MiniMax-M3.1-Flash-Preview</text>
-  </g>
-  <g>
-    <rect x="504" y="691" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="520" y="716" font-size="16" font-weight="600">TraeCode · trae</text>
-    <text x="520" y="739" class="mono muted">GLM-5.3-FlashX</text>
-  </g>
-  <g>
-    <rect x="864" y="691" width="344" height="66" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
-    <text x="880" y="716" font-size="16" font-weight="600">ZCode · zcode</text>
-    <text x="880" y="739" class="mono muted">GLM-5.3-Flash</text>
-  </g>
-  <text x="504" y="783" class="small muted">官方 CLI / app-server / 已配置网关；任务执行时按需启动进程</text>
 
-  <!-- Vendor services are outside the Hub host's deployment boundary. -->
-  <path d="M 856 804 V 830" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arch-arrow)"/>
-  <rect x="40" y="834" width="1200" height="122" rx="14" fill="#eaf2ff" stroke="#bfd2ef"/>
-  <text x="64" y="870" class="heading blue">模型服务商</text>
-  <text x="64" y="900" class="body">插件 → Hub → 官方通道 → 模型服务：提示词、附件和工具结果可能发送给服务商。</text>
-  <text x="64" y="929" class="body muted">宿主自身的编排模型也可能处理任务内容。自托管 Hub 不代表模型离线或数据不会离开设备。</text>
+  <g id="connection">
+    <rect x="320" y="144" width="220" height="452" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+    <rect x="320" y="144" width="220" height="8" rx="4" fill="#2563eb"/>
+    <text x="342" y="185" class="label blue">02 · 连接</text>
+    <text x="342" y="224" class="heading">共享 MCP 桥</text>
+    <text x="342" y="267" class="body" font-weight="700">扫描→选择→配对</text>
+    <text x="342" y="306" class="small muted">没找到？手动填地址</text>
+    <text x="342" y="351" class="body">选定一个 Hub</text>
+    <text x="342" y="383" class="small muted">本机 / 局域网 / 服务器</text>
+    <line x1="342" y1="414" x2="518" y2="414" stroke="#bfdbfe"/>
+    <text x="342" y="451" class="body">7 个 MCP 工具</text>
+    <text x="342" y="483" class="small muted">派发任务 · 查询能力</text>
+    <text x="342" y="515" class="small muted">按 ref 读取进度与结果</text>
+    <text x="342" y="557" class="small blue">保存连接，随时切换</text>
+  </g>
 
-  <rect x="40" y="978" width="1200" height="100" rx="14" fill="#fffbeb" stroke="#ecd5a2"/>
-  <text x="64" y="1007" font-size="17" font-weight="700" fill="#80521c">连接与能力边界</text>
-  <text x="64" y="1034" font-size="16" fill="#715529">发现不等于认证成功；每种模型分别约束思考、流式与附件，不能用安装成功代替任务成功。</text>
-  <text x="64" y="1060" font-size="16" fill="#715529">Windows → Linux 图文任务直连通过；Linux → Windows 当前经 SSH 反向转发通过，直连未通过。</text>
-  <text x="40" y="1102" class="small muted">组件版本：Hub / MCP / Codex / ZCode 0.8.0 · DSH 1.2.0　|　证据与限制见 README、release-0.7.md、release-0.8.md</text>
+  <g id="hub">
+    <rect x="576" y="144" width="250" height="452" rx="18" fill="#ecfdf5" stroke="#a7d8c4"/>
+    <rect x="576" y="144" width="250" height="8" rx="4" fill="#0f766e"/>
+    <text x="598" y="185" class="label green">03 · Hub</text>
+    <text x="598" y="224" class="heading">任务执行的机器</text>
+    <text x="598" y="267" class="body" font-weight="700">Windows / Linux</text>
+    <text x="598" y="306" class="small muted">可以与客户端分开部署</text>
+    <text x="598" y="351" class="body">预检模型与功能能力</text>
+    <text x="598" y="383" class="small muted">思考 / 流式 / 图片 / 文件</text>
+    <line x1="598" y1="414" x2="804" y2="414" stroke="#a7d8c4"/>
+    <text x="598" y="451" class="body">管理任务、状态和结果</text>
+    <text x="598" y="483" class="small muted">单个 Python 常驻服务</text>
+    <text x="598" y="515" class="small muted">worker 按需启动</text>
+    <text x="598" y="557" class="small green">Web 控制台可选</text>
+  </g>
+
+  <g id="workers">
+    <rect x="862" y="144" width="386" height="452" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="862" y="144" width="386" height="8" rx="4" fill="#0f766e"/>
+    <text x="886" y="185" class="label green">04 · Workers</text>
+    <text x="886" y="224" class="heading">9 种官方 CLI 通道</text>
+    <text x="886" y="263" class="body">Antigravity</text><text x="1224" y="263" text-anchor="end" class="small muted">agy</text>
+    <text x="886" y="295" class="body">CodeBuddy 国际版</text><text x="1224" y="295" text-anchor="end" class="small muted">cb</text>
+    <text x="886" y="327" class="body">CodeBuddy 国内版</text><text x="1224" y="327" text-anchor="end" class="small muted">cbcn</text>
+    <text x="886" y="359" class="body">GitHub Copilot</text><text x="1224" y="359" text-anchor="end" class="small muted">gcp</text>
+    <text x="886" y="391" class="body">MiMo · 26f</text><text x="1224" y="391" text-anchor="end" class="small muted">mimo</text>
+    <text x="886" y="423" class="body">MiniMax</text><text x="1224" y="423" text-anchor="end" class="small muted">mmx</text>
+    <text x="886" y="455" class="body">TraeCode</text><text x="1224" y="455" text-anchor="end" class="small muted">trae</text>
+    <text x="886" y="487" class="body">ZCode</text><text x="1224" y="487" text-anchor="end" class="small muted">zcode</text>
+    <rect x="880" y="502" width="350" height="34" rx="8" fill="#fffbeb"/>
+    <text x="886" y="527" class="body" font-weight="700">CodeArts</text><text x="1218" y="526" text-anchor="end" class="small amber">模型认证受阻</text>
+    <text x="886" y="573" class="small muted">收到任务后调用对应模型服务</text>
+  </g>
+  <path d="M290 352H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M546 352H570" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M832 352H856" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="640" y="631" text-anchor="middle" class="small muted">任务向右派发，状态与结果沿原路返回 · 不支持的功能在执行前拒绝</text>
+
+  <!-- Deployment choices: independent components, not Hub-to-Hub federation. -->
+  <rect x="32" y="661" width="1216" height="146" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="56" y="696" class="heading">部署自由：同机或跨机，两个方向都能连接</text>
+  <rect x="56" y="718" width="438" height="72" rx="10" fill="#eff6ff"/>
+  <text x="76" y="744" class="body blue" font-weight="700">Windows 客户端 ⇄ Linux Hub</text>
+  <text x="76" y="778" class="small muted">局域网直连已验收</text>
+  <rect x="510" y="718" width="470" height="72" rx="10" fill="#ecfdf5"/>
+  <text x="530" y="744" class="body green" font-weight="700">Linux 客户端 ⇄ Windows Hub</text>
+  <text x="530" y="778" class="small muted">已通过 SSH 反向转发验收</text>
+  <text x="1004" y="747" class="body" font-weight="700">也可同机安装</text>
+  <text x="1004" y="777" class="small muted">plugins / hub / both</text>
+
+  <rect x="32" y="831" width="1216" height="108" rx="18" fill="#eaf2ff" stroke="#bfdbfe"/>
+  <text x="56" y="866" class="heading blue">模型服务商 · 实际的数据流</text>
+  <text x="56" y="898" class="body">客户端 → Hub → 官方 CLI → 模型服务商；提示词、附件和工具结果可能发送到服务商。</text>
+  <text x="56" y="929" class="small muted">账号与模型需单独配置；CodeArts 的原生安装、通信通过不等于独立 worker 模型调用成功。</text>
+  <text x="32" y="965" class="small muted">当前源码 v0.9.0 · 体验优化持续进行 · 具体型号与限制见 README / codearts-compatibility.md</text>
 </svg>
