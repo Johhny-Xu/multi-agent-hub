@@ -1,6 +1,6 @@
 ---
 name: hub-consult
-description: 使用 AgentHub 多 worker 独立会诊、提出诊断假设或交叉求解；适用于复杂故障、算法分歧和需要独立观点的任务。
+description: 使用 multi-agent-hub 多 worker 独立会诊、提出诊断假设或交叉求解；适用于复杂故障、算法分歧和需要独立观点的任务。
 ---
 
 # 多路会诊

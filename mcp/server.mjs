@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Agent Hub 桥接 stdio MCP server（行分隔 JSON-RPC，与 agent_hub.py --http 同风格）。
+// multi-agent-hub 桥接 stdio MCP server（行分隔 JSON-RPC，与 agent_hub.py --http 同风格）。
 // 工具：hub_ask / hub_dispatch / hub_fetch / hub_status / hub_login。
 // 由插件 mcpServers 注册：node ${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs
 import { createInterface } from "node:readline";
@@ -18,13 +18,13 @@ const TASK_OPTIONS = {
 const TOOLS = [
   {
     name: "hub_discover",
-    description: "只读扫描本机与局域网可达的 AgentHub。初次连接或连接失败时调用；返回候选 Hub，不自动切换、不发送 token、不调用模型。没找到时提示使用安装目录 connect.cmd/connect.sh 手动配置，找到后由用户选择并配对。",
+    description: "只读扫描本机与局域网可达的 multi-agent-hub。初次连接或连接失败时调用；返回候选 Hub，不自动切换、不发送 token、不调用模型。没找到时提示使用安装目录 connect.cmd/connect.sh 手动配置，找到后由用户选择并配对。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "hub_ask",
     description:
-      "把任务派发给 Agent Hub 的一个 worker 并阻塞到出最终结果。worker 支持简称：agy/cb/cbcnintl/mimo/gcp/mmx/trae，或规范名 " +
+      "把任务派发给 multi-agent-hub 的一个 worker 并阻塞到出最终结果。worker 支持简称：agy/cb/cbcnintl/mimo/gcp/mmx/trae，或规范名 " +
       CANONICAL.join("/") +
       "。task 需自包含（worker 无本会话历史；minimaxcode 是纯聊天型无文件操作）。返回 JSON 文本：{ok,status,worker,ref,answer}。仅派发一次；running/unknown 时任务可能仍执行，使用原 ref 续查，避免重复派发。",
     inputSchema: {
@@ -41,7 +41,7 @@ const TOOLS = [
   },
   {
     name: "hub_status",
-    description: "列出 Agent Hub 注册代理与在线状态（原文文本）。",
+    description: "列出 multi-agent-hub 注册代理与在线状态（原文文本）。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -54,7 +54,7 @@ const TOOLS = [
   },
   {
     name: "hub_login",
-    description: "在 Agent Hub 宿主机发起或查询 worker 的官方登录。start 返回 login_url / user_code，由用户在浏览器完成授权；status 查询完成或过期；cancel 只取消本工具发起的登录流程。支持 worker 简称。不会索取密码、API Key 或回传凭据；不支持链接登录的 worker 返回 manual_required 及官方操作指引。",
+    description: "在 multi-agent-hub 宿主机发起或查询 worker 的官方登录。start 返回 login_url / user_code，由用户在浏览器完成授权；status 查询完成或过期；cancel 只取消本工具发起的登录流程。支持 worker 简称。不会索取密码、API Key 或回传凭据；不支持链接登录的 worker 返回 manual_required 及官方操作指引。",
     inputSchema: {
       type: "object",
       properties: {

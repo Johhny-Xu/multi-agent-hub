@@ -1,6 +1,6 @@
 ---
 name: hub-parallel-research
-description: 使用 AgentHub 外部 worker 并行调研、比较方案或搜集互补证据；适用于用户要求多代理研究或跨来源比较的任务。
+description: 使用 multi-agent-hub 外部 worker 并行调研、比较方案或搜集互补证据；适用于用户要求多代理研究或跨来源比较的任务。
 ---
 
 # 并行调研

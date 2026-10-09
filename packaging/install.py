@@ -136,7 +136,7 @@ def systemd_unit(prefix, config_dir, python):
             raise SetupError('User service paths cannot contain line breaks')
         return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$') + '"'
     command_line = ' '.join(quote(arg) for arg in python['argv'] + [str(prefix / 'packaging/service.py'), 'foreground', '--prefix', str(prefix)])
-    return '# AgentHub-managed prefix: ' + str(prefix.resolve()) + '\n[Unit]\nDescription=AgentHub user service\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=' + command_line + '\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n'
+    return '# AgentHub-managed prefix: ' + str(prefix.resolve()) + '\n[Unit]\nDescription=multi-agent-hub user service\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=' + command_line + '\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n'
 
 
 def install(args):

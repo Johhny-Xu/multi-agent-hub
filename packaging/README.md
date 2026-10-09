@@ -1,4 +1,4 @@
-AgentHub 0.8.0 将服务器与原生客户端分开安装：`hub` 包提供 Python HTTP Hub 和可选控制台，`plugins` 包只提供 Codex、ZCode、DSH 客户端，`both` 包可安装任一组件或同机共存。
+multi-agent-hub 0.8.0 将服务器与原生客户端分开安装：`hub` 包提供 Python HTTP Hub 和可选控制台，`plugins` 包只提供 Codex、ZCode、DSH 客户端，`both` 包可安装任一组件或同机共存。
 
 解压后，Windows 双击 `install.cmd`，Linux 运行 `./install.sh`。默认组件跟随包名；Hub 安装后自动启动在 `127.0.0.1:8765`，控制台默认关闭。`--no-start` 可只安装。插件安装不会启动或停止已有 Hub；检测到的官方宿主通过各自原生 CLI 注册，缺少的宿主会显示 `not_installed`，注册失败返回非零退出码。
 

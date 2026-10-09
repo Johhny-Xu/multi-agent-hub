@@ -64,7 +64,7 @@ const DEFAULT_CONFIG = {
   endpoints: [
     {
       id: 'server',
-      label: process.env.HUBCONSOLE_SERVER_LABEL || 'Agent Hub 服务器枢纽',
+      label: process.env.HUBCONSOLE_SERVER_LABEL || 'multi-agent-hub 服务器枢纽',
       url: process.env.HUBCONSOLE_SERVER_URL || 'http://127.0.0.1:8765/mcp',
       token: process.env.HUBCONSOLE_SERVER_TOKEN || '',
     },
@@ -2029,7 +2029,7 @@ export async function start(context) {
       tools: [
         {
           name: 'subagent_run',
-          description: `把一个任务派给 Agent Hub 上的子代理(trae/zcode/workbuddy/codebuddy 等)并等待完成。agent 也可传 auto 或 ${SELF_AGENT}: 自动挑选最优可派发子代理(在线优先, 可用 model 参数约束必须支持的模型)。全量结果落盘本机文件, 对话里只返回 ≤500 字摘要 + artifactPath, 最大幅度节省本机会话 tokens。需控制台运行时打开中。`,
+          description: `把一个任务派给 multi-agent-hub 上的子代理(trae/zcode/workbuddy/codebuddy 等)并等待完成。agent 也可传 auto 或 ${SELF_AGENT}: 自动挑选最优可派发子代理(在线优先, 可用 model 参数约束必须支持的模型)。全量结果落盘本机文件, 对话里只返回 ≤500 字摘要 + artifactPath, 最大幅度节省本机会话 tokens。需控制台运行时打开中。`,
           inputSchema: {
             type: 'object',
             properties: {

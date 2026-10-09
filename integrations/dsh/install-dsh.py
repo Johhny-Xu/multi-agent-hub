@@ -251,7 +251,7 @@ def prepare_profile(dsh_home, name, url=None, token=None, uninstall=False, confi
     return patch
 
 def main():
-    parser = argparse.ArgumentParser(description="Prepare the selected existing DSH profile for AgentHub")
+    parser = argparse.ArgumentParser(description="Prepare the selected existing DSH profile for multi-agent-hub")
     parser.add_argument("--profile", default="web", help="Existing profile name; never falls back to another profile")
     parser.add_argument("--url", default=None, help="Override Hub URL; omission preserves existing value")
     parser.add_argument("--token", default=None, help="Override Hub token; omission preserves existing env/token")
@@ -267,7 +267,7 @@ def main():
             raise ValueError("Selected profile does not exist: " + args.profile)
         if args.check:
             content = patch.read_bytes().decode("utf-8") if patch.exists() else ""
-            print("AgentHub profile configuration: " + ("present" if is_installed(content) else "absent"))
+            print("multi-agent-hub profile configuration: " + ("present" if is_installed(content) else "absent"))
             print("This check does not launch or verify a DSH host.")
             return 0
         prepare_profile(home, args.profile, args.url, args.token, args.uninstall, args.config_file)

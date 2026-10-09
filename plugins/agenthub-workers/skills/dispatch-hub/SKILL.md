@@ -1,9 +1,9 @@
 ---
 name: dispatch-hub
-description: 使用 AgentHub 的八个 worker 进行独立任务分派、并行协作和原始 ref 结果回收；适用于用户要求把任务分给多个外部代理。
+description: 使用 multi-agent-hub 的八个 worker 进行独立任务分派、并行协作和原始 ref 结果回收；适用于用户要求把任务分给多个外部代理。
 ---
 
-# AgentHub 调度
+# multi-agent-hub 调度
 
 主代理划分任务、决定允许修改的文件并验收结果。原生子代理只是 Hub 的路由通道，外部 worker 才是任务执行者。
 

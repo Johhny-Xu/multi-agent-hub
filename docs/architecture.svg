@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1120" viewBox="0 0 1280 1120" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">AgentHub 0.8：插件与 Hub 独立部署架构</title>
+  <title id="architecture-title">multi-agent-hub 0.8：插件与 Hub 独立部署架构</title>
   <desc id="architecture-desc">Codex、ZCode、DSH 插件可运行在 Windows 或 Linux，通过自动发现与鉴权配对选择本机或远端 Hub。Hub 按 worker、平台和模型能力派发任务到八种适配器，官方通道可能向模型服务商发送提示词、附件和工具结果。每个插件进程连接一个配置的 Hub，安装组件本身不触发模型调用。</desc>
   <defs>
     <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#2563eb"/></marker>
@@ -16,7 +16,7 @@
     </style>
   </defs>
   <rect width="1280" height="1120" fill="#f8fafc"/>
-  <text x="40" y="56" class="title">AgentHub：插件在你手边，任务在 Hub 执行</text>
+  <text x="40" y="56" class="title">multi-agent-hub：插件在你手边，任务在 Hub 执行</text>
   <text x="40" y="86" class="body muted">Windows / Linux 同机或跨机部署 · 客户端选择连接位置 · 0.8.0</text>
   <rect x="1090" y="32" width="150" height="34" rx="17" fill="#dbeafe"/>
   <text x="1165" y="55" text-anchor="middle" class="small blue" font-weight="700">更新 2026-10-09</text>

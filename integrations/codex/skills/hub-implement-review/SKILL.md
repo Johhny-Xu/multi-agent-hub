@@ -1,6 +1,6 @@
 ---
 name: hub-implement-review
-description: 使用 AgentHub 完成实现后再独立审查的两阶段工作流；适用于用户要求外部 worker 编码并复核实际改动的任务。
+description: 使用 multi-agent-hub 完成实现后再独立审查的两阶段工作流；适用于用户要求外部 worker 编码并复核实际改动的任务。
 ---
 
 # 实施与审查
