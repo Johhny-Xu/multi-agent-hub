@@ -1,18 +1,12 @@
 # multi-agent-hub
 
+![multi-agent-hub 0.9 结构图：四种原生客户端经 MCP 连接 Windows 或 Linux Hub，调度九种 worker；支持同机、跨机与双向连接](docs/architecture.svg)
+
 在 Codex、ZCode、DeepSeek Harness（DSH）、华为 CodeArts 中，通过原生插件和子代理调用其他客户端的 worker。multi-agent-hub 已适配四种宿主、九种 worker，负责运行官方 CLI、管理任务与返回结果；具体能否执行取决于目标机器的 CLI、账号和模型状态。
 
-当前源码版本 **0.9.0** 新增 CodeArts 双向接入：它可以作为客户端派发给其他 worker，也可以作为 worker 接受 Codex、ZCode、DSH 等客户端的任务。源码标签仍截至 **v0.8.0**；0.9.0 安装包已在本机构建并校验，尚未上传 GitHub Release。
+当前源码版本 **0.9.0**，重点是**优化体验**：连接选择更清楚，能力与失败原因可见，安装升级保护已有配置，并新增 CodeArts 双向接入。CodeArts 可以作为客户端派发给其他 worker，也可以作为 worker 接受其他客户端的任务。源码标签仍截至 **v0.8.0**；0.9.0 安装包已在本机构建并校验，尚未上传 GitHub Release。
 
 **插件和 Hub 可以装在不同机器，也可以一起安装。** Windows 的 CodeArts 或 Codex 可以连接 Linux 服务器上的 Hub，Linux 客户端也可以连接 Windows 上的 Hub。客户端不需要启动本地 Hub，服务器也不需要安装四种宿主插件。
-
-```mermaid
-flowchart LR
-    C["Codex / ZCode / DSH / CodeArts<br/>原生插件、子代理与工作流"] --> M["MCP 桥<br/>选择并连接一个 Hub"]
-    M --> H["Windows 或 Linux Hub<br/>管理任务与结果"]
-    H --> W["九种 worker 的官方 CLI<br/>包含 CodeArts"]
-    W --> P["模型服务商"]
-```
 
 ## CodeArts 接入与当前实测
 
@@ -135,13 +129,11 @@ Hub 默认常驻一个 Python 服务，任务执行时才启动对应 worker。�
 
 ## 版本路线与验证范围
 
-从登录与 Windows 兼容性、跨平台任务契约，到独立部署和自动发现，各阶段均保留独立源码标签。Linux 服务和 Codex 适配已经完成对应验证；账号、模型、网络和宿主流程的剩余限制单独列明。
+当前版本以**优化体验**为重点，继续完善登录引导、连接反馈和常见故障提示。0.5–0.8 已保留独立源码标签，0.9 的 CodeArts 适配代码已推送；各阶段的实测范围与剩余限制如下。
 
-![multi-agent-hub 0.5 至 0.8 版本路线与验证范围：各版进展、回归结果和待复测限制](docs/roadmap.svg)
+![multi-agent-hub 0.9 进度图：当前重点优化体验，展示已有基础、后续优化、0.5 至 0.9 演进和实际验证范围](docs/roadmap.svg)
 
-![multi-agent-hub 0.8 历史架构：插件与 Hub 独立部署、连接选择、八个 worker 与模型服务商数据流](docs/architecture.svg)
-
-两张 SVG 保留 0.8.0 的历史范围。0.9.0 新增 CodeArts 后，Windows 全量 26 组、407 项检查通过；Linux 首次全量中的打包测试夹具问题已修复，最终相关增量检查通过。回归使用模拟服务，真实 CodeArts 模型调用仍受上文认证限制。详细阶段来源见[版本记录](docs/version-history.md)，实际验收边界以各测试报告为准。
+Windows 全量 26 组、407 项检查通过；Linux 首次全量中的打包测试夹具问题已修复，最终相关增量检查通过。回归使用模拟服务，真实 CodeArts 模型调用仍受上文认证限制。详细阶段来源见[版本记录](docs/version-history.md)，实际验收边界以各测试报告为准。
 
 ## 开发、验证与构建
 

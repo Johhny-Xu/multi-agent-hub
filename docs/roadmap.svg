@@ -1,119 +1,113 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1120" viewBox="0 0 1280 1120" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 0.5 至 0.8 发展路线图与后续复测范围</title>
-  <desc id="roadmap-desc">四个源码检查点于 2026 年 10 月 9 日发布，实测记录来自 10 月 8 日。0.5 增加登录与 Windows worker 检查，0.6 统一任务契约并适配 Codex、ZCode 和 DSH，0.7 拆分安装并验证 Linux 服务与跨机器任务，0.8 增加只读 Hub 发现、用户选择和鉴权配对，提供七个 MCP 工具。验证统计仅表示相应回归、发现和安装范围；DSH 付费模型流程、反向直连及部分厂商授权能力仍待复测。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.0 重点优化体验</title>
+  <desc id="roadmap-desc">截至 2026 年 10 月 9 日，当前 v0.9.0 源码已推送，尚未发布 v0.9 标签。当前重点为优化体验：已有能力与失败提示、先扫描再配对、CodeArts 双向接入以及安装时保护配置；后续继续优化登录引导、连接反馈和常见故障提示。版本沿 v0.5 登录与 Windows 兼容、v0.6 统一契约与原生宿主、v0.7 独立部署与跨机器连接、v0.8 发现与配对、v0.9 体验优化演进。Windows 26 组 407 项检查通过，Linux 修复后相关增量检查通过，双向通信通过；CodeArts 自身模型调用仍需配置官方认证。</desc>
   <defs>
     <style>
-      .title { font-size:32px; font-weight:700; fill:#0f172a; }
-      .subtitle { font-size:18px; fill:#475569; }
-      .stage-title { font-size:24px; font-weight:700; fill:#0f172a; }
-      .body { font-size:18px; fill:#334155; }
-      .note { font-size:16px; fill:#475569; }
-      .badge { font-size:16px; font-weight:700; fill:#115e59; }
-      .version { font-size:18px; font-weight:700; fill:#0f766e; }
-      .section-title { font-size:22px; font-weight:700; fill:#0f172a; }
-      .stat-label { font-size:17px; fill:#334155; }
-      .stat-number { font-size:30px; font-weight:700; fill:#0f766e; }
-      .limit-title { font-size:22px; font-weight:700; fill:#78350f; }
-      .limit-body { font-size:17px; fill:#78350f; }
+      .title { font-size:34px; font-weight:700; fill:#0f172a; }
+      .meta { font-size:20px; fill:#475569; }
+      .focus { font-size:44px; font-weight:700; fill:#0f172a; }
+      .lead { font-size:22px; fill:#334155; }
+      .section { font-size:25px; font-weight:700; fill:#0f172a; }
+      .body { font-size:22px; fill:#334155; }
+      .version { font-size:27px; font-weight:700; fill:#0f766e; }
+      .stage { font-size:21px; fill:#334155; }
+      .stat { font-size:28px; font-weight:700; fill:#0f766e; }
+      .note { font-size:20px; fill:#475569; }
     </style>
+    <marker id="timeline-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#94a3b8"/>
+    </marker>
   </defs>
 
-  <!-- Native SVG: edit the text and card positions directly; no external assets. -->
-  <rect width="1280" height="1120" fill="#ffffff"/>
-  <rect x="32" y="24" width="1216" height="1080" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="64" y="72" class="title">multi-agent-hub 发展路线图</text>
-  <text x="64" y="108" class="subtitle">Git 发布：2026-10-09　｜　实测记录：2026-10-08　｜　当前源码版本：v0.8.0</text>
-  <text x="64" y="140" class="note">按真实检查点连续演进；已适配的平台与宿主，不等于全部账号、模型和任务能力都通过。</text>
+  <rect width="1280" height="1040" fill="#ffffff"/>
+  <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
+  <text x="64" y="108" class="meta">更新：2026-10-09　·　当前源码 v0.9.0　·　最新 Git 标签 v0.8</text>
 
-  <!-- Four released checkpoints. The timeline denotes version order, not separate test dates. -->
-  <line x1="100" y1="230" x2="100" y2="674" stroke="#99c8c4" stroke-width="4"/>
+  <!-- The current source checkpoint is deliberately separate from published tags. -->
+  <g id="current-focus">
+    <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
+    <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.0 · 当前重点</text>
+    <rect x="938" y="151" width="246" height="36" rx="18" fill="#dbeafe"/>
+    <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">源码已推送 · 未发布标签</text>
+    <text x="96" y="227" class="focus">优化体验</text>
+    <text x="96" y="262" class="lead">四种宿主 · 九个 worker · Windows / Linux 双向连接</text>
 
-  <g id="release-05">
-    <circle cx="100" cy="230" r="23" fill="#0f766e"/>
-    <text x="100" y="237" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">05</text>
-    <text x="100" y="275" text-anchor="middle" class="version">v0.5</text>
-    <rect x="164" y="164" width="1052" height="132" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <rect x="164" y="180" width="5" height="100" rx="2" fill="#0f766e"/>
-    <text x="192" y="198" class="stage-title">登录与 Windows worker 兼容性</text>
-    <rect x="1080" y="179" width="112" height="30" rx="15" fill="#ccfbf1"/>
-    <text x="1136" y="200" text-anchor="middle" class="badge">源码已发布</text>
-    <text x="192" y="232" class="body">官方登录链接与状态查询；国际 / 国内 CodeBuddy 使用独立配置。</text>
-    <text x="192" y="258" class="body">8 个 worker 通道按报告实测，区分成功、能力不支持与授权阻塞。</text>
-    <text x="192" y="282" class="note">检查点已含 Codex 初稿；不等同于所有宿主或厂商账号端到端通过。</text>
+    <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
+    <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
+    <circle cx="102" cy="343" r="5" fill="#0f766e"/>
+    <text x="120" y="351" class="body">清晰的能力说明与失败提示</text>
+    <circle cx="102" cy="376" r="5" fill="#0f766e"/>
+    <text x="120" y="384" class="body">先扫描 Hub，再选择与配对</text>
+    <circle cx="102" cy="409" r="5" fill="#0f766e"/>
+    <text x="120" y="417" class="body">CodeArts 原生接入与双向派发</text>
+    <circle cx="102" cy="442" r="5" fill="#0f766e"/>
+    <text x="120" y="450" class="body">安装、升级时保护现有配置</text>
+
+    <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">接下来继续优化</text>
+    <circle cx="698" cy="343" r="5" fill="#2563eb"/>
+    <text x="716" y="351" class="body">登录步骤与授权引导</text>
+    <circle cx="698" cy="376" r="5" fill="#2563eb"/>
+    <text x="716" y="384" class="body">扫描、配对与连接状态反馈</text>
+    <circle cx="698" cy="409" r="5" fill="#2563eb"/>
+    <text x="716" y="417" class="body">常见故障的说明与恢复指引</text>
+    <text x="692" y="456" class="note">按实际验证开放能力，持续补齐体验。</text>
   </g>
 
-  <g id="release-06">
-    <circle cx="100" cy="378" r="23" fill="#0f766e"/>
-    <text x="100" y="385" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">06</text>
-    <text x="100" y="423" text-anchor="middle" class="version">v0.6</text>
-    <rect x="164" y="312" width="1052" height="132" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <rect x="164" y="328" width="5" height="100" rx="2" fill="#0f766e"/>
-    <text x="192" y="346" class="stage-title">统一任务契约与三个原生宿主适配</text>
-    <rect x="1080" y="327" width="112" height="30" rx="15" fill="#ccfbf1"/>
-    <text x="1136" y="348" text-anchor="middle" class="badge">源码已发布</text>
-    <text x="192" y="380" class="body">统一 model、thinking、stream、图文附件与 cwd 任务契约。</text>
-    <text x="192" y="406" class="body">Codex / ZCode / DSH 原生适配；派发一次，保留原 ref 续查。</text>
-    <text x="192" y="430" class="note">不支持的选项先拒绝；正文进度与宿主 UI 实时显示分别验证。</text>
+  <text x="64" y="541" class="section">版本演进</text>
+  <text x="1216" y="539" text-anchor="end" class="note">每一步都保留上一阶段的基础</text>
+  <g id="version-timeline">
+    <rect x="64" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="88" y="602" class="version">v0.5</text>
+    <text x="88" y="646" class="stage">登录与 Windows</text>
+    <text x="88" y="675" class="stage">worker 兼容</text>
+
+    <line x1="284" y1="634" x2="294" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
+    <rect x="298" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="322" y="602" class="version">v0.6</text>
+    <text x="322" y="646" class="stage">统一任务契约</text>
+    <text x="322" y="675" class="stage">原生宿主适配</text>
+
+    <line x1="518" y1="634" x2="528" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
+    <rect x="532" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="556" y="602" class="version">v0.7</text>
+    <text x="556" y="646" class="stage">插件与 Hub 分离</text>
+    <text x="556" y="675" class="stage">跨机器部署</text>
+
+    <line x1="752" y1="634" x2="762" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
+    <rect x="766" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="790" y="602" class="version">v0.8</text>
+    <text x="790" y="646" class="stage">自动发现 Hub</text>
+    <text x="790" y="675" class="stage">选择与配对</text>
+
+    <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
+    <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <text x="1024" y="602" font-size="27" font-weight="700" fill="#2563eb">v0.9</text>
+    <text x="1024" y="646" font-size="21" font-weight="700" fill="#1d4ed8">体验优化</text>
+    <text x="1024" y="675" class="stage">CodeArts 接入</text>
   </g>
 
-  <g id="release-07">
-    <circle cx="100" cy="526" r="23" fill="#0f766e"/>
-    <text x="100" y="533" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">07</text>
-    <text x="100" y="571" text-anchor="middle" class="version">v0.7</text>
-    <rect x="164" y="460" width="1052" height="132" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <rect x="164" y="476" width="5" height="100" rx="2" fill="#0f766e"/>
-    <text x="192" y="494" class="stage-title">拆分安装、Linux 服务与跨机器连接</text>
-    <rect x="1080" y="475" width="112" height="30" rx="15" fill="#ccfbf1"/>
-    <text x="1136" y="496" text-anchor="middle" class="badge">源码已发布</text>
-    <text x="192" y="528" class="body">hub / plugins / both 独立包；Windows 与 Linux 运行时检测、升级保留配置。</text>
-    <text x="192" y="554" class="body">Linux systemd 用户服务已实测；插件可连接异机 Hub，账号不随包复制。</text>
-    <text x="192" y="578" class="note">控制台按平台、worker 和型号能力开放选项；未知状态不自动重派。</text>
-  </g>
-
-  <g id="release-08">
-    <circle cx="100" cy="674" r="23" fill="#2563eb"/>
-    <text x="100" y="681" text-anchor="middle" font-size="20" font-weight="700" fill="#ffffff">08</text>
-    <text x="100" y="719" text-anchor="middle" font-size="18" font-weight="700" fill="#1d4ed8">v0.8</text>
-    <rect x="164" y="608" width="1052" height="132" rx="14" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
-    <rect x="164" y="624" width="5" height="100" rx="2" fill="#2563eb"/>
-    <text x="192" y="642" class="stage-title">只读发现、用户配对与 7 个 MCP 工具</text>
-    <rect x="1080" y="623" width="112" height="30" rx="15" fill="#dbeafe"/>
-    <text x="1136" y="644" text-anchor="middle" font-size="16" font-weight="700" fill="#1e40af">当前版本</text>
-    <text x="192" y="676" class="body">UDP 18766 + 无凭据健康检查；首次安装先扫描，用户选择目标后配对。</text>
-    <text x="192" y="702" class="body">Codex / ZCode / DSH 提供 hub_discover；7 个工具，既有连接保留。</text>
-    <text x="192" y="726" class="note">未配置仍可发现，派发拒绝 SETUP_REQUIRED；token 留在外部私有配置。</text>
-  </g>
-
-  <!-- Counts describe separate validation scopes; they are not worker/model pass rates. -->
-  <text x="64" y="778" class="section-title">0.8 验证范围</text>
-  <text x="1216" y="776" text-anchor="end" class="note">回归、网络发现与安装验收分别计数</text>
+  <!-- These are validation scopes, not a success rate for every model or option. -->
+  <text x="64" y="753" class="section">当前实测</text>
   <g id="validation-summary">
-    <rect x="64" y="794" width="272" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="84" y="819" class="stat-label">Windows 完整回归</text>
-    <text x="84" y="854" class="stat-number">21 / 21 组</text>
-    <text x="84" y="880" class="note">冻结源码后的回归套件</text>
-    <rect x="352" y="794" width="272" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="372" y="819" class="stat-label">Linux 完整回归</text>
-    <text x="372" y="854" class="stat-number">19 / 19 组</text>
-    <text x="372" y="880" class="note">已适配，非后续规划</text>
-    <rect x="640" y="794" width="272" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="660" y="819" class="stat-label">两平台真实网络发现</text>
-    <text x="660" y="854" class="stat-number">8 / 8 项</text>
-    <text x="660" y="880" class="note">Python / Node，默认扫描与 IP</text>
-    <rect x="928" y="794" width="288" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="948" y="819" class="stat-label">正式 ZIP 的 Linux 安装配对</text>
-    <text x="948" y="854" class="stat-number">54 / 54 项</text>
-    <text x="948" y="880" class="note">三包安装、鉴权与 7 工具发现</text>
+    <rect x="64" y="775" width="368" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="88" y="807" class="body">Windows 完整回归</text>
+    <text x="88" y="848" class="stat">26 组 · 407 项通过</text>
+
+    <rect x="448" y="775" width="368" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="472" y="807" class="body">Linux 修复后复测</text>
+    <text x="472" y="848" class="stat">相关增量检查通过</text>
+
+    <rect x="832" y="775" width="384" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="856" y="807" class="body">Windows ↔ Linux</text>
+    <text x="856" y="848" class="stat">双向通信通过</text>
   </g>
 
-  <!-- Amber denotes an explicit validation boundary, not a platform deferred by priority. -->
-  <g id="follow-up-validation">
-    <rect x="64" y="918" width="1152" height="148" rx="14" fill="#fffbeb" stroke="#fbbf24"/>
-    <text x="88" y="948" class="limit-title">后续复测：外部条件恢复后补证据</text>
-    <text x="88" y="977" class="limit-body">宿主：DSH 真实子代理 / 工作流因 402 额度不足未完成；Codex、ZCode 按已有报告验证。</text>
-    <text x="88" y="1002" class="limit-body">网络：Windows → Linux 直连图文通过；Linux → Windows 直连未通，SSH 反向图文任务通过。</text>
-    <text x="88" y="1027" class="limit-body">账号与模型：认证、区域、SSO、型号目录仍有限制；不宣称 8 个 worker 所有选项均可用。</text>
-    <text x="88" y="1052" class="limit-body">下一步：复测上述阻塞，补宿主 UI 流式展示证据；不承诺完成日期。</text>
+  <g id="authentication-boundary">
+    <rect x="64" y="891" width="1152" height="70" rx="14" fill="#fffbeb" stroke="#fcd34d"/>
+    <text x="88" y="921" font-size="22" font-weight="700" fill="#92400e">CodeArts 自身模型调用：官方认证仍待配置。</text>
+    <text x="88" y="949" font-size="20" fill="#92400e">通信、插件和回归通过，不代表每个模型的思考、流式与附件能力均已通过。</text>
   </g>
-  <text x="64" y="1094" class="note">证据：release-0.7.md · release-0.8.md · version-history.md　｜　ZIP 为本地构建，未上传 Release 附件</text>
+  <text x="64" y="993" class="note">实测与限制详见 docs/codearts-compatibility.md　·　v0.9.0 尚未发布 Git 标签或 Release</text>
 </svg>
