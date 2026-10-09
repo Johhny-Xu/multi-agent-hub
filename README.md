@@ -1,20 +1,55 @@
 # multi-agent-hub
 
-把 Codex、ZCode、DeepSeek Harness（DSH）里的任务派发给八种外部 worker。插件负责连接和编排，multi-agent-hub 在它所在的机器运行官方 CLI、管理任务与返回结果。
+在 Codex、ZCode、DeepSeek Harness（DSH）、华为 CodeArts 中，通过原生插件和子代理调用其他客户端的 worker。multi-agent-hub 已适配四种宿主、九种 worker，负责运行官方 CLI、管理任务与返回结果；具体能否执行取决于目标机器的 CLI、账号和模型状态。
 
-**插件和 Hub 可以装在不同机器，也可以一起安装。** Windows 的 Codex 可以连接 Linux 服务器上的 Hub，Linux 的 ZCode 也可以连接 Windows 上的 Hub。客户端不需要启动本地 Hub，服务器也不需要安装三种宿主插件。
+当前源码版本 **0.9.0** 新增 CodeArts 双向接入：它可以作为客户端派发给其他 worker，也可以作为 worker 接受 Codex、ZCode、DSH 等客户端的任务。源码标签仍截至 **v0.8.0**；0.9.0 安装包已在本机构建并校验，尚未上传 GitHub Release。
 
-![multi-agent-hub 0.8 架构：插件与 Hub 独立部署、连接选择、八个 worker 与模型服务商数据流](docs/architecture.svg)
+**插件和 Hub 可以装在不同机器，也可以一起安装。** Windows 的 CodeArts 或 Codex 可以连接 Linux 服务器上的 Hub，Linux 客户端也可以连接 Windows 上的 Hub。客户端不需要启动本地 Hub，服务器也不需要安装四种宿主插件。
+
+```mermaid
+flowchart LR
+    C["Codex / ZCode / DSH / CodeArts<br/>原生插件、子代理与工作流"] --> M["MCP 桥<br/>选择并连接一个 Hub"]
+    M --> H["Windows 或 Linux Hub<br/>管理任务与结果"]
+    H --> W["九种 worker 的官方 CLI<br/>包含 CodeArts"]
+    W --> P["模型服务商"]
+```
+
+## CodeArts 接入与当前实测
+
+CodeArts 原生包包含 **9 个子代理、3 个命令、1 个调度技能、1 个 Hooks 插件和 7 个 MCP 工具**。在 CodeArts 中可用 `@hub-mimocode` 等子代理，或 `/hub-status`、`/hub-discover`、`/hub-login`；其他宿主派发给 CodeArts 时使用 `worker="codearts"`，也接受 `ca`、`huawei-codearts`。
+
+| 验证项目 | 实际结果 |
+| --- | --- |
+| Windows CodeArts 原生组件 | 正式内核识别代理、命令、技能与插件入口；当前 IDE 窗口需重载 |
+| Linux CodeArts | 官方 CLI 原生文件及 MCP 已安装；本轮未找到图形 IDE 本体 |
+| CodeArts MCP 桥 → 其他 worker | Linux 上单次派发 MiMo，实际回答 `42` |
+| Windows → Linux | 局域网通信通过；CodeArts 任务准确返回认证失败 |
+| Linux → Windows | SSH 反向回环转发通过；CodeArts 任务准确返回 provider 未就绪 |
+| CodeArts 自身模型调用 | **尚未通过**：Windows 独立内核缺 provider；Linux 非交互 CLI 缺所需 AK/SK 认证 |
+
+IDE 已登录不代表独立 CLI 已具备模型调用条件。当前 CodeArts worker 仅开放默认思考、非流式文本任务，图片、文件及显式思考开关关闭。组件安装和 MCP 派发验收通过，也不能证明 CodeArts 编排模型已经自主调用这些工具。完整报告与认证边界见 [CodeArts 接入说明](docs/codearts-compatibility.md)。
+
+只安装 CodeArts 客户端、连接已有 Hub 的例子：
+
+~~~powershell
+.\install.cmd --component plugins --native-hosts codearts --project C:\Work\my-project --url SERVER:8765 --token-file C:\private\hub-token.txt
+~~~
+
+~~~bash
+./install.sh --component plugins --native-hosts codearts --codearts-target cli --url SERVER:8765 --token-file /private/hub-token.txt
+~~~
+
+IDE 的 `--project` 应指向实际打开的工作区；也可用 `--codearts-ide-settings` 指定“配置 MCP”打开的文件。未提供工作区时，自动安装将 IDE 连接标为待配置。安装后重载 IDE 或重启 CLI。独立安装说明见 [CodeArts 原生包](integrations/codearts/README.md)。
 
 ## 选择安装包
 
-0.8.0 提供三种独立 ZIP，新增本机与局域网 Hub 自动发现；源码构建方法见下方。源码已按 v0.5.0 → v0.6.0 → v0.7.0 → v0.8.0 分别提交与打标签；ZIP 安装包仍为本机构建，尚未上传 GitHub Release 附件。
+0.9.0 提供三种独立 ZIP，包含 CodeArts 双向接入及本机与局域网 Hub 自动发现；源码构建方法见下方。源码已按 v0.5.0 → v0.6.0 → v0.7.0 → v0.8.0 分别提交与打标签；ZIP 安装包仍为本机构建，尚未上传 GitHub Release 附件。
 
 | 包 | 装在哪里 | 包含什么 |
 | --- | --- | --- |
-| agenthub-0.8.0-plugins.zip | 使用 Codex / ZCode / DSH 的机器 | 三种原生插件、MCP 桥、子代理与工作流 |
-| agenthub-0.8.0-hub.zip | 运行 worker 的 Windows / Linux 机器 | Python Hub、worker 适配器、可选网页控制台 |
-| agenthub-0.8.0-both.zip | 插件和 worker 都在本机 | 上述两部分 |
+| agenthub-0.9.0-plugins.zip | 使用 Codex / ZCode / DSH / CodeArts 的机器 | 四种原生插件、MCP 桥、子代理与工作流 |
+| agenthub-0.9.0-hub.zip | 运行 worker 的 Windows / Linux 机器 | Python Hub、worker 适配器、可选网页控制台 |
+| agenthub-0.9.0-both.zip | 插件和 worker 都在本机 | 上述两部分 |
 
 解压后，Windows 双击 **install.cmd**，Linux 执行 **bash install.sh**。安装器识别系统、已有 Python/Node 和官方 CLI，使用稳定安装目录，配置与运行数据放在源码包之外。重复安装会备份旧应用文件，保留连接和 worker 配置。完整参数、原生宿主注册及启动方式见[安装说明](packaging/README.md)。
 
@@ -38,9 +73,9 @@ bash install.sh --component both --with-console
 
 首次安装 plugins 包且没有连接配置时，会先扫描本机与局域网 Hub。终端列出可达候选，由你选择本机或服务器；没有发现时提示手动填写地址。配对时使用对应 Hub 的 token 文件或终端隐藏输入，验证成功后才保存。已有连接不会因扫描被覆盖；非交互安装返回待配置提示，不会停在那里等待输入。
 
-以后双击安装目录的 **connect.cmd**（Linux：`./connect.sh`）即可重新扫描并切换。ZCode 内可用 **/hub-discover**，Codex/DSH 可调用 **hub_discover**，只读列出候选及下一步说明；宿主不会因为工具注册就自动执行它。切换连接前先收回原 Hub 的未完成任务，保存后重启宿主 MCP 进程。
+以后双击安装目录的 **connect.cmd**（Linux：`./connect.sh`）即可重新扫描并切换。ZCode、CodeArts 内可用 **/hub-discover**，四种宿主都可调用 **hub_discover**，只读列出候选及下一步说明；宿主不会因为工具注册就自动执行它。切换连接前先收回原 Hub 的未完成任务，保存后重启宿主 MCP 进程。
 
-局域网自动发现需要服务器 Hub 升级到 0.8.0，并监听局域网地址。扫描使用 UDP 18766 与无凭据 HTTP 健康检查，不会广播 token。跨子网、VPN、广播被拦截、旧版本或发现端口被占用时可能找不到，仍可手动连接；不会自动修改防火墙。设置 `AGENTHUB_DISCOVERY=0` 可关闭服务端发现响应。发现到服务器只表示可达，配对还需要鉴权。
+局域网自动发现需要服务器 Hub 为 0.8.0 或更新版本，并监听局域网地址。扫描使用 UDP 18766 与无凭据 HTTP 健康检查，不会广播 token。跨子网、VPN、广播被拦截、旧版本或发现端口被占用时可能找不到，仍可手动连接；不会自动修改防火墙。设置 `AGENTHUB_DISCOVERY=0` 可关闭服务端发现响应。发现到服务器只表示可达，配对还需要鉴权。
 
 以 Linux 运行 Hub、Windows 运行插件为例：
 
@@ -69,7 +104,7 @@ ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 SERVER_SSH_ALIAS
 
 ## 使用与能力限制
 
-插件提供七个工具：hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。Codex 的项目子代理与三个工作流技能、ZCode 的八个原生代理、DSH 的预设与工作流都通过同一个任务契约派发。
+插件提供七个工具：hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。Codex 的项目子代理与工作流技能、ZCode 的九个原生代理、DSH 的预设与工作流、CodeArts 的原生子代理和技能都通过同一个任务契约派发。
 
 先用 hub_capabilities(worker, model) 查看目标 Hub 的能力和最近失败状态。前端按 **Hub 所在系统、worker、实际配置模型** 约束思考、流式、图片和文件选项；不支持的选项会禁用并解释原因，服务端也会拒绝。自动选择 worker 时使用相同限制。
 
@@ -82,6 +117,7 @@ ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 SERVER_SSH_ALIAS
 | MiniMax | MiniMax-M3.1-Flash-Preview |
 | TraeCode | GLM-5.3-FlashX |
 | ZCode | GLM-5.3-Flash |
+| CodeArts | 沿用官方 CLI 配置；需要账号可用的 provider/model |
 
 这些是配置默认值，不是所有账号都拥有这些模型的承诺。MiniMax M3.1 不能关闭思考；ZCode 的显式思考切换和未经验证的正文流式不会作为可用功能开放。CodeBuddy 文件工具需要实际权限，标准代理模式用于避免继承上次会话的其他代理模式。认证、余额、区域或模型目录错误会显示为不可用原因，修正后可手动刷新；刷新不会付费调用模型。
 
@@ -103,26 +139,32 @@ Hub 默认常驻一个 Python 服务，任务执行时才启动对应 worker。�
 
 ![multi-agent-hub 0.5 至 0.8 版本路线与验证范围：各版进展、回归结果和待复测限制](docs/roadmap.svg)
 
-图示对应 0.8.0；详细阶段来源见[版本记录](docs/version-history.md)，实际验收边界以各测试报告为准。
+![multi-agent-hub 0.8 历史架构：插件与 Hub 独立部署、连接选择、八个 worker 与模型服务商数据流](docs/architecture.svg)
+
+两张 SVG 保留 0.8.0 的历史范围。0.9.0 新增 CodeArts 后，Windows 全量 26 组、407 项检查通过；Linux 首次全量中的打包测试夹具问题已修复，最终相关增量检查通过。回归使用模拟服务，真实 CodeArts 模型调用仍受上文认证限制。详细阶段来源见[版本记录](docs/version-history.md)，实际验收边界以各测试报告为准。
 
 ## 开发、验证与构建
 
 源码入口仍可使用 Windows start.bat / stop.bat 或 Linux bash start.sh / bash stop.sh。先按 .env.example 指定外部 HUB_AGENTS_FILE、HUB_STATE_DIR、HUB_RESULTS_DIR。worker 配置模板在 hub/agents.windows.example.json 和 hub/agents.example.json；需要替换路径并按本机环境启用。
 
 ~~~bash
+git clone https://github.com/Johhny-Xu/multi-agent-hub.git
+cd multi-agent-hub
 python tests/run_regressions.py --report docs/local-validation.json
 python scripts/audit_secrets.py --history
-python packaging/build.py --output /path/outside/repository/agenthub-releases
+python packaging/build.py --output ../agenthub-releases
 ~~~
 
 离线回归使用隔离配置与模拟服务；真实模型和网络测试为显式运行项，不包含在普通回归中。各验证层分别记录，未通过项不会被安装成功或工具注册成功覆盖。
 
 - [自动发现与配对验收](docs/release-0.8.md)
+- [CodeArts 双向接入、实际任务与认证边界](docs/codearts-compatibility.md)
 - [上一轮修复、安装与验收](docs/release-0.7.md)
 - [更新日志](CHANGELOG.md)
 - [此前完整兼容性矩阵](docs/compatibility-2026-10-08.md)
 - [Codex 插件与子代理](integrations/codex/README.md)
 - [ZCode 原生插件](plugins/agenthub-workers/README.md)
 - [DSH 预设与工作流](integrations/dsh/README.md)
+- [CodeArts 原生插件、子代理与命令](integrations/codearts/README.md)
 
 MIT License，见 [LICENSE](LICENSE)。

@@ -31,7 +31,7 @@ from availability_store import local_availability, record_outcome, refresh as re
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "0.8.0"
+SERVER_VERSION = "0.9.0"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -163,6 +163,8 @@ AGENT_ALIASES = {
     "gcp": "github-copilot",
     "mmx": "minimaxcode",
     "trae": "traecode",
+    "ca": "codearts",
+    "huawei-codearts": "codearts",
 }
 
 
@@ -602,6 +604,10 @@ def tool_hub_capabilities(args):
         aliases = profile.get("models") or {}
         default_model = aliases.get("default")
         identifiers = list(dict.fromkeys(str(item) for item in aliases.values() if item))
+        # An explicit empty default delegates selection to the official CLI.
+        # Keep a capability row so clients do not invent a provider/model ID.
+        if default_model == "" and "default" in aliases:
+            identifiers.insert(0, "")
         if selected:
             identifiers = [resolve_model(profile, selected)]
         models = []

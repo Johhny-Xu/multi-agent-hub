@@ -1,4 +1,5 @@
 __pycache__/
+.codeartsdoer/
 Microsoft/Windows/PowerShell/ModuleAnalysisCache
 *.pyc
 node_modules/

@@ -2,6 +2,7 @@
 """Install only selected components; all machine configuration stays external."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PureWindowsPath
@@ -97,6 +98,19 @@ def worker_config(app, node):
                 'cli': node_args + [str(app / 'drivers/zcode_rpc.mjs'), '--cli', cli_path, '--task', '{task}'],
                 'model_arg': '--model', 'timeout_arg': '--timeout', 'models': {'default': 'GLM-5.3-Flash'}, 'async_default': True,
                 **({'env': {'ZCODE_BUILTIN_PROVIDER_CONFIG_FILE': provider}} if provider else {})}
+    codearts_driver = app / 'drivers/codearts_cli.py'
+    if codearts_driver.is_file():
+        spec = importlib.util.spec_from_file_location('agenthub_codearts_driver', codearts_driver)
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        codearts = driver.discover_cli()
+        if codearts:
+            workers['codearts'] = {
+                'role': 'Huawei CodeArts official CLI; separate headless authentication may be required',
+                'cli': [sys.executable, str(codearts_driver), '--cli', str(codearts), '--task', '{task}'],
+                'model_arg': '--model', 'timeout_arg': '--timeout', 'workdir_via': '--cwd',
+                'models': {'default': ''}, 'async_default': True,
+            }
     return {'_comment': 'Detected stable local official entries only. Authentication/model permissions are not verified by installation. No auth files were read or copied.', 'agents': workers}
 
 
@@ -310,8 +324,12 @@ def install(args):
         if stage.exists():
             shutil.rmtree(stage)
     registrations = native.register(app, config_dir, node, args.native_hosts, args.project, args.profile,
-                                    {'codex': args.codex_home, 'zcode': args.zcode_home, 'dsh': args.dsh_home},
-                                    {'codex': args.codex_cli, 'zcode': args.zcode_cli, 'dsh': args.dsh_cli}) if component in ('plugins', 'both') else []
+                                    {'codex': args.codex_home, 'zcode': args.zcode_home, 'dsh': args.dsh_home,
+                                     'codearts': getattr(args, 'codearts_home', None)},
+                                    {'codex': args.codex_cli, 'zcode': args.zcode_cli, 'dsh': args.dsh_cli,
+                                     'codearts': getattr(args, 'codearts_cli', None)},
+                                    codearts_ide_settings=getattr(args, 'codearts_ide_settings', None),
+                                    codearts_target=getattr(args, 'codearts_target', 'both')) if component in ('plugins', 'both') else []
     started = None
     if systemd and component in ('hub', 'both'):
         unit = Path(systemd['path']); unit.parent.mkdir(parents=True, exist_ok=True)
@@ -338,9 +356,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle', type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument('--component', choices=('hub', 'plugins', 'both'))
-    for name in ('prefix', 'config-dir', 'token-file', 'project', 'codex-home', 'zcode-home', 'dsh-home'):
+    for name in ('prefix', 'config-dir', 'token-file', 'project', 'codex-home', 'zcode-home', 'dsh-home', 'codearts-home', 'codearts-ide-settings'):
         parser.add_argument('--' + name, type=Path)
-    for name in ('url', 'bind', 'python', 'node', 'codex-cli', 'zcode-cli', 'dsh-cli'):
+    for name in ('url', 'bind', 'python', 'node', 'codex-cli', 'zcode-cli', 'dsh-cli', 'codearts-cli'):
         parser.add_argument('--' + name)
     parser.add_argument('--port', type=int)
     parser.add_argument('--console-port', type=int)
@@ -351,6 +369,7 @@ def main():
     parser.add_argument('--discovery-timeout', type=float, default=1.5)
     parser.add_argument('--discovery-port', type=int, default=18766)
     parser.add_argument('--native-hosts', default='auto')
+    parser.add_argument('--codearts-target', choices=('ide', 'cli', 'both'), default='both')
     parser.add_argument('--profile', default='agenthub-client')
     args = parser.parse_args()
     try:

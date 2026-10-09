@@ -1,13 +1,13 @@
 ---
 name: dispatch-hub
-description: 使用 multi-agent-hub 的八个 worker 进行独立任务分派、并行协作和原始 ref 结果回收；适用于用户要求把任务分给多个外部代理。
+description: 使用 multi-agent-hub 的九个 worker 进行独立任务分派、并行协作和原始 ref 结果回收；适用于用户要求把任务分给多个外部代理。
 ---
 
 # multi-agent-hub 调度
 
 主代理划分任务、决定允许修改的文件并验收结果。原生子代理只是 Hub 的路由通道，外部 worker 才是任务执行者。
 
-单路任务可使用 Agent 的 `agenthub-workers:zcode`、`agenthub-workers:antigravity`、`agenthub-workers:codebuddy`、`agenthub-workers:codebuddy-cn`、`agenthub-workers:github-copilot`、`agenthub-workers:minimaxcode`、`agenthub-workers:mimocode`、`agenthub-workers:traecode` 类型。多路协作由主代理分配互不冲突的责任、并发调用插件工具，并记录每路 ref。审查阶段可提供同一份材料；文件修改阶段不得让多个 worker 竞争写同一文件。
+单路任务可使用 Agent 的 `agenthub-workers:zcode`、`agenthub-workers:antigravity`、`agenthub-workers:codebuddy`、`agenthub-workers:codebuddy-cn`、`agenthub-workers:github-copilot`、`agenthub-workers:minimaxcode`、`agenthub-workers:mimocode`、`agenthub-workers:traecode`、`agenthub-workers:codearts` 类型。多路协作由主代理分配互不冲突的责任、并发调用插件工具，并记录每路 ref。审查阶段可提供同一份材料；文件修改阶段不得让多个 worker 竞争写同一文件。
 
 ## 自包含工具与任务选项 原生 Agent 的登记 ID 也可能带插件前缀；以当前 Agent 工具实际列出的类型为准。已实测的 profileId 为 agenthub-workers:mimocode 和 codebuddy-cn，其定义路径均来自本插件 agents/；不要硬编码旧的 agenthub: 前缀或绕到其他代理。
 

@@ -11,6 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 0.9.0：CodeArts 双向接入
+
+- 增加华为 CodeArts 第九种 worker，支持 Windows IDE 内置 AgentKernel 与 Linux 官方 CLI 的自动发现、独立任务、模型目录校验和严格结果判定。退出码 0 但认证失败、无 provider、空回答或未确认完成均不会算成功。
+- 增加 CodeArts 原生 Hooks 插件、九个子代理、三个命令、调度技能与独立 MCP；分别适配 IDE `mcpServers` 和 CLI `mcp` 配置，安装前备份并保护用户修改。
+- Codex、ZCode、DSH 增加 CodeArts 路由；四种客户端共用任务和结果协议，可连接另一台 Windows/Linux Hub。安装器与三种分发包增加 CodeArts。
+- 当前默认仅开放默认思考、非流式文本任务。CLI 的 `--thinking` 是显示开关，JSON 文本按完成块输出，图片 MIME 也未证明可用；相应选项关闭。模型默认沿用官方 CLI 配置，不猜测账号可用型号。
+- 实测发现 Windows IDE 登录不能证明独立内核已配置 provider；Linux 26.9.12 非交互 CLI 要求独立认证。原生安装、通信验证与真实模型完成分开记录，详细边界见 `docs/codearts-compatibility.md`。此版本尚未发布 Git 标签。
+- 已在两端安装原生组件；Linux Hub 升级至 0.9.0，保留原 worker、历史任务、鉴权并提供回滚备份。Windows→Linux 局域网、Linux→Windows SSH 反向通信通过；CodeArts MCP 桥派发 MiMo 单次任务得到真实答案。CodeArts 自身模型调用仍因上述官方认证/provider 问题受阻。
+- Windows 全量 26 组回归通过；Linux 首次全量的打包测试夹具错误已修复，最终六组增量和同步后的驱动测试通过，报告保留各轮覆盖范围与源码哈希。原生安装器支持工作区 IDE MCP 路径，未提供时明确标为待配置，不误报安装生效。
+- README 增加当前四种宿主/九种 worker 架构、CodeArts 两端安装示例与实测表；明确源码推送、版本标签和 Release 附件的状态，并将 0.8 SVG 标为历史范围。
+
 ### 文档 / Documentation
 
 - 统一项目正式展示名称为 `multi-agent-hub`：README、两张 SVG、控制台标题、原生插件展示信息与相关说明保持一致。既有安装目录、连接配置位置及插件 ID 保留兼容。

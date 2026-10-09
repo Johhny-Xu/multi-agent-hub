@@ -2,7 +2,7 @@
 
 本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
-DSH 包版本为 1.2.0，随 multi-agent-hub 0.8.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
+DSH 包版本为 1.3.0，随 multi-agent-hub 0.9.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
 
 首次连接或 Hub 连接失败时，调用 `mcp__agenthub__hub_discover {}` 只读扫描。扫描通过 UDP 18766 查找候选，并用无凭据 `/health` 确认；不发送 token、不写配置、不静默切换。展示候选地址供用户选择，再用安装目录的 `connect.cmd` 或 `./connect.sh` 完成配对；跨网段或防火墙阻止扫描时，在向导中手动填写地址。保存后重启该 profile 或 MCP 连接。连接文件损坏不会阻止发现，但派发会返回 `SETUP_REQUIRED`，固定文件模式也不会回退到旧环境连接。
 

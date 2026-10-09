@@ -1,0 +1,18 @@
+{
+  "checked_on": "2026-10-09",
+  "route": "Windows installed CodeArts native MCP -> LAN -> Linux production Hub -> official CodeArts CLI",
+  "native_model_invocation": false,
+  "model_success": false,
+  "dispatch_count": 1,
+  "initialize_passed": true,
+  "native_bridge_version": "0.9.0",
+  "tools_count": 7,
+  "capabilities_query_passed": true,
+  "task_status": "failed",
+  "task_ok": false,
+  "reference_present": true,
+  "ref": "codearts-1a9080dacd",
+  "error_code": "CODEARTS_AUTH_REQUIRED",
+  "transport_passed": true,
+  "owned_mcp_stopped": true
+}

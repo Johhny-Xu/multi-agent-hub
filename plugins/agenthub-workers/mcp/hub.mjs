@@ -19,6 +19,7 @@ const ALIASES = {
   mmx: "minimaxcode", minimaxcode: "minimaxcode",
   trae: "traecode", traecode: "traecode",
   zcode: "zcode",
+  ca: "codearts", codearts: "codearts", "huawei-codearts": "codearts",
 };
 
 export const CANONICAL = [...new Set(Object.values(ALIASES))].sort();
@@ -254,6 +255,9 @@ export async function ask(workerRaw, task, timeoutS = 300, options = {}) {
   if (!worker) {
     return { ok: false, status: "failed", worker: String(workerRaw || ""), ref: "", answer: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
+  if (worker === "codearts" && process.env.AGENTHUB_WORKER_ID === "codearts") {
+    return { ok: false, status: "failed", worker, ref: "", answer: "RECURSIVE_DISPATCH_DENIED: CodeArts worker cannot dispatch another CodeArts task through this bridge." };
+  }
   const error = taskError(task, timeoutS);
   if (error) return { ok: false, status: "failed", worker, ref: "", answer: error };
   return dispatchAndCollect(worker, task, timeoutS, options);
@@ -340,6 +344,9 @@ export async function dispatchOnly(workerRaw, task, timeoutS = 900, options = {}
   const worker = resolveWorker(workerRaw);
   if (!worker) {
     return { ok: false, worker: String(workerRaw || ""), ref: "", error: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
+  }
+  if (worker === "codearts" && process.env.AGENTHUB_WORKER_ID === "codearts") {
+    return { ok: false, status: "failed", worker, ref: "", error: "RECURSIVE_DISPATCH_DENIED: CodeArts worker cannot dispatch another CodeArts task through this bridge." };
   }
   const error = taskError(task, timeoutS);
   if (error) return { ok: false, worker, ref: "", error };

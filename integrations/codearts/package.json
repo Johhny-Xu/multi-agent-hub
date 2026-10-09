@@ -1,0 +1,9 @@
+{
+  "name": "multi-agent-hub-codearts",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "description": "Native CodeArts Agent plugin, agents, commands and MCP client for multi-agent-hub",
+  "license": "MIT",
+  "engines": { "node": ">=20" }
+}

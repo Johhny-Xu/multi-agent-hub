@@ -31,6 +31,11 @@ def discover(node, overrides=None):
         'zcode': [os.environ.get('ZCODE_CLI'), '/opt/ZCode/resources/glm/zcode.cjs', str(home / 'zcode-app/opt/ZCode/resources/glm/zcode.cjs'),
                   'C:/Program Files/ZCode/resources/glm/zcode.cjs', shutil.which('zcode')],
         'dsh': [shutil.which('dsh')],
+        'codearts': [os.environ.get('CODEARTS_CLI'), shutil.which('codearts'),
+                     str(home / '.local/bin/codearts'), str(home / '.codeartsdoer/installers/codearts'),
+                     str(home / '.codeartsdoer/installers/bin/codearts'),
+                     str(Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / 'CodeArts Agent/codearts-agent.exe'),
+                     '/opt/CodeArts Agent/codearts-agent', '/usr/share/codearts-agent/codearts-agent'],
     }
     candidates['codex'] += [str(path) for path in sorted((local / 'OpenAI/Codex/bin').glob('*/codex.exe'), key=lambda p: p.stat().st_mtime, reverse=True)]
     found = {}
@@ -154,12 +159,13 @@ def install_zcode_plugin(argv, env, app, backup):
         raise SetupError('ZCode did not report the installed multi-agent-hub plugin')
 
 
-def register(app, config_dir, node, selected='auto', project=None, profile='agenthub-client', homes=None, overrides=None):
+def register(app, config_dir, node, selected='auto', project=None, profile='agenthub-client', homes=None, overrides=None,
+             *, codearts_ide_settings=None, codearts_target='both'):
     app = Path(app); config_dir = Path(config_dir); homes = homes or {}
     hosts = discover(node, overrides)
     requested = list(hosts) if selected == 'auto' else [] if selected == 'none' else selected.split(',')
     if any(name not in hosts for name in requested):
-        raise SetupError('--native-hosts must be auto, none, or a comma-separated codex,zcode,dsh list')
+        raise SetupError('--native-hosts must be auto, none, or a comma-separated codex,zcode,dsh,codearts list')
     records = []
     for name in requested:
         argv = hosts[name]
@@ -169,6 +175,37 @@ def register(app, config_dir, node, selected='auto', project=None, profile='agen
                             **({'error': 'Configured native CLI was not found or is not an executable entry'} if explicit else {})})
             continue
         env = dict(os.environ, AGENTHUB_CONFIG=str(config_dir / 'client.json'), AGENTHUB_CONNECTION_MODE='file')
+        if name == 'codearts':
+            # Preserve the original path so the native installer's reparse and
+            # symlink checks cannot be bypassed by resolving it prematurely.
+            home = Path(homes.get(name) or Path.home() / '.codeartsdoer').expanduser().absolute()
+            settings = codearts_ide_settings
+            if settings is None and project:
+                settings = Path(project).resolve() / '.codeartsdoer/mcp/mcp_settings.json'
+            backup = config_dir / 'native-backups' / (str(time.time_ns()) + '-codearts')
+            try:
+                spec = importlib.util.spec_from_file_location('agenthub_codearts_installer', app / 'integrations/codearts/install.py')
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                targets = ('ide', 'cli') if codearts_target == 'both' else (codearts_target,)
+                pending = []
+                if 'ide' in targets and settings is None:
+                    if codearts_target == 'ide':
+                        raise SetupError('CodeArts IDE registration needs --project or --codearts-ide-settings for its actual MCP settings file')
+                    targets = ('cli',)
+                    pending = ['ide']
+                outcome = module.install(home, app / 'integrations/codearts', config_dir / 'client.json',
+                                         node=node['argv'][0], targets=targets, ide_settings=settings,
+                                         backup_dir=backup, apply=True)
+                if not isinstance(outcome, dict) or outcome.get('ok') is not True:
+                    raise SetupError('CodeArts registration preserved conflicting or invalid user configuration; review its installer plan')
+                records.append({'host': name, 'status': 'registered', 'reload_required': True,
+                                'targets': list(targets), 'pending_targets': pending,
+                                **({'next_step': 'Use --project or --codearts-ide-settings to register the IDE MCP connection'} if pending else {}),
+                                'configuration_backups': str(backup) if backup.exists() else None})
+            except (SetupError, OSError, ValueError, ImportError) as error:
+                records.append({'host': name, 'status': 'failed', 'error': str(error)})
+            continue
         home = Path(homes.get(name) or env.get({'codex': 'CODEX_HOME', 'zcode': 'ZCODE_STORAGE_DIR', 'dsh': 'DSH_HOME'}[name]) or Path.home() / ('.zcode' if name == 'zcode' else '.' + name)).resolve()
         home.mkdir(parents=True, exist_ok=True)
         env[{'codex': 'CODEX_HOME', 'zcode': 'ZCODE_STORAGE_DIR', 'dsh': 'DSH_HOME'}[name]] = str(home)

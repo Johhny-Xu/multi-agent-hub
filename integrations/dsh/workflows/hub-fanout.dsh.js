@@ -1,10 +1,10 @@
 // DSH workflow body; submit as workflow.script with meta and args JSON.
 const input = args || {};
 if (typeof input.task !== "string" || !input.task.trim()) throw new Error("task must be a nonempty string");
-const aliases = { agy: "antigravity", cb: "codebuddy", "codebuddy-intl": "codebuddy", cbcnintl: "codebuddy", intl: "codebuddy", cbcn: "codebuddy-cn", gcp: "github-copilot", copilot: "github-copilot", mmx: "minimaxcode", mimo: "mimocode", trae: "traecode" };
-const names = ["antigravity", "codebuddy", "codebuddy-cn", "github-copilot", "minimaxcode", "mimocode", "traecode", "zcode"];
+const aliases = { agy: "antigravity", cb: "codebuddy", "codebuddy-intl": "codebuddy", cbcnintl: "codebuddy", intl: "codebuddy", cbcn: "codebuddy-cn", gcp: "github-copilot", copilot: "github-copilot", mmx: "minimaxcode", mimo: "mimocode", trae: "traecode", ca: "codearts", "huawei-codearts": "codearts" };
+const names = ["antigravity", "codebuddy", "codebuddy-cn", "github-copilot", "minimaxcode", "mimocode", "traecode", "zcode", "codearts"];
 const raw = input.workers === undefined ? ["antigravity", "codebuddy", "traecode"] : typeof input.workers === "string" ? input.workers.split(/[,，\s]+/).filter(Boolean) : input.workers;
-if (!Array.isArray(raw) || !raw.length || raw.length > 8) throw new Error("workers must contain 1 to 8 workers");
+if (!Array.isArray(raw) || !raw.length || raw.length > names.length) throw new Error("workers must contain 1 to " + names.length + " workers");
 const workers = [...new Set(raw.map((value) => {
   if (typeof value !== "string") throw new Error("worker must be a string");
   const key = value.trim().toLowerCase();

@@ -1,0 +1,106 @@
+{
+  "checked_on": "2026-10-09",
+  "platform": "linux-x86_64",
+  "scope": "Read-only CodeArts installation inspection and one isolated no-tool model probe. No credential values, private hostnames, usernames, or account identifiers are recorded.",
+  "installation": {
+    "cli_found": true,
+    "cli_version": "26.9.12",
+    "launcher": "~/.local/bin/codearts",
+    "launcher_target": "~/.codeartsdoer/installers/codearts",
+    "binary": "~/.codeartsdoer/installers/bin/codearts",
+    "cli_configuration": "~/.codeartsdoer/codearts_cli.json",
+    "cli_data_directory": "~/.codeartsdoer/cli-data",
+    "cli_oauth_record_present": true,
+    "cli_ak_sk_environment_present": false,
+    "ide_data_directory_present": false,
+    "ide_installation_status": "not_found_in_checked_locations",
+    "ide_checked_locations": [
+      "/opt",
+      "~/.config",
+      "~/.local/share/applications",
+      "/usr/share/applications",
+      "dpkg package metadata"
+    ],
+    "desktop_launcher_kind": "Terminal running the CodeArts CLI; it is not evidence of an installed graphical IDE."
+  },
+  "existing_hub": {
+    "installed": true,
+    "directory": "~/agent-hub",
+    "listener": "0.0.0.0:8765",
+    "worker_count": 8,
+    "codearts_worker_present": false,
+    "changed": false,
+    "restarted": false
+  },
+  "cli_features_observed_in_help": {
+    "subcommands": ["run", "agent", "mcp", "serve", "attach", "models"],
+    "run_arguments": ["--format json", "--model", "--agent", "--file", "--variant", "--thinking", "--attach", "--password"],
+    "reasoning_caution": "--thinking displays thinking blocks; it does not establish that a model supports reasoning control. --variant is provider-specific."
+  },
+  "checks": [
+    {
+      "name": "version_and_run_help",
+      "status": "passed"
+    },
+    {
+      "name": "minimal_real_model_request",
+      "status": "blocked_authentication",
+      "requested_behavior": "Reply with one marker; do not use tools or read/write files.",
+      "exit_code": 0,
+      "diagnostic": "Authentication failed: CODEARTS_CLI_AK/CODEARTS_CLI_SK environment variables are not set.",
+      "returned_model_text": false,
+      "interpretation": "Exit code zero must not be treated as model success. Existing CLI OAuth state did not authorize this non-interactive invocation."
+    },
+    {
+      "name": "agent_list_mcp_list_models",
+      "status": "blocked_authentication",
+      "exit_code": 0,
+      "diagnostic": "The same missing-AK/SK check prevented these native CLI commands."
+    },
+    {
+      "name": "graphical_ide_native_extension",
+      "status": "not_verified",
+      "reason": "No graphical IDE installation or codearts-data directory was found in the checked locations."
+    },
+    {
+      "name": "reasoning_streaming_image_file_matrix",
+      "status": "not_verified",
+      "reason": "The baseline model request is blocked by authentication. Help flags alone do not verify model capabilities."
+    }
+  ],
+  "native_configuration_contracts": {
+    "agents": {
+      "personal": "~/.codeartsdoer/agents/*.md",
+      "project": ".codeartsdoer/agents/*.md",
+      "frontmatter": {"description": "required", "mode": "subagent|primary|all", "model": "optional provider/model"}
+    },
+    "cli_mcp": {
+      "configuration": "~/.codeartsdoer/codearts_cli.json or codearts_cli.jsonc; project equivalents are supported",
+      "top_level_key": "mcp",
+      "local_server_example": {"type": "local", "command": ["node", "/absolute/plugin/mcp/server.mjs"], "enabled": true, "timeout": 100000}
+    },
+    "ide_mcp": {
+      "configuration": "The IDE-managed mcp_settings.json; resolve the real path before writing",
+      "top_level_key": "mcpServers",
+      "stdio_server_example": {"command": "node", "args": ["/absolute/plugin/mcp/server.mjs"]}
+    },
+    "cli_hooks": {
+      "personal": "~/.codeartsdoer/plugin/*.ts",
+      "contract": "Export a plugin function returning supported lifecycle hooks. This is different from a VS Code extension."
+    }
+  },
+  "sources": [
+    "https://support.huaweicloud.com/intl/zh-cn/usermanual-cli/codeartsagent_cli_0031.html",
+    "https://support.huaweicloud.com/intl/zh-cn/usermanual-codeartsagent/codeartsagent_ug_0051.html",
+    "https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_0035.html",
+    "https://support.huaweicloud.com/usermanual-codeartsagent/codeartsagent_ug_0010.html",
+    "https://support.huaweicloud.com/intl/en-us/usermanual-cli/codeartsagent_cli_0018.html"
+  ],
+  "safety": {
+    "new_cli_installed": false,
+    "daily_configuration_modified": false,
+    "credentials_modified_or_exported": false,
+    "debug_ports_opened": false,
+    "running_ide_or_hub_restarted": false
+  }
+}

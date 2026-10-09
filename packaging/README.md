@@ -1,4 +1,4 @@
-multi-agent-hub 0.8.0 将服务器与原生客户端分开安装：`hub` 包提供 Python HTTP Hub 和可选控制台，`plugins` 包只提供 Codex、ZCode、DSH 客户端，`both` 包可安装任一组件或同机共存。
+multi-agent-hub 0.9.0 将服务器与原生客户端分开安装：`hub` 包提供 Python HTTP Hub 和可选控制台，`plugins` 包只提供 Codex、ZCode、DSH、CodeArts 客户端，`both` 包可安装任一组件或同机共存。
 
 解压后，Windows 双击 `install.cmd`，Linux 运行 `./install.sh`。默认组件跟随包名；Hub 安装后自动启动在 `127.0.0.1:8765`，控制台默认关闭。`--no-start` 可只安装。插件安装不会启动或停止已有 Hub；检测到的官方宿主通过各自原生 CLI 注册，缺少的宿主会显示 `not_installed`，注册失败返回非零退出码。
 
@@ -38,6 +38,10 @@ Linux 可显式使用 `--systemd-user`，需要可工作的用户 systemd 会话
 
 worker 配置只发现稳定的官方 CLI 路径，不证明账号或模型权限。仅发现的入口写入外部 `agents.json`；任意临时目录的便携程序不会自动加入。CodeBuddy 使用 standard 代理、Read 工具及 acceptEdits 预授权；MiMo 提供 default、26f、v2.6f 别名；ZCode 请求的 GLM 型号不存在时会在发送前拒绝，不换用其他模型。
 
-原生选项：`--native-hosts auto|none|codex,zcode,dsh`、`--project PATH`、`--profile NAME`、`--codex-home PATH`、`--zcode-home PATH`、`--dsh-home PATH`，以及对应 `--codex-cli` / `--zcode-cli` / `--dsh-cli`。Codex 项目代理默认放在稳定的 `PREFIX/workspace`，或指定项目；打开该项目即可发现代理。
+原生选项：`--native-hosts auto|none|codex,zcode,dsh,codearts`、`--project PATH`、`--profile NAME`、`--codex-home PATH`、`--zcode-home PATH`、`--dsh-home PATH`、`--codearts-home PATH`，以及对应 `--codex-cli` / `--zcode-cli` / `--dsh-cli` / `--codearts-cli`。逗号列表可以只选所需宿主。Codex 项目代理默认放在稳定的 `PREFIX/workspace`，或指定项目；打开该项目即可发现代理。
+
+CodeArts 支持 `--codearts-target ide|cli|both`。IDE 连接需要 `--project` 指向实际 CodeArts 工作区，或 `--codearts-ide-settings` 指定其“配置 MCP”打开的文件。默认 both 未指定工作区时会登记 CLI 与公共原生资产，并将 IDE 标为 `pending_targets`，不会将猜测的配置位置标成 IDE 已连接。例：`install.cmd --component plugins --native-hosts codearts --project C:\Work\my-project --url SERVER:8765 --token-file C:\private\hub-token.txt`。原生插件登记后重载 IDE，CLI 则重新启动；不会自动重启你的会话。
+
+CodeArts worker 使用正式 CLI/IDE 内置内核，独立会话并严格识别 exit=0 的认证失败。官方默认模型留空表示继承 CLI 模型配置；不是一个虚构模型 ID。IDE 登录与 CLI 非交互认证可能不同，安装不会读取或复制厂商凭据。当前禁用显式思考、流式与附件，详见 [CodeArts 验证边界](../docs/codearts-compatibility.md)。
 
 每个 ZIP 根目录包含 `manifest.json` 和 `SHA256SUMS`。发布目录也有各 ZIP 的校验清单；安装器按 manifest 验证分发源码。包内不含机器配置、日志、备份、个人会话或登录信息。

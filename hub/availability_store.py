@@ -48,13 +48,13 @@ def classify_failure(status, text):
     if status == "timeout":
         return "timeout"
     diagnostic = str(text).lower()
-    if ("401" in diagnostic and any(t in diagnostic for t in ("auth", "unauthorized", "login"))) or any(t in diagnostic for t in ("invalid api key", "invalid_api_key", "authentication required")):
+    if ("401" in diagnostic and any(t in diagnostic for t in ("auth", "unauthorized", "login"))) or any(t in diagnostic for t in ("invalid api key", "invalid_api_key", "authentication required", "authentication_required", "codearts_auth_required")):
         return "authentication_required"
     if "failed_precondition" in diagnostic and "region" in diagnostic or any(t in diagnostic for t in ("region restricted", "not supported in your country", "unsupported region", "user location is not supported")):
         return "region_restricted"
     if any(t in diagnostic for t in ("quota exceeded", "quota_exceeded", "insufficient credits", "credit balance is too low", "quota exhausted")):
         return "quota_exhausted"
-    if any(t in diagnostic for t in ("model_selection_not_applied", "model_catalog_unavailable", "model_ambiguous")) or re.search(r"(?:model.{0,100}(?:not found|unavailable|not available|does not exist)|unknown model|model_not_found)", diagnostic):
+    if any(t in diagnostic for t in ("model_selection_not_applied", "model_catalog_unavailable", "model_ambiguous", "codearts_provider_unavailable", "no providers found")) or re.search(r"(?:model.{0,100}(?:not found|unavailable|not available|does not exist)|unknown model|model_not_found)", diagnostic):
         return "model_unavailable"
     if "tool_protocol_unverified" in diagnostic:
         return "tool_protocol_unverified"

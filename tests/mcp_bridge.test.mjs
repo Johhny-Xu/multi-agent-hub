@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/"];
+const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/", "../integrations/codearts/mcp/"];
 
 test("Hub tokens are sent in Authorization and explicit URL credentials take precedence", async (t) => {
   const received = [];
@@ -99,6 +99,25 @@ test("bridge task and transport regressions", async (t) => {
       await t.test("rejects inherited aliases", () => {
         for (const name of ["constructor", "__proto__", "toString"]) assert.equal(bridge.resolveWorker(name), null);
         assert.equal(bridge.resolveWorker(" CBCN "), "codebuddy-cn");
+        assert.equal(bridge.resolveWorker(" CA "), "codearts");
+        assert.equal(bridge.resolveWorker("huawei-codearts"), "codearts");
+      });
+      await t.test("CodeArts workers cannot recursively dispatch through any bridge copy", async () => {
+        const previous = process.env.AGENTHUB_WORKER_ID;
+        requests = [];
+        try {
+          process.env.AGENTHUB_WORKER_ID = 'codearts';
+          for (const alias of ['codearts', 'ca', 'huawei-codearts']) {
+            const reply = await bridge.ask(alias, 'This must never reach the Hub');
+            assert.equal(reply.ok, false);
+            assert.match(reply.answer, /RECURSIVE_DISPATCH_DENIED/);
+            assert.equal((await bridge.dispatchOnly(alias, 'This must never reach the Hub')).ok, false);
+          }
+          assert.equal(requests.length, 0);
+        } finally {
+          if (previous === undefined) delete process.env.AGENTHUB_WORKER_ID;
+          else process.env.AGENTHUB_WORKER_ID = previous;
+        }
       });
       await t.test("does not repeat a completed task with empty text", async () => {
         mode = "empty"; requests = [];

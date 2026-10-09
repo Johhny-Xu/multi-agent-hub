@@ -1,0 +1,16 @@
+{
+  "checked_on": "2026-10-09",
+  "surface": "installed CodeArts native MCP bridge",
+  "native_model_invocation": false,
+  "transport": "stdio_to_http_loopback",
+  "dispatch_count": 1,
+  "initialize_passed": true,
+  "tools_count": 7,
+  "worker": "mimocode",
+  "ref": "mimocode-30e37465a0",
+  "status": "completed",
+  "ok": true,
+  "answer_is_42": true,
+  "passed": true,
+  "answer": "42"
+}

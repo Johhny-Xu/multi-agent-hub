@@ -62,9 +62,14 @@ def main():
         ("packaging_audit", "packaging_audit_regressions.py"),
         ("discovery", "discovery_regressions.py"),
         ("packaging_discovery", "packaging_discovery.py"),
+        ("codearts_driver", "codearts_driver_regressions.py"),
+        ("codearts_native_install", "codearts_native_install.py"),
+        ("codearts_hub_contract", "codearts_hub_contract.py"),
+        ("codearts_packaging", "codearts_packaging.py"),
     )]
     groups += [("mcp_bridge", [node, "--test", "tests/mcp_bridge.test.mjs", "tests/task_bridge.test.mjs", "plugins/agenthub-workers/scripts/test-login.mjs", "tests/discovery.test.mjs"]),
                ("zcode_rpc", [node, "--test", "tests/zcode_rpc.test.mjs"]),
+               ("codearts_native_plugin", [node, "--test", "tests/codearts_native_plugin.mjs"]),
                ("native_plugin_config", [node, "--test", "tests/native_plugins_config.mjs", "tests/native_plugins_contract.mjs", "tests/client_config.test.mjs"]),
                ("console", [node, "--test", "tests/console_smoke.mjs", "tests/console_capabilities_dom.mjs", "tests/console_capabilities_core.mjs"]),
                ("dsh_workflows", [node, "--test", "tests/dsh_workflows.test.mjs", "tests/dsh_connection.test.mjs"])]

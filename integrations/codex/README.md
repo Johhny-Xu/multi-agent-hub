@@ -1,6 +1,6 @@
 # multi-agent-hub for Codex
 
-此目录是独立的 Codex 插件包：3 个工作流技能、stdio MCP 桥接，以及 8 个项目级原生代理模板。包版本为 `0.8.0`。Node.js 需要 **20 或更高**；项目安装脚本需要 Python **3.11 或更高**。MCP 的六个文件（含 `discovery.mjs`）直接复制仓库根 `mcp/`，无需 npm 依赖。可独立安装并连接其他机器上的 Hub，见[安装包说明](../../packaging/README.md)。
+此目录是独立的 Codex 插件包：3 个工作流技能、stdio MCP 桥接，以及 9 个项目级原生代理模板。包版本为 `0.9.0`。Node.js 需要 **20 或更高**；项目安装脚本需要 Python **3.11 或更高**。MCP 的六个文件（含 `discovery.mjs`）直接复制仓库根 `mcp/`，无需 npm 依赖。可独立安装并连接其他机器上的 Hub，见[安装包说明](../../packaging/README.md)。
 
 原生 `agenthub_*` 代理仍使用父会话的 Codex 模型和权限，通过 MCP 派发给外部 worker。外部 worker 的认证、模型与运行目录由 Hub 的 profile 决定。代理模板不指定模型，不降低 sandbox，不代替 Hub 登录。
 
@@ -21,7 +21,7 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 
 ### 原生插件的 Hub 地址
 
-0.8.0 安装包统一使用外部 `client.json`：Windows 为 `%LOCALAPPDATA%/AgentHub/client.json`，Linux 为 `$XDG_CONFIG_HOME/agenthub/client.json` 或 `~/.config/agenthub/client.json`，字段为 `url` 和可选 `token`。插件读取该文件不依赖 Codex 转发自定义环境。安装器用 `AGENTHUB_CONFIG` 指定路径，并设置 `AGENTHUB_CONNECTION_MODE=file`，固定读取文件，防止宿主继承的旧 URL/token 覆盖新连接。未设置该模式的源码入口仍是显式环境优先；更换 URL 时不会把另一端点保存的 token 发过去。下面的 `PLUGIN_DATA` 配置仍兼容，并优先于标准位置。
+0.9.0 安装包统一使用外部 `client.json`：Windows 为 `%LOCALAPPDATA%/AgentHub/client.json`，Linux 为 `$XDG_CONFIG_HOME/agenthub/client.json` 或 `~/.config/agenthub/client.json`，字段为 `url` 和可选 `token`。插件读取该文件不依赖 Codex 转发自定义环境。安装器用 `AGENTHUB_CONFIG` 指定路径，并设置 `AGENTHUB_CONNECTION_MODE=file`，固定读取文件，防止宿主继承的旧 URL/token 覆盖新连接。未设置该模式的源码入口仍是显式环境优先；更换 URL 时不会把另一端点保存的 token 发过去。下面的 `PLUGIN_DATA` 配置仍兼容，并优先于标准位置。
 
 原生插件与项目 MCP fragment 的环境传递不同：实测 Codex `0.162.0-alpha.2` 会过滤插件子进程环境，直接给 Codex 设置 `AGENTHUB_URL` 不会传给插件；便携 `mcp.json` 里的 `${env.AGENTHUB_URL}` 也不会展开。插件启动器因此支持宿主提供的 `PLUGIN_DATA/agenthub.json`。在 `codex mcp list --json` 的 agenthub transport.env.PLUGIN_DATA 中找到本次安装的数据目录，在该目录写入：
 

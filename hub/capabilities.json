@@ -276,6 +276,39 @@
     },
     "stream_semantics": "terminal_only"
   },
+  "codearts": {
+    "thinking": {
+      "on": {
+        "supported": false,
+        "reason": "CodeArts --thinking controls display only; provider-specific reasoning variants have not been verified for the configured model."
+      },
+      "off": {
+        "supported": false,
+        "reason": "No strict thinking-off control has been verified for the configured CodeArts model; inherit its default behavior."
+      }
+    },
+    "stream": {
+      "on": {
+        "supported": false,
+        "reason": "CodeArts JSON event output does not establish verified incremental answer delivery; the current driver returns the terminal result."
+      },
+      "off": {
+        "args": ["--stream", "off"]
+      }
+    },
+    "attachments": {
+      "file": {
+        "supported": false,
+        "reason": "File attachment delivery has not passed a real authenticated CodeArts model request on this adapter."
+      },
+      "image": {
+        "supported": false,
+        "reason": "CodeArts CLI --file may label an image as text/plain; end-to-end image MIME and visual understanding have not been verified."
+      }
+    },
+    "stream_semantics": "terminal_only",
+    "notes": "Use the official CodeArts configured default model unless a locally declared model is explicitly selected. CLI presence, OAuth records and exit code zero do not establish successful authentication or model execution."
+  },
   "antigravity": {},
   "traecode": {}
 }
