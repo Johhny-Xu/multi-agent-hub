@@ -9,6 +9,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，ZIP 尚未上传远程 Release。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [Unreleased]
+
+### 文档 / Documentation
+
+- 补齐 0.8 架构 SVG：Codex / ZCode / DSH、hub / plugins / both 独立部署、扫描与配对、7 个工具、8 个默认模型，以及真实的数据流与连接边界；MiMo 标为 26f。
+- 更新 0.5–0.8 路线 SVG，纠正 Linux 仍搁置、Codex 尚未适配等旧描述；分别显示回归、网络发现和正式安装包验收范围，并保留 DSH 额度、网络与账号模型限制。
+- README 展示两张可缩放矢量图；完成实际浏览器渲染及文字重叠、边界检查。此为后续文档更新，既有版本标签保持原提交。
+
+---
+
 ## [0.8.0] - 2026-10-09
 
 ### 自动发现与连接选择
