@@ -1,0 +1,95 @@
+{
+  "kind": "real-linux-native-zcode-plugin-host",
+  "windows_credentials_copied": false,
+  "existing_gui_configuration_modified": false,
+  "native_entry_exists": true,
+  "generation_verified": false,
+  "existing_provider_configuration_filename_exists": true,
+  "discovery": [
+    {
+      "operation": [
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "0.16.9\n",
+      "stderr": ""
+    },
+    {
+      "operation": [
+        "plugins",
+        "validate"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"path\": \"/tmp/agenthub-platform-mudkznsr/plugins/agenthub-workers\",\n  \"ok\": true,\n  \"diagnostics\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "operation": [
+        "plugins",
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"commandRootCount\": 1,\n    \"dataPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/data/agenthub-workers@inline\",\n    \"enabled\": true,\n    \"id\": \"agenthub-workers@inline\",\n    \"manifestPath\": \"/tmp/agenthub-platform-mudkznsr/plugins/agenthub-workers/.zcode-plugin/plugin.json\",\n    \"marketplace\": \"inline\",\n    \"declaredMcpServerNames\": [\n      \"hub-bridge\"\n    ],\n    \"mcpServerNames\": [\n      \"plugin:agenthub-workers:hub-bridge\"\n    ],\n    \"hookDetails\": [],\n    \"name\": \"agenthub-workers\",\n    \"rootPath\": \"/tmp/agenthub-platform-mudkznsr/plugins/agenthub-workers\",\n    \"skillCount\": 1,\n    \"skillRootCount\": 1,\n    \"source\": \"inline\",\n    \"diagnostics\": [],\n    \"description\": \"Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.\",\n    \"version\": \"0.5.0\"\n  },\n  {\n    \"commandRootCount\": 0,\n    \"dataPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/data/node-repl-host@zcode-plugins-official\",\n    \"enabled\": true,\n    \"id\": \"node-repl-host@zcode-plugins-official\",\n    \"manifestPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/node-repl-host/0.6.0/.zcode-plugin/plugin.json\",\n    \"marketplace\": \"zcode-plugins-official\",\n    \"declaredMcpServerNames\": [],\n    \"mcpServerNames\": [],\n    \"hookDetails\": [],\n    \"name\": \"node-repl-host\",\n    \"rootPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/node-repl-host/0.6.0\",\n    \"skillCount\": 0,\n    \"skillRootCount\": 0,\n    \"source\": \"official\",\n    \"diagnostics\": [],\n    \"description\": \"Shared node_repl runtime host for ZCode official capabilities. Not user-facing: it carries no skill and appears in no marketplace listing; Browser Use and Computer Use enable it and contribute their own skills, docs and runtime assets.\",\n    \"version\": \"0.6.0\"\n  },\n  {\n    \"commandRootCount\": 0,\n    \"dataPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/data/android-emulator@zcode-plugins-official\",\n    \"enabled\": false,\n    \"id\": \"android-emulator@zcode-plugins-official\",\n    \"manifestPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/android-emulator/0.1.0/.zcode-plugin/plugin.json\",\n    \"marketplace\": \"zcode-plugins-official\",\n    \"declaredMcpServerNames\": [\n      \"android-emulator\"\n    ],\n    \"mcpServerNames\": [],\n    \"hookDetails\": [],\n    \"name\": \"android-emulator\",\n    \"rootPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/android-emulator/0.1.0\",\n    \"skillCount\": 0,\n    \"skillRootCount\": 0,\n    \"source\": \"official\",\n    \"diagnostics\": [],\n    \"description\": \"Provides Android development workflows and emulator automation for ZCode.\",\n    \"version\": \"0.1.0\"\n  },\n  {\n    \"commandRootCount\": 0,\n    \"dataPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/data/browser-use@zcode-plugins-official\",\n    \"enabled\": true,\n    \"id\": \"browser-use@zcode-plugins-official\",\n    \"manifestPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/browser-use/0.5.1/.zcode-plugin/plugin.json\",\n    \"marketplace\": \"zcode-plugins-official\",\n    \"declaredMcpServerNames\": [],\n    \"mcpServerNames\": [],\n    \"hookDetails\": [],\n    \"name\": \"browser-use\",\n    \"rootPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/browser-use/0.5.1\",\n    \"skillCount\": 2,\n    \"skillRootCount\": 1,\n    \"source\": \"official\",\n    \"diagnostics\": [],\n    \"description\": \"Built-in browser automation runtime and guidance for Desktop IAB and explicitly enabled CLI-managed headless CDP: open, navigate, inspect, click, type, screenshot, record workspace WebM videos, and verify web pages and local dev targets.\",\n    \"version\": \"0.5.1\"\n  },\n  {\n    \"commandRootCount\": 0,\n    \"dataPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/data/documents@zcode-plugins-official\",\n    \"enabled\": true,\n    \"id\": \"documents@zcode-plugins-official\",\n    \"manifestPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/documents/0.1.7/.zcode-plugin/plugin.json\",\n    \"marketplace\": \"zcode-plugins-official\",\n    \"declaredMcpServerNames\": [],\n    \"mcpServerNames\": [],\n    \"hookDetails\": [],\n    \"name\": \"documents\",\n    \"rootPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/documents/0.1.7\",\n    \"skillCount\": 1,\n    \"skillRootCount\": 1,\n    \"source\": \"official\",\n    \"diagnostics\": [],\n    \"description\": \"DOCX document production skills, published as an official ZCode plugin.\",\n    \"version\": \"0.1.7\"\n  },\n  {\n    \"commandRootCount\": 0,\n    \"dataPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/data/pdf@zcode-plugins-official\",\n    \"enabled\": true,\n    \"id\": \"pdf@zcode-plugins-official\",\n    \"manifestPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/pdf/0.1.7/.zcode-plugin/plugin.json\",\n    \"marketplace\": \"zcode-plugins-official\",\n    \"declaredMcpServerNames\": [],\n    \"mcpServerNames\": [],\n    \"hookDetails\": [],\n    \"name\": \"pdf\",\n    \"rootPath\": \"/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/native-zcode-11c1f9f0/store/cli/plugins/cache/zcode-plugins-official/pdf/0.1.7\",\n    \"skillCount\": 1,\n    \"skillRootCount\": 1,\n    \"source\": \"official\",\n    \"diagnostics\": [],\n    \"descri",
+      "stderr": ""
+    }
+  ],
+  "exit": 0,
+  "timed_out": false,
+  "duration_s": 48.462,
+  "host_stdout_bytes": 1951,
+  "host_stderr_bytes": 23,
+  "explicit_native_agent_evidence": true,
+  "host_returned_ref_names": [
+    "codebuddy-cn-6c886bb3d7"
+  ],
+  "results": [
+    {
+      "ref": "codebuddy-cn-6c886bb3d7",
+      "status": "completed",
+      "answer": "I can't complete this request as specified. You've asked me to use the Read tool only and not execute shell commands, but in this environment the Read tool isn't available to me \u2014 I can only call Bash and Edit inside the REPL. So I have no way to open those attachment files under the constraint you set.\n\nI also won't guess at contents I can't actually inspect: the nonce and the image's dominant color are exactly the kind of values I must not infer or fabricate.\n\nIf you'd like, I can read the files via Bash (e.g. `cat` for the text nonce, and an image tool for the dominant color) instead. That requires lifting the \"no shell commands\" restriction. Want me to proceed that way?",
+      "exit_code": 0,
+      "attachments": [
+        {
+          "name": "input.txt",
+          "kind": "file",
+          "bytes": 45,
+          "mode": "prompt_path"
+        },
+        {
+          "name": "input.png",
+          "kind": "image",
+          "bytes": 168,
+          "mode": "prompt_path"
+        }
+      ],
+      "usage": {
+        "model": "deepseek-v4.1-flash",
+        "input_tokens": 0,
+        "output_tokens": 156,
+        "cache_read_tokens": 6400,
+        "cache_write_tokens": 169
+      },
+      "generation_verified": false
+    }
+  ],
+  "outcome": "native_chain_not_verified",
+  "host_stderr_summary": "ZCode Built-in missing\n",
+  "native_agent_metadata": [
+    {
+      "profile_id": "codebuddy-cn",
+      "profile_name": "codebuddy-cn",
+      "profile_path": "/tmp/agenthub-platform-mudkznsr/plugins/agenthub-workers/agents/codebuddy-cn.md",
+      "status": "completed",
+      "total_tool_use_count": 1,
+      "metadata_snapshot_keys": [
+        "name",
+        "description",
+        "source",
+        "systemPrompt",
+        "path",
+        "color",
+        "tools"
+      ]
+    }
+  ]
+}

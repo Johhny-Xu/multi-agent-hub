@@ -42,6 +42,22 @@ class HubCoreRegressions(unittest.TestCase):
         hub.tool_hub_post_task({"from_agent": "owner", "to_agent": "cb", "title": "fixture"})
         return json.loads((hub.STATE / "tasks.json").read_text(encoding="utf-8"))["tasks"][0]["id"]
 
+    def test_transient_result_sharing_failure_preserves_existing_metadata(self):
+        original = {'agent': 'fixture-worker', 'status': 'running', 'task': 'original task'}
+        with patch.object(Path, 'read_text', side_effect=[PermissionError('busy'), json.dumps(original)]):
+            result = update_result(hub.RESULTS_DIR, 'sharing-fixture', {'progress': 'new text'})
+        self.assertEqual(result['agent'], 'fixture-worker')
+        self.assertEqual(result['task'], 'original task')
+        self.assertEqual(read_result(hub.RESULTS_DIR, 'sharing-fixture')['progress'], 'new text')
+
+    def test_corrupt_existing_result_is_never_overwritten_as_empty_state(self):
+        path = Path(hub.RESULTS_DIR) / 'corrupt.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{broken fixture', encoding='utf-8')
+        with self.assertRaises(RuntimeError):
+            update_result(hub.RESULTS_DIR, 'corrupt', {'progress': 'new text'})
+        self.assertEqual(path.read_text(encoding='utf-8'), '{broken fixture')
+
     def test_completion_requires_claim_owner_and_cannot_rewrite_terminal(self):
         tid = self.task()
         hub.tool_hub_complete_task({"task_id": tid, "agent": "cb", "result": "premature"})
@@ -210,10 +226,12 @@ class HubCoreRegressions(unittest.TestCase):
                     conn.request("POST", "/mcp?token=fixture-token", json.dumps({"jsonrpc": "2.0", "id": 3, "method": "ping"}))
                     response = conn.getresponse(); response.read()
                 self.assertNotIn("fixture-token", captured.getvalue())
-                conn.request("POST", "/mcp", "unread fixture body")
-                response = conn.getresponse(); response.read()
-                self.assertEqual(response.status, 401)
-                self.assertEqual(response.getheader("Connection"), "close")
+                for rejected_body in ("unread fixture body", "x" * 131072, ""):
+                    conn.request("POST", "/mcp", rejected_body)
+                    response = conn.getresponse()
+                    self.assertEqual(json.loads(response.read()), {"error": "unauthorized"})
+                    self.assertEqual(response.status, 401)
+                    self.assertEqual(response.getheader("Connection"), "close")
                 conn.request("POST", "/mcp", b"", {"Authorization": "Bearer fixture-token", "Content-Length": "-1"})
                 response = conn.getresponse()
                 self.assertEqual((response.status, response.read()), (413, b""))

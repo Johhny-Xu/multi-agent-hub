@@ -1,0 +1,82 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "layer": "new JavaScript bridge -> isolated HTTP Hub -> authenticated official worker CLI",
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-hub-f6qlqs2t",
+  "port": 65351,
+  "source_files_separate_from_worker_cwd": true,
+  "results": [
+    {
+      "case": "minimaxcode-1011",
+      "worker": "minimaxcode",
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "require_write": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "minimaxcode-359bb59a4c",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 108,
+        "nonce": "CHECK_c623171278"
+      },
+      "public_answer": {
+        "total": 108,
+        "nonce": "CHECK_c623171278"
+      },
+      "progress": [],
+      "elapsed_seconds": 3.095,
+      "passed": true
+    },
+    {
+      "case": "minimaxcode-1111",
+      "worker": "minimaxcode",
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "require_write": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "minimaxcode-18f7f61110",
+      "answer_verified": false,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 145,
+        "nonce": "CHECK_43adb35b65"
+      },
+      "public_answer": null,
+      "progress": [
+        {
+          "seconds": 3.111,
+          "status": "running",
+          "characters": 15
+        },
+        {
+          "seconds": 3.291,
+          "status": "running",
+          "characters": 31
+        },
+        {
+          "seconds": 3.475,
+          "status": "running",
+          "characters": 79
+        },
+        {
+          "seconds": 3.66,
+          "status": "running",
+          "characters": 131
+        }
+      ],
+      "elapsed_seconds": 3.839,
+      "passed": false
+    }
+  ],
+  "temporary_attachments_cleaned": true,
+  "owned_processes_cleaned": true
+}

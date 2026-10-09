@@ -1,0 +1,218 @@
+{
+  "generated_at": "2026-10-08T11:14:44.350Z",
+  "platform": "Windows",
+  "official_cli_version": "0.16.9",
+  "cases": [
+    {
+      "name": "default_model_preflight",
+      "elapsed_ms": 2928,
+      "requested_model": "GLM-5.3-Flash",
+      "result": {
+        "type": "result",
+        "is_error": true,
+        "subtype": "error_model_unavailable",
+        "status": "blocked_model",
+        "result": "",
+        "model": "GLM-5.3-Flash",
+        "error": {
+          "code": "MODEL_UNAVAILABLE",
+          "message": "MODEL_UNAVAILABLE"
+        }
+      },
+      "methods": [
+        "session/create",
+        "session/close"
+      ],
+      "send_count": 0,
+      "model_setter_count": 0,
+      "catalog_count": 13,
+      "actual_model": {
+        "providerId": "<runtime-provider>",
+        "modelId": "wx/Deepseek-v4-flash"
+      },
+      "confirmed_text_chunks": 0,
+      "confirmed_text": "",
+      "owned_sessions_created": 1,
+      "owned_sessions_closed": 1,
+      "owned_server_closed": true,
+      "runtime_removed": true
+    },
+    {
+      "name": "explicit_available_model_adapter_smoke",
+      "elapsed_ms": 15123,
+      "requested_model": "wx/Deepseek-v4-flash",
+      "result": {
+        "type": "result",
+        "is_error": false,
+        "subtype": "success",
+        "status": "completed",
+        "result": "HUB_ZCODE_RPC_SMOKE 122",
+        "model": "<redacted-id>/wx/Deepseek-v4-flash",
+        "session_id": "sess_<redacted-id>",
+        "usage": {
+          "input_tokens": 22541,
+          "output_tokens": 176,
+          "reasoning_tokens": 0,
+          "total_tokens": 22717,
+          "cache_read_tokens": 768,
+          "cache_write_tokens": 0
+        }
+      },
+      "methods": [
+        "session/create",
+        "session/close",
+        "session/create",
+        "session/subscribe",
+        "session/send",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/events",
+        "session/close"
+      ],
+      "send_count": 1,
+      "model_setter_count": 0,
+      "catalog_count": 13,
+      "actual_model": {
+        "providerId": "<runtime-provider>",
+        "modelId": "wx/Deepseek-v4-flash"
+      },
+      "confirmed_text_chunks": 0,
+      "confirmed_text": "",
+      "owned_sessions_created": 2,
+      "owned_sessions_closed": 2,
+      "owned_server_closed": true,
+      "runtime_removed": true
+    }
+  ],
+  "driver": "drivers/zcode_rpc.mjs",
+  "argv_contract": [
+    "node",
+    "drivers/zcode_rpc.mjs",
+    "--cli",
+    "<official absolute zcode.cjs path>",
+    "--model",
+    "<explicit requested model>",
+    "--task",
+    "<synthetic task>",
+    "--cwd",
+    "<owned temporary workspace>",
+    "--timeout",
+    "90",
+    "--stream",
+    "on|off"
+  ],
+  "auth_handling": "Existing official provider file path was passed by environment reference; file contents were never read or copied.",
+  "default_model_verified": false,
+  "default_model_status": "blocked_model",
+  "adapter_smoke_verified": true,
+  "adapter_smoke_model": "wx/Deepseek-v4-flash",
+  "live_stream_verified": false,
+  "live_stream_observation": "stream=true completed with final body, but no confirmed assistant text delta was emitted; this does not prove live streaming.",
+  "live_attachment_driver_verified": false,
+  "thinking_toggle_supported": false,
+  "native_mode_observation": "mode=plan was requested, but official 0.16.9 snapshots reported build; explicit tool denylist remains applied. File writing is not claimed or tested by this adapter smoke.",
+  "protocol_fix_evidence": {
+    "model_ref_options_lost_by_create": true,
+    "same_create_thoughtLevel_required": true,
+    "fixture": "tests/fixtures/zcode_rpc_metadata.json",
+    "fixture_cases": 3,
+    "fixture_session_send_count": 0,
+    "earlier_preflight_only_attempts": {
+      "send_count": 0,
+      "failures": [
+        "RPC_REJECTED_reasoning_level_required",
+        "MODEL_SELECTION_NOT_APPLIED_missing_current_options"
+      ]
+    }
+  },
+  "regression": {
+    "command": "node --test tests/zcode_rpc.test.mjs",
+    "passed": 22,
+    "failed": 0
+  },
+  "source_sha256": {
+    "drivers/zcode_rpc.mjs": "b07765838c0e9bbcbc155e02ec3ccf531641b57d5a6e08721427c4c2de3bc15c",
+    "tests/zcode_rpc.test.mjs": "4f290d452b91c2c2a4abaa064d66e0d30d08f703e7dfa888d0617f96153024ba",
+    "tests/fixtures/zcode_rpc_metadata.json": "6b56164af34562b5ec1a7b3b5e3ae87b003c520cbdc7fa1db954d7e6141b8932"
+  },
+  "live_harness": "Imported runZcodeTask from the frozen driver and wrapped AppServer.request to count method names; no replacement protocol/model service was used.",
+  "official_server_argv": [
+    "node",
+    "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+    "app-server",
+    "--cwd",
+    "<owned temporary workspace>"
+  ],
+  "cli_preflight": {
+    "exit_code": 1,
+    "status": "blocked_model",
+    "error_code": "MODEL_UNAVAILABLE",
+    "requested_model": "GLM-5.3-Flash",
+    "stream": false,
+    "timeout_seconds": 30,
+    "stdout_ndjson_records": 1
+  },
+  "final_restriction_update": {
+    "changes": [
+      "Explicitly deny Write and Edit after official mode was observed as build despite requesting plan",
+      "Update existing denylist regression assertion"
+    ],
+    "vendor_tasks_repeated": false,
+    "offline_regressions_passed": 22,
+    "source_sha256": {
+      "drivers/zcode_rpc.mjs": "e2e1a1e33999495ea2a974f12e0ccebc0c699632fee57b29fbf1ee417665fc8d",
+      "tests/zcode_rpc.test.mjs": "7fc312ca1b771fdf6ec8a5c77fa5cf07227886f1a49172fc879af96684e82aef",
+      "tests/fixtures/zcode_rpc_metadata.json": "6b56164af34562b5ec1a7b3b5e3ae87b003c520cbdc7fa1db954d7e6141b8932"
+    },
+    "live_source_sha256_location": "source_sha256 (unchanged live-tested snapshot)"
+  }
+}

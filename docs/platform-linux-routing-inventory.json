@@ -1,0 +1,40 @@
+{
+  "codebuddy": {
+    "entry_is_shell_wrapper": true,
+    "wrapper_environment_names": [
+      "CODEBUDDY_API_KEY_DISABLED",
+      "CODEBUDDY_CONFIG_DIR",
+      "CODEBUDDY_INTERNET_ENVIRONMENT"
+    ],
+    "routing_environment": [],
+    "official_profile_directory_exists": true,
+    "known_credential_filename_exists": true,
+    "known_credential_filename": "auth.info",
+    "wrapper_copies_profile_auth_to_shared_native_extension_file": true,
+    "wrapper_uses_shared_credential_lock": true,
+    "wrapper_lock_timeout_continues": true,
+    "wrapper_restores_original_auth_in_trap": false
+  },
+  "codebuddy-cn": {
+    "entry_is_shell_wrapper": true,
+    "wrapper_environment_names": [
+      "CODEBUDDY_API_KEY_DISABLED",
+      "CODEBUDDY_CONFIG_DIR",
+      "CODEBUDDY_INTERNET_ENVIRONMENT"
+    ],
+    "routing_environment": [],
+    "official_profile_directory_exists": true,
+    "known_credential_filename_exists": true,
+    "known_credential_filename": "auth.info",
+    "wrapper_copies_profile_auth_to_shared_native_extension_file": true,
+    "wrapper_uses_shared_credential_lock": true,
+    "wrapper_lock_timeout_continues": true,
+    "wrapper_restores_original_auth_in_trap": false
+  },
+  "audit_limits": {
+    "credential_contents_read_by_probe": false,
+    "account_credential_content_preservation_verified": false,
+    "existing_wrappers_may_change_shared_active_auth": true,
+    "existing_agents_configuration_preservation_verified": true
+  }
+}

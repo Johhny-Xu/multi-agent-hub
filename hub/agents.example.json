@@ -6,7 +6,7 @@
       "cli": [
         "/usr/local/bin/codebuddy-placeholder",
         "-p",
-        "-y"
+        "{task}"
       ],
       "model_arg": "--model",
       "models": {
@@ -25,8 +25,8 @@
       "description": "编码 worker 示例（OAuth CLI）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
       "cli": [
         "/usr/local/bin/antigravity-placeholder",
-        "--dangerously-skip-permissions",
-        "-p"
+        "-p",
+        "{task}"
       ],
       "model_arg": "--model",
       "models": {
@@ -38,7 +38,8 @@
         "flash": "gemini-3.7-flash-medium",
         "g38m": "gemini-3.8-flash-medium"
       },
-      "async_default": true
+      "async_default": true,
+      "options_before_prompt": true
     },
     "codebuddy-cn": {
       "role": "编码 worker 示例（独立配置目录）",
@@ -46,7 +47,7 @@
       "cli": [
         "/usr/local/bin/codebuddy-cn-placeholder",
         "-p",
-        "-y"
+        "{task}"
       ],
       "model_arg": "--model",
       "models": {
@@ -66,14 +67,41 @@
       }
     },
     "zcode": {
-      "role": "桌面版 worker 示例（CDP 驱动脚本）",
-      "description": "桌面版 worker 示例（CDP 驱动脚本）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
-      "cli": null,
-      "model_arg": null,
+      "role": "ZCode 官方 app-server 模型校验通道",
+      "description": "填写本仓库驱动与官方 zcode.cjs 绝对路径；先核验账号模型目录，再指定模型执行。缺少 GLM-5.3-Flash 时明确失败，不回退。plan 模式仅验证读取/问答。",
+      "cli": [
+        "node",
+        "/PATH/TO/agenthub/drivers/zcode_rpc.mjs",
+        "--cli",
+        "/PATH/TO/ZCode/resources/glm/zcode.cjs",
+        "--task",
+        "{task}"
+      ],
+      "model_arg": "--model",
       "models": {
         "default": "GLM-5.3-Flash"
       },
-      "async_default": true
+      "async_default": true,
+      "timeout_arg": "--timeout",
+      "capabilities": {
+        "stream": {
+          "on": {
+            "args": [
+              "--stream",
+              "on"
+            ]
+          },
+          "off": {
+            "args": [
+              "--stream",
+              "off"
+            ]
+          }
+        }
+      },
+      "env": {
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE": "/PATH/TO/zcode-builtin.json"
+      }
     },
     "mimocode": {
       "role": "编码 worker 示例（agentic CLI，--pure 反递归）",
@@ -85,7 +113,9 @@
       ],
       "model_arg": "-m",
       "models": {
-        "default": "9router/trae"
+        "default": "xiaomi/mimo-v2.6-flash",
+        "26f": "xiaomi/mimo-v2.6-flash",
+        "v2.6f": "xiaomi/mimo-v2.6-flash"
       },
       "async_default": true
     },
@@ -95,7 +125,6 @@
       "cli": [
         "/usr/local/bin/github-copilot-placeholder",
         "--silent",
-        "--allow-all-tools",
         "-p",
         "{task}"
       ],

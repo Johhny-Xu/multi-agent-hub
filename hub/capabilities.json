@@ -1,0 +1,236 @@
+{
+  "codebuddy": {
+    "stream": {
+      "on": {
+        "args": [
+          "--output-format",
+          "stream-json",
+          "--include-partial-messages"
+        ]
+      },
+      "off": {
+        "args": [
+          "--output-format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "prompt_path"
+      },
+      "image": {
+        "mode": "prompt_path"
+      }
+    },
+    "thinking": {
+      "on": {
+        "args": [
+          "--settings",
+          "{\"alwaysThinkingEnabled\":true}"
+        ],
+        "env": {
+          "MAX_THINKING_TOKENS": "4096"
+        },
+        "models": [
+          "deepseek-v4.1-flash"
+        ]
+      },
+      "off": {
+        "args": [
+          "--settings",
+          "{\"alwaysThinkingEnabled\":false}"
+        ],
+        "env": {
+          "MAX_THINKING_TOKENS": "0"
+        },
+        "models": [
+          "deepseek-v4.1-flash"
+        ]
+      }
+    }
+  },
+  "codebuddy-cn": {
+    "stream": {
+      "on": {
+        "args": [
+          "--output-format",
+          "stream-json",
+          "--include-partial-messages"
+        ]
+      },
+      "off": {
+        "args": [
+          "--output-format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "prompt_path"
+      },
+      "image": {
+        "mode": "prompt_path"
+      }
+    },
+    "thinking": {
+      "on": {
+        "args": [
+          "--settings",
+          "{\"alwaysThinkingEnabled\":true}"
+        ],
+        "env": {
+          "MAX_THINKING_TOKENS": "4096"
+        },
+        "models": [
+          "deepseek-v4.1-flash"
+        ]
+      },
+      "off": {
+        "args": [
+          "--settings",
+          "{\"alwaysThinkingEnabled\":false}"
+        ],
+        "env": {
+          "MAX_THINKING_TOKENS": "0"
+        },
+        "models": [
+          "deepseek-v4.1-flash"
+        ]
+      }
+    }
+  },
+  "github-copilot": {
+    "thinking": {
+      "off": {
+        "args": [
+          "--reasoning-effort",
+          "none"
+        ]
+      }
+    },
+    "stream": {
+      "on": {
+        "args": [
+          "--stream",
+          "on",
+          "--output-format",
+          "json"
+        ]
+      },
+      "off": {
+        "args": [
+          "--stream",
+          "off",
+          "--output-format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "prompt_path"
+      },
+      "image": {
+        "mode": "cli",
+        "flag": "--attachment"
+      }
+    },
+    "notes": "Default auto rejects explicit high reasoning effort; on is not declared supported."
+  },
+  "mimocode": {
+    "stream": {
+      "on": {
+        "args": [
+          "--format",
+          "json"
+        ]
+      },
+      "off": {
+        "args": [
+          "--format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "cli",
+        "flag": "--file"
+      },
+      "image": {
+        "mode": "cli",
+        "flag": "--file"
+      }
+    },
+    "thinking": {
+      "on": {
+        "args": [],
+        "models": [
+          "xiaomi/mimo-v2.6-flash"
+        ],
+        "env": {
+          "MIMOCODE_CONFIG_CONTENT": "{\"provider\":{\"xiaomi\":{\"models\":{\"mimo-v2.6-flash\":{\"options\":{\"thinking\":{\"type\":\"enabled\"}}}}}}}"
+        }
+      },
+      "off": {
+        "args": [],
+        "models": [
+          "xiaomi/mimo-v2.6-flash"
+        ],
+        "env": {
+          "MIMOCODE_CONFIG_CONTENT": "{\"provider\":{\"xiaomi\":{\"models\":{\"mimo-v2.6-flash\":{\"options\":{\"thinking\":{\"type\":\"disabled\"}}}}}}}"
+        }
+      }
+    }
+  },
+  "minimaxcode": {
+    "thinking": {
+      "on": {
+        "args": [],
+        "models": [
+          "MiniMax-M3.1-Flash-Preview"
+        ]
+      }
+    },
+    "stream": {
+      "on": {
+        "args": [
+          "--output",
+          "text",
+          "--stream"
+        ]
+      },
+      "off": {
+        "args": [
+          "--output",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "messages_file"
+      },
+      "image": {
+        "mode": "messages_file"
+      }
+    },
+    "notes": "MiniMax-M3.1-Flash-Preview always uses thinking; off is unsupported."
+  },
+  "zcode": {
+    "attachments": {
+      "file": {
+        "mode": "cli",
+        "flag": "--attach"
+      },
+      "image": {
+        "mode": "cli",
+        "flag": "--attach"
+      }
+    }
+  },
+  "antigravity": {},
+  "traecode": {}
+}

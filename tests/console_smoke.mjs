@@ -17,8 +17,11 @@ let delayDispatch = false;
 let bareDispatchRef = false;
 let dispatchTextOverride = null;
 let dispatchResponseOverride = null;
+let latestDispatchArgs = null;
 const results = new Map();
 let inbox = '';
+let agentsOverride = null;
+let modelsOverride = null;
 const hub = http.createServer(async (req, res) => {
   let body = '';
   for await (const part of req) body += part;
@@ -26,6 +29,7 @@ const hub = http.createServer(async (req, res) => {
   const name = rpc.params?.name;
   let text = '';
   if (name === 'hub_dispatch_cli') {
+    latestDispatchArgs = rpc.params.arguments;
     const ref = `probe-${(++dispatches).toString(16).padStart(10, '0')}`;
     if (delayDispatch) await new Promise((r) => setTimeout(r, 120));
     text = bareDispatchRef ? `[github-copilot/github-copilot-${ref.slice(-10)}] accepted` : `[probe/${ref}] task accepted; ref="${ref}"`;
@@ -35,9 +39,9 @@ const hub = http.createServer(async (req, res) => {
   } else if (name === 'hub_read_messages') {
     text = inbox || 'console 没有未读消息。';
     inbox = '';
-  } else if (name === 'hub_list_agents') text = '已注册代理:\n- probe [在线] 角色: synthetic | CLI: probe.exe';
+  } else if (name === 'hub_list_agents') text = agentsOverride || '已注册代理:\n- probe [在线] 角色: synthetic | CLI: probe.exe';
   else if (name === 'hub_list_tasks') text = '没有匹配的任务。';
-  else if (name === 'hub_list_models') text = '各 worker 可选模型:\n- probe: model_arg=--model | 默认→synthetic';
+  else if (name === 'hub_list_models') text = modelsOverride || '各 worker 可选模型:\n- probe: model_arg=--model | 默认→synthetic';
   else if (name === 'hub_note_get') text = '全部笔记: (空)';
   else text = 'synthetic ok';
   res.writeHead(200, { 'content-type': 'application/json' });
@@ -117,7 +121,7 @@ test('invalid explicit session does not modify another session', async () => {
 test('task reply returns to its original session instead of sender active session', async () => {
   await boot(sessionSeed([{ kind: 'task', taskId: 'task.abcdef', posted: Date.now() }]));
   try {
-    inbox = 'console 有 1 条未读:\n- [10-08 12:00] probe: task.abcdef synthetic reply';
+    inbox = 'console 有 1 条未读，本次返回 1 条:\n- [10-08 12:00] probe: task.abcdef synthetic reply';
     await watchOnce(async () => (await api('/api/chat/thread?agent=probe&session=session-old')).body.thread.messages.some((m) => m.role === 'agent'));
     const active = (await api('/api/chat/thread?agent=probe&session=session-new')).body.thread;
     assert.equal(active.messages.length, 0);
@@ -282,6 +286,60 @@ test('console MCP validates requests and notifications never dispatch', async ()
     assert.equal(dispatches, before);
     const valid = await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list', params: {} });
     assert.equal((await valid.json()).result.tools[0].name, 'subagent_run');
+  } finally { await stop(); }
+});
+
+test('console sends uploaded bytes to a remote Hub instead of trusting client attachment text', async () => {
+  await boot();
+  try {
+    const data = Buffer.from('ACTUAL_UPLOAD=37');
+    const upload = await api('/api/upload', { name: '输入.txt', base64: data.toString('base64') });
+    assert.equal(upload.status, 200);
+    const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    const sent = await api('/api/chat/send', { agent: 'probe', sessionId: session, mode: 'dispatch', text: 'Read actual upload', thinking: 'off', stream: true,
+      attachments: [{ url: upload.body.url, name: '输入.txt', content: 'FORGED_CLIENT_CONTENT', path: 'C:/fake/path' }] });
+    assert.equal(sent.status, 200);
+    assert.equal(latestDispatchArgs.task, 'Read actual upload');
+    assert.equal(latestDispatchArgs.thinking, 'off');
+    assert.equal(latestDispatchArgs.stream, true);
+    assert.equal(Buffer.from(latestDispatchArgs.attachments[0].data_base64, 'base64').toString(), data.toString());
+    assert.ok(!JSON.stringify(latestDispatchArgs).includes('C:/fake'));
+    assert.ok(!JSON.stringify(latestDispatchArgs).includes('FORGED'));
+  } finally { await stop(); }
+});
+
+test('uploads have unique names and reject malformed data and credential files', async () => {
+  await boot();
+  try {
+    const base64 = Buffer.from('fixture').toString('base64');
+    const uploads = await Promise.all([1, 2].map(() => api('/api/upload', { name: 'same.txt', base64 })));
+    assert.notEqual(uploads[0].body.url, uploads[1].body.url);
+    assert.equal((await api('/api/upload', { name: 'bad.txt', base64: 'dGVz%%%dA==' })).status, 400);
+    assert.equal((await api('/api/upload', { name: 'auth.json', base64 })).status, 400);
+  } finally { await stop(); }
+});
+
+test('snapshot follows configured default models and does not auto-route a catalog-only worker', async () => {
+  agentsOverride = '已注册代理:\n- mimocode [在线] 角色: synthetic | CLI: mimo\n- zcode [离线] 角色: synthetic | CLI: 未配置';
+  modelsOverride = '各 worker 可选模型:\n- mimocode: model_arg=--model | 26f→xiaomi/mimo-v2.6-flash, 默认→xiaomi/mimo-v2.6-flash\n- zcode: model_arg=未配置 | 默认→GLM-5.3-Flash';
+  await boot();
+  try {
+    const snapshot = (await api('/api/snapshot')).body;
+    assert.equal(snapshot.ok, true, JSON.stringify(snapshot));
+    assert.equal(snapshot.agents.find((agent) => agent.name === 'mimocode').defaultModel, 'xiaomi/mimo-v2.6-flash');
+    assert.equal(snapshot.agents.find((agent) => agent.name === 'zcode').dispatchable, false);
+    assert.equal(snapshot.modelCatalog.minimaxcode.find((model) => model.default).id, 'MiniMax-M3.1-Flash-Preview');
+  } finally { agentsOverride = modelsOverride = null; await stop(); }
+});
+
+test('queue mode rejects unsupported attachment or thinking controls before dispatch', async () => {
+  await boot();
+  try {
+    const before = dispatches;
+    const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    const sent = await api('/api/chat/send', { agent: 'probe', sessionId: session, mode: 'task', text: 'fixture', thinking: 'off' });
+    assert.equal(sent.status, 400);
+    assert.equal(dispatches, before);
   } finally { await stop(); }
 });
 

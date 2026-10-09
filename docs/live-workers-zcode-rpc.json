@@ -1,0 +1,491 @@
+{
+  "platform": "Windows",
+  "official_installed_version": "0.16.9",
+  "argv": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+    "app-server",
+    "--cwd",
+    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+  ],
+  "isolated_workspace": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+  "records": [
+    {
+      "method": "runtime/capabilities",
+      "public_response": {
+        "id": "probe-1",
+        "result": {
+          "omitted_field_names": [
+            "independentPlanState"
+          ]
+        }
+      }
+    },
+    {
+      "method": "workspace/readPresentation",
+      "public_response": {
+        "id": "probe-2",
+        "result": {
+          "workspace": {
+            "workspacePath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+            "workspaceKey": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+          },
+          "mode": "build",
+          "omitted_field_names": [
+            "slashCommands"
+          ]
+        }
+      }
+    },
+    {
+      "method": "session/create",
+      "public_response": {
+        "id": "probe-3",
+        "result": {
+          "projection": {
+            "mode": "build",
+            "sessionId": "unknown",
+            "status": "idle",
+            "omitted_field_names": [
+              "activeToolCalls",
+              "backgroundJobs",
+              "contextUsed",
+              "contextWindow",
+              "pendingPermissions",
+              "target",
+              "totalTokenCount",
+              "turnCount"
+            ]
+          },
+          "runtime": {
+            "eventSeq": 0,
+            "stateRevision": 0,
+            "omitted_field_names": [
+              "pendingRequestIds",
+              "goalVerifications",
+              "goalVerificationTimeline"
+            ]
+          },
+          "session": {
+            "mode": "build",
+            "model": {
+              "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+              "modelId": "wx/Deepseek-v4-flash"
+            },
+            "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
+            "status": "idle",
+            "workspace": {
+              "workspacePath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+              "workspaceKey": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+            },
+            "omitted_field_names": [
+              "createdAt",
+              "traceId",
+              "sessionKind",
+              "target",
+              "title",
+              "updatedAt"
+            ]
+          },
+          "settings": {
+            "mode": {
+              "current": "build"
+            },
+            "model": {
+              "available": [
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "wx/Deepseek-v4-flash"
+                  },
+                  "label": "wx/Deepseek-v4-flash",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "ag/gemini-3.8-flash-high"
+                  },
+                  "label": "ag/gemini-3.8-flash-high",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "deepseek-v4.1-flash"
+                  },
+                  "label": "deepseek-v4.1-flash",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "stealth"
+                  },
+                  "label": "stealth",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "mimo/mimo-v2.6-flash"
+                  },
+                  "label": "mimo/mimo-v2.6-flash",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "kimi/k3"
+                  },
+                  "label": "kimi/k3",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "atria/Atria-Dawn-Preview"
+                  },
+                  "label": "atria/Atria-Dawn-Preview",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "st/sensenova-6.8-flash-lite"
+                  },
+                  "label": "st/sensenova-6.8-flash-lite",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "zd/claude-sonnet-5-5"
+                  },
+                  "label": "zd/claude-sonnet-5-5",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "trcc/glm-5.3-flashx"
+                  },
+                  "label": "trcc/glm-5.3-flashx",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "new-provider",
+                    "modelId": "step-5-preview"
+                  },
+                  "label": "step-5-preview",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "new-provider-2",
+                    "modelId": "step-5-preview"
+                  },
+                  "label": "step-5-preview",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                },
+                {
+                  "ref": {
+                    "providerId": "new-provider-3",
+                    "modelId": "LongCat-2.5-Preview"
+                  },
+                  "label": "LongCat-2.5-Preview",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                }
+              ],
+              "current": {
+                "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                "modelId": "wx/Deepseek-v4-flash",
+                "options": {
+                  "reasoningLevel": "max"
+                }
+              },
+              "omitted_field_names": [
+                "lastUsed"
+              ]
+            },
+            "thoughtLevel": {
+              "available": [
+                {
+                  "label": "disabled",
+                  "value": "disabled"
+                },
+                {
+                  "label": "low",
+                  "value": "low"
+                },
+                {
+                  "label": "high",
+                  "value": "high"
+                },
+                {
+                  "label": "max",
+                  "value": "max"
+                }
+              ],
+              "current": "max",
+              "enabled": true
+            },
+            "omitted_field_names": [
+              "permission"
+            ]
+          },
+          "omitted_field_names": [
+            "messages",
+            "protocol",
+            "slashCommands",
+            "todos",
+            "todoGroups"
+          ]
+        }
+      }
+    },
+    {
+      "method": "session/read",
+      "params": {
+        "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
+        "messageLimit": 1
+      },
+      "public_response": {
+        "id": "probe-4",
+        "result": {
+          "projection": {
+            "mode": "build",
+            "sessionId": "unknown",
+            "status": "idle",
+            "omitted_field_names": [
+              "activeToolCalls",
+              "backgroundJobs",
+              "contextUsed",
+              "contextWindow",
+              "pendingPermissions",
+              "target",
+              "totalTokenCount",
+              "turnCount"
+            ]
+          },
+          "runtime": {
+            "eventSeq": 0,
+            "stateRevision": 0,
+            "omitted_field_names": [
+              "pendingRequestIds",
+              "goalVerifications",
+              "goalVerificationTimeline"
+            ]
+          },
+          "session": {
+            "mode": "build",
+            "model": {
+              "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+              "modelId": "wx/Deepseek-v4-flash"
+            },
+            "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
+            "status": "idle",
+            "workspace": {
+              "workspacePath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+              "workspaceKey": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+            },
+            "omitted_field_names": [
+              "createdAt",
+              "traceId",
+              "sessionKind",
+              "target",
+              "title",
+              "updatedAt"
+            ]
+          },
+          "settings": {
+            "mode": {
+              "current": "build"
+            },
+            "model": {
+              "available": [
+                {
+                  "ref": {
+                    "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                    "modelId": "wx/Deepseek-v4-flash"
+                  },
+                  "label": "wx/Deepseek-v4-flash",
+                  "omitted_field_names": [
+                    "providerLabel",
+                    "contextWindow",
+                    "maxOutputTokens",
+                    "reasoning",
+                    "properties"
+                  ]
+                }
+              ],
+              "current": {
+                "providerId": "3a5dd7da-6a1b-4221-814f-4ed57a05057f",
+                "modelId": "wx/Deepseek-v4-flash",
+                "options": {
+                  "reasoningLevel": "max"
+                }
+              },
+              "omitted_field_names": [
+                "lastUsed"
+              ]
+            },
+            "thoughtLevel": {
+              "available": [
+                {
+                  "label": "disabled",
+                  "value": "disabled"
+                },
+                {
+                  "label": "low",
+                  "value": "low"
+                },
+                {
+                  "label": "high",
+                  "value": "high"
+                },
+                {
+                  "label": "max",
+                  "value": "max"
+                }
+              ],
+              "current": "max",
+              "enabled": true
+            },
+            "omitted_field_names": [
+              "permission"
+            ]
+          },
+          "omitted_field_names": [
+            "messages",
+            "protocol",
+            "slashCommands",
+            "todos",
+            "todoGroups"
+          ]
+        }
+      }
+    },
+    {
+      "method": "session/events",
+      "params": {
+        "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
+        "afterSeq": 0,
+        "limit": 4
+      },
+      "public_response": {
+        "id": "probe-5",
+        "result": {
+          "events": []
+        }
+      }
+    },
+    {
+      "method": "session/subscribe",
+      "params": {
+        "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
+        "deliveryKind": "desktop-continuous",
+        "afterSeq": 0,
+        "includeSnapshot": false
+      },
+      "public_response": {
+        "id": "probe-6",
+        "result": {
+          "eventSeq": 0,
+          "events": [],
+          "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf"
+        }
+      }
+    },
+    {
+      "method": "session/close",
+      "public_response": {
+        "id": "probe-7",
+        "result": {
+          "closed": true
+        }
+      }
+    }
+  ],
+  "requested_model": "GLM-5.3-Flash",
+  "requested_model_in_catalog": false
+}

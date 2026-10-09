@@ -1,0 +1,72 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "layer": "new JavaScript bridge -> isolated HTTP Hub -> authenticated official worker CLI",
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-hub-iz8nrb0n",
+  "port": 60493,
+  "source_files_separate_from_worker_cwd": true,
+  "results": [
+    {
+      "case": "minimaxcode-1011",
+      "worker": "minimaxcode",
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "require_write": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "minimaxcode-6485837b2c",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 135,
+        "nonce": "CHECK_63a7a4c6ad"
+      },
+      "public_answer": {
+        "total": 135,
+        "nonce": "CHECK_63a7a4c6ad"
+      },
+      "progress": [],
+      "elapsed_seconds": 3.099,
+      "passed": true
+    },
+    {
+      "case": "minimaxcode-1111",
+      "worker": "minimaxcode",
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "require_write": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "minimaxcode-7d1aa85adb",
+      "answer_verified": false,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 109,
+        "nonce": "CHECK_21ed74c6e3"
+      },
+      "public_answer": null,
+      "progress": [
+        {
+          "seconds": 2.938,
+          "status": "running",
+          "characters": 15
+        },
+        {
+          "seconds": 3.122,
+          "status": "running",
+          "characters": 83
+        }
+      ],
+      "elapsed_seconds": 3.287,
+      "passed": false
+    }
+  ],
+  "temporary_attachments_cleaned": true,
+  "owned_processes_cleaned": true
+}

@@ -4,15 +4,15 @@
   "timezone": "Asia/Shanghai",
   "platform": "Windows",
   "python_version": "3.12.14",
-  "duration_seconds": 6.625,
+  "duration_seconds": 6.079,
   "live_vendor_inference_performed": false,
-  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-3bllojge",
+  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-vtkeroge",
   "active_agent_config_or_state_modified": false,
   "source_sha256": {
-    "hub/agent_hub.py": "75b1e11de98c714ad39423de777c571c891bbf4c31c6fec77ec4a92fa43c3c83",
-    "hub/async_worker.py": "106c7d0e3873c8a007bc8be2b54fe1f3e7bb60ceb87b83dd12fdd66a5660d58b",
+    "hub/agent_hub.py": "fe3ae2c958f999fb5c08891f3f2ba83afb7bb1a4c57cf50d21d6132183cdf776",
+    "hub/async_worker.py": "95b2cbce8db4a3adccde88f3ff573b28a25a16a2e6f8b6ee13b86e10ec9dd88a",
     "hub/command_runtime.py": "6f5abfb3672c6a8155d5ee24d2ead11aae45ea76f2f38ee75c21b6dde889415e",
-    "plugins/agenthub-workers/mcp/hub.mjs": "497d2a07a97a5c71a934509c37e1e5a641fad0dcc32e0fd50b870e0fe71fbe09",
+    "plugins/agenthub-workers/mcp/hub.mjs": "48b2c3a9a947bb5115593e0faf471ab0bafe735cf5fcbe67a2bf3317a8275acc",
     "drivers/zcode_dom.js": "d4b1723878230771640d20ced7d2d2f74aa7918d7f60ea71716bf7f0e3e38661"
   },
   "checks": [
@@ -25,29 +25,43 @@
           "agent": "codebuddy",
           "status": "completed",
           "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-          "ref": "codebuddy-203891fde9",
-          "updated_at": 1791451262.6798177,
+          "thinking": "default",
+          "stream": false,
+          "attachments": [],
+          "model": "",
+          "ref": "codebuddy-6bc5e0b281",
+          "updated_at": 1791458475.1703126,
           "progress": null,
           "exit_code": 0,
-          "text": "{\"synthetic\": true, \"kind\": \"cwd\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}",
-          "probe_elapsed_seconds": 0.625
+          "text": "{\"synthetic\": true, \"kind\": \"cwd\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output-format\", \"json\"]}",
+          "probe_elapsed_seconds": 0.703
         },
         "task_metadata": {
           "cmd": [
             "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
             "<isolated-temp>\\synthetic_worker.py",
             "cwd",
-            "SYNTHETIC_LOCAL_TEST_ONLY"
+            "SYNTHETIC_LOCAL_TEST_ONLY",
+            "--output-format",
+            "json"
           ],
           "callback_url": null,
           "cwd": "<isolated-temp>\\目标 workspace",
-          "timeout_s": 10.0
+          "timeout_s": 10.0,
+          "attachment_dir": null,
+          "attachment_parent": "<isolated-temp>\\state\\attachments",
+          "public_options": {
+            "thinking": "default",
+            "stream": false,
+            "attachments": [],
+            "model": ""
+          }
         }
       },
       "source": [
-        "hub/agent_hub.py:398",
+        "hub/agent_hub.py:414",
         "hub/agent_hub.py",
-        "hub/async_worker.py:265"
+        "hub/async_worker.py:289"
       ]
     },
     {
@@ -59,12 +73,16 @@
           "agent": "codebuddy-cn",
           "status": "completed",
           "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-          "ref": "codebuddy-cn-39d6c7a8d6",
-          "updated_at": 1791451262.6964467,
+          "thinking": "default",
+          "stream": false,
+          "attachments": [],
+          "model": "",
+          "ref": "codebuddy-cn-26046e6658",
+          "updated_at": 1791458475.2207155,
           "progress": null,
           "exit_code": 0,
-          "text": "{\"synthetic\": true, \"kind\": \"workdir\", \"cwd\": \"<isolated-temp>\\\\synthetic-auth-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--add-dir\", \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\"]}",
-          "probe_elapsed_seconds": 0.61
+          "text": "{\"synthetic\": true, \"kind\": \"workdir\", \"cwd\": \"<isolated-temp>\\\\synthetic-auth-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output-format\", \"json\", \"--add-dir\", \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\"]}",
+          "probe_elapsed_seconds": 0.656
         },
         "task_metadata": {
           "cmd": [
@@ -72,17 +90,27 @@
             "<isolated-temp>\\synthetic_worker.py",
             "workdir",
             "SYNTHETIC_LOCAL_TEST_ONLY",
+            "--output-format",
+            "json",
             "--add-dir",
             "<isolated-temp>\\目标 workspace"
           ],
           "callback_url": null,
           "cwd": "<isolated-temp>\\synthetic-auth-cwd",
-          "timeout_s": 10.0
+          "timeout_s": 10.0,
+          "attachment_dir": null,
+          "attachment_parent": "<isolated-temp>\\state\\attachments",
+          "public_options": {
+            "thinking": "default",
+            "stream": false,
+            "attachments": [],
+            "model": ""
+          }
         }
       },
       "source": [
         "hub/agent_hub.py",
-        "hub/agent_hub.py:430"
+        "hub/agent_hub.py:463"
       ]
     },
     {
@@ -96,27 +124,41 @@
           "agent": "mimocode",
           "status": "timeout",
           "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-          "ref": "mimocode-585955df9d",
-          "updated_at": 1791451262.7397382,
+          "thinking": "default",
+          "stream": false,
+          "attachments": [],
+          "model": "",
+          "ref": "mimocode-2f70e1feb1",
+          "updated_at": 1791458475.2052517,
           "text": "CLI 任务超时 (>0.1s), 已回收子进程树",
           "progress": null,
-          "probe_elapsed_seconds": 0.593
+          "probe_elapsed_seconds": 0.641
         },
         "task_metadata": {
           "cmd": [
             "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
             "<isolated-temp>\\synthetic_worker.py",
             "sleep",
-            "SYNTHETIC_LOCAL_TEST_ONLY"
+            "SYNTHETIC_LOCAL_TEST_ONLY",
+            "--format",
+            "json"
           ],
           "callback_url": null,
           "cwd": "<isolated-temp>\\目标 workspace",
-          "timeout_s": 0.1
+          "timeout_s": 0.1,
+          "attachment_dir": null,
+          "attachment_parent": "<isolated-temp>\\state\\attachments",
+          "public_options": {
+            "thinking": "default",
+            "stream": false,
+            "attachments": [],
+            "model": ""
+          }
         }
       },
       "source": [
         "hub/agent_hub.py",
-        "hub/async_worker.py:269"
+        "hub/async_worker.py:293"
       ]
     },
     {
@@ -127,16 +169,20 @@
         "agent": "minimaxcode",
         "status": "error",
         "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-        "ref": "minimaxcode-0f18799fa8",
-        "updated_at": 1791451262.7397382,
+        "thinking": "default",
+        "stream": false,
+        "attachments": [],
+        "model": "",
+        "ref": "minimaxcode-1cb4242207",
+        "updated_at": 1791458475.2722044,
         "progress": null,
         "exit_code": 7,
-        "text": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}",
-        "probe_elapsed_seconds": 0.578
+        "text": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}",
+        "probe_elapsed_seconds": 0.61
       },
       "source": [
-        "hub/async_worker.py:357",
-        "hub/async_worker.py:359"
+        "hub/async_worker.py:396",
+        "hub/async_worker.py:398"
       ]
     },
     {
@@ -149,17 +195,21 @@
           "agent": "github-copilot",
           "status": "completed",
           "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-          "ref": "github-copilot-f5f209c1ef",
-          "updated_at": 1791451262.7025716,
+          "thinking": "default",
+          "stream": false,
+          "attachments": [],
+          "model": "",
+          "ref": "github-copilot-ded698fa1e",
+          "updated_at": 1791458475.2624438,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK",
-          "probe_elapsed_seconds": 0.562
+          "probe_elapsed_seconds": 0.578
         }
       },
       "source": [
         "hub/agent_hub.py",
-        "hub/async_worker.py:265"
+        "hub/async_worker.py:289"
       ]
     },
     {
@@ -172,8 +222,12 @@
           "agent": "github-copilot",
           "status": "completed",
           "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-          "ref": "github-copilot-7aa9b76a5f",
-          "updated_at": 1791451263.1825728,
+          "thinking": "default",
+          "stream": false,
+          "attachments": [],
+          "model": "",
+          "ref": "github-copilot-9091200f86",
+          "updated_at": 1791458475.6333144,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK"
@@ -181,7 +235,7 @@
       },
       "source": [
         "hub/agent_hub.py",
-        "hub/async_worker.py:265"
+        "hub/async_worker.py:289"
       ]
     },
     {
@@ -192,12 +246,12 @@
         "ok": false,
         "worker": "minimaxcode",
         "status": "failed",
-        "ref": "minimaxcode-6b0f2f7e59",
-        "answer": "[minimaxcode-6b0f2f7e59] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}\n(exit=7)"
+        "ref": "minimaxcode-6b0bc81a24",
+        "answer": "[minimaxcode-6b0bc81a24] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
       },
       "source": [
         "plugins/agenthub-workers/mcp/hub.mjs",
-        "hub/async_worker.py:359"
+        "hub/async_worker.py:398"
       ]
     },
     {
@@ -209,15 +263,19 @@
           "agent": "antigravity",
           "status": "error",
           "task": "SYNTHETIC_LOCAL_TEST_ONLY",
-          "ref": "antigravity-6d649f2468",
-          "updated_at": 1791451262.5516193,
+          "thinking": "default",
+          "stream": false,
+          "attachments": [],
+          "model": "",
+          "ref": "antigravity-f35fec7fa0",
+          "updated_at": 1791458475.0759304,
           "text": "执行出错: [WinError 2] 系统找不到指定的文件。",
           "progress": null,
-          "probe_elapsed_seconds": 0.531
+          "probe_elapsed_seconds": 0.547
         },
         "bridge": {
           "status": "failed",
-          "answer": "[antigravity-6d649f2468] agent=antigravity status=error\n执行出错: [WinError 2] 系统找不到指定的文件。"
+          "answer": "[antigravity-f35fec7fa0] agent=antigravity status=error\n执行出错: [WinError 2] 系统找不到指定的文件。"
         }
       },
       "source": [
@@ -232,12 +290,12 @@
         "ok": true,
         "worker": "zcode",
         "status": "running",
-        "ref": "zcode-b46c178fea"
+        "ref": "zcode-14f2a1cd92"
       },
       "source": [
-        "plugins/agenthub-workers/mcp/hub.mjs:106",
-        "plugins/agenthub-workers/mcp/hub.mjs:102",
-        "hub/agent_hub.py:395"
+        "plugins/agenthub-workers/mcp/hub.mjs:153",
+        "plugins/agenthub-workers/mcp/hub.mjs:149",
+        "hub/agent_hub.py:394"
       ]
     },
     {
@@ -246,23 +304,23 @@
       "expected": "Actual closed-port driver failure remains an error with diagnostic text",
       "observed": {
         "direct_driver_exit": 1,
-        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:58870\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 58870\n}\n\nNode.js v24.17.0\n",
+        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:63337\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 63337\n}\n\nNode.js v24.17.0\n",
         "async_result": {
           "agent": "zcode",
           "status": "error",
           "task": "SYNTHETIC_CLOSED_CDP_TEST_ONLY",
-          "ref": "zcode-2f666a95ab",
-          "updated_at": 1791451267.553931,
-          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:58870\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 58870\n}\n\nNode.js v24.17.0",
+          "ref": "zcode-f213210589",
+          "updated_at": 1791458479.7806764,
+          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:63337\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 63337\n}\n\nNode.js v24.17.0",
           "progress": null
         },
         "forced_cdp_target": "reserved non-listening loopback port",
         "real_ui_access": false
       },
       "source": [
-        "hub/async_worker.py:117",
+        "hub/async_worker.py:121",
         "hub/async_worker.py",
-        "hub/async_worker.py:363"
+        "hub/async_worker.py:402"
       ]
     },
     {
@@ -277,7 +335,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa001",
-            "updated_at": 1791451267.6307557
+            "updated_at": 1791458479.8394783
           }
         },
         "async_worker": {
@@ -287,7 +345,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa002",
-            "updated_at": 1791451267.8563404
+            "updated_at": 1791458480.0672307
           }
         }
       },

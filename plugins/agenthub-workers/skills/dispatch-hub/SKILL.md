@@ -1,79 +1,36 @@
 ---
 name: dispatch-hub
-description: Agent Hub 多 worker 并发调度与编排技能。当用户要求"多 agent 并发/并行"、"把活分出去"、"协同多个 agent/worker 完成任务"或需要并发调度多个 Hub 代理时加载。
+description: 使用 AgentHub 的八个 worker 进行独立任务分派、并行协作和原始 ref 结果回收；适用于用户要求把任务分给多个外部代理。
 ---
 
-# Agent Hub 多 Worker 并发调度方法论
+# AgentHub 调度
 
-本技能指导主智能体如何高效、安全地并发调度 Agent Hub 上的多个 worker（`zcode` / `antigravity` / `codebuddy`）。
+主代理划分任务、决定允许修改的文件并验收结果。原生子代理只是 Hub 的路由通道，外部 worker 才是任务执行者。
 
-## 一、与 agents/ 子智能体的分工定位
+单路任务可使用 Agent 的 `agenthub-workers:zcode`、`agenthub-workers:antigravity`、`agenthub-workers:codebuddy`、`agenthub-workers:codebuddy-cn`、`agenthub-workers:github-copilot`、`agenthub-workers:minimaxcode`、`agenthub-workers:mimocode`、`agenthub-workers:traecode` 类型。多路协作由主代理分配互不冲突的责任、并发调用插件工具，并记录每路 ref。审查阶段可提供同一份材料；文件修改阶段不得让多个 worker 竞争写同一文件。
 
-- **单任务直派**：单点独立任务优先使用 `agents/` 定义的原生子智能体类型（`agenthub:zcode`、`agenthub:antigravity`、`agenthub:codebuddy`、`agenthub:codebuddy-cn`、`agenthub:mimocode`、`agenthub:github-copilot`、`agenthub:minimaxcode`、`agenthub:traecode`；简称 agy/cb/cbcn/mimo/gcp/mmx/trae 由枢纽自动归一，任务文本写规范名）。
-- **多任务编排与并发**：当需要分解任务、多路并行推进或交叉比对时，由主智能体加载本技能，直接调用 MCP 工具（`mcp__agent-hub-subagent__*`）进行并发派发、独立跟踪与结果聚合。
+## 自包含工具与任务选项 原生 Agent 的登记 ID 也可能带插件前缀；以当前 Agent 工具实际列出的类型为准。已实测的 profileId 为 agenthub-workers:mimocode 和 codebuddy-cn，其定义路径均来自本插件 agents/；不要硬编码旧的 agenthub: 前缀或绕到其他代理。
 
-## 二、派发通道规范与接口事实
+使用当前工具目录中的 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login` 六个插件工具，名称可能带宿主生成的前缀。不依赖额外 SSH、外部 MCP 服务或固定服务器路径。
 
-派发前请确认本机已加载 `agent-hub-subagent` MCP 服务。
+`hub_ask` 接受 `{worker,task,timeout_s,model,thinking,stream,files,cwd}`，派发一次并在总等待预算内回收。需要独立控制等待时，对每个任务调用一次 `hub_dispatch`，保存 ref，然后只对该 ref 使用 `hub_fetch`。timeout_s 默认 300 秒，必须是大于 0 且不超过 86400 的有限数字。
 
-### 1. 任务派发与异步受理
-- **派发工具**：`mcp__agent-hub-subagent__subagent_run`
-- **调用参数**：`{agent, task, timeout_s}`
-  - `agent`：目标代理规范名。可选 `zcode`（Linux 桌面版 GLM-5.3-Flash）、`antigravity`（服务端 CLI 路径 /home/user/.local/bin/agy；旧注册名 agy 已于 2026-10-05 停用）、`codebuddy`（国际版）、`codebuddy-cn`（国内版）、`mimocode`、`github-copilot`、`minimaxcode`（均 CLI 直通）；`traecode` 例外——无 CLI，走 `mcp__agent-hub__trae_delegate`（wait:false 异步受理，hub_wait_result/trae_result 回收）。
-  - `task`：发送给 worker 的完整提示词（须包含绝对路径及下述约束）。
-  - `timeout_s`：默认 240，按任务复杂度设定（常用 600~900，上限 1800；zcode 侧单任务上限 1000 秒）。
-- **30秒超时机制**：客户端在约 30 秒时若报超时错误，**不代表任务失败**；服务端已异步受理并在后台运行，**切勿判定失败并重复提交相同任务**。
-- **任务标识（ref）**：受理成功后生成形如 `<agent>-<hex>` 的任务 ref（例如 `zcode-a1b2c3d4`）。
-- **ref 丢失兜底**：若客户端异常未拿到 ref，在 Bash 中执行：
-  ```bash
-  ssh n5095-server 'ls -t ~/agent-hub/results/ | head -3'
-  ```
-  取最新生成的 `<agent>-<hex>.json` 文件名对应 ref 进行追溯。
+任务文本要自包含：目标、上下文、允许读写的范围、验收条件和输出要求。派发前可查询 `hub_capabilities(worker)`；`model` 是 Hub 的模型别名或实际 ID，`thinking` 是 default/on/off，`stream` 是布尔值，不支持的能力会在执行前拒绝。按用户要求传递这些选项，不把母会话的模型选项误认为 worker 设置。
 
-### 2. 状态查询与结果读取
-- **服务端结果路径**：`/home/user/agent-hub/results/<ref>.json`，关键字段：
-  - `status`：`running`（运行中）、`completed`（已完成）、`failed`（失败）。
-  - `text`：结果摘要文本（≤500 字）。
-  - `artifactPath`：落盘在服务器上的全文文件路径。
-- **轮询控制**：检查状态前使用 Bash `sleep 60` 至 `sleep 120` 缓冲，**严禁低延迟密集轮询轰炸服务端**。
-- **状态检查**：调用 `mcp__agent-hub-subagent__subagent_result` 传入 `{ref}` 查进度。
-- **全文读取**：若摘要不足以支撑结论，调用 `mcp__agent-hub-subagent__subagent_artifact` 传入 `{path: artifactPath}` 提取完整产出。
+`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB。桥读取授权附件、编码内容并送到 Hub 暂存，支持 Windows/Linux 跨系统传送；不能只把本地路径写入任务后假定远端可见。`cwd` 是 Hub 所在机器的工作目录，必须使用 Hub 的系统路径。只发送任务明确允许的输入，禁止上传凭据文件。
 
-## 三、并发调度方法论
+`stream=true` 请求 worker 流式生成。MCP 客户端提供 `_meta.progressToken` 才能收到进度通知；没有 token 时 `delivery=buffered_no_progress_token`，不能宣称用户界面已实时显示。
 
-1. **正交任务拆分**：将大任务拆分为互不依赖的子模块。**严禁向不同 worker 派发重复、竞争性的任务**，各 worker 权责必须互斥。
-2. **同批并行触发**：在单轮对话中，并行发起多个 `subagent_run` 工具调用，一次性分发全部子任务，各自拿到对应的 `ref`。
-3. **独立轮询跟踪**：维护各个 `ref` 的状态清单，每隔 60~120 秒统查一次进度；个别长耗时任务不阻碍已完成任务的前期整理。
-4. **归纳合成**：待全部 worker 完成后，由主智能体通读所有摘要与产出，比对一致性、验证可行性，输出最终统揽方案。
+## 完成与异常
 
-## 四、失败路由与异常降级策略
+只将 `ok=true`、`status=completed` 且含真实 answer 的结果作为成果，保留 worker/ref/status 和验证证据。completed 的文本也可能报告模型无法执行，要结合验收条件判断任务是否成功。
 
-- **codebuddy 403 / 权限错误**：若 codebuddy 返回 403、Token 权限错误或鉴权失效，**立刻改派 `zcode` 或 `antigravity`，严禁原地重试 codebuddy**。
-- **额度耗尽（Quota/Rate Limit）**：
-  - `zcode`：走体验套餐，额度每日重置。耗尽时切换到 `antigravity` 或推迟至次日。
-  - `antigravity`：走个人 Antigravity 账号额度。
-- **通道整体不可用**：若 `n5095-server` 失联或 MCP 工具报错提示离线，应停止盲目重试，如实向用户上报故障并等待人工排查。
+running/unknown 表示任务可能仍在执行。有 ref 时续查原任务；无 ref 的 unknown、网络超时、空输出或协议错误也不能自动重新派发。不要把本地代理的进度叙述当成 worker 答案。确定失败时报告错误并停止依赖阶段，是否改派由主代理结合任务副作用与授权判断。
 
-## 五、防循环与 Worker 约束铁律
+登录时先查询 `hub_login(worker,action="status")`。用户要求登录或获取链接时才 start，展示返回的官方链接、验证码和指引；只有 authenticated 表示授权完成。不要索取密码、API Key 或 Token，不将授权链接或凭据写入仓库。
 
-1. **审查与决策绝不外包**：主智能体是调度者与最终责任人。任务划分、成果审查、方案裁决必须在主会话中完成，**严禁将"审查/验证其他 worker 结果"作为任务外包出去，防止死循环**。
-2. **硬性注入任务约束**：每次拼接 `task` 文本时，必须将以下系统级约束作为前置提示显式写入：
-   - 严禁重启 `zcode-desktop`、`traecode-desktop` 等系统服务。
-   - 严禁修改任何任务范围外的无关文件或环境配置。
-   - 文件操作必须使用绝对路径（`/home/user/...`）。
+## 原生工作流节点
 
-## 六、工作流集成：让枢纽 worker 当工作流的执行者
+ZCode 的工作流 `agent()` 节点使用宿主模型负责编排；要让外部 worker 执行，节点提示需明确调用当前工具目录中的插件 hub_ask 一次，把原始 worker/ref/status/answer 返回。包含 model/thinking/stream/files/cwd 的请求也应原样传入。
 
-zcode 工作流（CreateWorkflow）的 agent() 节点本体永远跑本地会话模型——这一点插件与枢纽都改不了。
-让"枢纽 worker 实际执行任务"的写法（2026-10-06 实测：工作流子代理具备 MCP 工具面，可直调插件桥接工具）：
-
-1. **子代理转手（推荐）**：给 agent() 节点的 persona/ask 写明——
-   "你是 Agent Hub 派发通道：调用 mcp__hub-bridge__hub_ask，参数 worker=\"<规范名>\"、task=<任务原文>、timeout_s=120；
-   该调用会阻塞到枢纽 worker 出最终结果，把返回 JSON 的 answer 交给主流程；
-   若工具不存在如实上报，不要改用其他方式完成任务。"——
-   这样该节点的实际执行者就是枢纽 worker，工作流只负责编排与汇流。
-2. **脚本级直调**：`world.run("node", ["<插件缓存目录>/mcp/ask.mjs", "<worker>", task])`，阻塞出答案（exit 0/1）。
-3. **同任务多 worker 并行对比**：直接运行已保存的全局工作流 **hub-fanout**（args：task / workers / timeout_s / max_rounds / wait_s）。
-
-**铁律：当用户要求"用工作流测试/使用 hub worker"时，必须写出包含上述模式的工作流脚本并创建运行；
-禁止绕过工作流改为主对话直派（MCP 直派只适用于用户没点名工作流的场合）。**
+用户明确要求工作流时，应创建并运行包含该节点的原生工作流，按实际节点输出验收；不能把主对话直接派发称为工作流执行。插件技能提供配方，不自动注册全局保存的工作流名称。没有原生工作流或工具能力时如实报告。

@@ -138,7 +138,14 @@ try {
     Stop-Recorded 'console'
     Stop-Recorded 'hub'
     $agents = Join-Path $Root 'hub/agents.json'
+    if ($env:HUB_AGENTS_FILE) {
+        $agents = [Environment]::ExpandEnvironmentVariables($env:HUB_AGENTS_FILE)
+        if (-not [IO.Path]::IsPathRooted($agents)) { $agents = Join-Path $Root $agents }
+        $agents = [IO.Path]::GetFullPath($agents)
+        $env:HUB_AGENTS_FILE = $agents
+    }
     if (-not (Test-Path -LiteralPath $agents)) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $agents -Parent) | Out-Null
         Copy-Item -LiteralPath (Join-Path $Root 'hub/agents.windows.example.json') -Destination $agents
         Write-Output 'Created Windows worker template; replace C:/PATH/TO entries before dispatch.'
     }

@@ -1,0 +1,232 @@
+{
+  "kind": "windows-client-new-minimax-messages-file-to-real-linux",
+  "client_system": "win32",
+  "worker_system": "linux",
+  "real_vendor_requests": true,
+  "windows_credentials_copied": false,
+  "old_deployment_modified": false,
+  "cells": [
+    {
+      "worker": "minimaxcode",
+      "thinking": "on",
+      "stream": false,
+      "image": true,
+      "file": false,
+      "case_id": "minimaxcode-on-010",
+      "dispatch_count": 1,
+      "generation_verified": true,
+      "outcome": "verified",
+      "duration_s": 25.078,
+      "final": {
+        "ok": true,
+        "worker": "minimaxcode",
+        "status": "completed",
+        "ref": "minimaxcode-be6a853740",
+        "answer": "case=minimaxcode-on-010; image=blue; file=NO_FILE; product=5781\n\nTo find the product, multiply 123 by 47 by treating 47 as 40 plus 7. First, 123 times 40 equals 4,920. Next, 123 times 7 equals 861. Adding those partial results gives 4,920 + 861 = 5,781, so the product is 5,781. This distributive approach splits the calculation into two simpler multiplications and then combines their contributions."
+      },
+      "progress_notifications": 0,
+      "progress_before_final": 0,
+      "first_progress_s": null,
+      "stream_observed": false,
+      "stream_off_no_notifications": true,
+      "fixture_metadata": [
+        {
+          "name": "minimaxcode-on-010.png",
+          "bytes": 168,
+          "sha256": "fb59293297bbed4792e45b1e8a353c63f942d86ac3b235a8c5c38b81ab75e09a"
+        }
+      ],
+      "usage": {
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "input_tokens": 1,
+        "output_tokens": 765,
+        "cache_read_tokens": 287,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 648
+      },
+      "remote_attachments": [
+        {
+          "name": "minimaxcode-on-010.png",
+          "kind": "image",
+          "bytes": 168,
+          "mode": "messages_file"
+        }
+      ],
+      "runtime_exit_code": 0,
+      "thinking_observed": true
+    },
+    {
+      "worker": "minimaxcode",
+      "thinking": "on",
+      "stream": false,
+      "image": true,
+      "file": true,
+      "case_id": "minimaxcode-on-011",
+      "dispatch_count": 1,
+      "generation_verified": true,
+      "outcome": "verified",
+      "duration_s": 6.109,
+      "final": {
+        "ok": true,
+        "worker": "minimaxcode",
+        "status": "completed",
+        "ref": "minimaxcode-ac3943f059",
+        "answer": "case=minimaxcode-on-011; image=blue; file=FILE_F1BD746E4A; product=5781\n\nThe calculation is 123 \u00d7 47. Decompose 47 into 40 and 7: 123 \u00d7 40 = 4,920, while 123 \u00d7 7 = 861. Adding the partial products gives 4,920 + 861 = 5,781. Therefore, the result is 5,781, matching the product shown on the required first line. The image\u2019s dominant color is blue, and the text file\u2019s verification nonce is reproduced exactly."
+      },
+      "progress_notifications": 0,
+      "progress_before_final": 0,
+      "first_progress_s": null,
+      "stream_observed": false,
+      "stream_off_no_notifications": true,
+      "fixture_metadata": [
+        {
+          "name": "minimaxcode-on-011.png",
+          "bytes": 168,
+          "sha256": "fb59293297bbed4792e45b1e8a353c63f942d86ac3b235a8c5c38b81ab75e09a"
+        },
+        {
+          "name": "minimaxcode-on-011.txt",
+          "bytes": 37,
+          "sha256": "111f59af90161e641bae1da3b50660f86856c4a385a3a681044d6f8a9889ea70"
+        }
+      ],
+      "usage": {
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "input_tokens": 118,
+        "output_tokens": 655,
+        "cache_read_tokens": 199,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 525
+      },
+      "remote_attachments": [
+        {
+          "name": "minimaxcode-on-011.png",
+          "kind": "image",
+          "bytes": 168,
+          "mode": "messages_file"
+        },
+        {
+          "name": "minimaxcode-on-011.txt",
+          "kind": "file",
+          "bytes": 37,
+          "mode": "messages_file"
+        }
+      ],
+      "runtime_exit_code": 0,
+      "thinking_observed": true
+    },
+    {
+      "worker": "minimaxcode",
+      "thinking": "on",
+      "stream": true,
+      "image": true,
+      "file": false,
+      "case_id": "minimaxcode-on-110",
+      "dispatch_count": 1,
+      "generation_verified": true,
+      "outcome": "verified",
+      "duration_s": 23.625,
+      "final": {
+        "ok": true,
+        "worker": "minimaxcode",
+        "ref": "minimaxcode-054e397b85",
+        "status": "completed",
+        "answer": "\u280b Thinking (0s)\r\u2819 Thinking (0s)\r\u2839 Thinking (0s)\r\u2838 Thinking (0s)\r\u283c Thinking (0s)\r\u2834 Thinking (0s)\r\u2826 Thinking (0s)\r\u2827 Thinking (0s)\r\u2807 Thinking (0s)\r\u280f Thinking (0s)\r\u280b Thinking (0s)\r\u2819 Thinking (0s)\r\u2839 Thinking (0s)\r\u2838 Thinking (1s)\r\u283c Thinking (1s)\r\u2834 Thinking (1s)\r\u2826 Thinking (1s)\r\u2827 Thinking (1s)\r\u2807 Thinking (1s)\r\u280f Thinking (1s)\r\u280b Thinking (1s)\r\u2819 Thinking (1s)\r\u2839 Thinking (1s)\r\u2838 Thinking (1s)\r\u283c Thinking (1s)\r\u2834 Thinking (2s)\r\u2826 Thinking (2s)\r\u2827 Thinking (2s)\r\u2807 Thinking (2s)\r\u280f Thinking (2s)\r\u280b Thinking (2s)\r\u2819 Thinking (2s)\r\u2839 Thinking (2s)\r\u2838 Thinking (2s)\r\u283c Thinking (2s)\r\u2834 Thinking (2s)\r\u2826 Thinking (2s)\r\u2827 Thinking (2s)\r\u2807 Thinking (3s)\r\u280f Thinking (3s)\r\u280b Thinking (3s)\r\u2819 Thinking (3s)\r\u2839 Thinking (3s)\r\u2838 Thinking (3s)\r\u283c Thinking (3s)\r\u2834 Thinking (3s)\r\u2826 Thinking (3s)\r\u2827 Thinking (3s)\r\u2807 Thinking (3s)\r\u280f Thinking (3s)\r\u280b Thinking (4s)\r\u2819 Thinking (4s)\r\u2839 Thinking (4s)\r\u2838 Thinking (4s)\r\u283c Thinking (4s)\r\u2834 Thinking (4s)\r\u2826 Thinking (4s)\r\u2827 Thinking (4s)\r\u2807 Thinking (4s)\r\u280f Thinking (4s)\r\u280b Thinking (4s)\r\u2819 Thinking (4s)\r\u2839 Thinking (4s)\r\u2838 Thinking (5s)\r\u283c Thinking (5s)\r\u2834 Thinking (5s)\r\u2826 Thinking (5s)\r\u2827 Thinking (5s)\r\u2807 Thinking (5s)\r\u280f Thinking (5s)\r\u280b Thinking (5s)\r\u2819 Thinking (5s)\r\u2839 Thinking (5s)\r\u2838 Thinking (5s)\r\u283c Thinking (5s)\r\u2834 Thinking (6s)\r\u2826 Thinking (6s)\r\u2827 Thinking (6s)\r\u2807 Thinking (6s)\r\nResponse:\ncase=minimaxcode-on-110; image=blue; file=NO_FILE; product=5781\n\nTo calculate 123 \u00d7 47, split 47 into 40 and 7. First, multiply 123 by 40, which gives 4,920. Next, multiply 123 by 7, which gives 861. Add the two partial products: 4,920 + 861 = 5,781. Therefore, the result is 5,781. This method applies the distributive property by breaking one factor into place-value-friendly parts.",
+        "delivery": "mcp_progress"
+      },
+      "progress_notifications": 35,
+      "progress_before_final": 35,
+      "first_progress_s": 16.844,
+      "stream_observed": true,
+      "stream_off_no_notifications": false,
+      "fixture_metadata": [
+        {
+          "name": "minimaxcode-on-110.png",
+          "bytes": 168,
+          "sha256": "fb59293297bbed4792e45b1e8a353c63f942d86ac3b235a8c5c38b81ab75e09a"
+        }
+      ],
+      "usage": null,
+      "remote_attachments": [
+        {
+          "name": "minimaxcode-on-110.png",
+          "kind": "image",
+          "bytes": 168,
+          "mode": "messages_file"
+        }
+      ],
+      "runtime_exit_code": 0,
+      "thinking_observed": null
+    },
+    {
+      "worker": "minimaxcode",
+      "thinking": "on",
+      "stream": true,
+      "image": true,
+      "file": true,
+      "case_id": "minimaxcode-on-111",
+      "dispatch_count": 1,
+      "generation_verified": true,
+      "outcome": "verified",
+      "duration_s": 12.125,
+      "final": {
+        "ok": true,
+        "worker": "minimaxcode",
+        "ref": "minimaxcode-151af8f616",
+        "status": "completed",
+        "answer": "\u280b Thinking (0s)\r\u2819 Thinking (0s)\r\u2839 Thinking (0s)\r\u2838 Thinking (0s)\r\u283c Thinking (0s)\r\u2834 Thinking (0s)\r\u2826 Thinking (0s)\r\u2827 Thinking (0s)\r\u2807 Thinking (0s)\r\u280f Thinking (0s)\r\u280b Thinking (0s)\r\u2819 Thinking (0s)\r\u2839 Thinking (0s)\r\u2838 Thinking (1s)\r\u283c Thinking (1s)\r\u2834 Thinking (1s)\r\u2826 Thinking (1s)\r\u2827 Thinking (1s)\r\u2807 Thinking (1s)\r\u280f Thinking (1s)\r\u280b Thinking (1s)\r\u2819 Thinking (1s)\r\u2839 Thinking (1s)\r\u2838 Thinking (1s)\r\u283c Thinking (1s)\r\u2834 Thinking (2s)\r\u2826 Thinking (2s)\r\u2827 Thinking (2s)\r\u2807 Thinking (2s)\r\u280f Thinking (2s)\r\u280b Thinking (2s)\r\u2819 Thinking (2s)\r\u2839 Thinking (2s)\r\u2838 Thinking (2s)\r\u283c Thinking (2s)\r\u2834 Thinking (2s)\r\u2826 Thinking (2s)\r\u2827 Thinking (2s)\r\u2807 Thinking (3s)\r\u280f Thinking (3s)\r\u280b Thinking (3s)\r\u2819 Thinking (3s)\r\u2839 Thinking (3s)\r\u2838 Thinking (3s)\r\u283c Thinking (3s)\r\u2834 Thinking (3s)\r\u2826 Thinking (3s)\r\u2827 Thinking (3s)\r\u2807 Thinking (3s)\r\u280f Thinking (3s)\r\nResponse:\ncase=minimaxcode-on-111; image=blue; file=FILE_A5F4759136; product=5781\n\nTo compute 123 multiplied by 47, split 47 into 40 and 7. First, 123 \u00d7 40 equals 4,920. Next, 123 \u00d7 7 equals 861. Adding the partial products gives 4,920 + 861 = 5,781. Therefore, the result of 123 \u00d7 47 is 5,781. This method uses the distributive property and checks that both parts combine to the full product.",
+        "delivery": "mcp_progress"
+      },
+      "progress_notifications": 23,
+      "progress_before_final": 23,
+      "first_progress_s": 7.532,
+      "stream_observed": true,
+      "stream_off_no_notifications": false,
+      "fixture_metadata": [
+        {
+          "name": "minimaxcode-on-111.png",
+          "bytes": 168,
+          "sha256": "fb59293297bbed4792e45b1e8a353c63f942d86ac3b235a8c5c38b81ab75e09a"
+        },
+        {
+          "name": "minimaxcode-on-111.txt",
+          "bytes": 37,
+          "sha256": "ecfa12403c20ecb62db25e5bdd30196edc5790d6208b2ab102405c00d8799217"
+        }
+      ],
+      "usage": null,
+      "remote_attachments": [
+        {
+          "name": "minimaxcode-on-111.png",
+          "kind": "image",
+          "bytes": 168,
+          "mode": "messages_file"
+        },
+        {
+          "name": "minimaxcode-on-111.txt",
+          "kind": "file",
+          "bytes": 37,
+          "mode": "messages_file"
+        }
+      ],
+      "runtime_exit_code": 0,
+      "thinking_observed": null
+    }
+  ],
+  "capability_response": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"workers\":{\"codebuddy\":{\"configured\":true,\"default_model\":\"deepseek-v4.1-flash\",\"model_selection\":true,\"thinking\":[\"default\",\"on\",\"off\"],\"stream\":\"stdout_progress\",\"attachments\":{\"file\":\"prompt_path\",\"image\":\"prompt_path\"}},\"codebuddy-cn\":{\"configured\":true,\"default_model\":\"deepseek-v4.1-flash\",\"model_selection\":true,\"thinking\":[\"default\",\"on\",\"off\"],\"stream\":\"stdout_progress\",\"attachments\":{\"file\":\"prompt_path\",\"image\":\"prompt_path\"}},\"antigravity\":{\"configured\":true,\"default_model\":\"gemini-3.8-flash-medium\",\"model_selection\":true,\"thinking\":[\"default\"],\"stream\":\"stdout_progress\",\"attachments\":{}},\"mimocode\":{\"configured\":true,\"default_model\":\"xiaomi/mimo-v2.6-flash\",\"model_selection\":true,\"thinking\":[\"default\",\"on\",\"off\"],\"stream\":\"stdout_progress\",\"attachments\":{\"file\":\"cli\",\"image\":\"cli\"}},\"github-copilot\":{\"configured\":true,\"default_model\":\"auto\",\"model_selection\":true,\"thinking\":[\"default\",\"off\"],\"stream\":\"stdout_progress\",\"attachments\":{\"file\":\"prompt_path\",\"image\":\"cli\"}},\"minimaxcode\":{\"configured\":true,\"default_model\":\"MiniMax-M3.1-Flash-Preview\",\"model_selection\":true,\"thinking\":[\"default\",\"on\"],\"stream\":\"stdout_progress\",\"attachments\":{\"file\":\"messages_file\",\"image\":\"messages_file\"}},\"zcode\":{\"configured\":true,\"default_model\":\"GLM-5.3-Flash\",\"model_selection\":false,\"thinking\":[\"default\"],\"stream\":\"stdout_progress\",\"attachments\":{\"file\":\"cli\",\"image\":\"cli\"}},\"traecode\":{\"configured\":false,\"default_model\":\"glm-5.3-flash\",\"model_selection\":false,\"thinking\":[\"default\"],\"stream\":\"gui_snapshot\",\"attachments\":{}}},\"attachment_limit_bytes\":1048576,\"scope\":\"configured_capabilities_not_a_login_or_generation_check\"}"
+        }
+      ]
+    }
+  },
+  "duration_s": 67.094,
+  "counts": {
+    "verified": 4
+  }
+}

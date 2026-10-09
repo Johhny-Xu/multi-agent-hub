@@ -7,23 +7,36 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/"];
+const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/"];
 
-test("explicit Hub URLs retain an independently configured token", async (t) => {
+test("Hub tokens are sent in Authorization and explicit URL credentials take precedence", async (t) => {
+  const received = [];
+  const hub = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    received.push({ url: req.url, authorization: req.headers.authorization });
+    const rpc = JSON.parse(body);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result: { content: [{ type: 'text', text: 'synthetic status' }] } }));
+  });
+  await new Promise((r) => hub.listen(0, '127.0.0.1', r));
   const original = { url: process.env.AGENTHUB_URL, token: process.env.HUB_TOKEN };
   t.after(() => {
+    hub.close();
     for (const [key, value] of [["AGENTHUB_URL", original.url], ["HUB_TOKEN", original.token]]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   });
   process.env.HUB_TOKEN = "FAKE_TEST_TOKEN +&";
   for (const root of roots) {
-    process.env.AGENTHUB_URL = "http://127.0.0.1:9999/mcp?route=test";
+    process.env.AGENTHUB_URL = `http://127.0.0.1:${hub.address().port}/mcp?route=test`;
     const merged = await import(new URL(root + "hub.mjs?url-token-test", import.meta.url));
-    assert.equal(new URL(merged.HUB).searchParams.get("token"), process.env.HUB_TOKEN);
-    process.env.AGENTHUB_URL = "http://127.0.0.1:9999/mcp?token=FAKE_URL_TOKEN";
+    await merged.hubStatus();
+    assert.deepEqual(received.at(-1), { url: '/mcp?route=test', authorization: 'Bearer FAKE_TEST_TOKEN +&' });
+    process.env.AGENTHUB_URL = `http://127.0.0.1:${hub.address().port}/mcp?token=FAKE_URL_TOKEN`;
     const retained = await import(new URL(root + "hub.mjs?url-token-existing", import.meta.url));
-    assert.equal(new URL(retained.HUB).searchParams.get("token"), "FAKE_URL_TOKEN");
+    await retained.hubStatus();
+    assert.deepEqual(received.at(-1), { url: '/mcp', authorization: 'Bearer FAKE_URL_TOKEN' });
   }
 });
 

@@ -1,0 +1,44 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "layer": "new JavaScript bridge -> isolated HTTP Hub -> authenticated official worker CLI",
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-hub-fpuhf165",
+  "port": 52495,
+  "source_files_separate_from_worker_cwd": true,
+  "results": [
+    {
+      "case": "minimaxcode-1111",
+      "worker": "minimaxcode",
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "require_write": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "minimaxcode-0c298fc308",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 116,
+        "nonce": "CHECK_200d8d86bd"
+      },
+      "public_answer": {
+        "total": 116,
+        "nonce": "CHECK_200d8d86bd"
+      },
+      "progress": [
+        {
+          "seconds": 3.192,
+          "status": "running",
+          "characters": 40
+        }
+      ],
+      "elapsed_seconds": 3.371,
+      "passed": true
+    }
+  ],
+  "temporary_attachments_cleaned": true,
+  "owned_processes_cleaned": true
+}

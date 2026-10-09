@@ -32,7 +32,7 @@ def node_runtime(command):
 
 
 def package_files():
-    files = [SOURCE / name for name in ("plugin.json", "mcp.json", ".mcp.json", "package.json", "README.md", "install.py", ".codex-plugin/plugin.json", "scripts/start.mjs")]
+    files = [SOURCE / name for name in ("plugin.json", "mcp.json", ".mcp.json", "package.json", "README.md", "install.py", ".codex-plugin/plugin.json", "scripts/start.mjs", "scripts/config.mjs")]
     files.extend(SOURCE / "mcp" / name for name in MCP_FILES)
     files.extend(sorted((SOURCE / "skills").rglob("SKILL.md")))
     files.extend(sorted((SOURCE / "templates" / ".codex" / "agents").glob("*.toml")))

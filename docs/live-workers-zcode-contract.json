@@ -1,0 +1,40 @@
+{
+  "read_only": true,
+  "no_credentials_read": true,
+  "records": [
+    {
+      "command": "/model",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+        "--cwd",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-contract-884041us",
+        "--json",
+        "--disallowed-tools",
+        "Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,Task,Agent",
+        "--prompt",
+        "/model"
+      ],
+      "exit_code": 0,
+      "public_response": "`/model` 是 ZCode 客户端的模型切换命令，直接在输入框重新输入 `/model` 即可打开模型选择器。当前会话运行在 **Deepseek-v4-flash**。\n\n本机已配置的可用模型如下：\n\n| 模型 | 说明 |\n|---|---|\n| wx/Deepseek-v4-flash | 当前会话模型 |\n| deepseek-v4.1-flash | 可选，推理等级 low/high/max |\n| ag/gemini-3.8-flash-high | 可选 |\n| kimi/k3 | 可选 |\n| zd/claude-sonnet-5-5 | 可选 |\n| trcc/glm-5.3-flashx | 可选 |\n| mimo/mimo-v2.6-flash、atria/Atria-Dawn-Preview、st/sensenova-6.8-flash-lite、stealth | 可选 |\n| step-5-preview（stepfun / stai 两家）、LongCat-2.5-Preview（Meituan） | 可选 |\n\n我无法直接帮你切换会话模型（那是客户端侧操作）——再发一次 `/model` 命令，在弹出的列表里选择即可。",
+      "error": null
+    },
+    {
+      "command": "/effort",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+        "--cwd",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-contract-884041us",
+        "--json",
+        "--disallowed-tools",
+        "Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,Task,Agent",
+        "--prompt",
+        "/effort"
+      ],
+      "exit_code": 0,
+      "public_response": "`/effort` 不在我可用的技能列表中，也不是我能识别的内置命令，所以我这边无法直接执行它。\n\n可能的情况：\n- 它是某个 CLI 客户端内置命令（比如调节推理强度/effort 级别），这类命令应该由客户端本身处理，不会作为消息传给我。\n- 如果你想让我以更高的推理深度处理某个任务，我无法在会话中途自我调整；但你可以直接在消息里描述任务，我会尽力处理。\n\n有什么具体任务需要我做吗？直接描述即可。",
+      "error": null
+    }
+  ]
+}

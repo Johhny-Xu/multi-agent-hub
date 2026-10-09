@@ -1,0 +1,3741 @@
+{
+  "platform": "Windows",
+  "generated_from_real_cli_reports": true,
+  "matrix_order": "thinking,stream,image,file",
+  "matrix_cells": 128,
+  "warning": "A cell is marked actually_run only if an exact 4-bit probe exists. A default behavior computation pass cannot prove an unsupported setting. MiMo's stream axis is CLI event projection / Hub buffering, not a provider HTTP stream disable switch.",
+  "summary_note": "latest_final_answer_verified_cells counts public-answer acceptance only. It does not prove unsupported thinking settings or requested-model availability. qualified_passed_cells applies those requirements. File artifact counts exclude no-file cells.",
+  "direct_cli_attempts": 78,
+  "exact_cells_run": 62,
+  "worker_summary": {
+    "antigravity": {
+      "exact_cells_run": 1,
+      "direct_cli_attempts": 2,
+      "latest_final_answer_verified_cells": 0,
+      "qualified_passed_cells": 0,
+      "file_cells_run": 0,
+      "latest_file_artifact_verified_cells": 0,
+      "matrix_result_counts": {
+        "blocked_region": 1,
+        "not_run_region_blocked_baseline": 7,
+        "unsupported_setting_not_run": 8
+      }
+    },
+    "codebuddy": {
+      "exact_cells_run": 1,
+      "direct_cli_attempts": 1,
+      "latest_final_answer_verified_cells": 0,
+      "qualified_passed_cells": 0,
+      "file_cells_run": 0,
+      "latest_file_artifact_verified_cells": 0,
+      "matrix_result_counts": {
+        "blocked_auth": 1,
+        "not_run_auth_blocked_baseline": 15
+      }
+    },
+    "codebuddy-cn": {
+      "exact_cells_run": 16,
+      "direct_cli_attempts": 21,
+      "latest_final_answer_verified_cells": 16,
+      "qualified_passed_cells": 16,
+      "file_cells_run": 8,
+      "latest_file_artifact_verified_cells": 8,
+      "matrix_result_counts": {
+        "passed": 16
+      }
+    },
+    "github-copilot": {
+      "exact_cells_run": 10,
+      "direct_cli_attempts": 13,
+      "latest_final_answer_verified_cells": 6,
+      "qualified_passed_cells": 6,
+      "file_cells_run": 6,
+      "latest_file_artifact_verified_cells": 2,
+      "matrix_result_counts": {
+        "failed": 2,
+        "passed": 6,
+        "unsupported_setting": 2,
+        "unsupported_setting_not_run": 6
+      }
+    },
+    "mimocode": {
+      "exact_cells_run": 16,
+      "direct_cli_attempts": 21,
+      "latest_final_answer_verified_cells": 14,
+      "qualified_passed_cells": 14,
+      "file_cells_run": 8,
+      "latest_file_artifact_verified_cells": 8,
+      "matrix_result_counts": {
+        "failed": 2,
+        "passed": 14
+      }
+    },
+    "minimaxcode": {
+      "exact_cells_run": 11,
+      "direct_cli_attempts": 11,
+      "latest_final_answer_verified_cells": 11,
+      "qualified_passed_cells": 4,
+      "file_cells_run": 5,
+      "latest_file_artifact_verified_cells": 0,
+      "matrix_result_counts": {
+        "passed": 4,
+        "unsupported_native_file_write": 4,
+        "unsupported_setting": 3,
+        "unsupported_setting_not_run": 5
+      }
+    },
+    "traecode": {
+      "exact_cells_run": 1,
+      "direct_cli_attempts": 2,
+      "latest_final_answer_verified_cells": 0,
+      "qualified_passed_cells": 0,
+      "file_cells_run": 0,
+      "latest_file_artifact_verified_cells": 0,
+      "matrix_result_counts": {
+        "failed": 1,
+        "not_run_vendor_authentication_blocked": 15
+      }
+    },
+    "zcode": {
+      "exact_cells_run": 6,
+      "direct_cli_attempts": 7,
+      "latest_final_answer_verified_cells": 3,
+      "qualified_passed_cells": 0,
+      "file_cells_run": 3,
+      "latest_file_artifact_verified_cells": 1,
+      "matrix_result_counts": {
+        "blocked_model": 16
+      }
+    }
+  },
+  "matrix": [
+    {
+      "worker": "antigravity",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "no_off_or_none_in_official_effort_contract"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "antigravity",
+          "case": "antigravity-t1s0i0f0",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "blocked_region",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 11.158,
+          "public_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+            "cache_read_tokens": 0
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-antigravity.json",
+          "completed_at_unix": 1791455129.53756
+        },
+        {
+          "worker": "antigravity",
+          "case": "antigravity-t1s0i0f0",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "blocked_region",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 13.37,
+          "public_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+            "cache_read_tokens": 0
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-antigravity-final.json",
+          "completed_at_unix": 1791455866.185116
+        }
+      ],
+      "result": "blocked_region"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "antigravity",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_region_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy",
+          "case": "codebuddy-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "blocked_auth",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 13.125,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454061.737932
+        }
+      ],
+      "result": "blocked_auth"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_auth_blocked_baseline"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 10.328,
+          "public_usage": {
+            "input_tokens": 6425,
+            "output_tokens": 29,
+            "total_tokens": 6454,
+            "reasoning_tokens": 10,
+            "cache_read_tokens": 2944,
+            "cache_write_tokens": 3481
+          },
+          "observed_reasoning_token_counts": [
+            10
+          ],
+          "stdout_chunks": 5,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454058.9281611
+        },
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 7.313,
+          "public_usage": {
+            "input_tokens": 6409,
+            "output_tokens": 19,
+            "total_tokens": 6428,
+            "reasoning_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 6409
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 5,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454393.7915406
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s0i0f1",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 10.634,
+          "public_usage": {
+            "input_tokens": 22762,
+            "output_tokens": 216,
+            "total_tokens": 7766,
+            "reasoning_tokens": 0,
+            "cache_read_tokens": 17920,
+            "cache_write_tokens": 4842
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0,
+            0
+          ],
+          "stdout_chunks": 7,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455359.9492295
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s0i1f0",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 8.751,
+          "public_usage": {
+            "input_tokens": 15169,
+            "output_tokens": 121,
+            "total_tokens": 7763,
+            "reasoning_tokens": 0,
+            "cache_read_tokens": 10368,
+            "cache_write_tokens": 4801
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0
+          ],
+          "stdout_chunks": 7,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455358.169301
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s0i1f1",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 13.797,
+          "public_usage": {
+            "input_tokens": 31627,
+            "output_tokens": 432,
+            "total_tokens": 8350,
+            "reasoning_tokens": 0,
+            "cache_read_tokens": 23552,
+            "cache_write_tokens": 8075
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "stdout_chunks": 10,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454400.324364
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s1i0f0",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 6.519,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 23,
+            "cache_read_tokens": 2944,
+            "cache_write_tokens": 3461
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 24,
+          "delta_events": 80,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455355.839797
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s1i0f1",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 11.782,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 222,
+            "cache_read_tokens": 14976,
+            "cache_write_tokens": 7821
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 212,
+          "delta_events": 555,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454398.1672316
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s1i1f0",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 16.734,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 134,
+            "cache_read_tokens": 20736,
+            "cache_write_tokens": 8202
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 261,
+          "delta_events": 619,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454261.6982074
+        },
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s1i1f0",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 8.156,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 110,
+            "cache_read_tokens": 10368,
+            "cache_write_tokens": 4818
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 95,
+          "delta_events": 225,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454401.9343555
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t0s1i1f1",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 12.148,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 313,
+            "cache_read_tokens": 18432,
+            "cache_write_tokens": 5033
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 251,
+          "delta_events": 570,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455367.9264379
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s0i0f0",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 7.638,
+          "public_usage": {
+            "input_tokens": 6430,
+            "output_tokens": 31,
+            "total_tokens": 6461,
+            "reasoning_tokens": 7,
+            "cache_read_tokens": 2944,
+            "cache_write_tokens": 3486
+          },
+          "observed_reasoning_token_counts": [
+            7
+          ],
+          "stdout_chunks": 5,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455365.8132317
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s0i0f1",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 14.562,
+          "public_usage": {
+            "input_tokens": 22884,
+            "output_tokens": 255,
+            "total_tokens": 7834,
+            "reasoning_tokens": 35,
+            "cache_read_tokens": 17920,
+            "cache_write_tokens": 4964
+          },
+          "observed_reasoning_token_counts": [
+            11,
+            24,
+            0
+          ],
+          "stdout_chunks": 7,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454259.5941055
+        },
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s0i0f1",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 9.969,
+          "public_usage": {
+            "input_tokens": 22905,
+            "output_tokens": 251,
+            "total_tokens": 7838,
+            "reasoning_tokens": 31,
+            "cache_read_tokens": 18048,
+            "cache_write_tokens": 4857
+          },
+          "observed_reasoning_token_counts": [
+            10,
+            21,
+            0
+          ],
+          "stdout_chunks": 7,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454408.2400718
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s0i1f0",
+          "thinking": true,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 8.578,
+          "public_usage": {
+            "input_tokens": 15269,
+            "output_tokens": 162,
+            "total_tokens": 7837,
+            "reasoning_tokens": 59,
+            "cache_read_tokens": 10496,
+            "cache_write_tokens": 4773
+          },
+          "observed_reasoning_token_counts": [
+            40,
+            19
+          ],
+          "stdout_chunks": 7,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454408.9148705
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s0i1f1",
+          "thinking": true,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 12.549,
+          "public_usage": {
+            "input_tokens": 23761,
+            "output_tokens": 438,
+            "total_tokens": 8260,
+            "reasoning_tokens": 152,
+            "cache_read_tokens": 18688,
+            "cache_write_tokens": 5073
+          },
+          "observed_reasoning_token_counts": [
+            101,
+            51,
+            0
+          ],
+          "stdout_chunks": 9,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455372.4948697
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s1i0f0",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 6.219,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 33,
+            "cache_read_tokens": 2944,
+            "cache_write_tokens": 3492
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 40,
+          "delta_events": 96,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454408.1645174
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s1i0f1",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 11.472,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 241,
+            "cache_read_tokens": 17920,
+            "cache_write_tokens": 4953
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 237,
+          "delta_events": 676,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455377.048122
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s1i1f0",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 12.57,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 113,
+            "cache_read_tokens": 10496,
+            "cache_write_tokens": 4728
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 95,
+          "delta_events": 319,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455380.4769833
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "codebuddy-cn",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "failed",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 19.75,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 952,
+            "cache_read_tokens": 26752,
+            "cache_write_tokens": 5244
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 969,
+          "delta_events": 2309,
+          "evidence": "docs/live-workers-windows-attachments.json",
+          "completed_at_unix": 1791454169.0261993
+        },
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 16.047,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 344,
+            "cache_read_tokens": 18432,
+            "cache_write_tokens": 5149
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 322,
+          "delta_events": 957,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454260.9262073
+        },
+        {
+          "worker": "codebuddy-cn",
+          "case": "codebuddy-cn-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 10.75,
+          "public_usage": {
+            "model": "deepseek-v4.1-flash",
+            "input_tokens": 0,
+            "output_tokens": 354,
+            "cache_read_tokens": 18560,
+            "cache_write_tokens": 5057
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 420,
+          "delta_events": 993,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454418.8125772
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 18.969,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 19,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454067.5719962
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s0i0f1",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 17.297,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 30,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-copilot-complement.json",
+          "completed_at_unix": 1791456113.8723524
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s0i1f0",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 14.766,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 15,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-copilot-complement.json",
+          "completed_at_unix": 1791456111.4090834
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s0i1f1",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "failed",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 16.516,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 64,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-copilot-files.json",
+          "completed_at_unix": 1791454413.7037442
+        },
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s0i1f1",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 14.797,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 54,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-copilot-files-fixed.json",
+          "completed_at_unix": 1791454486.741635
+        }
+      ],
+      "result": "failed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s1i0f0",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 8.909,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 31,
+          "delta_events": 17,
+          "evidence": "docs/live-workers-windows-copilot-complement.json",
+          "completed_at_unix": 1791456120.320851
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s1i0f1",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "failed",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 13.578,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 191,
+          "delta_events": 17,
+          "evidence": "docs/live-workers-windows-copilot-files.json",
+          "completed_at_unix": 1791454410.7163267
+        },
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s1i0f1",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 12.282,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 165,
+          "delta_events": 16,
+          "evidence": "docs/live-workers-windows-copilot-files-fixed.json",
+          "completed_at_unix": 1791454484.1254687
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s1i1f0",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 10.329,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 37,
+          "delta_events": 16,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454271.5054266
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t0s1i1f1",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 13.572,
+          "public_usage": {
+            "model": "gpt-5.6-luna"
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 240,
+          "delta_events": 15,
+          "evidence": "docs/live-workers-windows-copilot-complement.json",
+          "completed_at_unix": 1791456127.444837
+        }
+      ],
+      "result": "failed"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t1s0i0f1",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 6.063,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454267.935356
+        }
+      ],
+      "result": "unsupported_setting"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "github-copilot",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "thinking_on_unsupported_auto_model"
+      ],
+      "attempts": [
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 2.203,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-attachments.json",
+          "completed_at_unix": 1791454151.8345263
+        },
+        {
+          "worker": "github-copilot",
+          "case": "github-copilot-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 6.672,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454266.3063018
+        }
+      ],
+      "result": "unsupported_setting"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 14.0,
+          "public_usage": {
+            "input_tokens": 36035,
+            "output_tokens": 24,
+            "reasoning_tokens": 0,
+            "total_tokens": 36059
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 3,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454072.9441707
+        },
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 8.312,
+          "public_usage": {
+            "input_tokens": 11453,
+            "output_tokens": 21,
+            "reasoning_tokens": 0,
+            "total_tokens": 36050
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 3,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454416.570401
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s0i0f1",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 47.437,
+          "public_usage": {
+            "input_tokens": 134,
+            "output_tokens": 24,
+            "reasoning_tokens": 0,
+            "total_tokens": 36574
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0,
+            0
+          ],
+          "stdout_chunks": 9,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455419.9674437
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s0i1f0",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 36.219,
+          "public_usage": {
+            "input_tokens": 11590,
+            "output_tokens": 23,
+            "reasoning_tokens": 0,
+            "total_tokens": 36189
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 3,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455413.527454
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s0i1f1",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 28.109,
+          "public_usage": {
+            "input_tokens": 106,
+            "output_tokens": 24,
+            "reasoning_tokens": 0,
+            "total_tokens": 37058
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0,
+            0
+          ],
+          "stdout_chunks": 11,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454437.040457
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s1i0f0",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 31.104,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455411.6973498
+        }
+      ],
+      "result": "failed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s1i0f1",
+          "thinking": false,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 19.5,
+          "public_usage": {
+            "input_tokens": 145,
+            "output_tokens": 24,
+            "reasoning_tokens": 0,
+            "total_tokens": 36585
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0,
+            0
+          ],
+          "stdout_chunks": 9,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454436.073078
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s1i1f0",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 15.75,
+          "public_usage": {
+            "input_tokens": 11593,
+            "output_tokens": 23,
+            "reasoning_tokens": 0,
+            "total_tokens": 36192
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 3,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454283.6977727
+        },
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s1i1f0",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 8.375,
+          "public_usage": {
+            "input_tokens": 11591,
+            "output_tokens": 23,
+            "reasoning_tokens": 0,
+            "total_tokens": 36190
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 3,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454427.2970195
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t0s1i1f1",
+          "thinking": false,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 40.036,
+          "public_usage": {
+            "input_tokens": 110,
+            "output_tokens": 26,
+            "reasoning_tokens": 0,
+            "total_tokens": 36744
+          },
+          "observed_reasoning_token_counts": [
+            0,
+            0,
+            0
+          ],
+          "stdout_chunks": 9,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455451.7377267
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s0i0f0",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 31.873,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455445.4034896
+        }
+      ],
+      "result": "failed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s0i0f1",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 32.109,
+          "public_usage": {
+            "input_tokens": 154,
+            "output_tokens": 25,
+            "reasoning_tokens": 22,
+            "total_tokens": 36809
+          },
+          "observed_reasoning_token_counts": [
+            174,
+            41,
+            22
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454303.6306434
+        },
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s0i0f1",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 27.547,
+          "public_usage": {
+            "input_tokens": 628,
+            "output_tokens": 23,
+            "reasoning_tokens": 11,
+            "total_tokens": 36822
+          },
+          "observed_reasoning_token_counts": [
+            173,
+            31,
+            11
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454454.8518434
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s0i1f0",
+          "thinking": true,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 15.516,
+          "public_usage": {
+            "input_tokens": 11593,
+            "output_tokens": 25,
+            "reasoning_tokens": 190,
+            "total_tokens": 36384
+          },
+          "observed_reasoning_token_counts": [
+            190
+          ],
+          "stdout_chunks": 4,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454451.6023252
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s0i1f1",
+          "thinking": true,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 57.485,
+          "public_usage": {
+            "input_tokens": 201,
+            "output_tokens": 25,
+            "reasoning_tokens": 150,
+            "total_tokens": 37112
+          },
+          "observed_reasoning_token_counts": [
+            141,
+            47,
+            150
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455477.4598968
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s1i0f0",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 20.219,
+          "public_usage": {
+            "input_tokens": 487,
+            "output_tokens": 24,
+            "reasoning_tokens": 30,
+            "total_tokens": 36573
+          },
+          "observed_reasoning_token_counts": [
+            265,
+            30
+          ],
+          "stdout_chunks": 8,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454457.2735598
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s1i0f1",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 57.844,
+          "public_usage": {
+            "input_tokens": 199,
+            "output_tokens": 25,
+            "reasoning_tokens": 10,
+            "total_tokens": 36714
+          },
+          "observed_reasoning_token_counts": [
+            75,
+            35,
+            10
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455503.2493525
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s1i1f0",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 32.297,
+          "public_usage": {
+            "input_tokens": 539,
+            "output_tokens": 24,
+            "reasoning_tokens": 23,
+            "total_tokens": 36682
+          },
+          "observed_reasoning_token_counts": [
+            246,
+            23
+          ],
+          "stdout_chunks": 8,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise-complement.json",
+          "completed_at_unix": 1791455484.0531535
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "mimocode",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 36.234,
+          "public_usage": {
+            "input_tokens": 559,
+            "output_tokens": 23,
+            "reasoning_tokens": 9,
+            "total_tokens": 36943
+          },
+          "observed_reasoning_token_counts": [
+            117,
+            49,
+            9
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-attachments.json",
+          "completed_at_unix": 1791454185.8547757
+        },
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 27.922,
+          "public_usage": {
+            "input_tokens": 252,
+            "output_tokens": 25,
+            "reasoning_tokens": 13,
+            "total_tokens": 36898
+          },
+          "observed_reasoning_token_counts": [
+            37,
+            81,
+            13
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-cross.json",
+          "completed_at_unix": 1791454294.244197
+        },
+        {
+          "worker": "mimocode",
+          "case": "mimocode-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 24.563,
+          "public_usage": {
+            "input_tokens": 241,
+            "output_tokens": 25,
+            "reasoning_tokens": 9,
+            "total_tokens": 36947
+          },
+          "observed_reasoning_token_counts": [
+            91,
+            65,
+            9
+          ],
+          "stdout_chunks": 13,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-pairwise.json",
+          "completed_at_unix": 1791454476.182518
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 2.141,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 71,
+            "output_tokens": 17,
+            "cache_read_tokens": 199,
+            "cache_write_tokens": 0
+          },
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454063.8758936
+        }
+      ],
+      "result": "unsupported_setting"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model",
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t0s0i0f1",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "unsupported_native_file_write",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 2.0,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 123,
+            "output_tokens": 102,
+            "cache_read_tokens": 199,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 82
+          },
+          "observed_reasoning_token_counts": [
+            82
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-zcode.json",
+          "completed_at_unix": 1791454731.0561109
+        }
+      ],
+      "result": "unsupported_setting"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t0s0i1f0",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 3.109,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 243,
+            "output_tokens": 46,
+            "cache_read_tokens": 128,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 30
+          },
+          "observed_reasoning_token_counts": [
+            30
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-zcode.json",
+          "completed_at_unix": 1791454729.1987627
+        }
+      ],
+      "result": "unsupported_setting"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model",
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model",
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_off_unsupported_always_thinking_model",
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [],
+      "result": "unsupported_setting_not_run"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s0i0f0",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 2.019,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 142,
+            "output_tokens": 47,
+            "cache_read_tokens": 128,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 31
+          },
+          "observed_reasoning_token_counts": [
+            31
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-complement.json",
+          "completed_at_unix": 1791456109.3050487
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s0i0f1",
+          "thinking": true,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "unsupported_native_file_write",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 2.308,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 119,
+            "output_tokens": 115,
+            "cache_read_tokens": 199,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 99
+          },
+          "observed_reasoning_token_counts": [
+            99
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-complement.json",
+          "completed_at_unix": 1791456109.602357
+        }
+      ],
+      "result": "unsupported_native_file_write"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s0i1f0",
+          "thinking": true,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 4.479,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 244,
+            "output_tokens": 73,
+            "cache_read_tokens": 128,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 56
+          },
+          "observed_reasoning_token_counts": [
+            56
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-image.json",
+          "completed_at_unix": 1791456819.2685225
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s0i1f1",
+          "thinking": true,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "unsupported_native_file_write",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 4.797,
+          "public_usage": {
+            "model": "MiniMax-M3.1-Flash-Preview",
+            "input_tokens": 316,
+            "output_tokens": 118,
+            "cache_read_tokens": 128,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 101
+          },
+          "observed_reasoning_token_counts": [
+            101
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-image.json",
+          "completed_at_unix": 1791456819.5942042
+        }
+      ],
+      "result": "unsupported_native_file_write"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s1i0f0",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 3.015,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 5,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-zcode.json",
+          "completed_at_unix": 1791454729.0410662
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s1i0f1",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": true,
+          "status": "unsupported_native_file_write",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 1.344,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 4,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-complement.json",
+          "completed_at_unix": 1791456110.6613088
+        }
+      ],
+      "result": "unsupported_native_file_write"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s1i1f0",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 2.443,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 4,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-image.json",
+          "completed_at_unix": 1791456821.7344089
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "worker": "minimaxcode",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "native_local_file_write_unsupported_host_inline_input_only"
+      ],
+      "attempts": [
+        {
+          "worker": "minimaxcode",
+          "case": "minimaxcode-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "unsupported_native_file_write",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 3.672,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 4,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-attachments.json",
+          "completed_at_unix": 1791454155.538133
+        }
+      ],
+      "result": "unsupported_native_file_write"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [],
+      "attempts": [
+        {
+          "worker": "traecode",
+          "case": "traecode-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 0.375,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454067.9565096
+        },
+        {
+          "worker": "traecode",
+          "case": "traecode-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "failed",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 6.062,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-trae.json",
+          "completed_at_unix": 1791454167.1886606
+        }
+      ],
+      "result": "failed"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "traecode",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [],
+      "attempts": [],
+      "result": "not_run_vendor_authentication_blocked"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0000",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [
+        {
+          "worker": "zcode",
+          "case": "zcode-t0s0i0f0",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 19.297,
+          "public_usage": {
+            "input_tokens": 26964,
+            "output_tokens": 90,
+            "reasoning_tokens": 0,
+            "total_tokens": 27054,
+            "cache_read_tokens": 256,
+            "cache_write_tokens": 0,
+            "model_request_count": 1,
+            "web_fetch_requests": 0,
+            "web_search_requests": 0
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-baseline.json",
+          "completed_at_unix": 1791454083.1737058
+        }
+      ],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0001",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [
+        {
+          "worker": "zcode",
+          "case": "zcode-t0s0i0f1",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "failed",
+          "answer_verified": true,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 47.984,
+          "public_usage": {
+            "input_tokens": 106985,
+            "output_tokens": 2576,
+            "reasoning_tokens": 0,
+            "total_tokens": 109561,
+            "cache_read_tokens": 63232,
+            "cache_write_tokens": 0,
+            "model_request_count": 4,
+            "web_fetch_requests": 0,
+            "web_search_requests": 0
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-zcode.json",
+          "completed_at_unix": 1791454789.9957879
+        },
+        {
+          "worker": "zcode",
+          "case": "zcode-t0s0i0f1",
+          "thinking": false,
+          "stream": false,
+          "image": false,
+          "file": true,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 33.56,
+          "public_usage": {
+            "input_tokens": 52580,
+            "output_tokens": 182,
+            "reasoning_tokens": 0,
+            "total_tokens": 52762,
+            "cache_read_tokens": 1024,
+            "cache_write_tokens": 0,
+            "model_request_count": 2,
+            "web_fetch_requests": 0,
+            "web_search_requests": 0
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-zcode-permission.json",
+          "completed_at_unix": 1791455691.4464538
+        }
+      ],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0010",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": true,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [
+        {
+          "worker": "zcode",
+          "case": "zcode-t0s0i1f0",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": false,
+          "status": "timeout",
+          "answer_verified": false,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 70.125,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-zcode.json",
+          "completed_at_unix": 1791454801.1823282
+        }
+      ],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0011",
+      "thinking": false,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [
+        {
+          "worker": "zcode",
+          "case": "zcode-t0s0i1f1",
+          "thinking": false,
+          "stream": false,
+          "image": true,
+          "file": true,
+          "status": "timeout",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 90.42,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-zcode-permission.json",
+          "completed_at_unix": 1791455748.5178707
+        }
+      ],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0100",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0101",
+      "thinking": false,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0110",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "0111",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1000",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1001",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1010",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1011",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1100",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "actually_run": true,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [
+        {
+          "worker": "zcode",
+          "case": "zcode-t1s1i0f0",
+          "thinking": true,
+          "stream": true,
+          "image": false,
+          "file": false,
+          "status": "passed",
+          "answer_verified": true,
+          "written_artifact_verified": true,
+          "elapsed_seconds": 12.813,
+          "public_usage": {
+            "input_tokens": 26961,
+            "output_tokens": 93,
+            "reasoning_tokens": 0,
+            "total_tokens": 27054,
+            "cache_read_tokens": 1024,
+            "cache_write_tokens": 0,
+            "model_request_count": 1,
+            "web_fetch_requests": 0,
+            "web_search_requests": 0
+          },
+          "observed_reasoning_token_counts": [
+            0
+          ],
+          "stdout_chunks": 1,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-minimax-zcode.json",
+          "completed_at_unix": 1791454742.0023992
+        }
+      ],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1101",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": true,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1110",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "actually_run": false,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    },
+    {
+      "worker": "zcode",
+      "bits": "1111",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "actually_run": true,
+      "limitations": [
+        "thinking_toggle_not_exposed_in_headless_argv",
+        "stream_toggle_not_exposed_in_headless_argv",
+        "GLM-5.3-Flash_not_available_in_official_runtime_catalog"
+      ],
+      "attempts": [
+        {
+          "worker": "zcode",
+          "case": "zcode-t1s1i1f1",
+          "thinking": true,
+          "stream": true,
+          "image": true,
+          "file": true,
+          "status": "timeout",
+          "answer_verified": false,
+          "written_artifact_verified": false,
+          "elapsed_seconds": 100.219,
+          "public_usage": {},
+          "observed_reasoning_token_counts": [],
+          "stdout_chunks": 0,
+          "delta_events": 0,
+          "evidence": "docs/live-workers-windows-attachments.json",
+          "completed_at_unix": 1791454255.7693045
+        }
+      ],
+      "result": "blocked_model",
+      "observed_runtime_model": "wx/Deepseek-v4-flash",
+      "model_evidence": "docs/live-workers-zcode-rpc.json"
+    }
+  ]
+}
