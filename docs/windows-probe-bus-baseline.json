@@ -1,0 +1,363 @@
+{
+  "kind": "synthetic_windows_bus_integration_probe",
+  "tested_date": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "platform": "Windows",
+  "python_version": "3.12.14",
+  "duration_seconds": 13.453,
+  "live_vendor_inference_performed": false,
+  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-lry0egtd",
+  "active_agent_config_or_state_modified": false,
+  "source_sha256": {
+    "hub/agent_hub.py": "8eb136862e864a7b45d1afb2ac4e4786795c92f0863c05c90fd3babae160b5cf",
+    "hub/async_worker.py": "51d788f8aee5c75c1f554af5e8e5693ecdc44feb5b7b26e2ab5f5f99a4571298",
+    "plugins/agenthub-workers/mcp/hub.mjs": "3e0f8bbaf8ec331a9ef7eeb7d799e44f130eb45e4b70027d3d601505da729dfe",
+    "drivers/zcode_dom.js": "d4b1723878230771640d20ced7d2d2f74aa7918d7f60ea71716bf7f0e3e38661"
+  },
+  "checks": [
+    {
+      "name": "async_cwd",
+      "passed": false,
+      "expected": "Child cwd equals caller cwd",
+      "observed": {
+        "result": {
+          "agent": "cmd",
+          "status": "completed",
+          "task": "[\"%USERPROFILE%\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\python\\\\python.exe\", \"<isolated-temp>\\\\synthetic_worker.py\", \"cwd\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+          "cmd": [
+            "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "<isolated-temp>\\synthetic_worker.py",
+            "cwd",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null,
+          "ref": "codebuddy-d7b3ca0a33",
+          "updated_at": 1791446113.4936948,
+          "progress": null,
+          "exit_code": 0,
+          "text": "{\"synthetic\": true, \"kind\": \"cwd\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}",
+          "probe_elapsed_seconds": 5.265
+        },
+        "task_metadata": {
+          "cmd": [
+            "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "<isolated-temp>\\synthetic_worker.py",
+            "cwd",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null
+        }
+      },
+      "source": [
+        "hub/agent_hub.py:422",
+        "hub/agent_hub.py:455",
+        "hub/async_worker.py:275"
+      ]
+    },
+    {
+      "name": "async_workdir_via",
+      "passed": false,
+      "expected": "Profile cwd used and caller target appended through --add-dir",
+      "observed": {
+        "result": {
+          "agent": "cmd",
+          "status": "completed",
+          "task": "[\"%USERPROFILE%\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\python\\\\python.exe\", \"<isolated-temp>\\\\synthetic_worker.py\", \"workdir\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+          "cmd": [
+            "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "<isolated-temp>\\synthetic_worker.py",
+            "workdir",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null,
+          "ref": "codebuddy-cn-bcb7008eb3",
+          "updated_at": 1791446113.509274,
+          "progress": null,
+          "exit_code": 0,
+          "text": "{\"synthetic\": true, \"kind\": \"workdir\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}",
+          "probe_elapsed_seconds": 5.234
+        },
+        "task_metadata": {
+          "cmd": [
+            "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "<isolated-temp>\\synthetic_worker.py",
+            "workdir",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null
+        }
+      },
+      "source": [
+        "hub/agent_hub.py:455",
+        "hub/agent_hub.py:478"
+      ]
+    },
+    {
+      "name": "async_timeout",
+      "passed": false,
+      "expected": "Requested timeout_s=0.1 bounds a synthetic 2-second child and reports timeout/error",
+      "observed": {
+        "requested_timeout_s": 0.1,
+        "child_sleep_s": 2,
+        "result": {
+          "agent": "cmd",
+          "status": "completed",
+          "task": "[\"%USERPROFILE%\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\python\\\\python.exe\", \"<isolated-temp>\\\\synthetic_worker.py\", \"sleep\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+          "cmd": [
+            "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "<isolated-temp>\\synthetic_worker.py",
+            "sleep",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null,
+          "ref": "mimocode-96ca37e034",
+          "updated_at": 1791446113.5337546,
+          "progress": null,
+          "exit_code": 0,
+          "text": "{\"synthetic\": true, \"kind\": \"sleep\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}",
+          "probe_elapsed_seconds": 5.219
+        },
+        "task_metadata": {
+          "cmd": [
+            "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "<isolated-temp>\\synthetic_worker.py",
+            "sleep",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null
+        }
+      },
+      "source": [
+        "hub/agent_hub.py:423",
+        "hub/agent_hub.py:463",
+        "hub/async_worker.py:277"
+      ]
+    },
+    {
+      "name": "async_nonzero_exit",
+      "passed": false,
+      "expected": "Synthetic child exit 7 reports failure",
+      "observed": {
+        "agent": "cmd",
+        "status": "completed",
+        "task": "[\"%USERPROFILE%\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\python\\\\python.exe\", \"<isolated-temp>\\\\synthetic_worker.py\", \"fail\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+        "cmd": [
+          "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "<isolated-temp>\\synthetic_worker.py",
+          "fail",
+          "SYNTHETIC_LOCAL_TEST_ONLY"
+        ],
+        "callback_url": null,
+        "ref": "minimaxcode-2e3ef8c9a5",
+        "updated_at": 1791446113.5614376,
+        "progress": null,
+        "exit_code": 7,
+        "text": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}",
+        "probe_elapsed_seconds": 5.25
+      },
+      "source": [
+        "hub/async_worker.py:349",
+        "hub/async_worker.py:350"
+      ]
+    },
+    {
+      "name": "async_bare_cmd_path",
+      "passed": true,
+      "expected": "Existing .cmd command on PATH launches through Windows-compatible resolution",
+      "observed": {
+        "which_resolves": true,
+        "result": {
+          "agent": "cmd",
+          "status": "completed",
+          "task": "[\"agenthub-smoke-lry0egtd.cmd\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+          "cmd": [
+            "agenthub-smoke-lry0egtd.cmd",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null,
+          "ref": "github-copilot-8147610358",
+          "updated_at": 1791446113.5913033,
+          "progress": null,
+          "exit_code": 0,
+          "text": "SYNTHETIC_CMD_OK",
+          "probe_elapsed_seconds": 5.235
+        }
+      },
+      "source": [
+        "hub/agent_hub.py:455",
+        "hub/agent_hub.py:482",
+        "hub/async_worker.py:275"
+      ]
+    },
+    {
+      "name": "async_extensionless_cmd_path",
+      "passed": false,
+      "expected": "Extensionless name of an existing .cmd on PATH resolves through PATHEXT",
+      "observed": {
+        "which_resolves": true,
+        "result": {
+          "agent": "cmd",
+          "status": "error",
+          "task": "[\"agenthub-smoke-lry0egtd\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+          "cmd": [
+            "agenthub-smoke-lry0egtd",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null,
+          "ref": "github-copilot-70fe4205ab",
+          "updated_at": 1791446113.763592,
+          "text": "执行出错: [WinError 2] 系统找不到指定的文件。",
+          "progress": null
+        }
+      },
+      "source": [
+        "hub/agent_hub.py:455",
+        "hub/agent_hub.py:482",
+        "hub/async_worker.py:275"
+      ]
+    },
+    {
+      "name": "bridge_ask_nonzero",
+      "passed": false,
+      "expected": "Plugin ask returns ok=false for a synthetic child exit 7",
+      "observed": {
+        "ok": true,
+        "status": "completed",
+        "worker": "minimaxcode",
+        "ref": "minimaxcode-f141fb76c5",
+        "answer": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\"]}"
+      },
+      "source": [
+        "plugins/agenthub-workers/mcp/hub.mjs:96",
+        "hub/async_worker.py:350"
+      ]
+    },
+    {
+      "name": "bridge_fetch_error",
+      "passed": false,
+      "expected": "Fetch preserves terminal startup-error text",
+      "observed": {
+        "hub_result": {
+          "agent": "cmd",
+          "status": "error",
+          "task": "[\"<isolated-temp>\\\\not-installed.exe\", \"SYNTHETIC_LOCAL_TEST_ONLY\"]",
+          "cmd": [
+            "<isolated-temp>\\not-installed.exe",
+            "SYNTHETIC_LOCAL_TEST_ONLY"
+          ],
+          "callback_url": null,
+          "ref": "antigravity-f763fefe6b",
+          "updated_at": 1791446108.585813,
+          "text": "执行出错: [WinError 2] 系统找不到指定的文件。",
+          "progress": null,
+          "probe_elapsed_seconds": 0.562
+        },
+        "bridge": {
+          "status": "error",
+          "answer": ""
+        }
+      },
+      "source": [
+        "plugins/agenthub-workers/mcp/hub.mjs:236",
+        "plugins/agenthub-workers/mcp/hub.mjs:239"
+      ]
+    },
+    {
+      "name": "bridge_zcode_null_cli_route",
+      "passed": true,
+      "expected": "ZCode cli:null routes to its desktop delegate and returns a ref",
+      "observed": {
+        "ok": true,
+        "worker": "zcode",
+        "ref": "zcode-e128a25063"
+      },
+      "source": [
+        "plugins/agenthub-workers/mcp/hub.mjs:65",
+        "plugins/agenthub-workers/mcp/hub.mjs:62",
+        "hub/agent_hub.py:419"
+      ]
+    },
+    {
+      "name": "zcode_driver_error_propagation",
+      "passed": false,
+      "expected": "Actual closed-port driver failure remains an error with diagnostic text",
+      "observed": {
+        "direct_driver_exit": 1,
+        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:60861\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 60861\n}\n\nNode.js v24.17.0\n",
+        "async_result": {
+          "agent": "zcode",
+          "status": "completed",
+          "task": "SYNTHETIC_CLOSED_CDP_TEST_ONLY",
+          "ref": "zcode-24e11f8f1c",
+          "updated_at": 1791446120.5494869,
+          "callback_url": null,
+          "text": "",
+          "session_id": null,
+          "progress": null
+        },
+        "forced_cdp_target": "reserved non-listening loopback port",
+        "real_ui_access": false
+      },
+      "source": [
+        "hub/async_worker.py:123",
+        "hub/async_worker.py:245",
+        "hub/async_worker.py:353"
+      ]
+    },
+    {
+      "name": "atomic_result_replace_sharing",
+      "passed": false,
+      "expected": "Actual hub/worker atomic writers survive a transient 0.2s Windows read handle",
+      "observed": {
+        "hub": {
+          "error": {
+            "type": "PermissionError",
+            "winerror": 5,
+            "message": "[WinError 5] 拒绝访问。: '<isolated-temp>\\\\results\\\\atomic-aaa001.json.tmp' -> '<isolated-temp>\\\\results\\\\atomic-aaa001.json'"
+          },
+          "reader_closed": true,
+          "result": {
+            "status": "running",
+            "text": "old",
+            "ref": "atomic-aaa001",
+            "updated_at": 1791446120.8377244
+          }
+        },
+        "async_worker": {
+          "error": {
+            "type": "PermissionError",
+            "winerror": 5,
+            "message": "[WinError 5] 拒绝访问。: '<isolated-temp>\\\\results\\\\atomic-aaa002.json.tmp' -> '<isolated-temp>\\\\results\\\\atomic-aaa002.json'"
+          },
+          "reader_closed": true,
+          "result": {
+            "status": "running",
+            "text": "old",
+            "ref": "atomic-aaa002",
+            "updated_at": 1791446121.04633
+          }
+        }
+      },
+      "source": [
+        "hub/agent_hub.py:635",
+        "hub/async_worker.py:81",
+        "hub/async_worker.py:341"
+      ]
+    }
+  ],
+  "passed": 2,
+  "failed": 9,
+  "worker_diagnostics": {
+    "worker-1.log": "",
+    "worker-2.log": "",
+    "worker-3.log": "",
+    "worker-4.log": "",
+    "worker-5.log": "",
+    "worker-6.log": "",
+    "worker-7.log": "",
+    "worker-8.log": "",
+    "worker-9.log": "",
+    "worker-10.log": ""
+  },
+  "cleanup": "Ephemeral HTTP server and reserved CDP socket closed; only test child processes/descendants reclaimed through a Windows Job Object. Small temporary fixture/result files retained; no directory deletion attempted."
+}

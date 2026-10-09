@@ -1,0 +1,35 @@
+{
+  "kind": "native_windows_login_integration",
+  "date": "2026-10-08",
+  "tests": [
+    {
+      "name": "real_terminal_utf8_owned_listener",
+      "passed": true
+    },
+    {
+      "name": "cancel_closes_reader_and_is_idempotent",
+      "passed": true
+    },
+    {
+      "name": "minimaxcode_official_link_and_cancel",
+      "passed": true,
+      "link_received": true,
+      "observed_status": "awaiting_user",
+      "error": null,
+      "instructions": "Open the official link in your browser. Do not send passwords or API keys to the Hub. Credentials are saved by the official CLI on the Hub host.",
+      "final_status": "cancelled"
+    },
+    {
+      "name": "mimocode_official_link_and_cancel",
+      "passed": true,
+      "link_received": true,
+      "observed_status": "awaiting_user",
+      "error": null,
+      "instructions": "Open the official link in your browser. Do not send passwords or API keys to the Hub. Credentials are saved by the official CLI on the Hub host.",
+      "final_status": "cancelled"
+    }
+  ],
+  "passed": 4,
+  "failed": 0,
+  "temporary_config": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-login-smoke-3ho6004t"
+}

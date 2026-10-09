@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# agent-hub-console 独立后端 (Linux 版) — 由 standalone 模式引导
-export HUBCONSOLE_HOST=0.0.0.0
-export HUBCONSOLE_PORT=8890
-export HUBCONSOLE_SUB_HOST=0.0.0.0
-export HUBCONSOLE_DATA_DIR="$HOME/.agent-hub-console"
-cd "$HOME/agent-hub-console"
-exec /usr/bin/node miniapp/node/server.mjs >> "$HOME/agent-hub-console/console.log" 2>&1
+# Run the console from this checkout, preserving caller/.env settings.
+set -e
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -a
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+export HUBCONSOLE_HOST="${HUBCONSOLE_HOST:-127.0.0.1}"
+export HUBCONSOLE_PORT="${HUBCONSOLE_PORT:-8890}"
+export HUBCONSOLE_SUB_HOST="${HUBCONSOLE_SUB_HOST:-127.0.0.1}"
+export HUBCONSOLE_SERVER_URL="${HUBCONSOLE_SERVER_URL:-http://127.0.0.1:${AGENTHUB_PORT:-8765}/mcp}"
+export HUBCONSOLE_SERVER_TOKEN="${HUBCONSOLE_SERVER_TOKEN:-${HUB_TOKEN:-}}"
+command -v node >/dev/null 2>&1 || { echo "Node.js is required" >&2; exit 1; }
+exec node "$ROOT_DIR/console/server.mjs"

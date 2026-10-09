@@ -1,0 +1,69 @@
+[
+  {
+    "name": "version",
+    "edition": "intl",
+    "executable": "C:\\Program Files\\nodejs\\node.exe",
+    "argv": [
+      "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+      "--version"
+    ],
+    "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+    "envOverrides": {
+      "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+      "DISABLE_AUTOUPDATER": "1"
+    },
+    "durationMs": 89,
+    "timedOut": false,
+    "code": 0,
+    "signal": null,
+    "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\version.stdout.log",
+    "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\version.stderr.log",
+    "stdoutPreview": "2.162.0\n",
+    "stderrPreview": ""
+  },
+  {
+    "name": "help",
+    "edition": "intl",
+    "executable": "C:\\Program Files\\nodejs\\node.exe",
+    "argv": [
+      "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+      "--help"
+    ],
+    "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+    "envOverrides": {
+      "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+      "DISABLE_AUTOUPDATER": "1"
+    },
+    "durationMs": 3226,
+    "timedOut": false,
+    "code": 0,
+    "signal": null,
+    "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\help.stdout.log",
+    "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\help.stderr.log",
+    "stdoutPreview": "Usage: codebuddy|cbc [options] [command] [prompt]\n\nCodeBuddy Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                           Your prompt\n\nOptions:\n  -V, --version                                    output the version number\n  -d, --debug [filter]                             Enable debug mode with optional category filtering (e.g., \"api,hooks\" or \"!statsig,!file\") (default: false)\n  --verbose                                        Override verbose mode setting from config (default: false)\n  -p, --print                                      Print response and exit (useful for pipes) (default: false)\n  --output-format <format>                         Output format (only works with --print): \"text\" (default), \"json\" (single result), or \"stream-json\" (realtime streaming) (default: \"text\")\n  --input-format <format>                          Input format (only works with --print): \"text\" (default), or \"stream-json\" (realtime streaming input) (choices: \"text\", \"stream-json\") (default: \"text\")\n  --json-schema <schema>                           JSON Schema for structured output validation. Example: {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}\n  --include-partial-messages                       Output raw SSE incremental messages from model requests (only works with --output-format stream-json) (default: false)\n  -y, --dangerously-skip-permissions               Bypass permission prompts (HIGH/CRITICAL still ask). Isolated-sandbox full pass: CODEBUDDY_IS_SANDBOX=1 (process env only; high-risk). (default: false)\n  --permission-mode <mode>                         Default permission mode for this process (TUI, --serve Web, ACP). Choices: acceptEdits, bypassPermissions, default, plan, dontAsk, auto. Does not write settings.\n  --permission-mode-before-plan <mode>             Permission mode to restore when exiting plan mode\n  --subagent-permission-mode <mode>                Default permission mode for subagents/teammates (choices: \"acceptEdits\", \"bypassPermissions\", \"default\", \"plan\", \"dontAsk\", \"auto\"). Overrides inheritance from main session.\n  --tools <value>                                  Restrict which built-in tools CodeBuddy can use. Use \"\" to disable all, \"default\" for all, or comma-separated tool names like \"Bash,Edit,Read\".\n  --allowedTools <tools...>                        Comma or space-separated list of tool names to allow (e.g. \"Bash(git:*",
+    "stderrPreview": ""
+  },
+  {
+    "name": "template-flag-parser",
+    "edition": "intl",
+    "executable": "C:\\Program Files\\nodejs\\node.exe",
+    "argv": [
+      "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+      "--print-mode",
+      "--help"
+    ],
+    "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+    "envOverrides": {
+      "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+      "DISABLE_AUTOUPDATER": "1"
+    },
+    "durationMs": 3280,
+    "timedOut": false,
+    "code": 0,
+    "signal": null,
+    "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\template-flag-parser.stdout.log",
+    "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\template-flag-parser.stderr.log",
+    "stdoutPreview": "Usage: codebuddy|cbc [options] [command] [prompt]\n\nCodeBuddy Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                           Your prompt\n\nOptions:\n  -V, --version                                    output the version number\n  -d, --debug [filter]                             Enable debug mode with optional category filtering (e.g., \"api,hooks\" or \"!statsig,!file\") (default: false)\n  --verbose                                        Override verbose mode setting from config (default: false)\n  -p, --print                                      Print response and exit (useful for pipes) (default: false)\n  --output-format <format>                         Output format (only works with --print): \"text\" (default), \"json\" (single result), or \"stream-json\" (realtime streaming) (default: \"text\")\n  --input-format <format>                          Input format (only works with --print): \"text\" (default), or \"stream-json\" (realtime streaming input) (choices: \"text\", \"stream-json\") (default: \"text\")\n  --json-schema <schema>                           JSON Schema for structured output validation. Example: {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}\n  --include-partial-messages                       Output raw SSE incremental messages from model requests (only works with --output-format stream-json) (default: false)\n  -y, --dangerously-skip-permissions               Bypass permission prompts (HIGH/CRITICAL still ask). Isolated-sandbox full pass: CODEBUDDY_IS_SANDBOX=1 (process env only; high-risk). (default: false)\n  --permission-mode <mode>                         Default permission mode for this process (TUI, --serve Web, ACP). Choices: acceptEdits, bypassPermissions, default, plan, dontAsk, auto. Does not write settings.\n  --permission-mode-before-plan <mode>             Permission mode to restore when exiting plan mode\n  --subagent-permission-mode <mode>                Default permission mode for subagents/teammates (choices: \"acceptEdits\", \"bypassPermissions\", \"default\", \"plan\", \"dontAsk\", \"auto\"). Overrides inheritance from main session.\n  --tools <value>                                  Restrict which built-in tools CodeBuddy can use. Use \"\" to disable all, \"default\" for all, or comma-separated tool names like \"Bash,Edit,Read\".\n  --allowedTools <tools...>                        Comma or space-separated list of tool names to allow (e.g. \"Bash(git:*",
+    "stderrPreview": ""
+  }
+]

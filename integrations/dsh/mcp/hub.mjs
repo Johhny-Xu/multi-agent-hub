@@ -1,12 +1,17 @@
 // Agent Hub 桥接引擎：把"派发 → 阻塞回收"包成一次调用（ask）。
 // 供 server.mjs（stdio MCP）与 ask.mjs（CLI 一次性）共用。
-// 通道事实（2026-10-06 实测）：CLI worker 走 hub_dispatch_cli；traecode 无 CLI 走 trae_delegate(wait:false)，
-// 其 ref 前缀是 trae-<hex>（其余 <规范名>-<hex>）；回收统一 hub_wait_result，对 trae ref 同样有效。
+// 发布时同步 root mcp 与 integrations/dsh/mcp；tests/mcp_bridge.test.mjs 防止独立安装包漂移。
 
-export const HUB =
-  process.env.AGENTHUB_URL ||
-  process.env.HUB_MCP_URL ||
-  (process.env.HUB_TOKEN ? `http://127.0.0.1:8765/mcp?token=${process.env.HUB_TOKEN}` : "http://127.0.0.1:8765/mcp");
+function hubUrl() {
+  const endpoint = process.env.AGENTHUB_URL || process.env.HUB_MCP_URL || "http://127.0.0.1:8765/mcp";
+  if (!process.env.HUB_TOKEN) return endpoint;
+  try {
+    const url = new URL(endpoint);
+    if (!url.searchParams.has("token")) url.searchParams.set("token", process.env.HUB_TOKEN);
+    return url.href;
+  } catch { return endpoint; }
+}
+export const HUB = hubUrl();
 
 const ALIASES = {
   agy: "antigravity", antigravity: "antigravity",
@@ -24,99 +29,158 @@ export const CANONICAL = [...new Set(Object.values(ALIASES))].sort();
 /** 简称/规范名 → 规范名；未知返回 null。 */
 export function resolveWorker(raw) {
   const k = String(raw || "").trim().toLowerCase();
-  return ALIASES[k] || null;
+  return Object.hasOwn(ALIASES, k) ? ALIASES[k] : null;
 }
 
 function refRegex(worker) {
   const prefix = worker === "traecode" ? "trae" : worker;
-  return new RegExp(prefix + "-[0-9a-f]+");
+  return new RegExp("^" + prefix + "-[0-9a-f]+$", "i");
 }
 
-/** 从枢纽回执里提取回答正文：去首行 [ref] 状态行，去尾部 (exit=N)/(继续对话…)，去 ANSI 色码。 */
+function cleanText(text) {
+  return String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
+}
+
+/** 从枢纽回执里提取正文，移除状态行和连续的退出码/会话元数据尾行。 */
 export function extractAnswer(text) {
-  return String(text)
-    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
-    .replace(/^\[[^\]]*\][^\n]*\n/, "")
-    .replace(/\n?\((?:exit=\d+|继续对话[^)]*)\)\s*$/, "")
+  return cleanText(text)
+    .replace(/^\[[^\]]*\][^\n]*(?:\n|$)/, "")
+    .replace(/(?:\n?\((?:exit=-?\d+|继续对话[^)]*)\)\s*)+$/, "")
     .trim();
 }
 
-async function callTool(name, args, timeoutMs) {
-  const payload = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+const MAX_TIMEOUT_S = 86400;
+const DISPATCH_HTTP_MS = 25000;
+let nextRequestId = 0;
+
+function validTimeout(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= MAX_TIMEOUT_S;
+}
+
+function message(error) {
+  return String(error?.message || error).slice(0, 500);
+}
+
+function hubError(kind, text) {
+  const error = new Error(text);
+  error.kind = kind;
+  return error;
+}
+
+async function callTool(name, args, timeoutMs, allowToolError = false) {
+  const id = ++nextRequestId;
+  const payload = JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
   const resp = await fetch(HUB, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: payload,
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: AbortSignal.timeout(Math.max(1, Math.ceil(timeoutMs))),
   });
-  const body = await resp.json();
-  if (body.error) throw new Error("RPC-ERROR " + (body.error.message || "unknown"));
-  return body.result?.content?.[0]?.text ?? "EMPTY";
+  if (!resp.ok) throw hubError("rejected", "HTTP " + resp.status + "：枢纽请求失败");
+  let body;
+  try { body = await resp.json(); }
+  catch (error) {
+    if (error.name === "TimeoutError" || error.name === "AbortError") throw error;
+    throw hubError("protocol", "PROTOCOL-ERROR：枢纽响应不是有效 JSON");
+  }
+  if (!body || Array.isArray(body) || body.jsonrpc !== "2.0" || body.id !== id ||
+      (Object.hasOwn(body, "result") === Object.hasOwn(body, "error"))) {
+    throw hubError("protocol", "PROTOCOL-ERROR：枢纽响应格式或请求 ID 不匹配");
+  }
+  if (body.error) throw hubError("rejected", "RPC-ERROR " + (body.error.message || "unknown"));
+  if (!body.result || !Array.isArray(body.result.content)) throw hubError("protocol", "PROTOCOL-ERROR：缺少工具内容");
+  const blocks = body.result.content.filter((block) => block?.type === "text" && typeof block.text === "string");
+  if (!blocks.length) throw hubError("protocol", "PROTOCOL-ERROR：工具没有返回文本内容");
+  const text = blocks.map((block) => block.text).join("\n");
+  if (body.result.isError && !allowToolError) throw hubError("rejected", "TOOL-ERROR " + text);
+  return text;
 }
 
-/**
- * 派发并阻塞回收（单次尝试，内部原语）。
- * 返回 { ok, status, worker, ref, answer }；status: completed / failed / running（超时未完，ref 可续查）。
- */
-async function dispatchAndCollect(worker, task, timeoutS) {
-  let dispatchText;
-  try {
-    if (worker === "traecode") {
-      dispatchText = await callTool("trae_delegate", { task: String(task), wait: false }, 45_000);
-    } else {
-      dispatchText = await callTool("hub_dispatch_cli", { agent: worker, task: String(task), timeout_s: Math.max(timeoutS, 60) }, 45_000);
+async function dispatchWorker(worker, task, timeoutS, deadline) {
+  const remaining = () => Math.max(1, Math.min(DISPATCH_HTTP_MS, deadline - performance.now()));
+  if (worker === "traecode") return callTool("trae_delegate", { task, wait: false, timeout_s: timeoutS }, remaining());
+  const text = await callTool("hub_dispatch_cli", { agent: worker, task, timeout_s: timeoutS }, remaining());
+  // 只在明确未受理时回退，正文引用此诊断不能引发第二次派发。
+  if (worker === "zcode" && /^zcode\s+未配置 CLI\b/.test(cleanText(text))) {
+    if (performance.now() >= deadline) throw hubError("rejected", "ZCode CLI 未配置，派发等待预算已用尽");
+    return callTool("zcode_delegate", { task, wait: false, timeout_s: timeoutS }, remaining());
+  }
+  return text;
+}
+
+/** 状态来自首行回执；退出码使用枢纽的尾行格式，不扫描正文中的 ref/status。 */
+function receipt(text, worker, expectedRef = null) {
+  const cleaned = cleanText(text);
+  const header = /^\[([^\]\r\n]+)\]([^\r\n]*)(?:\r?\n|$)/.exec(cleaned);
+  if (!header) return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
+  const tag = header[1];
+  const ref = tag.split("/").at(-1);
+  const validRef = expectedRef ? ref === expectedRef : refRegex(worker).test(ref);
+  const status = /(?:^|\s)status=([a-z]+)\b/i.exec(header[2])?.[1]?.toLowerCase();
+  const headerExit = /(?:^|\s)exit=(-?\d+)\b/.exec(header[2]);
+  const footerExit = /\n\(exit=(-?\d+)\)\s*$/.exec(cleaned);
+  if (validRef) {
+    if ((headerExit && Number(headerExit[1]) !== 0) || (footerExit && Number(footerExit[1]) !== 0) || ["failed", "error", "timeout", "cancelled"].includes(status)) {
+      return { status: "failed", ref, answer: cleaned.slice(0, 500) };
     }
-  } catch (e) {
-    return { ok: false, status: "failed", worker, ref: "", answer: "派发失败（枢纽不可达）：" + String(e && e.message || e).slice(0, 200) };
+    if (status === "completed") return { status, ref, answer: extractAnswer(cleaned) };
+    if (!expectedRef || status === "running") return { status: "running", ref, answer: "" };
+  } else if (!expectedRef && headerExit && (tag === worker || tag.startsWith(worker + "/"))) {
+    return { status: Number(headerExit[1]) === 0 ? "completed" : "failed", ref: "", answer: Number(headerExit[1]) === 0 ? extractAnswer(cleaned) : cleaned.slice(0, 500) };
   }
-  const m = refRegex(worker).exec(dispatchText);
-  if (!m) {
-    return { ok: false, status: "failed", worker, ref: "", answer: "派发失败（未返回 ref，可能 403/通道不可用）：" + dispatchText.slice(0, 400) };
+  return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
+}
+
+async function startTask(worker, task, timeoutS, deadline) {
+  try {
+    return receipt(await dispatchWorker(worker, task, timeoutS, deadline), worker);
+  } catch (error) {
+    const status = error.kind === "rejected" ? "failed" : "unknown";
+    const prefix = status === "unknown" ? "未能确认派发是否受理，请先检查枢纽，避免重复执行：" : "枢纽拒绝派发：";
+    return { status, ref: "", answer: prefix + message(error) };
   }
-  const ref = m[0];
-  const deadline = Date.now() + Math.max(30, timeoutS) * 1000;
-  while (Date.now() < deadline) {
-    const waitS = Math.min(110, Math.max(10, Math.round((deadline - Date.now()) / 1000)));
+}
+
+async function dispatchAndCollect(worker, task, timeoutS) {
+  const deadline = performance.now() + timeoutS * 1000;
+  const started = await startTask(worker, task, timeoutS, deadline);
+  if (started.status !== "running") return { ok: started.status === "completed", worker, ...started };
+  const { ref } = started;
+  while (performance.now() < deadline) {
+    const remainingMs = deadline - performance.now();
+    const waitS = Math.min(110, remainingMs / 1000);
     let t;
     try {
-      t = await callTool("hub_wait_result", { ref, wait_s: waitS }, (waitS + 40) * 1000);
-    } catch (e) {
-      return { ok: false, status: "failed", worker, ref, answer: "回收失败：" + String(e && e.message || e).slice(0, 200) };
+      t = await callTool("hub_wait_result", { ref, wait_s: waitS }, Math.min(remainingMs, (waitS + 5) * 1000));
+    } catch (error) {
+      if (performance.now() >= deadline) break;
+      if (error.name === "TimeoutError" || error.name === "AbortError") continue;
+      return { ok: false, status: "unknown", worker, ref, answer: "查询失败，任务可能仍在执行，请用同一 ref 续查：" + message(error) };
     }
-    const st = /status=(\w+)/.exec(t)?.[1] || "running";
-    if (st === "completed") {
-      return { ok: true, status: "completed", worker, ref, answer: extractAnswer(t) };
-    }
-    if (st === "failed" || st === "timeout") {
-      return { ok: false, status: "failed", worker, ref, answer: t.slice(0, 500) };
-    }
+    const result = receipt(t, worker, ref);
+    if (result.status !== "running") return { ok: result.status === "completed", worker, ...result };
+    // 即时 running 回执也要退避，避免本地 HTTP 枢纽被紧密轮询淹没。
+    const pauseMs = Math.min(100, Math.max(0, deadline - performance.now()));
+    if (pauseMs) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
-  return { ok: false, status: "running", worker, ref, answer: `在 ${timeoutS}s 内未完成，稍后可用 ref=${ref} 查询枢纽结果（hub_result）` };
+  return { ok: false, status: "running", worker, ref, answer: `在 ${timeoutS}s 内未完成，任务仍可能执行；使用 ref=${ref} 续查，避免重复派发。` };
 }
 
-/**
- * 把任务派给一个 worker 并阻塞到出结果。
- * 返回 { ok, status, worker, ref, answer }；status: completed / failed / running（超时未完，ref 可续查）。
- * 自愈：检测到上游"空文本轮"占位符（此轮未产生文本回复）或空输出时自动重试一次——
- * cbcn 上游约 25% 概率返回空文本轮（finish=stop 无内容），重试即可拿到正常回答。
- */
+function taskError(task, timeoutS) {
+  if (typeof task !== "string" || !task.trim()) return "task 必须是非空字符串";
+  if (!validTimeout(timeoutS)) return `timeout_s 必须是大于 0 且不超过 ${MAX_TIMEOUT_S} 的有限数字`;
+  return null;
+}
+
+/** 派发一次并在总预算内回收。空回复不能证明任务未执行，因此不自动重复有副作用的任务。 */
 export async function ask(workerRaw, task, timeoutS = 300) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
     return { ok: false, status: "failed", worker: String(workerRaw || ""), ref: "", answer: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
-  if (!String(task || "").trim()) {
-    return { ok: false, status: "failed", worker, ref: "", answer: "task 不能为空" };
-  }
-  let last = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    last = await dispatchAndCollect(worker, String(task), timeoutS);
-    const bad = (last.answer || "").includes("此轮未产生文本回复") ||
-                (last.answer || "").trim() === "(无输出)" ||
-                (last.status === "completed" && !(last.answer || "").trim());
-    if (!bad || attempt === 2) return last;
-  }
-  return last;
+  const error = taskError(task, timeoutS);
+  if (error) return { ok: false, status: "failed", worker, ref: "", answer: error };
+  return dispatchAndCollect(worker, task, timeoutS);
 }
 
 /** 列出枢纽注册代理与在线状态（原文）。 */
@@ -124,33 +188,78 @@ export async function hubStatus() {
   return callTool("hub_list_agents", {}, 30_000);
 }
 
+const LOGIN_STATUSES = new Set([
+  "preparing", "awaiting_user", "authenticated", "expired", "failed",
+  "manual_required", "unavailable", "cancelled", "unknown",
+]);
+
+function publicLoginText(value) {
+  return String(value || "").slice(0, 2000)
+    .replace(/\bBearer\s+[^\s"',}]+/gi, "Bearer [REDACTED]")
+    .replace(/((?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|authorization|password|secret|token)["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, "$1[REDACTED]");
+}
+
+/** 登录结果只公开操作状态及用户需要的授权链接，丢弃 account/userinfo/token 等内部字段。 */
+export function publicLoginResult(raw, worker, action) {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const result = {
+    ok: value.ok === true,
+    worker,
+    action,
+    status: LOGIN_STATUSES.has(value.status) ? value.status : "unknown",
+  };
+  for (const key of ["user_code", "expires_at", "instructions", "error"]) {
+    if (typeof value[key] === "string" && value[key]) result[key] = publicLoginText(value[key]);
+  }
+  if (typeof value.login_url === "string" && value.login_url) {
+    try {
+      const url = new URL(value.login_url);
+      const secretParam = [...url.searchParams.keys()].some((key) =>
+        /^(?:accesstoken|refreshtoken|idtoken|apikey|password|secret|authorization|token)$/.test(key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+      if (url.protocol === "https:" && !url.username && !url.password && !url.hash && !secretParam) {
+        result.login_url = url.href;
+      } else {
+        result.ok = false;
+        result.error = "枢纽返回的登录链接格式不安全，请在 worker 宿主机检查登录配置。";
+      }
+    } catch {
+      result.ok = false;
+      result.error = "枢纽返回的登录链接格式无效。";
+    }
+  }
+  return result;
+}
+
+/** 在枢纽宿主机发起/查询/取消官方登录流程，不在插件客户端运行 CLI。 */
+export async function hubLogin(workerRaw, action = "status") {
+  const worker = resolveWorker(workerRaw);
+  if (!worker) return { ok: false, worker: String(workerRaw || ""), action, status: "unavailable", error: "未知 worker，可选：" + CANONICAL.join(" / ") };
+  if (!["start", "status", "cancel"].includes(action)) {
+    return { ok: false, worker, action: "status", status: "failed", error: "action 必须是 start / status / cancel" };
+  }
+  try {
+    const text = await callTool("hub_login", { agent: worker, action }, 30_000, true);
+    return publicLoginResult(JSON.parse(text), worker, action);
+  } catch (e) {
+    return { ok: false, worker, action, status: "unavailable", error: "登录服务不可用：" + publicLoginText(e && e.message || e).slice(0, 300) };
+  }
+}
+
 /**
- * 只派发不等待：立即返回 { ok, worker, ref, raw? }。
- * 专为 30 秒 MCP 上限的工作流子代理设计——ref 秒级到手，结果用 fetchRef 续查。
+ * 异步派发返回 ref；同步配置直接返回 completed/failed 与 answer。
+ * HTTP 受理请求限制 25 秒；网络失败不证明远端未执行，不能自动重派。
  */
 export async function dispatchOnly(workerRaw, task, timeoutS = 900) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
     return { ok: false, worker: String(workerRaw || ""), ref: "", error: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
-  if (!String(task || "").trim()) {
-    return { ok: false, worker, ref: "", error: "task 不能为空" };
-  }
-  let dispatchText;
-  try {
-    if (worker === "traecode") {
-      dispatchText = await callTool("trae_delegate", { task: String(task), wait: false }, 45_000);
-    } else {
-      dispatchText = await callTool("hub_dispatch_cli", { agent: worker, task: String(task), timeout_s: Math.max(timeoutS, 60) }, 45_000);
-    }
-  } catch (e) {
-    return { ok: false, worker, ref: "", error: "派发失败（枢纽不可达）：" + String(e && e.message || e).slice(0, 200) };
-  }
-  const m = refRegex(worker).exec(dispatchText);
-  if (!m) {
-    return { ok: false, worker, ref: "", error: "派发失败（未返回 ref，可能 403/通道不可用）：" + dispatchText.slice(0, 400) };
-  }
-  return { ok: true, worker, ref: m[0] };
+  const error = taskError(task, timeoutS);
+  if (error) return { ok: false, worker, ref: "", error };
+  const result = await startTask(worker, task, timeoutS, performance.now() + DISPATCH_HTTP_MS);
+  if (result.status === "running") return { ok: true, worker, status: "running", ref: result.ref };
+  if (result.status === "completed") return { ok: true, worker, ...result };
+  return { ok: false, worker, ...result, error: result.answer };
 }
 
 /**
@@ -158,7 +267,7 @@ export async function dispatchOnly(workerRaw, task, timeoutS = 900) {
  * status: completed / failed / timeout / running / unknown。
  */
 export async function fetchRef(ref) {
-  if (!/^[\w.-]+-[0-9a-f]+$/i.test(String(ref || ""))) {
+  if (typeof ref !== "string" || !/^[\w.-]+-[0-9a-f]+$/i.test(ref)) {
     return { status: "unknown", answer: "ref 格式无效" };
   }
   let t;
@@ -167,12 +276,6 @@ export async function fetchRef(ref) {
   } catch (e) {
     return { status: "unknown", answer: "查询失败：" + String(e && e.message || e).slice(0, 200) };
   }
-  const st = /status=(\w+)/.exec(t)?.[1] || "running";
-  if (st === "completed") {
-    return { status: "completed", answer: extractAnswer(t) };
-  }
-  if (st === "failed" || st === "timeout") {
-    return { status: "failed", answer: t.slice(0, 500) };
-  }
-  return { status: st, answer: "" };
+  const result = receipt(t, null, ref);
+  return { status: result.status, answer: result.answer };
 }

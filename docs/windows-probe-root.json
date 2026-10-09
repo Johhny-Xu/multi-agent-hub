@@ -1,0 +1,157 @@
+{
+  "date": "2026-10-08",
+  "scope": "Windows native official CLI bootstrap and harmless real text generation; pre-login and post-login evidence retained",
+  "tests": [
+    {
+      "name": "mmx-version",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "--version"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 0,
+      "stdout": "mmx 1.0.27\n",
+      "stderr": "",
+      "seconds": 0.38
+    },
+    {
+      "name": "mmx-help",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "text",
+        "chat",
+        "--help"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "\nSend a chat completion (MiniMax Messages API)\nUsage: mmx text chat --message <text> [flags]\n\nOptions:\n  --model <model>          Model ID (default: MiniMax-M3)\n  --message <text>         Message text (repeatable, prefix role: to set role)\n  --messages-file <path>   JSON file with messages array (use - for stdin)\n  --system <text>          System prompt\n  --max-tokens <n>         Maximum tokens to generate (default: 4096)\n  --temperature <n>        Sampling temperature (0.0, 1.0]\n  --top-p <n>              Nucleus sampling threshold\n  --stream                 Stream response tokens (default: on in TTY)\n  --tool <json-or-path>    Tool definition as JSON or file path (repeatable)\n\nExamples:\n  mmx text chat --message \"What is MiniMax?\"\n  mmx text chat --model MiniMax-M3 --system \"You are a coding assistant.\" --message \"Write fizzbuzz in Python\"\n  mmx text chat --message \"Hello\" --message \"assistant:Hi!\" --message \"How are you?\"\n  cat conversation.json | mmx text chat --messages-file - --stream\n  mmx text chat --message \"Hello\" --output json\n\nAPI Reference: https://platform.minimax.io/docs/api-reference/text-post\n\nGlobal flags (--api-key, --output, --quiet, etc.) are always available.\nRun mmx --help for the full list.\n",
+      "seconds": 0.34
+    },
+    {
+      "name": "mmx-auth",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "auth",
+        "status"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 3,
+      "stdout": "",
+      "stderr": "{\n  \"error\": {\n    \"code\": 3,\n    \"message\": \"No credentials found.\",\n    \"hint\": \"Looked for credentials in: <USER_HOME>\\\\.mmx\\\\config.json\\nLog in:          mmx auth login\\nPass per-call:   --api-key sk-xxxxx\\nOr set env var:  MMX_CONFIG_DIR=/path/to/.mmx\"\n  }\n}\n",
+      "seconds": 0.27
+    },
+    {
+      "name": "mmx-generation",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "text",
+        "chat",
+        "--message",
+        "Reply exactly HUB_WINDOWS_OK. Do not use any tools, read any files, browse, or execute commands.",
+        "--output",
+        "text",
+        "--model",
+        "MiniMax-M3.1-Flash-Preview"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 3,
+      "stdout": "",
+      "stderr": "{\n  \"error\": {\n    \"code\": 3,\n    \"message\": \"No credentials found.\",\n    \"hint\": \"Looked for credentials in: <USER_HOME>\\\\.mmx\\\\config.json\\nLog in:          mmx auth login\\nPass per-call:   --api-key sk-xxxxx\\nOr set env var:  MMX_CONFIG_DIR=/path/to/.mmx\"\n  }\n}\n",
+      "seconds": 0.33
+    },
+    {
+      "name": "zcode-version",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+        "--version"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 0,
+      "stdout": "0.16.9\n",
+      "stderr": "",
+      "seconds": 1.89
+    },
+    {
+      "name": "zcode-generation",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+        "--cwd",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+        "--mode",
+        "plan",
+        "--disallowed-tools",
+        "Bash,Read,Write,Edit,Glob,Grep,Task,Agent,WebSearch,WebFetch",
+        "--json",
+        "--prompt",
+        "Reply exactly HUB_WINDOWS_OK. Do not use any tools, read any files, browse, or execute commands."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 0,
+      "stdout": "{\n  \"sessionId\": \"sess_fd3ea863-6ae7-43f0-a5d5-c6f5f0347a9e\",\n  \"traceId\": \"74f69ba2-3e22-495c-a5c0-c2172f46d96f\",\n  \"turnId\": \"turn_a857e2e1-2351-4376-9585-556d8740ddfc\",\n  \"response\": \"HUB_WINDOWS_OK\",\n  \"usage\": {\n    \"source\": \"provider\",\n    \"modelRequestCount\": 1,\n    \"inputTokens\": 25022,\n    \"outputTokens\": 100,\n    \"totalTokens\": 25122,\n    \"cacheReadTokens\": 1024,\n    \"cacheWriteTokens\": 0,\n    \"reasoningTokens\": 0,\n    \"webFetchRequests\": 0,\n    \"webSearchRequests\": 0\n  },\n  \"eventCount\": 41,\n  \"projection\": {\n    \"status\": \"idle\",\n    \"turnCount\": 1,\n    \"totalTokenCount\": 25122,\n    \"contextUsed\": 25122,\n    \"contextWindow\": 200000\n  }\n}\n",
+      "stderr": "ZCode Built-in missing\n",
+      "seconds": 23.14
+    },
+    {
+      "name": "trae-version",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
+        "--version"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 0,
+      "stdout": "traecli 0.208.1\ninstallation: public\n",
+      "stderr": "",
+      "seconds": 1.34
+    },
+    {
+      "name": "trae-help",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
+        "--help"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\empty-workspace",
+      "timed_out": false,
+      "exit_code": 0,
+      "stdout": "TRAE CLI\n\nIf no subcommand is specified, options will be forwarded to the interactive CLI.\n\nUsage: traecli [OPTIONS] [PROMPT]\n       traecli [OPTIONS] <COMMAND> [ARGS]\n\nCommands:\n  worktree-apply    Apply isolated workflow changes to the current workspace\n  backend           Persist the backend routing (cn or i18n) used by future CLI processes\n  dashboard         Browse sessions and agent activity on the shared app-server daemon\n  exec              Run TRAE CLI non-interactively [aliases: e]\n  review            Run a code review non-interactively\n  login             Manage login\n  update            Check for and install TRAE CLI updates\n  logout            Remove stored authentication credentials\n  mcp               Manage external MCP servers for TRAE CLI\n  plugin            Manage TRAE CLI plugins\n  channel           Set up messaging channels\n  acp               Run as an ACP (Agent Client Protocol) server\n  app-server        [experimental] Run the app server or related tooling\n  remote-control    [experimental] Start a headless app-server with remote control enabled\n  completion        Generate shell completion scripts\n  sandbox           Run commands within a TRAE CLI-provided sandbox\n  debug             Debugging tools\n  models            List available models\n  apply             Apply the latest diff produced by TRAE CLI as a `git apply` to your local\n                    working tree [aliases: a]\n  resume            Resume a previous interactive session (picker by default; use --last to continue\n                    the most recent)\n  fork              Fork a previous interactive session (picker by default; use --last to fork the\n                    most recent)\n  archive           Archive a saved session by id\n  migrate-rollouts  Migrate legacy session rollouts to paginated history\n  queue             Queue a text message for an existing session\n  delete            Permanently delete a saved session by id\n  unarchive         Unarchive a saved session by id\n  exec-server       [EXPERIMENTAL] Run the standalone exec-server service\n  features          Inspect feature flags\n  doctor            Collect local diagnostics for support\n  migrate           Migrate legacy traecli (traecli.yaml) configuration to traecli.toml\n  help              Print this message or the help of the given subcommand(s)\n\nArguments:\n  [PROMPT]\n          Optional user prompt to start the session. If stdin is piped, it is appended as a\n          `<stdin>` block; without a prompt, stdin becomes the prompt\n\nOptions:\n  -c, --config <key=value>\n          Override a configuration value that would otherwise be loaded from `~/.trae/traecli.toml`.\n          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed\n          as TOML. If it fails to parse as TOML, the raw string is used as a literal.\n          \n          Examples: - `-c model=\"o3\"` - `-c 'sandbox_permissions=[\"disk-full-read-access\"]'` - `-c\n          shell_environment_policy.inherit=all`\n\n      --enable <FEATURE>\n          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`\n\n      --disable <FEATURE>\n          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`\n\n      --remote <ADDR>\n          Connect the TUI to a remote app server websocket endpoint.\n          \n          Accepted forms: `ws://host:port` or `wss://host:port`.\n\n      --remote-auth-token-env <ENV_VAR>\n          Name of the environment variable containing the bearer token to send to a remote app\n          server websocket\n\n  -V, --version\n          Print version\n          \n          [aliases: -v]\n\n      --acp\n          Start TRAE CLI as an ACP server over stdio. Equivalent to `traecli acp serve`\n\n      --disabled-tool <TOOL_NAME>\n          Disable an ACP compatibility tool for this invocation\n\n  -w, --worktree [<NAME>]\n          Start in a fresh git worktree for isolation. Optionally provide a name. Use\n          `-w`/`--worktree` for auto-naming or `-w NAME`/`--worktree NAME` to specify. If NAME\n          matches a top-level subcommand, use `--worktree=NAME`/`-w=NAME`\n\n      --worktree-base <REF>\n          Base ref used when creating a --worktree session, for example `origin/release`\n\n      --worktree-mode <MODE>\n          Worktree creation strategy to use with --worktree\n          \n          [possible values: git, reflink]\n\n      --resume [<SESSION_ID>]\n          Resume a local session by ID, or auto-resume the most recent local session if no ID is\n          provided\n\n      --session-id <SESSION_ID>\n          Legacy compatibility flag for selecting or naming the session\n\n      --shell-tool-timeout <DURATION>\n          Hard timeout for shell tool execution. Any shell process is unconditionally killed after\n          this duration. Accepts \"120s\", \"2m\", or bare milliseconds\n\n      --strict-config\n          Error out when traecli.toml contains fields that are not recognized by this version of\n          TRAE CLI\n\n      --no-daemon\n          Use an embedded server without probing or starting the shared background server\n\n  -i, --image <FILE>...\n          Optional image(s) to attach to the initial prompt\n\n  -m, --model <MODEL>\n          Model the agent should use\n\n      --oss\n          Use open-source provider\n\n      --local-provider <OSS_PROVIDER>\n          Specify which local provider to use (lmstudio or ollama). If not specified with --oss,\n          will use config default or show selection\n\n  -p, --profile <CONFIG_PROFILE>\n          Layer $TRAE_HOME/<name>.traecli.toml on top of the base user config\n\n      --permission-mode <MODE>\n          Select the permission mode preset to use\n\n          Possible values:\n          - default:            TRAE CLI can read and edit files in the current workspace, and run\n            commands. Approval is required to access the internet or edit other files. (Identical to\n            Agent mode)\n          - bypass_permissions: TRAE CLI can edit files outside this workspace and access the\n            internet without asking for approval. Exercise caution when using\n          - auto:               Same workspace-write permissions as Workspace Edit, but eligible\n            on-request approvals are routed through the auto-reviewer subagent\n\n  -s, --sandbox <SANDBOX_MODE>\n          Select the sandbox policy to use when executing model-generated shell commands\n          \n          [possible values: read-only, workspace-write, danger-full-access]\n\n  -y, --dangerously-bypass-approvals-and-sandbox\n          Skip all confirmation prompts and execute commands without sandboxing. EXTREMELY\n          DANGEROUS. Intended solely for running in environments that are externally sandboxed\n\n      --dangerously-bypass-hook-trust\n          Run enabled hooks without requiring persisted hook trust for this invocation. DANGEROUS.\n          Intended only for automation that already vets hook sources\n\n  -C, --cd <DIR>\n          Tell the agent to use the specified directory as its working root\n\n      --add-dir <DIR>\n          Additional directories that should be writable alongside the primary workspace\n\n  -a, --ask-for-approval <APPROVAL_POLICY>\n          Configure when the model requires human approval before executing a command\n\n          Possible values:\n          - on-failure: DEPRECATED: Run all commands without asking for user approval. Only asks for\n            approval if a command fails to execute, in which case it will escalate to the user to\n            ask for un-sandboxed execution. Prefer `on-request` for interactive runs or `never` for\n            non-interactive runs\n          - on-request: The model decides when to ask the user for approval\n          - never:      Never ask for user approval Execution failures are immediately returned to\n            the model\n\n      --search\n          Enable live web search. When enabled, the native Responses `web_search` tool is available\n          to the model (no per‑call approval)\n\n      --no-alt-screen\n          Disable alternate screen mode\n          \n          Runs the TUI in inline mode, preserving terminal scrollback history.\n\n      --allowed-tool <TOOL>\n          Allow a Bash(pattern) command for this session (can be specified multiple times)\n\n      --disallowed-tool <TOOL>\n          Disallow a tool for this session (can be specified multiple times)\n\n  -h, --help\n          Print help (see a summary with '-h')\n",
+      "stderr": "",
+      "seconds": 0.09
+    },
+    {
+      "name": "mmx-generation-authenticated",
+      "exit_code": 0,
+      "timed_out": false,
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "max_tokens": 128,
+      "stdout": "HUB_WINDOWS_OK\n",
+      "stderr": "",
+      "authentication": "Official OAuth completed and saved by mmx; no credential output retained",
+      "observed_via": "Native Node.js CLI invocation after browser authorization"
+    },
+    {
+      "name": "trae-auth-current",
+      "version": "0.208.1",
+      "exit_code": 1,
+      "public_manifest_sha256_verified": true,
+      "authentication": "Not logged in",
+      "result": "Public stable Windows asset launched an internal ByteDance/ByteCloud login flow; requests failed. Public-account login was not verified.",
+      "desktop_gateway": "No listener on default local port 8787",
+      "documentation": "https://docs.trae.cn/cli_get-started-with-trae-code-cli-2",
+      "manifest": "https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae-cli/v2/public/stable/latest.json",
+      "asset_sha256": "37d59ada8df7596280c323a03265d7aa2a4fc6f1a38a9dd7b518a2d61b513755"
+    }
+  ]
+}

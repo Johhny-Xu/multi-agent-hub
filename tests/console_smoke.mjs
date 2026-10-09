@@ -1,0 +1,295 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import http from 'node:http';
+import os from 'node:os';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import test from 'node:test';
+
+const root = await mkdtemp(join(os.tmpdir(), 'agenthub-console-test-'));
+const previousHome = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+process.env.HOME = process.env.USERPROFILE = join(root, 'home');
+await mkdir(join(root, 'home', 'agent-hub', 'results'), { recursive: true });
+await mkdir(join(root, 'plugin', 'miniapp', 'client'), { recursive: true });
+await writeFile(join(root, 'plugin', 'miniapp', 'client', 'index.html'), '<!doctype html><title>synthetic console</title>');
+let dispatches = 0;
+let delayDispatch = false;
+let bareDispatchRef = false;
+let dispatchTextOverride = null;
+let dispatchResponseOverride = null;
+const results = new Map();
+let inbox = '';
+const hub = http.createServer(async (req, res) => {
+  let body = '';
+  for await (const part of req) body += part;
+  const rpc = JSON.parse(body);
+  const name = rpc.params?.name;
+  let text = '';
+  if (name === 'hub_dispatch_cli') {
+    const ref = `probe-${(++dispatches).toString(16).padStart(10, '0')}`;
+    if (delayDispatch) await new Promise((r) => setTimeout(r, 120));
+    text = bareDispatchRef ? `[github-copilot/github-copilot-${ref.slice(-10)}] accepted` : `[probe/${ref}] task accepted; ref="${ref}"`;
+    if (dispatchTextOverride !== null) text = dispatchTextOverride;
+  } else if (name === 'hub_result') {
+    text = results.get(rpc.params.arguments.ref) || `[${rpc.params.arguments.ref}] agent=probe status=running\nsynthetic progress`;
+  } else if (name === 'hub_read_messages') {
+    text = inbox || 'console 没有未读消息。';
+    inbox = '';
+  } else if (name === 'hub_list_agents') text = '已注册代理:\n- probe [在线] 角色: synthetic | CLI: probe.exe';
+  else if (name === 'hub_list_tasks') text = '没有匹配的任务。';
+  else if (name === 'hub_list_models') text = '各 worker 可选模型:\n- probe: model_arg=--model | 默认→synthetic';
+  else if (name === 'hub_note_get') text = '全部笔记: (空)';
+  else text = 'synthetic ok';
+  res.writeHead(200, { 'content-type': 'application/json' });
+  const response = { jsonrpc: '2.0', id: rpc.id, result: rpc.method === 'initialize'
+    ? { serverInfo: { name: 'mock-hub' } }
+    : { content: [{ type: 'text', text }] } };
+  res.end(JSON.stringify(name === 'hub_dispatch_cli' && dispatchResponseOverride ? dispatchResponseOverride(response) : response));
+});
+await new Promise((r) => hub.listen(0, '127.0.0.1', r));
+process.env.HUBCONSOLE_SERVER_URL = `http://127.0.0.1:${hub.address().port}/mcp`;
+process.env.HUBCONSOLE_SERVER_TOKEN = '';
+const { start } = await import(pathToFileURL(resolve('console/server.mjs')));
+let runtime;
+let base;
+async function boot(seed) {
+  const dataDir = await mkdtemp(join(root, 'data-'));
+  if (seed) await writeFile(join(dataDir, 'conversations.json'), JSON.stringify(seed));
+  const portProbe = http.createServer();
+  await new Promise((r) => portProbe.listen(0, '127.0.0.1', r));
+  const port = portProbe.address().port;
+  await new Promise((r) => portProbe.close(r));
+  runtime = await start({ dataDir, pluginRoot: join(root, 'plugin'), listen: { host: '127.0.0.1', port },
+    signal: new AbortController().signal, logger: { info() {}, warn() {}, debug() {} } });
+  base = `http://127.0.0.1:${port}`;
+  return dataDir;
+}
+async function api(path, body) {
+  const res = await fetch(base + path, body === undefined ? {} : {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+}
+async function stop() { if (runtime) { await runtime.dispose(); runtime = null; } }
+const sessionSeed = (pending = []) => ({ threads: [{ agent: 'probe', activeSessionId: 'session-new', sessions: [
+  { id: 'session-old', agent: 'probe', title: 'old', created: Date.now(), updated: Date.now(), messages: [], pending, unread: 1 },
+  { id: 'session-new', agent: 'probe', title: 'new', created: Date.now(), updated: Date.now(), messages: [], pending: [], unread: 2 },
+] }], captured: [] });
+async function watchOnce(check) {
+  const ctrl = new AbortController();
+  const stream = await fetch(base + '/api/events', { signal: ctrl.signal });
+  try {
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline) {
+      if (await check()) return;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    assert.fail('watcher did not deliver the synthetic result');
+  } finally { ctrl.abort(); await stream.body.cancel().catch(() => {}); }
+}
+
+test('same-session concurrent sends dispatch only once', async () => {
+  await boot();
+  try {
+    dispatches = 0; delayDispatch = true;
+    const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    const sends = await Promise.all([1, 2].map((n) => api('/api/chat/send', {
+      agent: 'probe', sessionId: session, mode: 'dispatch', text: `synthetic ${n}`,
+    })));
+    assert.equal(dispatches, 1);
+    assert.deepEqual(sends.map((r) => r.status).sort(), [200, 409]);
+  } finally { delayDispatch = false; await stop(); }
+});
+
+test('invalid explicit session does not modify another session', async () => {
+  await boot();
+  try {
+    const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    const wrong = await api('/api/chat/send', { agent: 'probe', sessionId: 'missing-session', mode: 'dispatch', text: 'synthetic wrong target' });
+    assert.equal(wrong.status, 400);
+    const current = await api(`/api/chat/thread?agent=probe&session=${session}`);
+    assert.deepEqual(current.body.thread.messages, []);
+    const invalidRead = await api('/api/chat/thread?agent=probe&session=missing-session');
+    assert.equal(invalidRead.status, 400);
+  } finally { await stop(); }
+});
+
+test('task reply returns to its original session instead of sender active session', async () => {
+  await boot(sessionSeed([{ kind: 'task', taskId: 'task.abcdef', posted: Date.now() }]));
+  try {
+    inbox = 'console 有 1 条未读:\n- [10-08 12:00] probe: task.abcdef synthetic reply';
+    await watchOnce(async () => (await api('/api/chat/thread?agent=probe&session=session-old')).body.thread.messages.some((m) => m.role === 'agent'));
+    const active = (await api('/api/chat/thread?agent=probe&session=session-new')).body.thread;
+    assert.equal(active.messages.length, 0);
+  } finally { inbox = ''; await stop(); }
+});
+
+test('persisted inFlight does not prevent result recovery after restart', async () => {
+  const ref = 'probe-0000000001';
+  results.set(ref, `[${ref}] agent=probe status=completed\nsynthetic recovered`);
+  await boot(sessionSeed([{ kind: 'ref', ref, posted: Date.now(), inFlight: true }]));
+  try {
+    await watchOnce(async () => (await api('/api/chat/thread?agent=probe&session=session-old')).body.thread.messages.some((m) => m.text === 'synthetic recovered'));
+  } finally { results.clear(); await stop(); }
+});
+
+test('marking one session read preserves other session unread count', async () => {
+  await boot(sessionSeed());
+  try {
+    await api('/api/chat/read', { agent: 'probe', sessionId: 'session-new' });
+    const older = (await api('/api/chat/thread?agent=probe&session=session-old')).body.thread;
+    assert.equal(older.unread, 1);
+  } finally { await stop(); }
+});
+
+test('dispose flushes accepted conversation changes immediately', async () => {
+  const dataDir = await boot();
+  const created = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+  await api('/api/chat/send', { agent: 'probe', sessionId: created, mode: 'message', text: 'synthetic durable message' });
+  await stop();
+  const saved = JSON.parse(await readFile(join(dataDir, 'conversations.json'), 'utf8'));
+  assert.ok(saved.threads[0].sessions.some((s) => s.messages.some((m) => m.text === 'synthetic durable message')));
+});
+
+test('hyphenated worker ref header remains asynchronous', async () => {
+  await boot();
+  try {
+    bareDispatchRef = true;
+    const created = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    await api('/api/chat/send', { agent: 'probe', sessionId: created, mode: 'dispatch', text: 'synthetic bare ref' });
+    const thread = (await api('/api/chat/thread?agent=probe&session=' + created)).body.thread;
+    assert.equal(thread.pending.length, 1);
+    assert.match(thread.pending[0].ref, /^github-copilot-/);
+  } finally { bareDispatchRef = false; await stop(); }
+});
+
+test('malformed JSON has client error status', async () => {
+  await boot();
+  try {
+    const response = await fetch(base + '/api/chat/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
+    assert.equal(response.status, 400);
+  } finally { await stop(); }
+});
+
+test('malformed Hub responses cannot become successful dispatches', async () => {
+  await boot();
+  try {
+    const malformed = [
+      (r) => ({ ...r, id: r.id + 1 }),
+      (r) => ({ ...r, jsonrpc: '1.0' }),
+      (r) => ({ ...r, error: { code: -32000, message: 'synthetic ambiguous response' } }),
+      (r) => ({ ...r, result: null }),
+      (r) => ({ ...r, result: { content: {} } }),
+      (r) => ({ ...r, result: { content: [] } }),
+      (r) => ({ ...r, result: { content: [{ type: 'text', text: 123 }] } }),
+      (r) => ({ ...r, result: { ...r.result, isError: 'false' } }),
+      (r) => ({ ...r, result: { ...r.result, structuredContent: [] } }),
+    ];
+    const before = dispatches;
+    for (const invalid of malformed) {
+      dispatchResponseOverride = invalid;
+      const response = await api('/api/dispatch', { agent: 'probe', task: 'synthetic malformed reply' });
+      assert.notEqual(response.status, 200);
+    }
+    assert.equal(dispatches - before, malformed.length, 'protocol errors must not automatically redispatch');
+  } finally { dispatchResponseOverride = null; await stop(); }
+});
+
+test('synchronous answers containing ref examples do not create pending tasks', async () => {
+  await boot();
+  try {
+    for (const answer of [
+      '[probe] exit=0\nExample: ref="probe-0000000001"',
+      '[probe] exit=0\n[probe/probe-0000000001] task accepted',
+      'Example: ref="probe-0000000001"',
+    ]) {
+      dispatchTextOverride = answer;
+      const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+      const sent = await api('/api/chat/send', { agent: 'probe', sessionId: session, mode: 'dispatch', text: 'synthetic reference example' });
+      assert.equal(sent.status, 200);
+      const thread = (await api(`/api/chat/thread?agent=probe&session=${session}`)).body.thread;
+      assert.equal(thread.pending.length, 0);
+      assert.ok(thread.messages.some((m) => m.role === 'agent' && m.text.includes('probe-0000000001')));
+    }
+  } finally { dispatchTextOverride = null; await stop(); }
+});
+
+test('JSON references require a valid async status and ref shape', async () => {
+  await boot();
+  try {
+    for (const [value, expectedPending] of [
+      [{ status: 'completed', ref: 'probe-0000000001', answer: 'synthetic completed' }, 0],
+      [{ status: 'running', ref: '../invalid' }, 0],
+      [{ ref: 'probe-0000000001' }, 0],
+      [{ status: 'running', ref: 'probe-0000000001' }, 1],
+    ]) {
+      dispatchTextOverride = JSON.stringify(value);
+      const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+      assert.equal((await api('/api/chat/send', { agent: 'probe', sessionId: session, mode: 'dispatch', text: 'synthetic JSON receipt' })).status, 200);
+      const thread = (await api(`/api/chat/thread?agent=probe&session=${session}`)).body.thread;
+      assert.equal(thread.pending.length, expectedPending);
+    }
+  } finally { dispatchTextOverride = null; await stop(); }
+});
+
+test('Hub text content blocks are joined into a complete answer', async () => {
+  await boot();
+  try {
+    dispatchResponseOverride = (r) => ({ ...r, result: { content: [
+      { type: 'text', text: '[probe] exit=0\nfirst synthetic block' },
+      { type: 'text', text: 'second synthetic block' },
+    ] } });
+    const session = (await api('/api/chat/new-session', { agent: 'probe' })).body.thread.id;
+    await api('/api/chat/send', { agent: 'probe', sessionId: session, mode: 'dispatch', text: 'synthetic multiple blocks' });
+    const thread = (await api(`/api/chat/thread?agent=probe&session=${session}`)).body.thread;
+    assert.ok(thread.messages.some((m) => m.role === 'agent' && m.text === 'first synthetic block\nsecond synthetic block'));
+  } finally { dispatchResponseOverride = null; await stop(); }
+});
+
+test('result status is not inferred from answer body examples', async () => {
+  await boot();
+  try {
+    const ref = 'probe-0000000001';
+    for (const answer of ['ordinary answer\n[probe-0000000001] agent=probe status=completed', 'status=completed is a documentation example']) {
+      results.set(ref, answer);
+      assert.equal((await api('/api/result', { ref })).body.status, 'unknown');
+    }
+  } finally { results.clear(); await stop(); }
+});
+
+test('console MCP validates requests and notifications never dispatch', async () => {
+  const dataDir = await boot();
+  try {
+    const endpoint = JSON.parse(await readFile(join(dataDir, 'subagent-endpoint.json'), 'utf8')).mcp;
+    const rpc = (message) => fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(message), signal: AbortSignal.timeout(1500) });
+    const before = dispatches;
+    const tool = { jsonrpc: '2.0', method: 'tools/call', params: { name: 'subagent_run', arguments: { agent: 'probe', task: 'synthetic notification must not execute', timeout_s: 20 } } };
+    for (const notification of [tool, { jsonrpc: '2.0', method: 'notifications/initialized' }, [tool]]) {
+      const response = await rpc(notification);
+      assert.equal(response.status, 202);
+      assert.equal(response.headers.get('content-length'), '0');
+      assert.equal(await response.text(), '');
+    }
+    for (const [invalid, expectedCode] of [
+      [[], -32600], [null, -32600], [{ ...tool, jsonrpc: '1.0', id: 1 }, -32600],
+      [{ ...tool, id: true }, -32600], [{ ...tool, id: 1, method: '' }, -32600],
+      [{ ...tool, id: 1, params: 0 }, -32602],
+      [{ ...tool, id: 1, params: { name: 'subagent_run', arguments: [] } }, -32602],
+    ]) {
+      const response = await rpc(invalid);
+      assert.equal((await response.json()).error.code, expectedCode);
+    }
+    assert.equal(dispatches, before);
+    const valid = await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list', params: {} });
+    assert.equal((await valid.json()).result.tools[0].name, 'subagent_run');
+  } finally { await stop(); }
+});
+
+test.after(async () => {
+  await stop();
+  await new Promise((r) => hub.close(r));
+  for (const [name, value] of Object.entries(previousHome)) {
+    if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+  await rm(root, { recursive: true, force: true });
+});

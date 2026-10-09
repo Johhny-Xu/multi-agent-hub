@@ -3,7 +3,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
-import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, stat, rename, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve, sep, dirname } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
@@ -365,6 +365,8 @@ function rpcRaw(url, payload, timeoutMs) {
     }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
+      res.on('error', (err) => reject(new Error(sanitizeHubError(err.message))));
+      res.on('aborted', () => reject(new Error('枢纽响应中断，执行状态未确认')));
       res.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf-8');
         if (res.statusCode && res.statusCode >= 400) {
@@ -408,24 +410,56 @@ function sanitizeHubError(msg) {
 
 function makeHub(getEndpoint) {
   let seq = 0;
+  const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  function validateResponse(resp, id) {
+    if (!object(resp) || resp.jsonrpc !== '2.0' || resp.id !== id ||
+        Object.hasOwn(resp, 'result') === Object.hasOwn(resp, 'error')) {
+      throw new Error('枢纽 JSON-RPC 响应格式或请求 ID 不匹配');
+    }
+    if (Object.hasOwn(resp, 'error')) {
+      if (!object(resp.error) || typeof resp.error.message !== 'string' || !Number.isInteger(resp.error.code)) {
+        throw new Error('枢纽 JSON-RPC 错误格式无效');
+      }
+      throw new Error(sanitizeHubError(resp.error.message));
+    }
+    if (!object(resp.result)) throw new Error('枢纽结果格式无效');
+    return resp.result;
+  }
   /** @returns {Promise<string>} 工具返回的文本 */
   async function callTool(name, args, timeoutMs = DEFAULT_TIMEOUT_MS) {
     const ep = getEndpoint();
     const url = ep.token ? `${ep.url}${ep.url.includes('?') ? '&' : '?'}token=${encodeURIComponent(ep.token)}` : ep.url;
-    const resp = await rpcRaw(url, { jsonrpc: '2.0', id: ++seq, method: 'tools/call', params: { name, arguments: args || {} } }, timeoutMs);
-    if (resp.error) throw new Error(sanitizeHubError(resp.error.message || '枢纽错误'));
-    const content = resp.result && resp.result.content;
-    const text = Array.isArray(content) && content[0] && typeof content[0].text === 'string' ? content[0].text : '';
-    if (resp.result && resp.result.isError) throw new Error(text || '工具执行出错');
+    const id = ++seq;
+    const resp = await rpcRaw(url, { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args || {} } }, timeoutMs);
+    const toolResult = validateResponse(resp, id);
+    const content = toolResult.content;
+    if (!Array.isArray(content) || content.some((c) => !object(c) || typeof c.type !== 'string' || (c.type === 'text' && typeof c.text !== 'string')) ||
+        (Object.hasOwn(toolResult, 'isError') && typeof toolResult.isError !== 'boolean') ||
+        (Object.hasOwn(toolResult, 'structuredContent') && !object(toolResult.structuredContent))) {
+      throw new Error('枢纽工具结果格式无效');
+    }
+    const blocks = content.filter((c) => c.type === 'text');
+    if (!blocks.length) throw new Error('枢纽工具未返回文本内容');
+    const text = blocks.map((c) => c.text).join('\n');
+    let result = toolResult.structuredContent;
+    if (!result) { try { result = JSON.parse(text); } catch { /* 普通文本合同 */ } }
+    if (toolResult.isError || ['failed', 'unknown', 'error'].includes(result?.status)) {
+      const error = new Error(result?.answer || result?.error || text || '工具执行出错');
+      error.hubStatus = result?.status || 'failed';
+      error.ref = validHubRef(result?.ref) ? result.ref : extractDispatchRef(text);
+      throw error;
+    }
     return text;
   }
   async function ping(timeoutMs = 8_000) {
     const ep = getEndpoint();
     const url = ep.token ? `${ep.url}${ep.url.includes('?') ? '&' : '?'}token=${encodeURIComponent(ep.token)}` : ep.url;
     const t0 = Date.now();
-    const resp = await rpcRaw(url, { jsonrpc: '2.0', id: ++seq, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'agent-hub-console', version: VERSION } } }, timeoutMs);
-    if (resp.error) throw new Error(sanitizeHubError(resp.error.message || '枢纽错误'));
-    return { latencyMs: Date.now() - t0, serverInfo: (resp.result && resp.result.serverInfo) || null };
+    const id = ++seq;
+    const resp = await rpcRaw(url, { jsonrpc: '2.0', id, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'agent-hub-console', version: VERSION } } }, timeoutMs);
+    const result = validateResponse(resp, id);
+    if (!object(result.serverInfo) || typeof result.serverInfo.name !== 'string') throw new Error('枢纽初始化结果格式无效');
+    return { latencyMs: Date.now() - t0, serverInfo: result.serverInfo };
   }
   return { callTool, ping };
 }
@@ -551,16 +585,31 @@ function parseInbox(agent, text) {
   return msgs;
 }
 
+function validHubRef(value) {
+  return typeof value === 'string' && /^[\w.-]+-[0-9a-f]{10}$/i.test(value);
+}
+
 function extractDispatchRef(text) {
-  const m = text.match(/ref="([^"]+)"/) || text.match(/^\[[^\]]*?\/([a-z0-9]+-[0-9a-f]{10})\]/m);
-  return m ? m[1] : null;
+  try {
+    const value = JSON.parse(text);
+    if (value && ['running', 'pending', 'accepted', 'unknown'].includes(value.status) && validHubRef(value.ref)) return value.ref;
+    return null;
+  } catch { /* 文本合同 */ }
+  const header = /^\[([^\]\r\n]+)\]([^\r\n]*)/.exec(String(text).trimStart());
+  if (!header || /\bexit=|\bstatus=(?:completed|failed|error|cancelled|timeout)\b/.test(header[2]) ||
+      !/受理|异步|\baccepted\b|\bstatus=(?:running|pending)\b/i.test(header[2])) return null;
+  const ref = header[1].split('/').at(-1);
+  if (header[1].includes('/') && validHubRef(ref)) return ref;
+  const quoted = /\bref="([^"]+)"/.exec(header[2]);
+  return quoted && validHubRef(quoted[1]) ? quoted[1] : null;
 }
 
 function extractResultStatus(text) {
-  const m = text.match(/status=(\S+)/);
-  if (m) return m[1];
+  const statuses = new Set(['running', 'pending', 'completed', 'failed', 'error', 'unknown', 'cancelled', 'timeout']);
+  try { const value = JSON.parse(text); if (statuses.has(value?.status)) return value.status; } catch { /* 文本合同 */ }
+  const m = text.split('\n', 1)[0].match(/^\[[^\]\r\n]+\][^\r\n]*\bstatus=([\w-]+)/);
+  if (m && statuses.has(m[1])) return m[1];
   if (/^未找到 /.test(text)) return 'pending';
-  if (/\[.*\] agent=\S+ status=(\S+)/.test(text)) return RegExp.$1;
   return 'unknown';
 }
 
@@ -634,6 +683,12 @@ function slug(s) {
 
 /** @param {MiniAppContext} context */
 export async function start(context) {
+  // 宿主安装包使用 miniapp/client，源码和 standalone 使用相邻的 client。
+  // 在绑定端口前读取，启动失败时不会留下后台服务。
+  const clientPath = [join(context.pluginRoot, 'miniapp/client/index.html'), join(dirname(fileURLToPath(import.meta.url)), 'client/index.html')].find(existsSync);
+  if (!clientPath) throw new Error('控制台页面不存在');
+  const clientEntry = await readFile(clientPath);
+  let disposing = false;
   const dataDir = context.dataDir;
   await mkdir(dataDir, { recursive: true });
   const configPath = join(dataDir, 'config.json');
@@ -1024,20 +1079,33 @@ export async function start(context) {
     const saved = JSON.parse(await readFile(usagePath, 'utf-8'));
     if (saved && saved.total) usage = saved;
   } catch { /* 首次运行 */ }
-  let usageDirty = false;
-  let usageSaveTimer = null;
-  function scheduleUsageSave() {
-    usageDirty = true;
-    if (usageSaveTimer) return;
-    usageSaveTimer = setTimeout(async () => {
-      usageSaveTimer = null;
-      if (!usageDirty) return;
-      usageDirty = false;
-      try { await writeFile(usagePath, JSON.stringify(usage, null, 1), 'utf-8'); }
-      catch (err) { context.logger.warn('miniapp.usage.save_failed', { error: String(err && err.message).slice(0, 120) }); }
-    }, 3000);
-    usageSaveTimer.unref?.();
+  // 每个文件串行、原子替换；退出时等待最后一次写入，避免半份 JSON 和延迟保存丢失。
+  function jsonWriter(path, value, delay, event) {
+    let dirty = false, timer = null, tail = Promise.resolve();
+    const flush = () => {
+      clearTimeout(timer); timer = null;
+      if (dirty) {
+        dirty = false;
+        const body = JSON.stringify(value(), (key, v) => key === 'inFlight' ? undefined : v, 1);
+        tail = tail.then(async () => {
+          const temporary = `${path}.${process.pid}.tmp`;
+          try { await writeFile(temporary, body, 'utf-8'); await rename(temporary, path); }
+          catch (err) {
+            dirty = true;
+            await rm(temporary, { force: true }).catch(() => {});
+            context.logger.warn(event, { error: String(err?.message).slice(0, 120) });
+          }
+        });
+      }
+      return tail;
+    };
+    return { flush, schedule() {
+      dirty = true;
+      if (!timer && !disposing) { timer = setTimeout(() => { void flush(); }, delay); timer.unref?.(); }
+    } };
   }
+  const usageWriter = jsonWriter(usagePath, () => usage, 3000, 'miniapp.usage.save_failed');
+  const scheduleUsageSave = () => usageWriter.schedule();
   function estTokens(text) {
     const s = String(text);
     let cjk = 0;
@@ -1075,20 +1143,8 @@ export async function start(context) {
   // ---------------- 会话线程引擎: 服务端持有对话与轮询, 本机会话零 token 消耗 (支持平台内多会话)
   /** @type {{threads: Array<any>, captured: Array<any>}} */
   const conv = { threads: [], captured: [] };
-  let convDirty = false;
-  let convSaveTimer = null;
-  function saveConv() {
-    convDirty = true;
-    if (convSaveTimer) return;
-    convSaveTimer = setTimeout(async () => {
-      convSaveTimer = null;
-      if (!convDirty) return;
-      convDirty = false;
-      try { await writeFile(convPath, JSON.stringify(conv, null, 1), 'utf-8'); }
-      catch (err) { context.logger.warn('miniapp.chat.save_failed', { error: String(err && err.message).slice(0, 120) }); }
-    }, 1200);
-    convSaveTimer.unref?.();
-  }
+  const convWriter = jsonWriter(convPath, () => conv, 1200, 'miniapp.chat.save_failed');
+  const saveConv = () => convWriter.schedule();
 
   try {
     const saved = JSON.parse(await readFile(convPath, 'utf-8'));
@@ -1133,6 +1189,10 @@ export async function start(context) {
           }
         }
         for (const s of t.sessions) {
+          for (const p of s.pending || []) {
+            if ('inFlight' in p) { delete p.inFlight; cleanedAny = true; }
+            if (!p.posted && !p.firstSeen) { p.posted = tsNow(); cleanedAny = true; }
+          }
           const before = (s.messages || []).length;
           s.messages = dedupAdjacentMessages(s.messages);
           if (s.messages.length !== before) cleanedAny = true;
@@ -1211,9 +1271,10 @@ export async function start(context) {
     if (sessionId) {
       const s = entry.sessions.find((x) => x.id === sessionId);
       if (s) {
-        s.agent = agentName;
+        s.agent = entry.agent;
         return s;
       }
+      throw badReqSoft('会话不存在，请刷新会话列表');
     }
     let active = entry.sessions.find((x) => x.id === entry.activeSessionId);
     if (!active && entry.sessions.length > 0) {
@@ -1223,7 +1284,7 @@ export async function start(context) {
     if (!active && create) {
       active = createSession(agentName, '初始对话');
     }
-    if (active) active.agent = agentName;
+    if (active) active.agent = entry.agent;
     return active;
   }
 
@@ -1423,17 +1484,23 @@ export async function start(context) {
     }
   }
 
+  const sendingSessions = new Set();
   async function chatSend(agentName, text, mode, model, attachments, sessionId, options = {}) {
     const thread = getThread(agentName, true, sessionId);
+    agentName = thread.agent;
     // 并发保护: 同一 session 已有 pending 任务时不重复派发
     const activePend = (thread.pending || []).filter((p) => {
       if (p.kind !== 'ref' && p.kind !== 'task') return false;
       if (tsNow() - (p.firstSeen || p.posted || 0) > 30 * 60_000) return false;
       return true;
     });
-    if (activePend.length > 0) {
-      throw new Error(`当前会话已有正在执行的任务（${activePend.map((p) => p.ref || p.taskId || '进行中').join(', ')}），请等待完成后再发送`);
+    if (sendingSessions.has(thread.id) || activePend.length > 0) {
+      const error = new Error('当前会话已有正在派发或执行的任务，请等待完成后再发送');
+      error.status = 409;
+      throw error;
     }
+    sendingSessions.add(thread.id);
+    try {
     const atts = (attachments || []).slice(0, 4);
     const attMeta = atts.length ? atts.map((a) => ({ name: String(a.name || 'file').slice(0, 120), url: a.url, isImage: !!a.isImage })) : undefined;
     addMsg(thread, 'me', text, attMeta ? { att: attMeta } : undefined);
@@ -1530,12 +1597,23 @@ export async function start(context) {
       addMsg(thread, 'sys', `${sendText.trim()} 提示: 私信需要对方代理在线并轮询自己的信箱才能收到并回复。`);
     }
     return thread;
+    } catch (err) {
+      if (err.ref) {
+        if (!thread.pending.some((p) => p.ref === err.ref)) thread.pending.push({ kind: 'ref', ref: err.ref, posted: tsNow(), tag: 'chat-recovery' });
+        saveConv();
+      }
+      if (!err.status) {
+        err.hubStatus ||= 'unknown';
+        addMsg(thread, 'sys', err.hubStatus === 'unknown' ? '未能确认执行状态；任务可能已受理，请先检查枢纽或使用原 ref 查询，避免重复派发。' : `派发失败：${sanitizeHubError(err.message)}`);
+      }
+      throw err;
+    } finally { sendingSessions.delete(thread.id); }
   }
 
-  function routeInboxMessage(msg) {
+  async function routeInboxMessage(msg) {
     // 任务完成/回复 → 匹配对应线程 (按发送者; 若文本含未决 taskId 也归位到相应 session)
-    let thread = getThread(msg.from, false);
-    if (!thread) {
+    let thread;
+    {
       for (const entry of conv.threads) {
         const found = (entry.sessions || []).find((s) => (s.pending || []).some((p) => p.taskId && msg.text.includes(p.taskId)));
         if (found) {
@@ -1545,6 +1623,7 @@ export async function start(context) {
         }
       }
     }
+    if (!thread) thread = getThread(msg.from, false);
     if (!thread) {
       conv.captured.unshift({ ...msg, ts2: tsNow() });
       conv.captured = conv.captured.slice(0, 100);
@@ -1552,7 +1631,7 @@ export async function start(context) {
       broadcast({ type: 'inbox' });
       return false;
     }
-    void deliverAgentReply(thread, msg.text, 'inbox');
+    await deliverAgentReply(thread, msg.text, 'inbox');
     if (thread.pending?.length) {
       thread.pending = thread.pending.filter((p) => !(p.kind === 'task' && msg.text.includes(p.taskId || '__none__')));
       saveConv();
@@ -1560,6 +1639,7 @@ export async function start(context) {
     return true;
   }
 
+  const pollingPending = new WeakSet();
   async function pollThreadPending() {
     for (const entry of conv.threads) {
       const sessions = Array.isArray(entry.sessions) ? entry.sessions : (entry.messages ? [entry] : []);
@@ -1567,13 +1647,13 @@ export async function start(context) {
         t.agent = entry.agent || t.agent;
         const pend = (t.pending || []).filter((p) => p.kind === 'ref');
         for (const p of pend) {
-          if (p.inFlight) continue;
+          if (pollingPending.has(p)) continue;
           if (tsNow() - (p.firstSeen || p.posted) > 30 * 60_000) {
             t.pending = t.pending.filter((x) => x !== p);
             addMsg(t, 'sys', `ref ${p.ref} 超过 30 分钟未回, 已停止跟踪（可到「任务队列/异步任务」手动查询）。`);
             continue;
           }
-          p.inFlight = true;
+          pollingPending.add(p);
           try {
             const text = await hub.callTool('hub_result', { ref: p.ref });
             const status = extractResultStatus(text);
@@ -1590,7 +1670,7 @@ export async function start(context) {
               addMsg(t, 'sys', `异步任务结束但状态为 ${status}: ${String(text).slice(0, 300)}`, { ref: p.ref });
             }
           } catch { /* 枢纽抖动, 下轮再试 */ }
-          finally { p.inFlight = false; }
+          finally { pollingPending.delete(p); }
         }
       }
     }
@@ -1651,12 +1731,12 @@ export async function start(context) {
 
   let watcherBusy = false;
   async function watcherTick() {
-    if (watcherBusy) return;
+    if (disposing || watcherBusy) return;
     watcherBusy = true;
     try {
       const text = await hub.callTool('hub_read_messages', { agent: SELF_AGENT, mark_read: true });
       const msgs = parseInbox(SELF_AGENT, text);
-      for (const m of msgs) routeInboxMessage(m);
+      for (const m of msgs) await routeInboxMessage(m);
       if (msgs.length) saveConv();
     } catch { /* 枢纽不可达: 静默等下一轮 */ }
     try { await pollThreadPending(); } catch { /* noop */ }
@@ -1667,7 +1747,8 @@ export async function start(context) {
   let watcherTimer = null;
   let watcherFast = false;
   function tuneWatcher() {
-    const fast = sseClients.size > 0 || conv.threads.some((t) => (t.pending || []).length > 0);
+    if (disposing) return;
+    const fast = sseClients.size > 0 || conv.threads.some((t) => (t.sessions || []).some((s) => (s.pending || []).length > 0));
     if (fast === watcherFast && watcherTimer) return;
     watcherFast = fast;
     if (watcherTimer) clearInterval(watcherTimer);
@@ -1840,7 +1921,7 @@ export async function start(context) {
       return runSubagent(pick.name, task, { ...opts, viaAuto: true });
     }
     const timeoutMs = Math.min(Math.max(Number(opts.timeout_s) || 240, 20), 1_800) * 1000;
-    const key = `${agentName}::${task.slice(0, 200)}`;
+    const key = JSON.stringify([agentName, task, opts.model, opts.extra_args, opts.effort, opts.contextTier, opts.autoTier, timeoutMs]);
     if (subInflight.has(key)) return subInflight.get(key);
     const p = (async () => {
       recordRun(agentName, true);
@@ -1867,13 +1948,14 @@ export async function start(context) {
         };
       }
       thread.pending = (thread.pending || []).filter((x) => x.ref !== ref);
-      thread.pending.push({ kind: 'ref', ref, tag: 'run' });
+      thread.pending.push({ kind: 'ref', ref, tag: 'run', posted: tsNow() });
       saveConv();
       const deadline = tsNow() + timeoutMs;
       let lastText = '';
       let status = 'pending';
-      while (tsNow() < deadline) {
+      while (!disposing && tsNow() < deadline) {
         await new Promise((r) => setTimeout(r, REF_POLL_MS));
+        if (disposing) break;
         try {
           const r = await hub.callTool('hub_result', { ref });
           status = extractResultStatus(r);
@@ -1890,6 +1972,11 @@ export async function start(context) {
         summary = (artifactPath ? `${body.slice(0, SUMMARY_CAP)}\n…(完整输出见 artifactPath)` : body);
         await deliverAgentReply(thread, lastText, 'run', ref);
         await backfillCliSessionId(thread, deadline - timeoutMs);
+      } else if (['failed', 'error', 'timeout'].includes(status)) {
+        thread.pending = (thread.pending || []).filter((x) => x.ref !== ref);
+        summary = extractResultBody(lastText);
+        addMsg(thread, 'sys', `异步任务结束但状态为 ${status}: ${summary.slice(0, 300)}`, { ref });
+        saveConv();
       } else {
         summary = `任务仍在执行或超时 (status=${status})。ref=${ref} 可稍后用 subagent_result 查询, 完成后会自动回到控制台「对话」线程。`;
         if (!thread.pending.some((x) => x.ref === ref)) {
@@ -1996,9 +2083,31 @@ export async function start(context) {
       response.end(payload);
     };
     const replies = [];
+    const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+    const errorReply = (id, code, message) => ({ jsonrpc: '2.0', id, error: { code, message } });
+    if (Array.isArray(msg) && !msg.length) {
+      send(errorReply(null, -32600, 'invalid request'));
+      return;
+    }
     for (const one of (Array.isArray(msg) ? msg : [msg])) {
-      if (one && one.method === 'notifications/initialized') continue;
-      const id = one ? one.id ?? null : null;
+      const hasId = object(one) && Object.hasOwn(one, 'id');
+      const validId = hasId && (one.id === null || typeof one.id === 'string' || (typeof one.id === 'number' && Number.isFinite(one.id)));
+      const id = validId ? one.id : null;
+      if (!object(one) || one.jsonrpc !== '2.0' || typeof one.method !== 'string' || !one.method || (hasId && !validId)) {
+        replies.push(errorReply(null, -32600, 'invalid request'));
+        continue;
+      }
+      if (Object.hasOwn(one, 'params') && !object(one.params)) {
+        replies.push(errorReply(id, -32602, 'params must be an object'));
+        continue;
+      }
+      // MCP 工具调用必须有请求 ID；通知不启动任何工作，也没有 JSON-RPC 回应。
+      if (!hasId) continue;
+      if (one.method === 'tools/call' && (typeof one.params?.name !== 'string' || !one.params.name ||
+          (Object.hasOwn(one.params, 'arguments') && !object(one.params.arguments)))) {
+        replies.push(errorReply(id, -32602, 'invalid tool parameters'));
+        continue;
+      }
       try {
         let result;
         switch (one && one.method) {
@@ -2026,7 +2135,12 @@ export async function start(context) {
         replies.push({ jsonrpc: '2.0', id, error: { code: -32000, message: sanitizeHubError(err && err.message) } });
       }
     }
-    const out = Array.isArray(msg) ? replies : replies[0] || { jsonrpc: '2.0', id: null, result: {} };
+    if (!replies.length) {
+      response.writeHead(202, { 'content-length': '0' });
+      response.end();
+      return;
+    }
+    const out = Array.isArray(msg) ? replies : replies[0];
     send(out);
   }
 
@@ -2120,7 +2234,6 @@ export async function start(context) {
   await bindSubServer();
 
   // ---------------- 控制台路由 (原 /dashboard 与 /api/*)
-  const clientEntry = await readFile(join(context.pluginRoot, 'miniapp/client/index.html'));
 
   const server = http.createServer((request, response) => {
     const url = new URL(request.url || '/', 'http://agent-hub-console.local');
@@ -2132,7 +2245,11 @@ export async function start(context) {
     };
     const readJson = () => readBody(request).then((raw) => {
       if (!raw) return {};
-      try { return JSON.parse(raw); } catch { throw new Error('请求体不是合法 JSON'); }
+      try {
+        const value = JSON.parse(raw);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw badReq('请求体须为 JSON 对象');
+        return value;
+      } catch (err) { throw badReq(err.status ? err.message : '请求体不是合法 JSON'); }
     });
     const str = (v, max, name) => {
       if (typeof v !== 'string' || !v.trim()) throw badReq(`${name} 不能为空`);
@@ -2144,7 +2261,7 @@ export async function start(context) {
     const safeName = (v, name) => { const s = str(v, 64, name); if (!nameRe.test(s)) throw badReq(`${name} 含非法字符`); return s; };
 
     const route = async () => {
-      if (request.method === 'GET' && p === '/dashboard') {
+      if (request.method === 'GET' && (p === '/dashboard' || p === '/')) {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         response.end(clientEntry);
         return;
@@ -2454,7 +2571,9 @@ export async function start(context) {
           } catch (err) {
             const e = new Error(sanitizeHubError(err && err.message));
             // @ts-ignore
-            e.status = 502;
+            e.status = err.status || 502;
+            e.hubStatus = err.hubStatus;
+            e.ref = err.ref;
             throw e;
           }
           return;
@@ -2476,8 +2595,10 @@ export async function start(context) {
           const agent = safeName(body.agent, 'agent');
           const entry = getAgentEntry(agent, false);
           if (entry) {
-            entry.unread = 0;
-            if (Array.isArray(entry.sessions)) for (const s of entry.sessions) s.unread = 0;
+            const sessionId = body.sessionId || body.session;
+            if (sessionId) getThread(agent, false, sessionId).unread = 0;
+            else if (Array.isArray(entry.sessions)) for (const s of entry.sessions) s.unread = 0;
+            entry.unread = (entry.sessions || []).reduce((n, s) => n + (s.unread || 0), 0);
             saveConv();
           }
           send(200, { ok: true });
@@ -2579,7 +2700,7 @@ export async function start(context) {
 
     route().catch((err) => {
       if (response.headersSent) { try { response.end(); } catch { /* noop */ } return; }
-      send(err && err.status ? err.status : 500, { error: sanitizeHubError(err && err.message) || '内部错误' });
+      send(err && err.status ? err.status : 500, { error: sanitizeHubError(err && err.message) || '内部错误', ...(err.hubStatus ? { status: err.hubStatus } : {}), ...(err.ref ? { ref: err.ref } : {}) });
     });
   });
 
@@ -2596,6 +2717,7 @@ export async function start(context) {
   let disposal;
   const dispose = () => {
     if (disposal) return disposal;
+    disposing = true;
     context.signal.removeEventListener('abort', onAbort);
     clearInterval(watcherTimer);
     clearInterval(watcherKick);
@@ -2609,6 +2731,9 @@ export async function start(context) {
           error ? reject(error) : resolve();
         });
       });
+    }).then(async () => {
+      while (watcherBusy) await new Promise((r) => setTimeout(r, 20));
+      await Promise.all([convWriter.flush(), usageWriter.flush()]);
     });
     return disposal;
   };

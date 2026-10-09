@@ -6,6 +6,7 @@ logs/
 .run/
 hub/agents.json
 hub/.env
+.env
 state/
 results/
 *.bak-*

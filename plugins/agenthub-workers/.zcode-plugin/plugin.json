@@ -1,10 +1,10 @@
 {
   "name": "agenthub-workers",
-  "version": "0.4.0",
-  "description": "Bridge all Multi-Agent Hub workers (zcode / antigravity / codebuddy / codebuddy-cn / mimocode / github-copilot / minimaxcode / traecode) as native ZCode subagents, with a blocking ask MCP bridge (hub_ask), a concurrent dispatch skill and a /hub-status command.",
+  "version": "0.5.0",
+  "description": "Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.",
   "description_i18n": {
-    "en": "Bridge all Multi-Agent Hub workers as native ZCode subagents, with a blocking ask MCP bridge (hub_ask), a concurrent dispatch skill and a /hub-status command.",
-    "zh-CN": "把 Multi-Agent Hub 全部 8 个 worker 桥接为 ZCode 原生子智能体；附阻塞式派发桥接 MCP（hub_ask 一次调用出结果）、多 worker 并发调度技能与 /hub-status 状态命令。"
+    "en": "Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.",
+    "zh-CN": "把 Multi-Agent Hub 全部 8 个 worker 桥接为 ZCode 原生子智能体；提供派发/回收 MCP、官方登录链接与状态（hub_login）、并发调度技能、/hub-status 与 /hub-login。"
   },
   "author": {
     "name": "Multi-Agent Hub Contributors"

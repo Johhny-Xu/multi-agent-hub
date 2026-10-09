@@ -1,0 +1,410 @@
+{
+  "date": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "workers": [
+    "codebuddy",
+    "codebuddy-cn"
+  ],
+  "platform": "Windows x64",
+  "vendorWindowsAvailability": "supported",
+  "locallyInstalledCLI": false,
+  "localCommandsChecked": [
+    "codebuddy",
+    "codebuddy-intl",
+    "codebuddy-cn"
+  ],
+  "localAuthObservation": "Original %USERPROFILE%\\.codebuddy contained diagnostics/ and logs/ only; no settings or credential file at top level. No credential content was read.",
+  "testedPackage": "@tencent-ai/codebuddy-code@2.162.0",
+  "packageBinNames": [
+    "cbc",
+    "codebuddy",
+    "cbc-prewarm",
+    "codebuddy-code",
+    "codebuddy-lowmem"
+  ],
+  "packageArchiveSha256": "C5D471C9B17CAC3CC323C2593B420152B984AF8D038E76B0A0F0145DF84B0EE7",
+  "nodeVersion": "v24.17.0",
+  "security": "Default permission settings; no -y or bypass permission flags; no tools requested; DISABLE_AUTOUPDATER=1 process-only. User explicitly requested login links and completed OAuth in browser. Official CLI persisted credentials in separate ~/.codebuddy and ~/.codebuddy-cn configurations. No credentials or dynamic OAuth URLs copied into report.",
+  "sources": [
+    "https://www.codebuddy.ai/docs/cli/quickstart",
+    "https://www.codebuddy.ai/docs/cli/installation",
+    "https://www.codebuddy.ai/docs/cli/env-vars",
+    "https://www.codebuddy.ai/docs/cli/cli-reference",
+    "https://www.codebuddy.ai/docs/cli/troubleshooting",
+    "https://registry.npmjs.org/@tencent-ai/codebuddy-code"
+  ],
+  "findings": [
+    {
+      "worker": "codebuddy",
+      "startup": "pass",
+      "version": "2.162.0",
+      "help": "pass",
+      "prompt": "pass",
+      "promptExitCode": 0,
+      "promptStdoutEmpty": false,
+      "apiModelResponse": "HUB_WINDOWS_OK with deepseek-v4.1-flash",
+      "repoPrintMode": "fail - unknown option --print-mode",
+      "repoDefaultModel": "deepseek-v4.1-flash actual generation verified after explicit user OAuth login",
+      "wrapper": "codebuddy-intl is a project/deployment wrapper, not an official package bin",
+      "recommendedArgv": [
+        "node",
+        "ABSOLUTE_PATH_TO_OFFICIAL_CLI/bin/codebuddy",
+        "-p",
+        "{task}",
+        "--model",
+        "deepseek-v4.1-flash"
+      ]
+    },
+    {
+      "worker": "codebuddy-cn",
+      "startup": "pass",
+      "version": "2.162.0",
+      "help": "pass",
+      "prompt": "pass",
+      "promptExitCode": 0,
+      "promptStdoutEmpty": false,
+      "apiModelResponse": "HUB_WINDOWS_OK with deepseek-v4.1-flash",
+      "repoPrintMode": "same official CLI rejects --print-mode; actual rejected prompt was run once in intl context",
+      "repoDefaultModel": "deepseek-v4.1-flash actual generation verified after explicit user OAuth login",
+      "additionalArgs": "--effort high and --add-dir ABSOLUTE_WORKDIR parsed",
+      "wrapper": "codebuddy-cn is a project/deployment wrapper, not an official package bin",
+      "editionEnvironment": {
+        "CODEBUDDY_CONFIG_DIR": "independent Windows directory",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+      },
+      "recommendedArgv": [
+        "node",
+        "ABSOLUTE_PATH_TO_OFFICIAL_CLI/bin/codebuddy",
+        "-p",
+        "{task}",
+        "--model",
+        "deepseek-v4.1-flash"
+      ]
+    }
+  ],
+  "caveats": [
+    "An authentication message with exit code 0 is not a successful model response. A smoke pass requires HUB_WINDOWS_OK in stdout.",
+    "The --print-mode --help probe exits 0 because help short-circuits argument parsing; the actual prompt probe proves --print-mode is invalid.",
+    "No login flow was started; no GUI or browser was opened.",
+    "No historical 403 behavior was reproduced or assumed.",
+    "Inspect async_default handling of cwd/workdir_via in hub/agent_hub.py: it returns before synchronous workdir_via branch."
+  ],
+  "probes": [
+    {
+      "name": "version",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "--version"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 89,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\version.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\version.stderr.log",
+      "stdoutPreview": "2.162.0\n",
+      "stderrPreview": ""
+    },
+    {
+      "name": "help",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "--help"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 3226,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\help.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\help.stderr.log",
+      "stdoutPreview": "Usage: codebuddy|cbc [options] [command] [prompt]\n\nCodeBuddy Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                           Your prompt\n\nOptions:\n  -V, --version                                    output the version number\n  -d, --debug [filter]                             Enable debug mode with optional category filtering (e.g., \"api,hooks\" or \"!statsig,!file\") (default: false)\n  --verbose                                        Override verbose mode setting from config (default: false)\n  -p, --print                                      Print response and exit (useful for pipes) (default: false)\n  --output-format <format>                         Output format (only works with --print): \"text\" (default), \"json\" (single result), or \"stream-json\" (realtime streaming) (default: \"text\")\n  --input-format <format>                          Input format (only works with --print): \"text\" (default), or \"stream-json\" (realtime streaming input) (choices: \"text\", \"stream-json\") (default: \"text\")\n  --json-schema <schema>                           JSON Schema for structured output validation. Example: {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}\n  --include-partial-messages                       Output raw SSE incremental messages from model requests (only works with --output-format stream-json) (default: false)\n  -y, --dangerously-skip-permissions               Bypass permission prompts (HIGH/CRITICAL still ask). Isolated-sandbox full pass: CODEBUDDY_IS_SANDBOX=1 (process env only; high-risk). (default: false)\n  --permission-mode <mode>                         Default permission mode for this process (TUI, --serve Web, ACP). Choices: acceptEdits, bypassPermissions, default, plan, dontAsk, auto. Does not write settings.\n  --permission-mode-before-plan <mode>             Permission mode to restore when exiting plan mode\n  --subagent-permission-mode <mode>                Default permission mode for subagents/teammates (choices: \"acceptEdits\", \"bypassPermissions\", \"default\", \"plan\", \"dontAsk\", \"auto\"). Overrides inheritance from main session.\n  --tools <value>                                  Restrict which built-in tools CodeBuddy can use. Use \"\" to disable all, \"default\" for all, or comma-separated tool names like \"Bash,Edit,Read\".\n  --allowedTools <tools...>                        Comma or space-separated list of tool names to allow (e.g. \"Bash(git:*",
+      "stderrPreview": ""
+    },
+    {
+      "name": "template-flag-parser",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "--print-mode",
+        "--help"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 3280,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\template-flag-parser.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\template-flag-parser.stderr.log",
+      "stdoutPreview": "Usage: codebuddy|cbc [options] [command] [prompt]\n\nCodeBuddy Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                           Your prompt\n\nOptions:\n  -V, --version                                    output the version number\n  -d, --debug [filter]                             Enable debug mode with optional category filtering (e.g., \"api,hooks\" or \"!statsig,!file\") (default: false)\n  --verbose                                        Override verbose mode setting from config (default: false)\n  -p, --print                                      Print response and exit (useful for pipes) (default: false)\n  --output-format <format>                         Output format (only works with --print): \"text\" (default), \"json\" (single result), or \"stream-json\" (realtime streaming) (default: \"text\")\n  --input-format <format>                          Input format (only works with --print): \"text\" (default), or \"stream-json\" (realtime streaming input) (choices: \"text\", \"stream-json\") (default: \"text\")\n  --json-schema <schema>                           JSON Schema for structured output validation. Example: {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}\n  --include-partial-messages                       Output raw SSE incremental messages from model requests (only works with --output-format stream-json) (default: false)\n  -y, --dangerously-skip-permissions               Bypass permission prompts (HIGH/CRITICAL still ask). Isolated-sandbox full pass: CODEBUDDY_IS_SANDBOX=1 (process env only; high-risk). (default: false)\n  --permission-mode <mode>                         Default permission mode for this process (TUI, --serve Web, ACP). Choices: acceptEdits, bypassPermissions, default, plan, dontAsk, auto. Does not write settings.\n  --permission-mode-before-plan <mode>             Permission mode to restore when exiting plan mode\n  --subagent-permission-mode <mode>                Default permission mode for subagents/teammates (choices: \"acceptEdits\", \"bypassPermissions\", \"default\", \"plan\", \"dontAsk\", \"auto\"). Overrides inheritance from main session.\n  --tools <value>                                  Restrict which built-in tools CodeBuddy can use. Use \"\" to disable all, \"default\" for all, or comma-separated tool names like \"Bash,Edit,Read\".\n  --allowedTools <tools...>                        Comma or space-separated list of tool names to allow (e.g. \"Bash(git:*",
+      "stderrPreview": ""
+    },
+    {
+      "name": "template-prompt-intl",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "--print-mode",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 2518,
+      "timedOut": false,
+      "code": 1,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\template-prompt-intl.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\template-prompt-intl.stderr.log",
+      "stdoutPreview": "",
+      "stderrPreview": "error: unknown option '--print-mode'\n"
+    },
+    {
+      "name": "prompt-intl",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 4020,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\prompt-intl.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\prompt-intl.stderr.log",
+      "stdoutPreview": "",
+      "stderrPreview": "Authentication required. Please use /login command to sign in to your account\n"
+    },
+    {
+      "name": "prompt-cn",
+      "edition": "cn",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-cn",
+        "DISABLE_AUTOUPDATER": "1",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+      },
+      "durationMs": 4562,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\prompt-cn.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\prompt-cn.stderr.log",
+      "stdoutPreview": "",
+      "stderrPreview": "Authentication required. Please use /login command to sign in to your account\n"
+    },
+    {
+      "name": "model-effort-intl",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files.",
+        "--model",
+        "deepseek-v4.1-flash",
+        "--effort",
+        "high"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-intl",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 3176,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\model-effort-intl.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\model-effort-intl.stderr.log",
+      "stdoutPreview": "",
+      "stderrPreview": "Authentication required. Please use /login command to sign in to your account\n"
+    },
+    {
+      "name": "model-effort-cn",
+      "edition": "cn",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files.",
+        "--model",
+        "deepseek-v4.1-flash",
+        "--effort",
+        "high",
+        "--add-dir",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-cn",
+        "DISABLE_AUTOUPDATER": "1",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+      },
+      "durationMs": 3338,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\model-effort-cn.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\model-effort-cn.stderr.log",
+      "stdoutPreview": "",
+      "stderrPreview": "Authentication required. Please use /login command to sign in to your account\n"
+    },
+    {
+      "name": "help-cn",
+      "edition": "cn",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "--help"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\config-cn",
+        "DISABLE_AUTOUPDATER": "1",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+      },
+      "durationMs": 2885,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\help-cn.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\help-cn.stderr.log",
+      "stdoutPreview": "Usage: codebuddy|cbc [options] [command] [prompt]\n\nCodeBuddy Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                           Your prompt\n\nOptions:\n  -V, --version                                    output the version number\n  -d, --debug [filter]                             Enable debug mode with optional category filtering (e.g., \"api,hooks\" or \"!statsig,!file\") (default: false)\n  --verbose                                        Override verbose mode setting from config (default: false)\n  -p, --print                                      Print response and exit (useful for pipes) (default: false)\n  --output-format <format>                         Output format (only works with --print): \"text\" (default), \"json\" (single result), or \"stream-json\" (realtime streaming) (default: \"text\")\n  --input-format <format>                          Input format (only works with --print): \"text\" (default), or \"stream-json\" (realtime streaming input) (choices: \"text\", \"stream-json\") (default: \"text\")\n  --json-schema <schema>                           JSON Schema for structured output validation. Example: {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}\n  --include-partial-messages                       Output raw SSE incremental messages from model requests (only works with --output-format stream-json) (default: false)\n  -y, --dangerously-skip-permissions               Bypass permission prompts (HIGH/CRITICAL still ask). Isolated-sandbox full pass: CODEBUDDY_IS_SANDBOX=1 (process env only; high-risk). (default: false)\n  --permission-mode <mode>                         Default permission mode for this process (TUI, --serve Web, ACP). Choices: acceptEdits, bypassPermissions, default, plan, dontAsk, auto. Does not write settings.\n  --permission-mode-before-plan <mode>             Permission mode to restore when exiting plan mode\n  --subagent-permission-mode <mode>                Default permission mode for subagents/teammates (choices: \"acceptEdits\", \"bypassPermissions\", \"default\", \"plan\", \"dontAsk\", \"auto\"). Overrides inheritance from main session.\n  --tools <value>                                  Restrict which built-in tools CodeBuddy can use. Use \"\" to disable all, \"default\" for all, or comma-separated tool names like \"Bash,Edit,Read\".\n  --allowedTools <tools...>                        Comma or space-separated list of tool names to allow (e.g. \"Bash(git:*",
+      "stderrPreview": ""
+    },
+    {
+      "name": "authenticated-prompt-intl",
+      "edition": "intl",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files.",
+        "--model",
+        "deepseek-v4.1-flash"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\.codebuddy",
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "durationMs": 41724,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-intl.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-intl.stderr.log",
+      "stdoutPreview": "HUB_WINDOWS_OK\n",
+      "stderrPreview": ""
+    },
+    {
+      "name": "authenticated-prompt-cn",
+      "edition": "cn",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files.",
+        "--model",
+        "deepseek-v4.1-flash"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\.codebuddy-cn",
+        "DISABLE_AUTOUPDATER": "1",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+      },
+      "durationMs": 6531,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-cn.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-cn.stderr.log",
+      "stdoutPreview": "",
+      "stderrPreview": "401 Authentication required. Please use /login command to sign in to your account (auth-type:cli-external-link,token-type:Bearer,token-length:1414) (proxy: http://<PRIVATE_PROXY_HOST>:7890 -> https://copilot.tencent.com) (01a11a802e6b7e6783d1291015b9b559/01a11a80-24e6-70b6-8872-88d3627c5654)\n"
+    },
+    {
+      "name": "authenticated-prompt-cn-retry",
+      "edition": "cn",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files.",
+        "--model",
+        "deepseek-v4.1-flash"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+      "envOverrides": {
+        "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\.codebuddy-cn",
+        "DISABLE_AUTOUPDATER": "1",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+      },
+      "durationMs": 8460,
+      "timedOut": false,
+      "code": 0,
+      "signal": null,
+      "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-cn-retry.stdout.log",
+      "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-cn-retry.stderr.log",
+      "stdoutPreview": "HUB_WINDOWS_OK\n",
+      "stderrPreview": ""
+    }
+  ],
+  "cleanup": {
+    "temporaryToolsRemoved": false,
+    "userConfigurationChanged": true,
+    "globalInstallChanged": false,
+    "remainingProbeProcessCount": 0,
+    "cleanupBlock": "Automatic approval review rejected native PowerShell recursive deletion of the isolated temporary package folder: blocked by policy. No alternative deletion mechanism was used.",
+    "temporaryToolsPath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008"
+  },
+  "oauthEvidence": {
+    "international": "Official stream authentication callback success=true; subsequent marker generation passed",
+    "china": "First flow timed out at vendor hardcoded 60s; subsequent prompt returned 401. A fresh user-authorized flow callback success=true; subsequent marker generation passed",
+    "dynamicLoginURLs": "Omitted from report and repository logs",
+    "credentialValues": "Never read or emitted",
+    "codebuddyProtocol": "-p --input-format stream-json --output-format stream-json --verbose with initialize/authenticate control requests and callback ACK",
+    "protocolLimitation": "User OAuth flows were verified through official stream control callbacks (hardcoded 60s timeout). Plugin backend now uses official ACP for new login links, with 300s process TTL; actual ACP initialization and cached-account backend status were verified, plus synthetic full ACP auth/expiry contract tests. A real five-minute authentication wait was not exercised."
+  },
+  "featureVerification": {
+    "pluginTests": "plugins/agenthub-workers/scripts/test-login.mjs passed: schema, stdio bridge, aliases, safe public fields, credential-bearing URL rejection, HTTP/MCP errors, manual_required, zcode routing, status=error",
+    "backendTests": "tests/login_manager_smoke.py 9 tests passed: vendor URLs, independent configuration defaults, status account-field stripping, repeated start dedupe, cancellation, expiry, ACP callbacks and current-process expiry ownership",
+    "realBackendStatus": "Fresh temporary CODEBUDDY_CONFIG_DIR still detected vendor cached CN account; status authenticated and no link, no forced reauthentication. Vendor may cache account outside configuration directory.",
+    "actualAuthWaitProcesses": "all closed; no probe node processes found"
+  }
+}

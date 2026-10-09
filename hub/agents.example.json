@@ -5,7 +5,7 @@
       "description": "编码 worker 示例（CLI 无头模式）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
       "cli": [
         "/usr/local/bin/codebuddy-placeholder",
-        "--print-mode",
+        "-p",
         "-y"
       ],
       "model_arg": "--model",
@@ -45,7 +45,7 @@
       "description": "编码 worker 示例（独立配置目录）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
       "cli": [
         "/usr/local/bin/codebuddy-cn-placeholder",
-        "--print-mode",
+        "-p",
         "-y"
       ],
       "model_arg": "--model",

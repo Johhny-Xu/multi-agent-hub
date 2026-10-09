@@ -23,13 +23,15 @@
 import json
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
 from pathlib import Path
+
+from command_runtime import positive_timeout, spawn_owned, terminate_owned
+from result_store import read_result as stored_result, update_result
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -61,35 +63,12 @@ ZCODE_TIMEOUT = 1000
 PROGRESS_INTERVAL = 6
 
 
-def save(ref, **kv):
-    """原子写结果文件, 保证不出现半截 JSON。"""
-    os.makedirs(RESULTS, exist_ok=True)
-    p = os.path.join(RESULTS, ref + ".json")
-    d = {}
-    if os.path.exists(p):
-        try:
-            with open(p, encoding="utf-8") as f:
-                d = json.load(f)
-        except (OSError, ValueError):
-            d = {}
-    d.update(kv)
-    d["ref"] = ref
-    d["updated_at"] = time.time()
-    tmp = p + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False)
-    os.replace(tmp, p)
+def save(ref, only_if_running=False, **kv):
+    return update_result(RESULTS, ref, kv, only_if_running=only_if_running)
 
 
 def read_result(ref):
-    p = os.path.join(RESULTS, ref + ".json")
-    if not os.path.exists(p):
-        return None
-    try:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return None
+    return stored_result(RESULTS, ref)
 
 
 def load_task_meta(path):
@@ -100,67 +79,66 @@ def load_task_meta(path):
     try:
         with open(path, encoding="utf-8") as f:
             raw = f.read()
-    except OSError as e:
+    except (OSError, UnicodeError) as e:
         raise RuntimeError(f"读取任务文件失败: {e}")
     try:
         d = json.loads(raw)
     except ValueError:
-        return {"task": raw, "cmd": None, "callback_url": None, "new_chat": False}
+        return {"task": raw, "cmd": None, "callback_url": None, "new_chat": False,
+                "cwd": None, "timeout_s": None, "env": None}
     if isinstance(d, dict):
         return {
             "task": d.get("task"),
             "cmd": d.get("cmd"),
             "callback_url": d.get("callback_url"),
             "new_chat": d.get("new_chat") is True,
+            "cwd": d.get("cwd") or None,
+            "timeout_s": d.get("timeout_s"),
+            "env": d.get("env"),
         }
     # JSON 标量/数组: 当作任务文本使用
     text = d if isinstance(d, str) else json.dumps(d, ensure_ascii=False)
-    return {"task": text, "cmd": None, "callback_url": None, "new_chat": False}
+    return {"task": text, "cmd": None, "callback_url": None, "new_chat": False,
+            "cwd": None, "timeout_s": None, "env": None}
 
 
-def subprocess_run(cmd_argv, timeout=25):
+class CommandTimeout(RuntimeError):
+    pass
+
+
+class CommandCancelled(RuntimeError):
+    pass
+
+
+def subprocess_run(cmd_argv, timeout=25, stop_event=None, input_data=None):
+    timeout = positive_timeout(timeout, 25)
+    proc = None
     try:
-        p = subprocess.run(cmd_argv, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=timeout)
-        return p.stdout or ""
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
+        proc = spawn_owned(cmd_argv, stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        deadline = time.monotonic() + timeout
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                raise CommandCancelled("进度读取已停止")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CommandTimeout(f"子进程执行超时 (>{timeout}s)")
+            try:
+                out, err = proc.communicate(input=input_data, timeout=min(.1, remaining) if stop_event is not None else remaining)
+                break
+            except subprocess.TimeoutExpired:
+                input_data = None
+        if proc.returncode:
+            diagnostic = (err or out or "无诊断输出").strip()[-1200:]
+            raise RuntimeError(f"子进程失败 (exit={proc.returncode}): {diagnostic}")
+        return out or ""
+    finally:
+        terminate_owned(proc)
 
 
 def kill_process_group(proc):
-    """整组回收子进程, 先 SIGTERM 后 SIGKILL, 避免留下孤儿进程空转。
-
-    进程组操作是 Unix 专有 API (os.getpgid/os.killpg); 在无该 API 的平台上
-    自动回退到单进程 terminate/kill。
-    """
-    if proc is None or proc.poll() is not None:
-        return
-    can_group = hasattr(os, "getpgid") and hasattr(os, "killpg")
-    pgid = None
-    if can_group:
-        try:
-            pgid = os.getpgid(proc.pid)
-        except OSError:
-            pgid = None
-    try:
-        if pgid is not None:
-            os.killpg(pgid, signal.SIGTERM)
-        else:
-            proc.terminate()
-    except OSError:
-        pass
-    try:
-        proc.wait(timeout=10)
-        return
-    except Exception:  # noqa: BLE001 - 兜底升级为强杀
-        pass
-    try:
-        if pgid is not None:
-            os.killpg(pgid, signal.SIGKILL)
-        else:
-            proc.kill()
-    except OSError:
-        pass
+    """兼容旧调用名; Windows Job Object 回收整棵自有子进程树。"""
+    terminate_owned(proc)
 
 
 def progress_poller(ref, reader_argv, stop_event):
@@ -172,10 +150,10 @@ def progress_poller(ref, reader_argv, stop_event):
     last = ""
     while not stop_event.is_set():
         try:
-            prog = (subprocess_run(reader_argv) or "").strip()
-            if prog and prog != last:
+            prog = (subprocess_run(reader_argv, stop_event=stop_event) or "").strip()
+            if not stop_event.is_set() and prog and prog != last:
                 last = prog
-                save(ref, status="running", progress=prog[:800])
+                save(ref, only_if_running=True, progress=prog[:800])
         except Exception:  # noqa: BLE001 - 轮询失败不应影响主任务
             pass
         stop_event.wait(PROGRESS_INTERVAL)
@@ -191,97 +169,117 @@ def start_progress_poller(ref, reader_script, stop_event):
     return th
 
 
-def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT):
+_HTTP_REQUEST = """import json, sys, urllib.request
+payload = sys.stdin.buffer.read()
+request = urllib.request.Request(sys.argv[1], data=payload,
+    headers={"Content-Type": "application/json; charset=utf-8"}, method="POST")
+with urllib.request.urlopen(request, timeout=float(sys.argv[2])) as response:
+    sys.stdout.buffer.write(response.read())
+"""
+
+
+def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT, *, gateway=None, dom_read=None, node=None):
+    timeout = positive_timeout(timeout, TRAE_TIMEOUT)
+    deadline = time.monotonic() + timeout
+    gateway = GATEWAY if gateway is None else str(gateway).rstrip("/")
+    dom_read = DOM_READ_TRAE if dom_read is None else dom_read
+    node = NODE if node is None else node
     payload = {"content": task, "sessionMetadata": {"client": "async"}}
     if session_id:
         payload["sessionId"] = session_id
     # 默认延续当前对话; 仅显式 new_chat=true 才新开对话
     if new_chat:
         payload["newChat"] = True
-    box = {}
-
-    def worker():
-        try:
-            payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            req = urllib.request.Request(
-                GATEWAY + "/v1/chat", data=payload_bytes,
-                headers={"Content-Type": "application/json; charset=utf-8"},
-                method="POST")
-            with urllib.request.urlopen(req, timeout=600) as r:
-                d = json.loads(r.read().decode("utf-8"))
-            data = d.get("data", {})
-            sess = data.get("session", {})
-            box["text"] = (data.get("result") or {}).get("text") or ""
-            box["sid"] = sess.get("sessionId") or session_id or ""
-            if not box["text"].strip() and os.path.exists(DOM_READ_TRAE):
-                box["text"] = subprocess_run([NODE, DOM_READ_TRAE], timeout=120).strip()
-        except Exception as e:  # noqa: BLE001
-            box["error"] = str(e)[:300]
-
-    th = threading.Thread(target=worker, daemon=True)
-    th.start()
     stop = threading.Event()
-    poller = start_progress_poller(ref, DOM_READ_TRAE, stop)
-    th.join(timeout=timeout)
-    stop.set()
-    if poller:
-        poller.join(timeout=15)
-    if th.is_alive():
-        raise RuntimeError(f"trae 任务超时 (>{timeout}s), 已回收轮询线程")
-    if "error" in box:
-        raise RuntimeError(box["error"])
-    return box.get("text", ""), box.get("sid", "")
+    poller = start_progress_poller(ref, dom_read, stop) if ref else None
+    try:
+        # Own the HTTP client process so the absolute deadline also bounds a
+        # stalled response body and cannot leave a late DOM read behind.
+        raw = subprocess_run([sys.executable, "-c", _HTTP_REQUEST, gateway + "/v1/chat", str(timeout)],
+                             timeout=timeout, input_data=json.dumps(payload, ensure_ascii=False))
+        d = json.loads(raw)
+        if not isinstance(d, dict):
+            raise RuntimeError("Trae 网关返回了无效响应")
+        if d.get("error") or d.get("success") is False:
+            raise RuntimeError(str(d.get("error") or "Trae 网关执行失败")[:300])
+        data = d.get("data") or {}
+        if not isinstance(data, dict):
+            raise RuntimeError("Trae 网关返回了无效结果格式")
+        sess = data.get("session") or {}
+        result = data.get("result") or {}
+        if not all(isinstance(item, dict) for item in (data, sess, result)):
+            raise RuntimeError("Trae 网关返回了无效结果格式")
+        statuses = [str(item).strip().lower() for item in (sess.get("status"), result.get("status")) if item is not None]
+        if "timeout" in statuses:
+            raise CommandTimeout("Trae 网关任务超时")
+        if any(status in {"error", "failed"} for status in statuses):
+            raise RuntimeError("Trae 网关任务失败: " + str(result.get("error") or sess.get("status") or result.get("status"))[:300])
+        text = result.get("text") or ""
+        if not isinstance(text, str):
+            raise RuntimeError("Trae 网关返回了无效回答格式")
+        # Legacy blocking /v1/chat returned a final nonempty result.text with no
+        # status. Explicit running/unknown states can never override that rule.
+        if (statuses and any(status not in {"completed", "done", "finished"} for status in statuses)) or (not statuses and not text.strip()):
+            raise RuntimeError("Trae 网关状态不确定，继续查询原任务；请勿重新派发: " + ",".join(statuses or ["missing"]))
+        sid = sess.get("sessionId") or session_id or ""
+        if not text.strip() and os.path.exists(dom_read):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CommandTimeout(f"trae 任务超时 (>{timeout}s)")
+            text = subprocess_run([node, dom_read], timeout=min(120, remaining)).strip()
+        return text, sid
+    finally:
+        stop.set()
+        if poller:
+            poller.join(timeout=2)
 
 
 def zcode_run(task, session_id, ref, timeout=ZCODE_TIMEOUT):
+    timeout = positive_timeout(timeout, ZCODE_TIMEOUT)
     driver = DOM_DRIVER_ZCODE
     reader = DOM_READ_ZCODE
     if not os.path.exists(driver):
         raise RuntimeError(f"ZCode 驱动不存在: {driver}。请确保 drivers/ 目录已包含 zcode_dom.js")
-    box = {}
-
-    def worker():
-        try:
-            box["text"] = subprocess_run([NODE, driver, task], timeout=timeout).strip()
-        except Exception as e:  # noqa: BLE001
-            box["error"] = str(e)[:300]
-
-    th = threading.Thread(target=worker, daemon=True)
-    th.start()
     stop = threading.Event()
     poller = start_progress_poller(ref, reader, stop)
-    th.join(timeout=timeout + 60)
-    stop.set()
-    if poller:
-        poller.join(timeout=15)
-    if th.is_alive():
-        raise RuntimeError(f"zcode 任务超时 (>{timeout}s), 已回收轮询线程")
-    if "error" in box:
-        raise RuntimeError(box["error"])
-    return box.get("text", "")
+    try:
+        return subprocess_run([NODE, driver, task], timeout=timeout).strip()
+    finally:
+        stop.set()
+        if poller:
+            poller.join(timeout=2)
 
 
-def run_cmd_mode(cmd_list, taskfile, ref):
+def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
     """执行 CLI 命令并回传输出尾部作为进度; 结束后整组回收子进程。"""
     tmpout = taskfile + ".out"
     proc = None
+    child_env = os.environ.copy()
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    child_env["PYTHONUTF8"] = "1"
+    if env:
+        child_env.update({str(key): str(value) for key, value in env.items()})
+    timeout_s = positive_timeout(timeout_s, 600)
     try:
         with open(tmpout, "w", encoding="utf-8") as fo:
-            popen_kwargs = {"stdout": fo, "stderr": subprocess.STDOUT}
-            if os.name == "nt":
-                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-            else:
-                popen_kwargs["start_new_session"] = True
-            proc = subprocess.Popen(cmd_list, **popen_kwargs)
+            proc = spawn_owned(cmd_list, cwd=cwd, env=child_env, stdin=subprocess.DEVNULL,
+                               stdout=fo, stderr=subprocess.STDOUT)
+            deadline = time.monotonic() + timeout_s
             last = ""
             while proc.poll() is None:
-                time.sleep(5)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise CommandTimeout(f"CLI 任务超时 (>{timeout_s}s), 已回收子进程树")
+                try:
+                    proc.wait(timeout=min(0.1, remaining))
+                except subprocess.TimeoutExpired:
+                    pass
                 try:
                     with open(tmpout, encoding="utf-8", errors="replace") as f:
                         tail = f.read()[-600:].strip()
                     if tail and tail != last:
                         last = tail
-                        save(ref, status="running", progress=tail, exit_code=None)
+                        save(ref, only_if_running=True, progress=tail, exit_code=None)
                 except OSError:
                     pass
         with open(tmpout, encoding="utf-8", errors="replace") as f:
@@ -304,10 +302,11 @@ def push_callback(callback_url, payload):
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type": "application/json; charset=utf-8"},
             method="POST")
-        urllib.request.urlopen(req, timeout=15)
-        print("[async] callback 已推送:", callback_url)
+        with urllib.request.urlopen(req, timeout=15):
+            pass
+        print("[async] callback 已推送")
     except Exception as e:  # noqa: BLE001
-        print("[async] callback 推送失败:", str(e)[:200])
+        print("[async] callback 推送失败:", type(e).__name__)
 
 
 def cleanup_taskfile(taskfile):
@@ -322,12 +321,16 @@ def main():
         sys.stderr.write("用法: async_worker.py <mode: trae|zcode|cmd> <ref> <taskfile> [session_id]\n")
         return 2
     mode, ref, taskfile = sys.argv[1], sys.argv[2], sys.argv[3]
+    if mode not in {"cmd", "trae", "zcode"}:
+        sys.stderr.write("无效 worker mode\n")
+        return 2
     session_id = sys.argv[4] if len(sys.argv) > 4 else ""
 
     try:
         meta = load_task_meta(taskfile)
     except RuntimeError as e:
         save(ref, agent=mode, status="error", text=str(e)[:500], progress=None)
+        cleanup_taskfile(taskfile)
         return 1
 
     task = meta["task"]
@@ -338,29 +341,41 @@ def main():
     elif task is None:
         task = ""
 
-    save(ref, agent=mode, status="running", task=task, callback_url=callback_url)
+    outcome = 0
     try:
+        initial = {"agent": (read_result(ref) or {}).get("agent") or mode, "status": "running"}
+        if mode != "cmd":
+            initial["task"] = task
+        save(ref, **initial)
         if mode == "trae":
-            text, sid = trae_run(task, session_id, ref, new_chat=meta.get("new_chat", False))
+            text, sid = trae_run(task, session_id, ref, new_chat=meta.get("new_chat", False),
+                                 timeout=positive_timeout(meta.get("timeout_s"), TRAE_TIMEOUT))
             save(ref, status="completed", text=text, session_id=sid or None,
                  progress=None)
         elif mode == "cmd":
             cmd_list = cmd if isinstance(cmd, list) else json.loads(task)
-            text, code = run_cmd_mode(cmd_list, taskfile, ref)
-            save(ref, status="completed", text=text or "(无输出)",
+            text, code = run_cmd_mode(cmd_list, taskfile, ref, cwd=meta.get("cwd"),
+                                      timeout_s=meta.get("timeout_s", 600), env=meta.get("env"))
+            save(ref, status="completed" if code == 0 else "error", text=text or "(无输出)",
                  exit_code=code, progress=None)
+            outcome = 0 if code == 0 else 1
         else:
-            text = zcode_run(task, session_id, ref)
+            text = zcode_run(task, session_id, ref, timeout=positive_timeout(meta.get("timeout_s"), ZCODE_TIMEOUT))
             save(ref, status="completed", text=text, session_id=session_id or None,
                  progress=None)
         push_callback(callback_url, read_result(ref))
+    except CommandTimeout as e:
+        outcome = 1
+        save(ref, status="timeout", text=str(e), progress=None)
+        push_callback(callback_url, {"ref": ref, "status": "timeout", "text": str(e)})
     except Exception as e:  # noqa: BLE001 - 任何异常都必须落盘, 否则调用方会永久轮询
+        outcome = 1
         save(ref, status="error", text=f"执行出错: {e}"[:500], progress=None)
         push_callback(callback_url, {"ref": ref, "status": "error",
                                      "text": f"执行出错: {e}"[:300]})
     finally:
         cleanup_taskfile(taskfile)
-    return 0
+    return outcome
 
 
 if __name__ == "__main__":

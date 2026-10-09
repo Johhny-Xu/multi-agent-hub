@@ -15,7 +15,9 @@
 
 ## 中文
 
-还在嫌各家白嫖配额用得提心吊胆、到处手动切“毒鸡蛋”太心累？还在担心本地代码被云端看了个一清二楚？**Multi-Agent Hub**（`multi-agent-hub`）替你一站式解决！本项目源于日常薅各家 AI 额度时，受够了“额度一光满盘皆输、切号切环境切到怀疑人生”的糟心体验，索性把 Trae、Antigravity、Copilot 等多路 Agent 全接到一条本地总线上，自动故障转移与配额调度，代码和任务全在局域网内跑。
+**Multi-Agent Hub** 将多个官方 CLI 和桌面代理接到本地任务总线，提供派发、状态查询、任务队列与会话控制台。各 worker 使用自己的官方账号和模型服务；调用厂商模型时，请求仍会发送到对应厂商。
+
+本轮修复与适配见 [CHANGELOG.md](CHANGELOG.md)，Windows 实测见 [兼容性报告](docs/windows-compatibility.md)。
 
 ### 架构与核心组件
 
@@ -59,7 +61,8 @@ multi-agent-hub/
 │   ├── dom_probe_zcode.js
 │   └── dom_read.js
 ├── integrations/             # 官方宿主客户端扩展与插件
-│   └── dsh/                  # DeepSeek Harness (DSH) 一键插件与适配器
+│   ├── codex/                # Codex 本地插件、子代理与技能
+│   └── dsh/                  # DeepSeek Harness (DSH) 插件与工作流
 └── docs/                     # 架构设计图与品牌资产
     ├── architecture.svg
     └── logo.png
@@ -69,7 +72,7 @@ multi-agent-hub/
 
 #### 依赖环境
 - **Python 3.8+**（标准库，无需 pip 安装）
-- **Node.js 20+**（内置模块，需原生 WebSocket，无需 npm install）
+- **Node.js 20+**（控制台与 MCP 桥无需 npm install）；桌面 CDP 驱动使用原生 WebSocket，需 **Node.js 22+**。见 [Node 官方说明](https://nodejs.org/api/globals.html#websocket)。
 - （可选）VNC + Chromium 系桌面 AI（仅使用 `drivers/` 驱动桌面客户端时需要）
 
 #### Windows（🌟 官方首推 / 重点支持）
@@ -77,6 +80,14 @@ multi-agent-hub/
 2. 双击运行 **`start.bat`** 即可一键拉起任务总线与 Web 控制台！
 3. 浏览器打开 **`http://localhost:8890/dashboard`** 即可进入一体化控制台；
 4. 停止服务随时双击运行 **`stop.bat`**。
+
+启动器会加载根目录 `.env`（其次为 `hub/.env`）、验证服务健康并保留配置端口。若 Python 命令只是 Windows Store 别名，可在 `.env` 设置 `HUB_PYTHON` 为实际 `python.exe` 路径。仅停止本目录记录且进程身份匹配的服务。
+
+创建 worker 配置时可使用 [`hub/agents.windows.example.json`](hub/agents.windows.example.json)：把各 `cli` 中的 `C:/PATH/TO` 替换为官方 CLI 的稳定安装位置，只保留已安装的 worker，再保存为 `hub/agents.json`。npm 工具的实际安装根目录可用 `npm root -g` 查询。CodeBuddy 配置使用 `node + 官方入口脚本`，两版分别使用 `%USERPROFILE%/.codebuddy`、`%USERPROFILE%/.codebuddy-cn`；国内版设置 `CODEBUDDY_INTERNET_ENVIRONMENT=internal`。MiniMax 默认采用实测通过的 `MiniMax-M3.1-Flash-Preview`（别名 `m31flash`）。MiMo 默认模型为 `xiaomi/mimo-v2.6-flash`，别名 `v2.6f`。Trae 桌面通道仍需配置网关。
+
+ZCode 独立 CLI 还需要把 `env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` 改为桌面端已经生成的 `zcode-builtin.json` 路径，通常位于 `%USERPROFILE%/.zcode/v2/runtime/provider/windows-x86_64/<版本>/<目录>/zcode-builtin.json`。在 PowerShell 中用 `Get-ChildItem -LiteralPath "$env:USERPROFILE/.zcode/v2/runtime/provider/windows-x86_64" -Recurse -Filter zcode-builtin.json | Select-Object -ExpandProperty FullName` 仅列出文件路径，再填入模板中的 `C:/PATH/TO/zcode-builtin.json`；不要把该文件内容或凭据复制进仓库。
+
+插件 v0.5.0 提供 `hub_login(worker, action="start"|"status"|"cancel")` 和 `/hub-login`：在 worker 所在的 Hub 宿主机获取官方授权链接，用户完成浏览器授权后查询状态。也可运行 `node mcp/login.mjs cb start`，随后 `node mcp/login.mjs cb status`。Windows 上的 MiMo 支持自动获取官方登录链接，可用 `/hub-login mimo start` 发起，授权等待上限为 300 秒，再用 `/hub-login mimo status` 查询。`awaiting_user` 表示等待用户授权，只有 `authenticated` 才表示已登录；Linux 上的 MiMo 仍需按 `manual_required` 指引在宿主机终端登录，Antigravity 等没有已验证链接登录接口的 worker 也返回人工操作指引。工具不返回凭据，临时链接和验证码不要写入仓库。
 
 #### Linux 部署（⏸️ 暂缓搁置·排在 DSH 适配后重构）
 > 💡 **优先级调整公告**：为确保核心功能扎实稳定，团队当前全力攻坚 Windows 平台的极致开箱体验与 DeepSeek Harness (DSH) 原生适配，Linux 的生产级服务化启动（如 systemd 守护进程、跨发行版环境自检）**暂时搁置，排在 DSH 适配完成之后集中推进**。
@@ -131,36 +142,41 @@ node server.mjs
 - 局域网访问建议配合防火墙规则，请勿将未鉴权服务直接映射到公网。
 - `state/` 包含本地任务与会话记录，属于敏感本地数据，请注意访问权限与备份。
 
-### 🛡️ 反代会封号，本项目绝不封号
+### CLI 与桌面调用方式
 
-- ❌ **逆向反代 / 非官方 API 转发**：将 Web 网页端逆向破解为非官方 API 接口、跳过客户端签名与风控调用——这是各大厂商明确打击的违规行为，也是批量封号的头号元凶。
-- ✅ **本项目**：只使用各大厂商**官方 CLI 的无头执行模式**（如 `codebuddy -p`、`copilot -p`、`mmx text chat`、`antigravity` 等）与你自己登录的官方桌面应用（CDP 仅负责驱动本机窗口）——与你在终端手动敲命令、在桌面正常操作属于同一种完全合规的交互形式，只是将“手动触发”交由总线自动化调度。
+CLI 通道使用配置中的官方无头命令；桌面通道通过 CDP 驱动本机客户端。Hub 负责调度与保存结果，认证和模型服务由各官方客户端处理。
+
+### 回归验证
+
+使用可用的 Python 3.11+ 和 Node.js，运行 `python tests/run_regressions.py`。脚本使用隔离目录、合成 worker 和 mock Hub，验证总线、登录运行时、控制台、Codex/DSH 适配与 Windows 启停；结果和源码哈希保存到 [`docs/refactor-validation.json`](docs/refactor-validation.json)。不调用厂商模型，不改当前客户端配置。Unix 启停脚本本轮仅做语法检查。
 
 ### 🔌 官方客户端插件与集成 / Integrations & Plugins
 
 除了使用独立的 Web 控制台与命令行调用外，本项目深度适配各大主流 AI 开发桌面端：
 
-1. **ZCode 桌面端插件 (`agenthub-workers`)【✅ 完全就绪 / Production Ready】**：
+1. **ZCode 桌面端插件源码 (`agenthub-workers`)**：
    - **一键安装**：打开 ZCode **设置 ➔ 插件管理 ➔ 发现**，点击右上角 **`+`** 按钮，直接粘贴 GitHub 仓库地址 `https://github.com/Johhny-Xu/multi-agent-hub.git`，即可在卡片列表中点击“获取”一键安装！
    - **8 大原生子智能体类型**：深度无缝接入 ZCode 子智能体体系，支持自然语言与简称自动识别（`agy` ➔ Antigravity、`cb` ➔ CodeBuddy 国际版、`cbcn` ➔ CodeBuddy 国内版、`zcode` ➔ Linux ZCode、`trae` ➔ TraeCode、`gcp` ➔ GitHub Copilot、`mmx` ➔ MiniMax、`mimo` ➔ MiMoCode）。
    - **突破工作流 30 秒超时限制**：内置专门打造的 `hub-bridge` MCP 工具面（`hub_ask`、`hub_dispatch`、`hub_fetch`），以“秒级返回 ref + 增量异步轮询”机制彻底攻克工作流子代理 30s 框架调用上限，支撑高并发扇出压测与复杂流水线。
    - **状态探活与调度技能**：内置 `/hub-status` 快捷指令及 `dispatch-hub` 协同编排技能。
+   - **官方登录链接（v0.5.0）**：`hub_login` 与 `/hub-login` 支持发起、查询及取消宿主机上的 worker 登录流程，用户在浏览器完成官方授权。
    - **免服务器双击运行保障**：产物输出严格遵循无依赖单文件规范（CSS/JS 内联，Base64/Web Audio 程序化资产），支持在操作系统文件管理器中直接双击 HTML 文件（`file://` 协议）离线流畅运行。
 
-2. **DeepSeek Harness (DSH) 原生适配套件【🚀 积极适配中 / Under Active Adaptation】**：
-   - 目录：[`integrations/dsh/`](integrations/dsh/)
-   - **Cordis 微内核与预设方案**：基于 `@deepseek-ai/dsh-agent-preset` 与 `@deepseek-ai/dsh-mcp-client` 规范，预研打造全量子代理预设（Presets）与 MCP 桥接。
-   - **原生工作流模板库**：包含 `hub-fanout.dsh.js`（多 Agent 并发扇出）、`code-audit.dsh.js`（双代理流水线代码审查）、`competitive-solve.dsh.js`（多模型交叉解题验证）三大开箱即用脚本。
-   - **适配进展**：团队正全面进行 Cordis 微内核多环境隔离测试，以确保在生产环境中的平滑免损注入与极致稳定性。
+2. **DeepSeek Harness (DSH) 适配源码**：
+   - [`integrations/dsh/README.md`](integrations/dsh/README.md)：8 个 worker 子代理预设、三个原生工作流及确定性 Node runner。
+   - 已按官方 Cordis、`agent`/`parallel` 接口修复并进行隔离测试；安装脚本保留 profile 原有配置，实际激活遵循官方插件命令。
 
-3. **Codex 生态适配【⏳ 下阶段规划 / Planned】**：
-   - 计划实现与 Codex 扩展协议的深度打通，实现跨平台智能体双向任务流转与上下文无缝衔接。
+3. **Codex 本地插件与子代理适配源码**：
+   - [`integrations/codex/README.md`](integrations/codex/README.md)：本地插件 MCP、8 个项目子代理 TOML 模板和三个工作流技能。
+   - 安装预览及测试使用隔离项目；子代理继承宿主模型与权限，通过 Hub 调用外部 worker。
+
+Codex 和 DSH 均尚未安装到当前客户端；源码、配置与 mock 流程已验证，宿主内真实模型调用仍需安装后验证。
 
 ---
 
 ## English
 
-Tired of tiptoeing around quota limits and constantly swapping "free-tier tokens" by hand? Worried about your local codebase being laid completely bare to third-party clouds? **Multi-Agent Hub** (`multi-agent-hub`) has got you covered! Born out of pure frustration with juggling disposable free-tier AI accounts—getting cut off mid-task and having to reset everything—this project wires multiple AI agents (Trae, Antigravity, Copilot, and more) into a single self-hosted bus. It auto-fails over when quotas run dry and keeps your sessions and code strictly within your LAN.
+**Multi-Agent Hub** connects official CLIs and desktop agents through a local task bus, with dispatch, result polling, task queues and a conversation console. Vendor model calls still reach the respective vendor's service. Changes are recorded in [CHANGELOG.md](CHANGELOG.md); Windows results are in [the compatibility report](docs/windows-compatibility.md).
 
 ### Architecture & Components
 
@@ -186,7 +202,8 @@ multi-agent-hub/
 ├── console/                  # Web console (Node.js + responsive SPA)
 ├── drivers/                  # Desktop CDP drivers for VNC
 ├── integrations/             # Native client integrations & plugins
-│   └── dsh/                  # DeepSeek Harness (DSH) one-click plugin
+│   ├── codex/                # Codex local plugin, subagents and skills
+│   └── dsh/                  # DeepSeek Harness (DSH) integration
 └── docs/                     # Architecture diagrams and assets
 ```
 
@@ -194,7 +211,7 @@ multi-agent-hub/
 
 #### Prerequisites
 - **Python 3.8+** (standard library only, no pip needed)
-- **Node.js 20+** (native WebSocket required, built-in modules only, no npm install needed)
+- **Node.js 20+** for the console and MCP bridge; desktop CDP drivers require **Node.js 22+** for the built-in WebSocket. See [Node documentation](https://nodejs.org/api/globals.html#websocket).
 - Optional: VNC + Chromium-based desktop AI clients (only needed for desktop drivers)
 
 #### Windows (🌟 Primary Recommended Platform)
@@ -202,6 +219,12 @@ multi-agent-hub/
 2. Double-click **`start.bat`** to start both the Task Bus and Web Console in one second!
 3. Open **`http://localhost:8890/dashboard`** in your browser.
 4. To stop the services, double-click **`stop.bat`**.
+
+For a new worker configuration, use [`hub/agents.windows.example.json`](hub/agents.windows.example.json), replace each `C:/PATH/TO` with the official CLI's stable installation path, keep the installed workers, and save it as `hub/agents.json`. Use `npm root -g` to locate global npm packages. CodeBuddy uses `node + official entry script`, with separate `%USERPROFILE%/.codebuddy` and `%USERPROFILE%/.codebuddy-cn` directories; the CN edition uses `CODEBUDDY_INTERNET_ENVIRONMENT=internal`. MiniMax defaults to the tested `MiniMax-M3.1-Flash-Preview` (alias `m31flash`). MiMo defaults to `xiaomi/mimo-v2.6-flash` (alias `v2.6f`). The Trae desktop channel still requires its gateway.
+
+The standalone ZCode CLI also needs `env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` to point to the desktop-generated `zcode-builtin.json`, usually under `%USERPROFILE%/.zcode/v2/runtime/provider/windows-x86_64/<version>/<directory>/zcode-builtin.json`. In PowerShell, run `Get-ChildItem -LiteralPath "$env:USERPROFILE/.zcode/v2/runtime/provider/windows-x86_64" -Recurse -Filter zcode-builtin.json | Select-Object -ExpandProperty FullName` to list paths only, then replace `C:/PATH/TO/zcode-builtin.json` in the template. Do not copy the file contents or credentials into the repository.
+
+Plugin v0.5.0 adds `hub_login(worker, action="start"|"status"|"cancel")` and `/hub-login`. It obtains an official authorization link on the worker's Hub host; the user completes authorization in their browser and then checks status. The CLI equivalent is `node mcp/login.mjs cb start`, followed by `node mcp/login.mjs cb status`. MiMo on Windows supports automatic official login links: use `/hub-login mimo start`, complete authorization within the 300-second waiting period, then use `/hub-login mimo status`. `awaiting_user` means authorization is pending; only `authenticated` means signed in. MiMo on Linux still returns `manual_required` with host-terminal login instructions, as do workers without a verified link flow, such as Antigravity. Credentials are never returned; do not save temporary authorization links or user codes in the repository.
 
 #### Linux Deployment (⏸️ Paused / Scheduled after DSH)
 > 💡 **Strategic Realignment**: The development team is prioritizing a seamless Windows out-of-the-box experience and native DeepSeek Harness (DSH) adaptation. Production-grade Linux service automation (systemd daemons, multi-distro dependency checks) is **temporarily paused and scheduled right after DSH adaptation**.
@@ -246,21 +269,19 @@ Every agent channel in Multi-Agent Hub is completely decoupled:
 
 In addition to the standalone web console and CLI tools, native integrations are designed for major AI development desktop environments:
 
-1. **ZCode Desktop Plugin (`agenthub-workers`)【✅ Production Ready】**:
+1. **ZCode Desktop Plugin Source (`agenthub-workers`)**:
    - **One-Click Install**: Open ZCode **Settings ➔ Plugin Management ➔ Discover**, click the top-right **`+`** button, paste the GitHub repository URL `https://github.com/Johhny-Xu/multi-agent-hub.git`, and click "Get" on the card to install!
    - **8 Native Subagent Types**: Deeply integrated into ZCode's subagent ecosystem, with automatic alias routing (`agy` ➔ Antigravity, `cb` ➔ CodeBuddy International, `cbcn` ➔ CodeBuddy CN, `zcode` ➔ Linux ZCode, `trae` ➔ TraeCode, `gcp` ➔ GitHub Copilot, `mmx` ➔ MiniMax, `mimo` ➔ MiMoCode).
    - **Bypassing 30-Second Workflow Timeout**: Dedicated `hub-bridge` MCP suite (`hub_ask`, `hub_dispatch`, `hub_fetch`) utilizing instant ref return + incremental async polling to conquer workflow timeout ceilings.
    - **Heartbeat & Dispatch Skills**: Integrated `/hub-status` command and `dispatch-hub` orchestration skill.
+   - **Official Login Links (v0.5.0)**: `hub_login` and `/hub-login` start, inspect, and cancel worker login flows on the Hub host; users complete official authorization in their browser.
    - **Zero-Server Direct Launch**: Generated artifacts adhere strictly to self-contained single-file HTML standards (inline CSS/JS, Base64/Web Audio data), allowing double-click execution directly via `file://`.
 
-2. **DeepSeek Harness (DSH) Native Integration【🚀 Under Active Adaptation】**:
-   - Location: [`integrations/dsh/`](integrations/dsh/)
-   - **Cordis Microkernel & Presets**: Pre-architected native subagent presets via `@deepseek-ai/dsh-agent-preset` and `@deepseek-ai/dsh-mcp-client`.
-   - **Native Workflows**: Includes ready-to-run workflow templates: `hub-fanout.dsh.js`, `code-audit.dsh.js`, and `competitive-solve.dsh.js`.
-   - **Status**: The engineering team is actively testing and hardening multi-profile Cordis integration to ensure zero-risk desktop stability.
+2. **DeepSeek Harness (DSH) adapter source**: [integration guide](integrations/dsh/README.md), with eight worker presets, three native workflows and a deterministic Node runner. The installer preserves the selected profile's existing settings.
 
-3. **Codex Ecosystem Integration【⏳ Planned】**:
-   - Scheduled cross-platform bidirectional agent orchestration and streaming context bridging with Codex.
+3. **Codex local plugin and subagent adapter source**: [integration guide](integrations/codex/README.md), with MCP manifests, eight project subagent TOML templates and three workflow skills.
+
+Both adapters have isolated configuration/mock validation. They have not been installed into the current clients or exercised with real models inside those hosts.
 
 ---
 
