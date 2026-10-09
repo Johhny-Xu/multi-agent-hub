@@ -25,9 +25,11 @@ from pathlib import Path
 from command_runtime import atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
 from state_store import StateFileLock, safe_component
 from result_store import read_result, update_result
+from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task
+from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.6.0"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -41,15 +43,15 @@ TERMINAL_STATUSES = ("completed", "error", "timeout")
 HUB_TOKEN = os.environ.get("HUB_TOKEN", "").strip()
 
 HERE = Path(__file__).resolve().parent
-STATE = HERE / "state"
-AGENTS_JSON = HERE / "agents.json"
+STATE = Path(os.path.expandvars(os.path.expanduser(os.environ.get("HUB_STATE_DIR") or str(HERE / "state")))).resolve()
+AGENTS_JSON = Path(os.path.expandvars(os.path.expanduser(os.environ.get("HUB_AGENTS_FILE") or str(HERE / "agents.json")))).resolve()
 DRIVERS_DIR = HERE.parent / "drivers"
 
 # 结果目录：优先读取环境变量 HUB_RESULTS_DIR，缺省自包含在 state/results
-RESULTS_DIR = (
+RESULTS_DIR = str(Path(os.path.expandvars(os.path.expanduser(
     os.environ.get("HUB_RESULTS_DIR", "").strip()
-    or (os.path.expanduser("~/agent-hub/results") if os.path.isdir(os.path.expanduser("~/agent-hub/results")) else str(STATE / "results"))
-)
+    or str(STATE / "results")
+))).resolve())
 # 异步任务 worker 脚本：优先使用本仓库自带的 async_worker.py
 ASYNC_WORKER_SCRIPT = (
     os.environ.get("HUB_ASYNC_WORKER", "").strip()
@@ -380,13 +382,10 @@ def tool_hub_note_get(args):
 
 def tool_hub_dispatch_cli(args):
     agent = _resolve_agent(str(args.get("agent") or ""))
-    task = str(args.get("task") or "").strip()
-    model = str(args.get("model") or "").strip()
+    if not isinstance(args.get("task"), str):
+        raise ValueError("task 必须是字符串")
+    task = args["task"].strip()
     prof = _load_agents().get(agent) or {}
-    # 调用方未指定模型时, 用 agents.json 中该 worker 的默认模型, 而不是任由 CLI 自身默认值兜底
-    # (各 worker 的默认模型统一在 agents.json 的 models.default 维护, 此处不再写死)
-    if not model:
-        model = str((prof.get("models") or {}).get("default") or "").strip()
     cli = prof.get("cli")
     if not agent:
         raise ValueError("缺少 agent")
@@ -395,28 +394,62 @@ def tool_hub_dispatch_cli(args):
     if not cli:
         return (f"{agent} 未配置 CLI (agents.json 中 cli 为 null)。"
                 f"确认该工具的无头调用命令后, 填入 agents.json 的 cli 字段即可。")
+    plan = prepare_task(agent, prof, dict(args, task=task), STATE / "attachments")
+    try:
+        return _dispatch_prepared_cli(args, agent, prof, plan)
+    finally:
+        if not plan.get("async_started"):
+            cleanup_attachments(plan["staging"], STATE / "attachments")
+
+
+def _dispatch_prepared_cli(args, agent, prof, plan):
+    cli, task = prof["cli"], plan["task"]
+    aliases = prof.get("models") or {}
+    requested = str(args.get("model") or "").strip()
+    if requested in ("", "default", "默认"):
+        requested = str(aliases.get("default") or "")
+    model = aliases.get(requested, requested)
+    if agent == "zcode" and model and not prof.get("model_arg"):
+        raise ValueError("UNSUPPORTED: ZCode 旧通道不能验证配置模型；请使用 drivers/zcode_rpc.mjs 与 --model，避免静默调用账号当前模型")
     cwd = args.get("cwd") or prof.get("cwd") or None
     timeout = _positive_seconds(args.get("timeout_s"), 600)
     if not isinstance(cli, list) or not cli:
         raise ValueError("agents.json 的 cli 必须是非空参数数组")
     has_placeholder = any("{task}" in str(c) for c in cli)
-    cmd = [str(c).replace("{task}", task) if "{task}" in str(c) else str(c) for c in cli]
+    cmd = [str(c) for c in cli]
     if not has_placeholder:
-        cmd.append(task)
-    if prof.get("model_arg"):
-        # 规范化: 前端可能把"默认"当别名发来 -> 视为未指定, 走注入分支
-        if model in ("默认", "default"):
-            model = ""
-        # 未显式指定模型时, 注入 agents.json models.default (显示与实跑一致)
-        eff = model or (prof.get("models") or {}).get("default")
-        if eff:
-            flag = prof.get("model_arg")
-            resolved = (prof.get("models") or {}).get(eff, eff)  # 别名命中则替换, 否则原样透传
-            if resolved in ("v41f", "deepseek", "v4") and "deepseekv41f" in (prof.get("models") or {}):
-                resolved = prof["models"]["deepseekv41f"]
-            # 模型参数追加在任务之后: commander 风格 CLI 支持尾部选项,
-            # 且避免 -p 这类"取下一参数为值"的 flag 把 --model 吃成提示词
-            cmd += [str(flag), resolved]
+        prompt_flags = {"codebuddy": ("-p", "--print"), "codebuddy-cn": ("-p", "--print"),
+                        "antigravity": ("-p", "--prompt"), "github-copilot": ("-p", "--prompt"),
+                        "minimaxcode": ("--message",), "zcode": ("--prompt",)}.get(agent, ())
+        prompt_at = next((index for index, item in enumerate(cmd) if item in prompt_flags), None)
+        if prompt_at is None:
+            cmd.append("{task}")
+        elif prompt_at + 1 == len(cmd) or cmd[prompt_at + 1].startswith("-"):
+            # Variadic flags such as --allowedTools can otherwise swallow a
+            # prompt blindly appended to the end of an older profile.
+            cmd.insert(prompt_at + 1, "{task}")
+        else:
+            raise ValueError("CLI 已含固定提示词；请用 {task} 显式标出任务参数位置")
+    if plan.get("message_file"):
+        if "--message" not in cmd:
+            raise ValueError("messages_file 附件要求 CLI 以 --message {task} 配置文本输入")
+        prompt_at = cmd.index("--message")
+        if cmd[prompt_at + 1:prompt_at + 2] != ["{task}"]:
+            raise ValueError("messages_file 附件的 --message 后必须是 {task}")
+        del cmd[prompt_at:prompt_at + 2]
+    prompt_tail = None
+    if prof.get("options_before_prompt"):
+        if len(cmd) < 2 or cmd[-1] != "{task}" or not cmd[-2].startswith("-"):
+            raise ValueError("options_before_prompt 要求 CLI 以提示词参数和 {task} 结尾")
+        prompt_tail = cmd[-2:]
+        cmd = cmd[:-2]
+    if not prof.get("model_arg") and model and model != aliases.get("default"):
+        raise ValueError("UNSUPPORTED: 此 CLI 通道没有配置模型切换参数")
+    if prof.get("model_arg") and model:
+        cmd = merge_cli_arguments(cmd, [str(prof["model_arg"]), str(model)])
+    if prof.get("timeout_arg"):
+        cmd = merge_cli_arguments(cmd, [str(prof["timeout_arg"]), str(timeout)])
+    cmd = merge_cli_arguments(cmd, plan["extra_args"])
     extra_args = args.get("extra_args")
     if extra_args:
         if isinstance(extra_args, (list, tuple)):
@@ -431,6 +464,9 @@ def tool_hub_dispatch_cli(args):
     if via and args.get("cwd"):
         cmd += [str(via), str(args["cwd"])]
         cwd = prof.get("cwd") or cwd
+    if prompt_tail is not None:
+        cmd.extend(prompt_tail)
+    cmd = [item.replace("{task}", task) for item in cmd]
     if cwd:
         cwd = os.path.expandvars(os.path.expanduser(str(cwd)))
     process_env = os.environ.copy()
@@ -439,6 +475,7 @@ def tool_hub_dispatch_cli(args):
     if agent in ("codebuddy", "codebuddy-cn"):
         from login_manager import worker_env
         process_env = worker_env(prof, agent)
+    process_env = apply_environment(process_env, plan["env"])
     try:
         cmd = prepare_command(cmd, env=process_env)
     except (OSError, ValueError) as exc:
@@ -448,14 +485,17 @@ def tool_hub_dispatch_cli(args):
     # (置于函数体顶层: 占位符 {task} 模式与无 model_arg 的 worker 同样走异步,
     #  否则掉进同步分支; 且不可在函数内 import subprocess —— 模块级已导入,
     #  函数内导入会让 subprocess 变成局部变量, 同步分支触发 UnboundLocalError)
-    if _as_bool(prof.get("async_default"), False):
+    if _as_bool(prof.get("async_default"), False) or plan["metadata"]["stream"]:
         cb = args.get("callback_url")
         try:
             ref = _start_async(agent, "cmd", task,
-                               {"cmd": cmd, "callback_url": cb, "cwd": cwd, "timeout_s": timeout},
+                               {"cmd": cmd, "callback_url": cb, "cwd": cwd, "timeout_s": timeout,
+                                "attachment_dir": plan["staging"], "attachment_parent": str((STATE / "attachments").resolve()),
+                                "public_options": dict(plan["metadata"], model=model)},
                                env=process_env)
         except (OSError, RuntimeError) as exc:
             return f"{agent} CLI 启动失败: {exc}"
+        plan["async_started"] = True
         cb_note = f"\n完成后将回调: {cb}" if cb else ""
         return (f"[{agent}/{ref}] 任务已异步受理 (此类任务耗时长, 不阻塞等待)。{cb_note}\n"
                 f"查询结果: hub_result(ref=\"{ref}\")\n"
@@ -474,9 +514,14 @@ def tool_hub_dispatch_cli(args):
         return f"{agent} CLI 启动失败: {e}"
     finally:
         terminate_owned(proc)
-    out = (stdout or "") + (("\n[stderr]\n" + stderr) if stderr else "")
+    parsed = parse_output(stdout or "")
+    out = parsed["error"] or parsed["text"] or stderr or ""
+    code = proc.returncode or (1 if parsed["error"] else 0)
+    if code == 0 and not parsed["text"].strip():
+        code = 1
+        out = parsed["error"] or "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。"
     tag = f"{agent}/{model}" if model else agent
-    return _truncate(f"[{tag}] exit={proc.returncode}\n{out or '(无输出)'}")
+    return _truncate(f"[{tag}] exit={code}\n{out or '(无输出)'}")
 
 
 def tool_hub_list_models(args):
@@ -506,6 +551,25 @@ def tool_hub_login(args):
     action = str(args.get("action") or "status")
     reply = MANAGER.handle(worker, action, _load_agents().get(worker) or {})
     return json.dumps(reply, ensure_ascii=False)
+
+
+def tool_hub_capabilities(args):
+    wanted = _resolve_agent(str(args.get("agent") or ""))
+    workers = {}
+    for agent, profile in _load_agents().items():
+        if wanted and agent != wanted:
+            continue
+        caps = capabilities(agent, profile) if profile.get("cli") else {}
+        default_model = (profile.get("models") or {}).get("default")
+        thinking = [mode for mode, config in (caps.get("thinking") or {}).items()
+                    if not config.get("models") or default_model in config["models"]]
+        workers[agent] = {"configured": bool(profile.get("cli")), "default_model": default_model,
+                          "model_selection": bool(profile.get("model_arg")),
+                          "thinking": ["default"] + thinking,
+                          "stream": "stdout_progress" if profile.get("cli") else "gui_snapshot",
+                          "attachments": {kind: item.get("mode") for kind, item in (caps.get("attachments") or {}).items()}}
+    return json.dumps({"workers": workers, "attachment_limit_bytes": 1024 * 1024,
+                       "scope": "configured_capabilities_not_a_login_or_generation_check"}, ensure_ascii=False)
 
 
 # ---------------- Trae 桥接 (经 TraeClaw 网关驱动 TraeCode CN 桌面) ----------------
@@ -592,6 +656,15 @@ def tool_hub_result(args):
     return _format_result(d)
 
 
+def tool_hub_result_json(args):
+    ref = safe_component(str(args.get("ref") or "").strip())
+    data = _reap_result(_read_result(ref))
+    if not data:
+        return json.dumps({"ref": ref, "status": "unknown", "text": "未找到任务结果，请核对 ref。"}, ensure_ascii=False)
+    keys = ("ref", "agent", "status", "text", "progress", "exit_code", "updated_at", "model", "thinking", "stream", "attachments", "usage")
+    return json.dumps({key: data[key] for key in keys if key in data}, ensure_ascii=False)
+
+
 def tool_trae_status(args):
     h = _trae_gw_get("/health")
     if "error" in h:
@@ -623,7 +696,7 @@ def _start_async(agent, mode, task, metadata, session_id="", env=None):
     process_env = dict(os.environ if env is None else env)
     process_env.update(HUB_RESULTS_DIR=str(RESULTS_DIR), TRAE_GATEWAY=TRAE_GATEWAY,
                        TRAE_DOM_READ=TRAE_DOM_READ, ZCODE_DOM_DRIVER=ZCODE_DOM_DRIVER)
-    _save_result(ref, agent=agent, status="running", task=task)
+    _save_result(ref, agent=agent, status="running", task=task, **metadata.get("public_options", {}))
     try:
         atomic_write_json(task_path, metadata)
         kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
@@ -643,7 +716,21 @@ def _start_async(agent, mode, task, metadata, session_id="", env=None):
     return ref
 
 
+def _check_gui_options(args, agent):
+    if args.get("thinking", "default") != "default" or args.get("attachments"):
+        raise ValueError("UNSUPPORTED: GUI 通道尚未验证思考开关或附件输入；请使用对应官方 CLI")
+    if "stream" in args and not isinstance(args["stream"], bool):
+        raise ValueError("stream 必须是布尔值")
+    if args.get("cwd"):
+        raise ValueError("UNSUPPORTED: GUI 通道无法保证指定工作目录")
+    model = args.get("model")
+    default = ((_load_agents().get(agent) or {}).get("models") or {}).get("default")
+    if model and model not in ("default", "默认", default):
+        raise ValueError("UNSUPPORTED: GUI 通道无法切换请求的模型")
+
+
 def tool_trae_delegate(args):
+    _check_gui_options(args, "traecode")
     content = str(args.get("task") or "").strip()
     if not content:
         raise ValueError("缺少 task")
@@ -698,6 +785,7 @@ def tool_trae_result(args):
 
 
 def tool_zcode_delegate(args):
+    _check_gui_options(args, "zcode")
     content = str(args.get("task") or "").strip()
     if not content:
         raise ValueError("缺少 task")
@@ -814,17 +902,21 @@ TOOL_DEFS = [
      ["key", "value"]),
     ("hub_note_get", "读共享笔记。key 留空则列出全部键名。",
      {"key": {"type": "string"}}, []),
-    ("hub_dispatch_cli", "按 agents.json 中配置的 CLI 命令无头调用某代理执行任务; 可用 model 参数指定模型(如 gemini/gpt 或具体模型ID), 也可只传 model 不传 task 来探测。",
+    ("hub_dispatch_cli", "无头派发任务；模型、思考、流式与附件能力按 worker 配置校验，不支持的组合在执行前拒绝。",
      {"agent": {"type": "string"}, "task": {"type": "string"},
       "model": {"type": "string", "description": "模型别名或模型ID, 见 hub_list_models"},
       "extra_args": {"type": "array", "items": {"type": "string"}, "description": "追加到命令尾部的额外参数列表"},
-      "cwd": {"type": "string"}, "timeout_s": {"type": "number"}}, ["agent", "task"]),
+      "cwd": {"type": "string"}, "timeout_s": {"type": "number"}, **OPTIONS_SCHEMA}, ["agent", "task"]),
+    ("hub_capabilities", "查询 worker 已配置的模型与思考、流式、附件能力；不返回运行环境或凭据。",
+     {"agent": {"type": "string"}}, []),
     ("hub_list_models", "查看各 worker 可用的模型别名表和模型参数名。",
      {"agent": {"type": "string", "description": "只看某个 worker"}}, []),
     ("hub_login", "获取官方 worker CLI 登录链接、查看登录状态或取消本次等待；凭据由官方 CLI 保存到 Hub 主机，不回传密码、Token 或 API Key。",
      {"agent": {"type": "string"},
       "action": {"type": "string", "enum": ["start", "status", "cancel"], "default": "status"}}, ["agent"]),
     ("hub_result", "查询异步受理任务的结果 (zcode 等长任务 worker 派活时自动返回 ref)。即时返回, 不等待。",
+     {"ref": {"type": "string"}}, ["ref"]),
+    ("hub_result_json", "查询结构化任务状态和增量进度，不包含私有执行参数。",
      {"ref": {"type": "string"}}, ["ref"]),
     ("hub_wait_result", "阻塞等待异步任务完成 (服务端按 0/3/6/12/25/45/70/95秒 前置密集+递进回查)。快任务几秒命中秒回; 长任务预算尽返回进度快照。推荐代替反复 hub_result, 减少模型输入。",
      {"ref": {"type": "string"},
@@ -863,12 +955,12 @@ HANDLERS = {n: (f, ) for n, f in [
     ("hub_send_message", tool_hub_send_message), ("hub_read_messages", tool_hub_read_messages),
     ("hub_note_set", tool_hub_note_set), ("hub_note_get", tool_hub_note_get),
     ("hub_dispatch_cli", tool_hub_dispatch_cli), ("hub_list_models", tool_hub_list_models),
-    ("hub_login", tool_hub_login),
+    ("hub_login", tool_hub_login), ("hub_capabilities", tool_hub_capabilities),
     ("trae_status", tool_trae_status), ("trae_delegate", tool_trae_delegate),
     ("trae_result", tool_trae_result),
     ("trae_new_chat", tool_trae_new_chat),
     ("zcode_delegate", tool_zcode_delegate), ("zcode_result", tool_zcode_result),
-    ("hub_result", tool_hub_result), ("hub_wait_result", tool_hub_wait_result),
+    ("hub_result", tool_hub_result), ("hub_result_json", tool_hub_result_json), ("hub_wait_result", tool_hub_wait_result),
     ("hub_reap", tool_hub_reap)]}
 
 
@@ -914,6 +1006,32 @@ class _HTTPHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers",
                          "Content-Type, Accept, Authorization, Mcp-Session-Id")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+
+    def _drain_rejected_body(self):
+        """Let clients receive a rejection before Windows closes the socket.
+
+        Closing with unread request bytes can reset TCP and discard the 401.
+        Flush the response first; discard only a bounded amount for 250 ms at
+        most. Rejected bodies are never parsed or passed to tool handlers.
+        """
+        self.wfile.flush()
+        try:
+            remaining = min(2 * 1024 * 1024, max(0, int(self.headers.get("Content-Length") or 0)))
+        except ValueError:
+            return
+        previous = self.connection.gettimeout()
+        deadline = time.monotonic() + .25
+        try:
+            while remaining and time.monotonic() < deadline:
+                self.connection.settimeout(max(.001, deadline - time.monotonic()))
+                chunk = self.rfile.read1(min(8192, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except OSError:
+            pass
+        finally:
+            self.connection.settimeout(previous)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -965,6 +1083,7 @@ class _HTTPHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             self.close_connection = True
+            self._drain_rejected_body()
             return
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -975,6 +1094,7 @@ class _HTTPHandler(BaseHTTPRequestHandler):
                 self.send_header("Connection", "close")
                 self.end_headers()
                 self.close_connection = True
+                self._drain_rejected_body()
                 return
             raw = self.rfile.read(length)
             try:

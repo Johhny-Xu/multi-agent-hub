@@ -1,0 +1,529 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7",
+  "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
+  "results": [
+    {
+      "worker": "codebuddy-cn",
+      "requested_model": "deepseek-v4.1-flash",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "codebuddy-cn-t0s0i0f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_e0ca871278.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
+        "--model",
+        "deepseek-v4.1-flash",
+        "--output-format",
+        "json",
+        "--tools",
+        "",
+        "--allowedTools",
+        "Read,Write",
+        "--max-turns",
+        "5",
+        "--setting-sources",
+        "user"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\codebuddy-cn-t0s0i0f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 10.328,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_e0ca871278"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 5,
+      "stdout_timing": [
+        10.235,
+        10.235,
+        10.235,
+        10.235,
+        10.235
+      ],
+      "event_types": [
+        "file-history-snapshot",
+        "input_text",
+        "message",
+        "output_text",
+        "reasoning",
+        "reasoning_text",
+        "result"
+      ],
+      "delta_events": 0,
+      "usage": [
+        {
+          "requests": 1,
+          "inputTokens": 6425,
+          "outputTokens": 29,
+          "totalTokens": 6454,
+          "inputTokensDetails": [
+            {
+              "cached_tokens": 2944
+            }
+          ],
+          "outputTokensDetails": [
+            {
+              "reasoning_tokens": 10
+            }
+          ]
+        },
+        {
+          "input_tokens": 6425,
+          "output_tokens": 29,
+          "cache_creation_input_tokens": 3481,
+          "cache_read_input_tokens": 2944,
+          "cache_creation": null,
+          "server_tool_use": null,
+          "service_tier": null
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 78, \"nonce\": \"CHECK_e0ca871278\"}"
+      ],
+      "public_usage": {
+        "input_tokens": 6425,
+        "output_tokens": 29,
+        "total_tokens": 6454,
+        "reasoning_tokens": 10,
+        "cache_read_tokens": 2944,
+        "cache_write_tokens": 3481
+      },
+      "observed_reasoning_token_counts": [
+        10
+      ],
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    },
+    {
+      "worker": "codebuddy",
+      "requested_model": "deepseek-v4.1-flash",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "codebuddy-t0s0i0f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "-p",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_62be34a048.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
+        "--model",
+        "deepseek-v4.1-flash",
+        "--output-format",
+        "json",
+        "--tools",
+        "",
+        "--allowedTools",
+        "Read,Write",
+        "--max-turns",
+        "5",
+        "--setting-sources",
+        "user"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\codebuddy-t0s0i0f0",
+      "status": "blocked_auth",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 13.125,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_62be34a048"
+      },
+      "answer_verified": false,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 0,
+      "stdout_timing": [],
+      "event_types": [],
+      "delta_events": 0,
+      "usage": [],
+      "answer_evidence": [],
+      "diagnostic": "401 Authentication required. Please use /login command to sign in to your account (auth-type:cli-external-link,token-type:Bearer,token-length:1327) (proxy: http://<PRIVATE_PROXY_HOST>:7890 -> https://www.codebuddy.ai) (01a11afb9e237be7b86f2083f97e6f0f/01a11afb-8522-7df1-916b-bdffef29e9a4)\n",
+      "public_usage": {},
+      "observed_reasoning_token_counts": [],
+      "strict_json_answer": false,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    },
+    {
+      "worker": "minimaxcode",
+      "requested_model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "minimaxcode-t0s0i0f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "text",
+        "chat",
+        "--model",
+        "MiniMax-M3.1-Flash-Preview",
+        "--messages-file",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\minimaxcode-t0s0i0f0\\messages.json",
+        "--output",
+        "json",
+        "--max-tokens",
+        "4096",
+        "--timeout",
+        "90",
+        "--non-interactive",
+        "--no-color"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\minimaxcode-t0s0i0f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 2.141,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_f0ac3571fe"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 1,
+      "stdout_timing": [
+        2.11
+      ],
+      "event_types": [
+        "message",
+        "text"
+      ],
+      "delta_events": 0,
+      "usage": [
+        {
+          "input_tokens": 71,
+          "output_tokens": 17,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 199
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 78, \"nonce\": \"CHECK_f0ac3571fe\"}"
+      ],
+      "public_usage": {
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "input_tokens": 71,
+        "output_tokens": 17,
+        "cache_read_tokens": 199,
+        "cache_write_tokens": 0
+      },
+      "observed_reasoning_token_counts": [],
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    },
+    {
+      "worker": "github-copilot",
+      "requested_model": "auto",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "github-copilot-t0s0i0f0",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
+        "-p",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_f4d7ddd67d.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
+        "--model",
+        "auto",
+        "--reasoning-effort",
+        "none",
+        "--stream",
+        "off",
+        "--output-format",
+        "json",
+        "--silent",
+        "--no-custom-instructions",
+        "--disable-builtin-mcps",
+        "--no-auto-update",
+        "--no-color",
+        "--log-dir",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\github-copilot-t0s0i0f0\\cli-logs",
+        "--available-tools=view,create,edit",
+        "--allow-tool=read,write"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\github-copilot-t0s0i0f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 18.969,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_f4d7ddd67d"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 19,
+      "stdout_timing": [
+        12.985,
+        12.985,
+        13.047,
+        13.11,
+        13.141,
+        13.188,
+        13.594,
+        13.61,
+        13.625,
+        13.641,
+        13.657,
+        13.672,
+        16.75,
+        16.75,
+        16.75,
+        16.75,
+        16.766,
+        16.766,
+        16.766
+      ],
+      "event_types": [
+        "assistant.idle",
+        "assistant.message",
+        "assistant.turn_end",
+        "assistant.turn_start",
+        "model.call_final_result",
+        "model.call_finished",
+        "model.call_start",
+        "result",
+        "session.auto_mode_resolved",
+        "session.custom_agents_updated",
+        "session.info",
+        "session.mcp_server_status_changed",
+        "session.mcp_servers_loaded",
+        "session.skills_loaded",
+        "session.tools_updated",
+        "session.usage_checkpoint",
+        "user.message"
+      ],
+      "delta_events": 0,
+      "usage": [
+        {
+          "premiumRequests": 1,
+          "totalApiDurationMs": 1669,
+          "sessionDurationMs": 6129,
+          "codeChanges": {
+            "linesAdded": 0,
+            "linesRemoved": 0,
+            "filesModified": []
+          }
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 78, \"nonce\": \"CHECK_f4d7ddd67d\"}"
+      ],
+      "public_usage": {
+        "model": "gpt-5.6-luna"
+      },
+      "observed_reasoning_token_counts": [],
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    },
+    {
+      "worker": "traecode",
+      "requested_model": "GLM-5.3-FlashX",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "traecode-t0s0i0f0",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
+        "exec",
+        "--model",
+        "GLM-5.3-FlashX",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "never",
+        "--json",
+        "--config",
+        "model_reasoning_effort=\"none\"",
+        "--output-last-message",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\traecode-t0s0i0f0\\last-message.txt",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_19c49c4da2.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\traecode-t0s0i0f0",
+      "status": "failed",
+      "exit_code": 2,
+      "timed_out": false,
+      "elapsed_seconds": 0.375,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_19c49c4da2"
+      },
+      "answer_verified": false,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 0,
+      "stdout_timing": [],
+      "event_types": [],
+      "delta_events": 0,
+      "usage": [],
+      "answer_evidence": [],
+      "diagnostic": "error: unexpected argument '--ask-for-approval' found\n\n  tip: to pass '--ask-for-approval' as a value, use '-- --ask-for-approval'\n\nUsage: traecli exec [OPTIONS] [PROMPT]\n       traecli exec [OPTIONS] <COMMAND> [ARGS]\n\nFor more information, try '--help'.\n",
+      "public_usage": {},
+      "observed_reasoning_token_counts": [],
+      "strict_json_answer": false,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    },
+    {
+      "worker": "mimocode",
+      "requested_model": "xiaomi/mimo-v2.6-flash",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "mimocode-t0s0i0f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "run",
+        "--pure",
+        "--model",
+        "xiaomi/mimo-v2.6-flash",
+        "--format",
+        "json",
+        "--thinking",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_09c28a1da0.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\mimocode-t0s0i0f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 14.0,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_09c28a1da0"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 3,
+      "stdout_timing": [
+        13.094,
+        13.391,
+        13.407
+      ],
+      "event_types": [
+        "step-finish",
+        "step-start",
+        "step_finish",
+        "step_start",
+        "text"
+      ],
+      "delta_events": 0,
+      "usage": [
+        {
+          "total": 36059,
+          "input": 36035,
+          "output": 24,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 0
+          }
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 78, \"nonce\": \"CHECK_09c28a1da0\"}"
+      ],
+      "public_usage": {
+        "input_tokens": 36035,
+        "output_tokens": 24,
+        "reasoning_tokens": 0,
+        "total_tokens": 36059
+      },
+      "observed_reasoning_token_counts": [
+        0
+      ],
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    },
+    {
+      "worker": "zcode",
+      "requested_model": "GLM-5.3-Flash",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "zcode-t0s0i0f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+        "--cwd",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\zcode-t0s0i0f0",
+        "--mode",
+        "plan",
+        "--disallowed-tools",
+        "Bash,WebSearch,WebFetch,Task,Agent",
+        "--json",
+        "--prompt",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_1b7e6236f3.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\zcode-t0s0i0f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 19.297,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_1b7e6236f3"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 1,
+      "stdout_timing": [
+        18.297
+      ],
+      "event_types": [],
+      "delta_events": 0,
+      "usage": [
+        {
+          "source": "provider",
+          "modelRequestCount": 1,
+          "inputTokens": 26964,
+          "outputTokens": 90,
+          "totalTokens": 27054,
+          "cacheReadTokens": 256,
+          "cacheWriteTokens": 0,
+          "reasoningTokens": 0,
+          "webFetchRequests": 0,
+          "webSearchRequests": 0
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 78, \"nonce\": \"CHECK_1b7e6236f3\"}"
+      ],
+      "public_usage": {
+        "input_tokens": 26964,
+        "output_tokens": 90,
+        "reasoning_tokens": 0,
+        "total_tokens": 27054,
+        "cache_read_tokens": 256,
+        "cache_write_tokens": 0,
+        "model_request_count": 1,
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "observed_reasoning_token_counts": [
+        0
+      ],
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    }
+  ]
+}

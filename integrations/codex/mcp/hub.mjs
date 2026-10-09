@@ -1,15 +1,12 @@
 // Agent Hub 桥接引擎：把"派发 → 阻塞回收"包成一次调用（ask）。
 // 供 server.mjs（stdio MCP）与 ask.mjs（CLI 一次性）共用。
 // 发布时同步 root mcp 与 integrations/dsh/mcp；tests/mcp_bridge.test.mjs 防止独立安装包漂移。
+import { open } from "node:fs/promises";
+import { basename, extname } from "node:path";
 
 function hubUrl() {
   const endpoint = process.env.AGENTHUB_URL || process.env.HUB_MCP_URL || "http://127.0.0.1:8765/mcp";
-  if (!process.env.HUB_TOKEN) return endpoint;
-  try {
-    const url = new URL(endpoint);
-    if (!url.searchParams.has("token")) url.searchParams.set("token", process.env.HUB_TOKEN);
-    return url.href;
-  } catch { return endpoint; }
+  return endpoint;
 }
 export const HUB = hubUrl();
 
@@ -58,7 +55,54 @@ function validTimeout(value) {
 }
 
 function message(error) {
-  return String(error?.message || error).slice(0, 500);
+  let text = String(error?.message || error).replace(/([?&]token=)[^&\s]+/gi, "$1[REDACTED]");
+  if (process.env.HUB_TOKEN) text = text.replaceAll(process.env.HUB_TOKEN, "[REDACTED]");
+  return text.slice(0, 500);
+}
+
+async function taskOptions(options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw hubError("rejected", "options must be an object");
+  const known = new Set(["model", "cwd", "thinking", "stream", "files", "onProgress"]);
+  for (const key of Object.keys(options)) if (!known.has(key)) throw hubError("rejected", "Unknown task option: " + key);
+  const result = {};
+  for (const key of ["model", "cwd"]) {
+    if (options[key] !== undefined) {
+      if (typeof options[key] !== "string" || !options[key].trim()) throw hubError("rejected", key + " must be a nonempty string");
+      result[key] = options[key];
+    }
+  }
+  if (options.thinking !== undefined) {
+    if (!["default", "on", "off"].includes(options.thinking)) throw hubError("rejected", "thinking must be default/on/off");
+    result.thinking = options.thinking;
+  }
+  if (options.stream !== undefined) {
+    if (typeof options.stream !== "boolean") throw hubError("rejected", "stream must be a boolean");
+    result.stream = options.stream;
+  }
+  if (options.files !== undefined) {
+    if (!Array.isArray(options.files) || options.files.length > 8 || options.files.some((f) => typeof f !== "string" || !f)) {
+      throw hubError("rejected", "files must contain at most 8 local file paths");
+    }
+    result.attachments = [];
+    let size = 0;
+    const mimeTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf", ".json": "application/json" };
+    for (const source of options.files) {
+      const name = basename(source);
+      if (/^(?:\.env(?:\..*)?|\.?auth\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))$/i.test(name) || /\.(?:key|pem)$/i.test(name)) {
+        throw hubError("rejected", "Credential files cannot be sent as task attachments");
+      }
+      const file = await open(source, "r");
+      try {
+        const stat = await file.stat();
+        if (!stat.isFile() || size + stat.size > 1024 * 1024) throw hubError("rejected", "Attachments exceed the 1 MiB combined limit or are not regular files");
+        const data = await file.readFile();
+        size += data.length;
+        if (size > 1024 * 1024) throw hubError("rejected", "Attachments exceed the 1 MiB combined limit");
+        result.attachments.push({ name, mime_type: mimeTypes[extname(name).toLowerCase()] || "text/plain", data_base64: data.toString("base64") });
+      } finally { await file.close(); }
+    }
+  }
+  return result;
 }
 
 function hubError(kind, text) {
@@ -70,9 +114,12 @@ function hubError(kind, text) {
 async function callTool(name, args, timeoutMs, allowToolError = false) {
   const id = ++nextRequestId;
   const payload = JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
-  const resp = await fetch(HUB, {
+  const target = new URL(HUB);
+  const token = target.searchParams.get("token") || process.env.HUB_TOKEN;
+  target.searchParams.delete("token");
+  const resp = await fetch(target, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
     body: payload,
     signal: AbortSignal.timeout(Math.max(1, Math.ceil(timeoutMs))),
   });
@@ -96,14 +143,14 @@ async function callTool(name, args, timeoutMs, allowToolError = false) {
   return text;
 }
 
-async function dispatchWorker(worker, task, timeoutS, deadline) {
+async function dispatchWorker(worker, task, timeoutS, deadline, options) {
   const remaining = () => Math.max(1, Math.min(DISPATCH_HTTP_MS, deadline - performance.now()));
-  if (worker === "traecode") return callTool("trae_delegate", { task, wait: false, timeout_s: timeoutS }, remaining());
-  const text = await callTool("hub_dispatch_cli", { agent: worker, task, timeout_s: timeoutS }, remaining());
+  if (worker === "traecode") return callTool("trae_delegate", { task, wait: false, timeout_s: timeoutS, ...options }, remaining());
+  const text = await callTool("hub_dispatch_cli", { agent: worker, task, timeout_s: timeoutS, ...options }, remaining());
   // 只在明确未受理时回退，正文引用此诊断不能引发第二次派发。
   if (worker === "zcode" && /^zcode\s+未配置 CLI\b/.test(cleanText(text))) {
     if (performance.now() >= deadline) throw hubError("rejected", "ZCode CLI 未配置，派发等待预算已用尽");
-    return callTool("zcode_delegate", { task, wait: false, timeout_s: timeoutS }, remaining());
+    return callTool("zcode_delegate", { task, wait: false, timeout_s: timeoutS, ...options }, remaining());
   }
   return text;
 }
@@ -131,9 +178,16 @@ function receipt(text, worker, expectedRef = null) {
   return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
 }
 
-async function startTask(worker, task, timeoutS, deadline) {
+async function startTask(worker, task, timeoutS, deadline, options = {}) {
+  let prepared;
   try {
-    return receipt(await dispatchWorker(worker, task, timeoutS, deadline), worker);
+    prepared = await taskOptions(options);
+    if (performance.now() >= deadline) throw new Error("派发前等待预算已用尽");
+  } catch (error) {
+    return { status: "failed", ref: "", answer: "任务未派发：" + message(error) };
+  }
+  try {
+    return receipt(await dispatchWorker(worker, task, timeoutS, deadline, prepared), worker);
   } catch (error) {
     const status = error.kind === "rejected" ? "failed" : "unknown";
     const prefix = status === "unknown" ? "未能确认派发是否受理，请先检查枢纽，避免重复执行：" : "枢纽拒绝派发：";
@@ -141,15 +195,35 @@ async function startTask(worker, task, timeoutS, deadline) {
   }
 }
 
-async function dispatchAndCollect(worker, task, timeoutS) {
+async function dispatchAndCollect(worker, task, timeoutS, options) {
   const deadline = performance.now() + timeoutS * 1000;
-  const started = await startTask(worker, task, timeoutS, deadline);
+  const started = await startTask(worker, task, timeoutS, deadline, options);
   if (started.status !== "running") return { ok: started.status === "completed", worker, ...started };
   const { ref } = started;
+  let previousProgress = "";
   while (performance.now() < deadline) {
     const remainingMs = deadline - performance.now();
     const waitS = Math.min(110, remainingMs / 1000);
     let t;
+    if (options.stream) {
+      let result;
+      try {
+        const value = JSON.parse(await callTool("hub_result_json", { ref }, Math.min(remainingMs, 30000)));
+        if (value.ref !== ref || !["running", "completed", "error", "failed", "timeout", "cancelled", "unknown"].includes(value.status)) throw new Error("Invalid structured task result");
+        const progress = typeof value.progress === "string" ? value.progress : "";
+        if (progress && progress !== previousProgress) {
+          previousProgress = progress;
+          if (typeof options.onProgress === "function") await options.onProgress({ ref, status: value.status, text: progress });
+        }
+        const status = ["error", "timeout", "cancelled"].includes(value.status) ? "failed" : value.status;
+        result = { ok: status === "completed", worker, ref, status, answer: typeof value.text === "string" ? value.text : "" };
+      } catch (error) {
+        return { ok: false, worker, ref, status: "unknown", answer: "查询失败，保留原 ref：" + message(error) };
+      }
+      if (result.status !== "running") return result;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(150, Math.max(0, deadline - performance.now()))));
+      continue;
+    }
     try {
       t = await callTool("hub_wait_result", { ref, wait_s: waitS }, Math.min(remainingMs, (waitS + 5) * 1000));
     } catch (error) {
@@ -173,19 +247,25 @@ function taskError(task, timeoutS) {
 }
 
 /** 派发一次并在总预算内回收。空回复不能证明任务未执行，因此不自动重复有副作用的任务。 */
-export async function ask(workerRaw, task, timeoutS = 300) {
+export async function ask(workerRaw, task, timeoutS = 300, options = {}) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
     return { ok: false, status: "failed", worker: String(workerRaw || ""), ref: "", answer: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
   const error = taskError(task, timeoutS);
   if (error) return { ok: false, status: "failed", worker, ref: "", answer: error };
-  return dispatchAndCollect(worker, task, timeoutS);
+  return dispatchAndCollect(worker, task, timeoutS, options);
 }
 
 /** 列出枢纽注册代理与在线状态（原文）。 */
 export async function hubStatus() {
   return callTool("hub_list_agents", {}, 30_000);
+}
+
+export async function hubCapabilities(workerRaw) {
+  const worker = workerRaw === undefined ? null : resolveWorker(workerRaw);
+  if (workerRaw !== undefined && !worker) throw new Error("Unknown worker");
+  return JSON.parse(await callTool("hub_capabilities", worker ? { agent: worker } : {}, 30000));
 }
 
 const LOGIN_STATUSES = new Set([
@@ -249,14 +329,14 @@ export async function hubLogin(workerRaw, action = "status") {
  * 异步派发返回 ref；同步配置直接返回 completed/failed 与 answer。
  * HTTP 受理请求限制 25 秒；网络失败不证明远端未执行，不能自动重派。
  */
-export async function dispatchOnly(workerRaw, task, timeoutS = 900) {
+export async function dispatchOnly(workerRaw, task, timeoutS = 900, options = {}) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
     return { ok: false, worker: String(workerRaw || ""), ref: "", error: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
   const error = taskError(task, timeoutS);
   if (error) return { ok: false, worker, ref: "", error };
-  const result = await startTask(worker, task, timeoutS, performance.now() + DISPATCH_HTTP_MS);
+  const result = await startTask(worker, task, timeoutS, performance.now() + DISPATCH_HTTP_MS, options);
   if (result.status === "running") return { ok: true, worker, status: "running", ref: result.ref };
   if (result.status === "completed") return { ok: true, worker, ...result };
   return { ok: false, worker, ...result, error: result.answer };
@@ -277,5 +357,6 @@ export async function fetchRef(ref) {
     return { status: "unknown", answer: "查询失败：" + String(e && e.message || e).slice(0, 200) };
   }
   const result = receipt(t, null, ref);
-  return { status: result.status, answer: result.answer };
+  const progress = result.status === "running" ? extractAnswer(t).replace(/^\[执行中·受控端界面快照\]\s*/, "").replace(/\n?\(尚无文本\)$/, "") : undefined;
+  return { status: result.status, answer: result.answer, ...(progress ? { progress } : {}) };
 }

@@ -1,6 +1,6 @@
 {
   "name": "agenthub-workers",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.",
   "description_i18n": {
     "en": "Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.",

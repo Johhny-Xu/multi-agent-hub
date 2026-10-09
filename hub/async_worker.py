@@ -11,7 +11,7 @@
 导致 worker 进程直接崩溃、结果永远停留在 running (实测卡死 9~18 小时)。
 此处统一由 load_task_meta() 容错解析。
 
-结果文件: ~/agent-hub/results/<ref>.json
+结果文件: HUB_RESULTS_DIR/<ref>.json，默认 state/results/<ref>.json
   {status: running|completed|error, text, progress, session_id, exit_code}
 
 资源回收约定 (避免空闲吊起进程持续占 CPU/内存):
@@ -32,16 +32,18 @@ from pathlib import Path
 
 from command_runtime import positive_timeout, spawn_owned, terminate_owned
 from result_store import read_result as stored_result, update_result
+from task_contract import cleanup_attachments
+from output_parser import parse_output, parse_usage
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 DRIVERS_DIR = ROOT / "drivers"
-STATE_DIR = HERE / "state"
+STATE_DIR = Path(os.path.expandvars(os.path.expanduser(os.environ.get("HUB_STATE_DIR") or str(HERE / "state")))).resolve()
 
-RESULTS = (
+RESULTS = str(Path(os.path.expandvars(os.path.expanduser(
     os.environ.get("HUB_RESULTS_DIR", "").strip()
-    or (os.path.expanduser("~/agent-hub/results") if os.path.isdir(os.path.expanduser("~/agent-hub/results")) else str(STATE_DIR / "results"))
-)
+    or str(STATE_DIR / "results")
+))).resolve())
 GATEWAY = os.environ.get("TRAE_GATEWAY", "http://127.0.0.1:8787").rstrip("/")
 NODE = shutil.which("node") or "node"
 DOM_READ_TRAE = (
@@ -95,6 +97,8 @@ def load_task_meta(path):
             "cwd": d.get("cwd") or None,
             "timeout_s": d.get("timeout_s"),
             "env": d.get("env"),
+            "attachment_dir": d.get("attachment_dir"),
+            "attachment_parent": d.get("attachment_parent"),
         }
     # JSON 标量/数组: 当作任务文本使用
     text = d if isinstance(d, str) else json.dumps(d, ensure_ascii=False)
@@ -250,9 +254,29 @@ def zcode_run(task, session_id, ref, timeout=ZCODE_TIMEOUT):
             poller.join(timeout=2)
 
 
+def _read_cli_output(path, final=False):
+    limit = 2 * 1024 * 1024 if final else 256 * 1024
+    with open(path, "rb") as stream:
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        stream.seek(max(0, size - limit))
+        raw = stream.read(limit).decode("utf-8", errors="replace")
+    if size > limit:
+        raw = raw.partition("\n")[2]
+    if not final and raw and not raw.endswith("\n"):
+        fragment = raw.rsplit("\n", 1)[-1]
+        if fragment.lstrip().startswith(("{", "[")):
+            try:
+                json.loads(fragment)
+            except ValueError:
+                raw = raw.rpartition("\n")[0]
+    return dict(parse_output(raw), usage=parse_usage(raw))
+
+
 def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
     """执行 CLI 命令并回传输出尾部作为进度; 结束后整组回收子进程。"""
     tmpout = taskfile + ".out"
+    tmperr = taskfile + ".err"
     proc = None
     child_env = os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
@@ -261,9 +285,9 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
         child_env.update({str(key): str(value) for key, value in env.items()})
     timeout_s = positive_timeout(timeout_s, 600)
     try:
-        with open(tmpout, "w", encoding="utf-8") as fo:
+        with open(tmpout, "w", encoding="utf-8") as fo, open(tmperr, "w", encoding="utf-8") as fe:
             proc = spawn_owned(cmd_list, cwd=cwd, env=child_env, stdin=subprocess.DEVNULL,
-                               stdout=fo, stderr=subprocess.STDOUT)
+                               stdout=fo, stderr=fe)
             deadline = time.monotonic() + timeout_s
             last = ""
             while proc.poll() is None:
@@ -275,22 +299,37 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
                 except subprocess.TimeoutExpired:
                     pass
                 try:
-                    with open(tmpout, encoding="utf-8", errors="replace") as f:
-                        tail = f.read()[-600:].strip()
+                    tail = _read_cli_output(tmpout)["text"][-20000:]
                     if tail and tail != last:
                         last = tail
                         save(ref, only_if_running=True, progress=tail, exit_code=None)
                 except OSError:
                     pass
-        with open(tmpout, encoding="utf-8", errors="replace") as f:
-            text = f.read().strip()[-4000:]
-        return text or "(无输出)", proc.returncode
+        parsed = _read_cli_output(tmpout, final=True)
+        if parsed["usage"]:
+            save(ref, only_if_running=True, usage=parsed["usage"])
+        text = parsed["error"] or parsed["text"]
+        if proc.returncode and not parsed["error"]:
+            # CLI spinners/status messages on stderr are not model answers.
+            # Keep diagnostics only for failed executions, bounded in memory.
+            with open(tmperr, "rb") as errors:
+                errors.seek(0, os.SEEK_END)
+                errors.seek(max(0, errors.tell() - 12000))
+                diagnostic = errors.read(12000).decode("utf-8", errors="replace").strip()
+            if diagnostic:
+                text = (text + "\n" if text else "") + diagnostic
+        if not text.strip() and proc.returncode == 0:
+            return "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。", 1
+        if len(text) > 20000:
+            text = text[:20000] + "\n[输出超过 20000 字符，已截断]"
+        return text or "(无输出)", proc.returncode or (1 if parsed["error"] else 0)
     finally:
         kill_process_group(proc)
-        try:
-            os.unlink(tmpout)
-        except OSError:
-            pass
+        for path in (tmpout, tmperr):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def push_callback(callback_url, payload):
@@ -374,6 +413,11 @@ def main():
         push_callback(callback_url, {"ref": ref, "status": "error",
                                      "text": f"执行出错: {e}"[:300]})
     finally:
+        if meta.get("attachment_dir") and meta.get("attachment_parent"):
+            try:
+                cleanup_attachments(meta["attachment_dir"], meta["attachment_parent"])
+            except (OSError, ValueError):
+                pass
         cleanup_taskfile(taskfile)
     return outcome
 

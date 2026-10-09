@@ -54,7 +54,8 @@ ${extra}`);
   return { root, hubPort, consolePort };
 }
 async function run(root, action) {
-  const env = { ...process.env, USERPROFILE: root, HOME: root };
+  const env = { ...process.env, USERPROFILE: root, HOME: root,
+    PSModuleAnalysisCachePath: join(root, 'powershell-module-cache') };
   for (const key of Object.keys(env)) if (/^(?:AGENTHUB_|HUBCONSOLE_|HUB_|FIXTURE_)/.test(key)) delete env[key];
   return new Promise((resolveResult, reject) => {
     const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', launcher, '-Action', action, '-Root', root, '-HealthTimeoutSeconds', '6'], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -105,6 +106,16 @@ test('failed console startup returns failure and reclaims its newly started Hub'
     assert.notEqual(result.code, 0);
     assert.ok(!existsSync(join(root, '.run/hub.windows.json')));
     await assert.rejects(fetch(`http://127.0.0.1:${hubPort}/health`));
+  } finally { await cleanup(root); }
+});
+
+test('external worker configuration does not create a second source-tree config', { skip: !available }, async () => {
+  const { root } = await fixture('HUB_AGENTS_FILE=private-config/agents.json\n');
+  try {
+    const result = await run(root, 'start');
+    assert.equal(result.code, 0, result.output);
+    assert.equal(JSON.parse(await readFile(join(root, 'private-config/agents.json'), 'utf8')).fixture, 'WINDOWS_TEMPLATE');
+    assert.ok(!existsSync(join(root, 'hub/agents.json')));
   } finally { await cleanup(root); }
 });
 

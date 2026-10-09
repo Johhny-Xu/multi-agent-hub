@@ -3,6 +3,7 @@
 import { ask, resolveWorker } from "../mcp/hub.mjs";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { workflowOptions } from "./options.mjs";
 
 function nonempty(value, name) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${name} must be a nonempty string`);
@@ -19,8 +20,9 @@ export async function runWorkflow(mode, input, invoke = ask) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Input must be a JSON object");
   const budget = input.timeout_s ?? 300;
   if (typeof budget !== "number" || !Number.isFinite(budget) || budget <= 0 || budget > 86400) throw new Error("Invalid timeout_s");
+  const options = workflowOptions(input);
   const call = async (worker, task) => {
-    try { return checked(await invoke(worker, task, budget), worker); }
+    try { return checked(await invoke(worker, task, budget, options), worker); }
     catch (error) { return { ok: false, status: "unknown", worker, ref: "", answer: String(error?.message || error) }; }
   };
   if (mode === "hub-fanout") {

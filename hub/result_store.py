@@ -12,11 +12,24 @@ def result_path(directory, ref):
 
 def read_result(directory, ref):
     path = result_path(directory, ref)
-    try:
-        result = json.loads(path.read_text(encoding="utf-8"))
-        return result if isinstance(result, dict) else None
-    except (OSError, ValueError):
-        return None
+    deadline = time.monotonic() + 1.0
+    while True:
+        try:
+            result = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(result, dict):
+                raise ValueError("Result is not an object")
+            return result
+        except FileNotFoundError:
+            return None
+        except PermissionError as error:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("Task result is temporarily inaccessible; preserve its ref") from error
+            time.sleep(min(0.02, remaining))
+        except ValueError as error:
+            # A corrupt existing result must never be treated as a fresh empty
+            # task by update_result, which would silently lose its metadata.
+            raise RuntimeError("Task result is invalid; preserve its ref") from error
 
 
 def update_result(directory, ref, fields, *, only_if_running=False, expected_updated_at=None):

@@ -1,0 +1,244 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "layer": "new JavaScript bridge -> isolated HTTP Hub -> authenticated official worker CLI",
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-hub-57fa32r1",
+  "port": 58791,
+  "source_files_separate_from_worker_cwd": true,
+  "results": [
+    {
+      "case": "mimocode-0000",
+      "worker": "mimocode",
+      "model": "xiaomi/mimo-v2.6-flash",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "status": "running",
+      "ok": false,
+      "ref": "mimocode-3b3a245c04",
+      "answer_verified": false,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_c1f7636472"
+      },
+      "public_answer": null,
+      "progress": [],
+      "elapsed_seconds": 100.033,
+      "passed": false
+    },
+    {
+      "case": "mimocode-0111",
+      "worker": "mimocode",
+      "model": "xiaomi/mimo-v2.6-flash",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "status": "running",
+      "ok": false,
+      "ref": "mimocode-4727278cef",
+      "answer_verified": false,
+      "written_artifact_verified": false,
+      "expected": {
+        "total": 103,
+        "nonce": "CHECK_7b7d9833df"
+      },
+      "public_answer": null,
+      "progress": [],
+      "elapsed_seconds": 100.012,
+      "passed": false
+    },
+    {
+      "case": "mimocode-1011",
+      "worker": "mimocode",
+      "model": "xiaomi/mimo-v2.6-flash",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "status": "completed",
+      "ok": true,
+      "ref": "mimocode-f37189dbd5",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 152,
+        "nonce": "CHECK_493b0f76b6"
+      },
+      "public_answer": {
+        "total": 152,
+        "nonce": "CHECK_493b0f76b6"
+      },
+      "progress": [],
+      "elapsed_seconds": 45.036,
+      "passed": true
+    },
+    {
+      "case": "mimocode-1100",
+      "worker": "mimocode",
+      "model": "xiaomi/mimo-v2.6-flash",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "mimocode-60f21d0a49",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_a3489520d8"
+      },
+      "public_answer": {
+        "total": 78,
+        "nonce": "CHECK_a3489520d8"
+      },
+      "progress": [
+        {
+          "seconds": 21.026,
+          "status": "running",
+          "characters": 42
+        }
+      ],
+      "elapsed_seconds": 21.542,
+      "passed": true
+    },
+    {
+      "case": "codebuddy-cn-0000",
+      "worker": "codebuddy-cn",
+      "model": "deepseek-v4.1-flash",
+      "thinking": false,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "codebuddy-cn-48ae05b251",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_ce059f4813"
+      },
+      "public_answer": {
+        "total": 78,
+        "nonce": "CHECK_ce059f4813"
+      },
+      "progress": [],
+      "elapsed_seconds": 12.031,
+      "passed": true
+    },
+    {
+      "case": "codebuddy-cn-0111",
+      "worker": "codebuddy-cn",
+      "model": "deepseek-v4.1-flash",
+      "thinking": false,
+      "stream": true,
+      "image": true,
+      "file": true,
+      "status": "completed",
+      "ok": true,
+      "ref": "codebuddy-cn-e244379bc1",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 137,
+        "nonce": "CHECK_f52054b45e"
+      },
+      "public_answer": {
+        "total": 137,
+        "nonce": "CHECK_f52054b45e"
+      },
+      "progress": [
+        {
+          "seconds": 4.841,
+          "status": "running",
+          "characters": 33
+        },
+        {
+          "seconds": 7.583,
+          "status": "running",
+          "characters": 54
+        },
+        {
+          "seconds": 9.652,
+          "status": "running",
+          "characters": 19
+        },
+        {
+          "seconds": 9.838,
+          "status": "running",
+          "characters": 43
+        }
+      ],
+      "elapsed_seconds": 10.351,
+      "passed": true
+    },
+    {
+      "case": "codebuddy-cn-1011",
+      "worker": "codebuddy-cn",
+      "model": "deepseek-v4.1-flash",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "status": "completed",
+      "ok": true,
+      "ref": "codebuddy-cn-874b71a84d",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 96,
+        "nonce": "CHECK_1234ca77fe"
+      },
+      "public_answer": {
+        "total": 96,
+        "nonce": "CHECK_1234ca77fe"
+      },
+      "progress": [],
+      "elapsed_seconds": 12.031,
+      "passed": true
+    },
+    {
+      "case": "codebuddy-cn-1100",
+      "worker": "codebuddy-cn",
+      "model": "deepseek-v4.1-flash",
+      "thinking": true,
+      "stream": true,
+      "image": false,
+      "file": false,
+      "status": "completed",
+      "ok": true,
+      "ref": "codebuddy-cn-2bbf6a8143",
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_b6ad2cfbb2"
+      },
+      "public_answer": {
+        "total": 78,
+        "nonce": "CHECK_b6ad2cfbb2"
+      },
+      "progress": [
+        {
+          "seconds": 6.666,
+          "status": "running",
+          "characters": 32
+        },
+        {
+          "seconds": 6.851,
+          "status": "running",
+          "characters": 42
+        }
+      ],
+      "elapsed_seconds": 7.366,
+      "passed": true
+    }
+  ],
+  "temporary_attachments_cleaned": true,
+  "owned_processes_cleaned": true
+}

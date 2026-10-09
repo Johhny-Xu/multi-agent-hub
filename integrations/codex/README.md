@@ -19,6 +19,16 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 
 插件路径可供 Codex 本地插件安装流程使用；有 `plugin.json/mcp.json` 便携入口及 `.codex-plugin/plugin.json/.mcp.json` 兼容入口。采用项目 fragment 时，MCP 使用复制包的绝对入口路径，并显式转发 `AGENTHUB_URL`、`HUB_MCP_URL`、`HUB_TOKEN` 环境变量名；文件不存凭据。Hub 默认连接 `http://127.0.0.1:8765/mcp`。
 
+### 原生插件的 Hub 地址
+
+原生插件与项目 MCP fragment 的环境传递不同：实测 Codex `0.162.0-alpha.2` 会过滤插件子进程环境，直接给 Codex 设置 `AGENTHUB_URL` 不会传给插件；便携 `mcp.json` 里的 `${env.AGENTHUB_URL}` 也不会展开。插件启动器因此支持宿主提供的 `PLUGIN_DATA/agenthub.json`。在 `codex mcp list --json` 的 agenthub transport.env.PLUGIN_DATA 中找到本次安装的数据目录，在该目录写入：
+
+```json
+{"url":"http://127.0.0.1:8765/mcp"}
+```
+
+远程 Hub 的 token 可作为可选字符串字段放在该私有数据文件中；不要写进插件包、项目或报告。通过直接 MCP fragment 显式传入的环境优先于数据文件。数据文件缺失时仍使用环境与默认地址；格式无效会阻止启动，并返回不含设置值的错误。
+
 - `$hub-parallel-research`：多路调研后整合证据。
 - `$hub-implement-review`：一个 worker 实施，另一个审查实际 diff。
 - `$hub-consult`：独立会诊和交叉验证。
@@ -26,9 +36,15 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 
 每个任务仅派发一次并保留 ref。running/unknown/空输出继续跟踪原任务，不能被当成 completed，也不能自动重派。登录链接按用户请求用 `hub_login` 获取。
 
+桥提供 6 个工具：`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`。派发支持 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files` 与 `cwd`。先查询目标 worker 的 `hub_capabilities`，未验证的能力会在执行前拒绝。`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥发送文件内容，Hub 在自己的主机暂存，因此可以跨 Windows/Linux 传附件。`cwd` 则是 Hub 主机上的目录。不要发送凭据文件。
+
+`stream=true` 请求 worker 流式输出。MCP 客户端提供 `_meta.progressToken` 时桥可以发送进度通知；没有该 token 时 `delivery=buffered_no_progress_token`，不能据此宣称客户端已经实时显示。
+
 ## 验证范围与来源
 
-`python tests/codex_adapter_smoke.py` 检查 manifest、TOML、拷贝一致性、dry-run/重复安装/冲突保护，并在隔离 mock Hub 上对已复制的 stdio MCP 做初始化、派发、续查和失败处理验证。设置 `CODEX_TEST_BINARY` 为本机 CLI 路径，还可在全新 HOME、CODEX_HOME 和项目目录中验证配置片段解析，以及便携/兼容包的本地 marketplace 安装、路径解析和 stdio 初始化。测试不登录厂商，不执行模型；Codex UI 和原生代理任务发现尚未实测。
+`python tests/codex_adapter_smoke.py` 检查 manifest、TOML、拷贝一致性、dry-run/重复安装/冲突保护，并在隔离 mock Hub 上对已复制的 stdio MCP 做初始化、派发、续查和失败处理验证。设置 `CODEX_TEST_BINARY` 为本机 CLI 路径，还可验证配置片段、本地 marketplace 和 stdio 初始化。这套回归不执行厂商模型。
+
+2026-10-08 另以真实 Windows CLI、隔离 CODEX_HOME/项目与既有官方登录验证：原生 `agenthub_codebuddy_cn` 子代理通过已安装插件派发并回收真实 CN worker；thinking=on 的算术任务，以及 thinking=off 的文本+图片内容读取均成功，stream 请求已传入。Codex UI 实时进度显示未测试。该版本 `--ephemeral` 的原生子代理出现 rollout 缺失错误，实际子代理测试使用隔离持久会话。完整边界见 [原生验证报告](../../docs/native-plugins-windows.md)。
 
 在 `codex-cli 0.162.0-alpha.2` 中，便携 `mcp.json` 的 `${PLUGIN_ROOT}` 会展开；兼容 `.mcp.json` 不展开这个变量或 `${CLAUDE_PLUGIN_ROOT}`。因此兼容入口采用 `cwd = "./"` 和相对脚本路径，由宿主解析工作目录为安装根。两种入口都经过原生 CLI 的隔离加载验证。
 

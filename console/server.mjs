@@ -3,7 +3,8 @@
 import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
-import { mkdir, readFile, writeFile, readdir, stat, rename, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile, readdir, stat, lstat, rename, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve, sep, dirname } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
@@ -137,7 +138,7 @@ const MODEL_CATALOG = {
     { id: 'space-bunny', name: 'Space-Bunny', credits: 'x0.03' },
   ],
   antigravity: [
-    { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', default: true },
+    { id: 'gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash Medium', default: true },
     { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', tag: '即将下线' },
     { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', tag: '即将下线' },
     { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro' },
@@ -146,7 +147,8 @@ const MODEL_CATALOG = {
     { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' },
   ],
   mimocode: [
-    { id: '9router/trae', name: 'Trae (9router 通道)', tag: '默认', default: true },
+    { id: 'xiaomi/mimo-v2.6-flash', name: 'MiMo-V2.6-Flash (26f)', default: true },
+    { id: '9router/trae', name: 'Trae (9router 通道)' },
     { id: 'mimo-auto', name: 'MiMo Auto (MiMo-V2.5)' },
     { id: 'mimo-v2.6-pro', name: 'MiMo-V2.6-Pro' },
     { id: 'mimo-v2.5', name: 'MiMo-V2.5' },
@@ -157,8 +159,8 @@ const MODEL_CATALOG = {
     { id: 'mimo-v2.5-flash', name: 'MiMo-V2.5-Flash' },
   ],
   minimaxcode: [
-    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', default: true },
-    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K/1M' },
+    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文' },
+    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K/1M', default: true },
     { id: 'MiniMax-M2.7', name: 'MiniMax-M2.7', tag: '204.8K' },
     { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax-M2.7-highspeed', tag: '204.8K · 高速' },
   ],
@@ -166,7 +168,8 @@ const MODEL_CATALOG = {
     { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },
   ],
   traecode: [
-    { id: 'glm-5.3-flash', name: 'GLM-5.3-Flash', default: true },
+    { id: 'GLM-5.3-FlashX', name: 'GLM-5.3-FlashX', default: true },
+    { id: 'glm-5.3-flash', name: 'GLM-5.3-Flash' },
     { id: 'glm-5.3', name: 'GLM-5.3' },
     { id: 'glm-5.3-flashx', name: 'GLM-5.3-FlashX' },
     { id: 'glm-5.2', name: 'GLM-5.2' },
@@ -565,7 +568,7 @@ function parseNoteOne(key, text) {
 function parseInbox(agent, text) {
   const body = text.startsWith(`${agent} 没有未读消息。`) ? null : text;
   if (body === null) return [];
-  const m0 = body.match(new RegExp(`^${agent} 有 (\\d+) 条未读:\\n`));
+  const m0 = body.match(new RegExp(`^${agent} 有 (\\d+) 条未读(?:，本次返回 \\d+ 条)?:\\n`));
   if (!m0) return [];
   /** @type {Array<{ts:string,from:string,text:string}>} */
   const msgs = [];
@@ -823,14 +826,18 @@ export async function start(context) {
         if (MODEL_CATALOG[a.name]) {
           a.models = MODEL_CATALOG[a.name].map((m) => ({ alias: m.name, id: m.id, tag: m.tag, credits: m.credits, default: !!m.default }));
           const def = MODEL_CATALOG[a.name].find((m) => m.default);
-          a.defaultModel = def ? def.id : (mi ? mi.defaultModelId : null);
+          a.defaultModel = mi?.defaultModelId || def?.id || null;
+          for (const model of mi?.models || []) {
+            if (!a.models.some((entry) => entry.id === model.id)) a.models.push(model);
+          }
+          a.models = a.models.map((model) => ({ ...model, default: model.id === a.defaultModel }));
         } else {
           a.models = mi ? mi.models : [];
           a.defaultModel = mi ? mi.defaultModelId : null;
         }
         a.modelNote = mi ? mi.note || '' : (a.cli ? '未出现在模型别名表' : '未配置 CLI 通道');
         // 激活判定优化: 心跳窗口过期 ≠ 不可用。有 CLI 直通/专用通道即可随时派发(服务端主动拉起 worker)
-        a.dispatchable = !!a.cli || !!DISPATCH_OVERRIDES[a.name] || !!(a.models && a.models.length);
+        a.dispatchable = !!a.cli || !!DISPATCH_OVERRIDES[a.name];
         a.activation = a.online ? 'online' : (a.dispatchable ? 'standby' : 'queue-only');
         a.activationNote = a.online ? '在线 · 可即时收发消息'
           : (a.dispatchable ? '心跳窗口过期 · CLI/专用通道仍可直通派发（首次响应较慢）' : '心跳过期且无直通通道 · 仅可入队等待其认领');
@@ -1029,17 +1036,43 @@ export async function start(context) {
   }
   async function saveUpload(name, b64) {
     const base = safeFileName(name);
-    const buf = Buffer.from(String(b64 || '').replace(/^data:[^;]+;base64,/, ''), 'base64');
+    if (/^(?:\.env(?:\..*)?|\.?auth\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))$/i.test(base) || /\.(?:key|pem)$/i.test(base)) throw badReqSoft('凭据文件不能作为任务附件上传');
+    const encoded = String(b64 || '').replace(/^data:[^;]+;base64,/, '');
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) throw badReqSoft('base64 不合法');
+    const buf = Buffer.from(encoded, 'base64');
     if (!buf.length) throw badReqSoft('文件内容为空或 base64 不合法');
     if (buf.length > UPLOAD_MAX_BYTES) throw badReqSoft(`文件超过 ${UPLOAD_MAX_BYTES / 1e6}MB 上限`);
-    const fname = `${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}-${base}`;
-    await writeFile(join(uploadsDir, fname), buf);
+    const fname = `${randomUUID()}-${base}`;
+    await writeFile(join(uploadsDir, fname), buf, { flag: 'wx' });
     let content = null;
     if (TEXT_EXT_RE.test(base) && buf.length <= INLINE_TEXT_MAX * 4) {
       const s = buf.toString('utf-8');
       if (!s.includes('\u0000')) content = s.slice(0, INLINE_TEXT_MAX);
     }
     return { name: base, url: `/uploads/${encodeURIComponent(fname)}`, path: join(uploadsDir, fname), size: buf.length, isImage: IMG_RE.test(base), content };
+  }
+  async function portableAttachments(attachments) {
+    const out = [];
+    let total = 0;
+    for (const item of attachments || []) {
+      let name;
+      try { name = decodeURIComponent(item.url.slice('/uploads/'.length)); } catch { throw badReqSoft('附件 URL 无效'); }
+      if (!name || /[\\/\0]/.test(name) || name.includes('..')) throw badReqSoft('附件路径无效');
+      const path = resolve(uploadsDir, name);
+      if (dirname(path) !== resolve(uploadsDir)) throw badReqSoft('附件超出上传目录');
+      let info, data;
+      try {
+        info = await lstat(path);
+        if (!info.isFile() || info.isSymbolicLink()) throw new Error('not a regular file');
+        total += info.size;
+        if (total > 1024 * 1024) throw badReqSoft('派发附件总计不能超过 1 MiB');
+        data = await readFile(path);
+      } catch (error) { if (error.status) throw error; throw badReqSoft('附件不存在或不可读'); }
+      const ext = name.split('.').at(-1).toLowerCase();
+      const mime = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', pdf: 'application/pdf', json: 'application/json' }[ext] || 'text/plain';
+      out.push({ name: item.name, mime_type: mime, data_base64: data.toString('base64') });
+    }
+    return out;
   }
   /** 把附件拼成 worker 可用文本: 文本类内联内容, 图片/二进制给本机路径提示 */
   function attBlock(text, attachments) {
@@ -1502,6 +1535,15 @@ export async function start(context) {
     sendingSessions.add(thread.id);
     try {
     const atts = (attachments || []).slice(0, 4);
+    const direct = ['auto', 'dispatch', 'trae'].includes(mode) || (mode == null && agentName === 'traecode');
+    if (!direct && (atts.length || options.thinking && options.thinking !== 'default' || options.stream === true)) {
+      throw badReqSoft('附件、思考和流式选项需要使用自动派发或直通派发');
+    }
+    const taskOptions = {
+      ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
+      ...(options.stream !== undefined ? { stream: options.stream } : {}),
+      ...(direct && atts.length ? { attachments: await portableAttachments(atts) } : {}),
+    };
     const attMeta = atts.length ? atts.map((a) => ({ name: String(a.name || 'file').slice(0, 120), url: a.url, isImage: !!a.isImage })) : undefined;
     addMsg(thread, 'me', text, attMeta ? { att: attMeta } : undefined);
     if (mode === 'auto') {
@@ -1511,19 +1553,20 @@ export async function start(context) {
         addMsg(thread, 'sys', (model ? `没有支持模型 ${model} 的可派发子代理` : '没有可派发的子代理') + '（需在线或具备直通通道）。可改用「直通派发」指定具体代理，或走「任务」入队等待认领。');
         return thread;
       }
-      const full = attBlock(text, atts);
+      const full = text;
       addMsg(thread, 'sys', `⚡ 自动派发：${SELF_AGENT} 本机无 CLI，任务已转给 ${pick.name}（${pick.activation === 'online' ? '在线' : '待机·CLI 可直派'}${model ? ` · model=${model}` : ''}）。`);
       const ov = DISPATCH_OVERRIDES[pick.name];
       const workerExtra = buildWorkerExtraArgs(pick.name, options);
       const toolText = await hub.callTool(
         ov ? ov.tool : 'hub_dispatch_cli',
         ov
-          ? { task: full, ...ov.asyncFlag }
+          ? { task: full, ...ov.asyncFlag, ...taskOptions, ...(model ? { model } : {}) }
           : {
               agent: pick.name,
               task: full,
               ...(model ? { model } : {}),
               ...(workerExtra.length ? { extra_args: workerExtra } : {}),
+              ...taskOptions,
             },
         DISPATCH_TIMEOUT_MS
       );
@@ -1537,13 +1580,12 @@ export async function start(context) {
       }
       return thread;
     }
-    const fullText = mode === 'message' ? `${text}${atts.length ? `\n[附件: ${atts.map((a) => a.name).join('、')} · 已存本机控制台, 详见对话]` : ''}` : attBlock(text, atts);
+    const fullText = direct ? text : mode === 'message' ? `${text}${atts.length ? `\n[附件: ${atts.map((a) => a.name).join('、')} · 已存本机控制台, 详见对话]` : ''}` : attBlock(text, atts);
     if (mode === 'trae' || (mode == null && agentName === 'traecode')) {
-      const toolText = await hub.callTool('trae_delegate', { task: fullText, wait: false, ...(thread.traeSession ? { session_id: thread.traeSession } : {}) }, DISPATCH_TIMEOUT_MS);
+      const toolText = await hub.callTool('trae_delegate', { task: fullText, wait: false, ...taskOptions, ...(model ? { model } : {}), ...(thread.traeSession ? { session_id: thread.traeSession } : {}) }, DISPATCH_TIMEOUT_MS);
       const ref = extractDispatchRef(toolText);
       const sm = toolText.match(/session[_ ]?id[=":]+\s*([^\s",;]+)/i);
       if (sm) thread.traeSession = sm[1];
-      if (model) addMsg(thread, 'sys', 'Trae 通道由桌面版固定模型，不支持指定 model（已忽略）。');
       if (ref) {
         thread.pending = (thread.pending || []).filter((p) => p.ref !== ref);
         thread.pending.push({ kind: 'ref', ref, tag: 'trae', posted: tsNow(), dispatchTime: tsNow() });
@@ -1560,12 +1602,13 @@ export async function start(context) {
       const toolText = await hub.callTool(
         ov ? ov.tool : 'hub_dispatch_cli',
         ov
-          ? { task: fullText, ...ov.asyncFlag }
+          ? { task: fullText, ...ov.asyncFlag, ...taskOptions, ...(model ? { model } : {}) }
           : {
               agent: agentName,
               task: fullText,
               ...(model ? { model } : {}),
               ...(extraArgs.length ? { extra_args: extraArgs } : {}),
+              ...taskOptions,
             },
         DISPATCH_TIMEOUT_MS
       );
@@ -2552,6 +2595,8 @@ export async function start(context) {
           const effort = typeof body.effort === 'string' && body.effort.trim() ? body.effort.trim().slice(0, 32) : undefined;
           const contextTier = typeof body.contextTier === 'string' && body.contextTier.trim() ? body.contextTier.trim().slice(0, 32) : undefined;
           const autoTier = typeof body.autoTier === 'string' && body.autoTier.trim() ? body.autoTier.trim().slice(0, 32) : undefined;
+          if (body.thinking !== undefined && !['default', 'on', 'off'].includes(body.thinking)) throw badReq('thinking 无效');
+          if (body.stream !== undefined && typeof body.stream !== 'boolean') throw badReq('stream 必须是布尔值');
           // 附件：客户端先经 /api/upload 落盘，这里只认 url 白名单与元数据
           let attachments;
           if (Array.isArray(body.attachments) && body.attachments.length) {
@@ -2559,14 +2604,14 @@ export async function start(context) {
             attachments = [];
             for (const a of body.attachments.slice(0, 4)) {
               const attUrl = typeof a?.url === 'string' ? a.url : '';
-              if (!/^\/uploads\/[\w.%\-]{1,220}$/.test(attUrl)) throw badReq('附件 url 非法');
+              if (!/^\/uploads\/[\w.%\-]{1,2048}$/.test(attUrl)) throw badReq('附件 url 非法');
               const att = { url: attUrl, name: typeof a?.name === 'string' ? a.name.slice(0, 160) : 'file', isImage: !!a?.isImage };
               if (typeof a?.content === 'string' && a.content.length <= INLINE_TEXT_MAX + 100) att.content = a.content.slice(0, INLINE_TEXT_MAX);
               attachments.push(att);
             }
           }
           try {
-            const thread = await chatSend(agent, text, mode, model, attachments, sessionId, { effort, contextTier, autoTier });
+            const thread = await chatSend(agent, text, mode, model, attachments, sessionId, { effort, contextTier, autoTier, thinking: body.thinking, stream: body.stream });
             send(200, { thread: { id: thread.id, agent: thread.agent } });
           } catch (err) {
             const e = new Error(sanitizeHubError(err && err.message));

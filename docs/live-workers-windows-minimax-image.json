@@ -1,0 +1,219 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n",
+  "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
+  "results": [
+    {
+      "worker": "minimaxcode",
+      "requested_model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": false,
+      "case": "minimaxcode-t1s0i1f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "text",
+        "chat",
+        "--model",
+        "MiniMax-M3.1-Flash-Preview",
+        "--messages-file",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n\\minimaxcode-t1s0i1f0\\messages.json",
+        "--output",
+        "json",
+        "--max-tokens",
+        "4096",
+        "--timeout",
+        "90",
+        "--non-interactive",
+        "--no-color"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n\\minimaxcode-t1s0i1f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 4.479,
+      "expected": {
+        "total": 60,
+        "nonce": "CHECK_75fb81b3ac"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 1,
+      "stdout_timing": [
+        4.448
+      ],
+      "event_types": [
+        "message",
+        "text",
+        "thinking"
+      ],
+      "delta_events": 0,
+      "usage": [
+        {
+          "input_tokens": 244,
+          "output_tokens": 73,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 128,
+          "output_tokens_details": {
+            "thinking_tokens": 56
+          }
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 60, \"nonce\": \"CHECK_75fb81b3ac\"}"
+      ],
+      "public_usage": {
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "input_tokens": 244,
+        "output_tokens": 73,
+        "cache_read_tokens": 128,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 56
+      },
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content",
+      "observed_reasoning_token_counts": [
+        56
+      ]
+    },
+    {
+      "worker": "minimaxcode",
+      "requested_model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": false,
+      "image": true,
+      "file": true,
+      "case": "minimaxcode-t1s0i1f1",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "text",
+        "chat",
+        "--model",
+        "MiniMax-M3.1-Flash-Preview",
+        "--messages-file",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n\\minimaxcode-t1s0i1f1\\messages.json",
+        "--output",
+        "json",
+        "--max-tokens",
+        "4096",
+        "--timeout",
+        "90",
+        "--non-interactive",
+        "--no-color"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n\\minimaxcode-t1s0i1f1",
+      "status": "unsupported_native_file_write",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 4.797,
+      "expected": {
+        "total": 108,
+        "nonce": "CHECK_5cfbe068a1"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": false,
+      "artifact": null,
+      "stdout_chunks": 1,
+      "stdout_timing": [
+        4.776
+      ],
+      "event_types": [
+        "message",
+        "text",
+        "thinking"
+      ],
+      "delta_events": 0,
+      "usage": [
+        {
+          "input_tokens": 316,
+          "output_tokens": 118,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 128,
+          "output_tokens_details": {
+            "thinking_tokens": 101
+          }
+        }
+      ],
+      "answer_evidence": [
+        "{\"total\": 108, \"nonce\": \"CHECK_5cfbe068a1\"}"
+      ],
+      "public_usage": {
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "input_tokens": 316,
+        "output_tokens": 118,
+        "cache_read_tokens": 128,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 101
+      },
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content",
+      "file_input_mode": "host reads fixture and supplies its contents in text blocks; CLI has no local filesystem tools",
+      "diagnostic": "",
+      "observed_reasoning_token_counts": [
+        101
+      ]
+    },
+    {
+      "worker": "minimaxcode",
+      "requested_model": "MiniMax-M3.1-Flash-Preview",
+      "thinking": true,
+      "stream": true,
+      "image": true,
+      "file": false,
+      "case": "minimaxcode-t1s1i1f0",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "text",
+        "chat",
+        "--model",
+        "MiniMax-M3.1-Flash-Preview",
+        "--messages-file",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n\\minimaxcode-t1s1i1f0\\messages.json",
+        "--output",
+        "text",
+        "--max-tokens",
+        "4096",
+        "--timeout",
+        "90",
+        "--non-interactive",
+        "--no-color",
+        "--stream"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-9ejzpa7n\\minimaxcode-t1s1i1f0",
+      "status": "passed",
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 2.443,
+      "expected": {
+        "total": 49,
+        "nonce": "CHECK_9ae5ae3a9a"
+      },
+      "answer_verified": true,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 4,
+      "stdout_timing": [
+        2.17,
+        2.251,
+        2.251,
+        2.424
+      ],
+      "event_types": [],
+      "delta_events": 0,
+      "usage": [],
+      "answer_evidence": [
+        "{\"total\": 49, \"nonce\": \"CHECK_9ae5ae3a9a\"}"
+      ],
+      "public_usage": {},
+      "strict_json_answer": true,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content",
+      "observed_reasoning_token_counts": []
+    }
+  ]
+}

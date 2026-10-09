@@ -1,0 +1,958 @@
+{
+  "date": "2026-10-08",
+  "platform": "Windows x86_64",
+  "scope": "Native Windows hosts; actual worker calls separately distinguished from fixture-only checks. Linux host applications were not installed/tested in this probe.",
+  "versions": {
+    "codex": "0.162.0-alpha.2",
+    "zcode": "0.16.9",
+    "dsh": "0.2.0-rc.2"
+  },
+  "sources": [
+    "https://developers.openai.com/plugins/build/plugins",
+    "https://learn.chatgpt.com/docs/agent-configuration/subagents",
+    "https://learn.chatgpt.com/docs/extend/mcp",
+    "https://zcode.z.ai/en/docs/plugin",
+    "https://github.com/zai-org/ZCode/blob/main/apps/zcode-cli/README.md",
+    "https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md",
+    "https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/workflow/workflow/README.md"
+  ],
+  "dsh_native_discovery": {
+    "presets": [
+      "agenthub-all",
+      "agenthub-antigravity",
+      "agenthub-codebuddy",
+      "agenthub-codebuddy-cn",
+      "agenthub-zcode",
+      "agenthub-traecode",
+      "agenthub-copilot",
+      "agenthub-minimaxcode",
+      "agenthub-mimocode"
+    ],
+    "mcp_tools": [
+      "mcp__agenthub__hub_ask",
+      "mcp__agenthub__hub_status",
+      "mcp__agenthub__hub_capabilities",
+      "mcp__agenthub__hub_login",
+      "mcp__agenthub__hub_dispatch",
+      "mcp__agenthub__hub_fetch"
+    ],
+    "workflow_tools": [
+      "workflow"
+    ]
+  },
+  "cases": [
+    {
+      "name": "codex-host-marker",
+      "executable": "%LOCALAPPDATA%/OpenAI/Codex/bin/9691020b546a15b2/codex.exe",
+      "argv": [
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "-C",
+        "<native-lab>\\codex-project",
+        "Reply exactly HUB_NATIVE_HOST_OK. Do not call tools or read files."
+      ],
+      "environmentNames": [
+        "CODEX_HOME"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 21193,
+      "verdict": "pass",
+      "evidence": "<native-lab>/codex-host-marker.json"
+    },
+    {
+      "name": "codex-native-agent-configured",
+      "executable": "%LOCALAPPDATA%/OpenAI/Codex/bin/9691020b546a15b2/codex.exe",
+      "argv": [
+        "exec",
+        "--enable",
+        "multi_agent",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "-C",
+        "<native-lab>\\codex-project",
+        "Use native custom agent agenthub_codebuddy_cn exactly once. The child must follow its installed instructions: call AgentHub plugin hub_dispatch exactly once with worker codebuddy-cn, model deepseek-v4.1-flash, thinking on, stream true, task Compute 43*7 and reply exactly HUB_NATIVE_CONFIG_OK followed by the integer; external worker must not use tools or read files. Save original ref and use hub_fetch on that ref until completed. Return answer, worker, original ref, status, and stream delivery if present. Do not calculate arithmetic yourself or dispatch directly in parent, retry, or reroute uncertain tasks."
+      ],
+      "environmentNames": [
+        "CODEX_HOME",
+        "AGENTHUB_URL",
+        "HUB_TOKEN"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 92791,
+      "verdict": "pass",
+      "evidence": "<native-lab>/codex-native-agent-configured.json",
+      "features": {
+        "native_agent": "agenthub_codebuddy_cn",
+        "thinking": "on",
+        "stream_requested": true
+      },
+      "ref": "codebuddy-cn-6270af7e60",
+      "worker_result": {
+        "agent": "codebuddy-cn",
+        "model": "deepseek-v4.1-flash",
+        "status": "completed",
+        "thinking": "on",
+        "stream": true,
+        "attachments": [],
+        "exit_code": 0,
+        "usage": null,
+        "text": "HUB_NATIVE_CONFIG_OK 301"
+      }
+    },
+    {
+      "name": "codex-native-agent-attachments",
+      "executable": "%LOCALAPPDATA%/OpenAI/Codex/bin/9691020b546a15b2/codex.exe",
+      "argv": [
+        "exec",
+        "--enable",
+        "multi_agent",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "-C",
+        "<native-lab>\\codex-project",
+        "Use native custom agent agenthub_codebuddy_cn exactly once. Child must call plugin hub_dispatch once with worker codebuddy-cn, model deepseek-v4.1-flash, thinking off, stream true, files [\"<native-lab>/client-input/codex.txt\",\"<native-lab>/client-input/codex.png\"], and task \"Read only supplied text and image attachments. Add a+b from the text and add the two numbers visibly written in the image. Reply exactly HUB_NATIVE_ATTACH_OK nonce=<nonce in text> text=<text sum> image=<image sum>. Do not use network, modify any files, or inspect unrelated files.\" Save original ref and use hub_fetch on that ref until completed. Return real answer/ref/status and delivery if returned. Parent must not read attachments, calculate answers, dispatch directly, retry or reroute uncertain tasks."
+      ],
+      "environmentNames": [
+        "CODEX_HOME",
+        "AGENTHUB_URL",
+        "HUB_TOKEN"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 98009,
+      "verdict": "failed_worker_permission",
+      "evidence": "<native-lab>/codex-native-agent-attachments.json",
+      "features": {
+        "native_agent": "agenthub_codebuddy_cn"
+      },
+      "note": "Transport accepted both files but the worker model reported Read denied; completed is not feature success.",
+      "ref": "codebuddy-cn-cd2f5bdfd4",
+      "worker_result": {
+        "agent": "codebuddy-cn",
+        "model": "deepseek-v4.1-flash",
+        "status": "completed",
+        "thinking": "off",
+        "stream": true,
+        "attachments": [
+          {
+            "name": "codex.txt",
+            "kind": "file",
+            "bytes": 35,
+            "mode": "prompt_path"
+          },
+          {
+            "name": "codex.png",
+            "kind": "image",
+            "bytes": 3646,
+            "mode": "prompt_path"
+          }
+        ],
+        "exit_code": 0,
+        "usage": null,
+        "text": "I can't complete this task: the `Read` tool is denied in this non-interactive session, so I'm unable to access either attachment.\n\nTo proceed, you'd need to either:\n- Re-run with `codebuddy -p -y \"<prompt>\"` (or `--permission-mode bypassPermissions`), or\n- Add `\"Read\"` to the `permissions.allow` list in settings.\n\nI won't guess at the contents."
+      }
+    },
+    {
+      "name": "codex-native-agent-attachments-v2",
+      "executable": "%LOCALAPPDATA%/OpenAI/Codex/bin/9691020b546a15b2/codex.exe",
+      "argv": [
+        "exec",
+        "--enable",
+        "multi_agent",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "-C",
+        "<native-lab>\\codex-project",
+        "Use native custom agent agenthub_codebuddy_cn exactly once. Child must call plugin hub_dispatch once with worker codebuddy-cn, model deepseek-v4.1-flash, thinking off, stream true, files [\"<native-input>/codex.txt\",\"<native-input>/codex.png\"], and task \"Read only supplied text and image attachments. Add a+b from the text and add the two numbers visibly written in the image. Reply exactly HUB_NATIVE_ATTACH_OK nonce=<nonce in text> text=<text sum> image=<image sum>. Do not use network, modify any files, or inspect unrelated files.\" Save original ref and use hub_fetch on that ref until completed. Return real answer/ref/status and delivery if returned. Parent must not read attachments, calculate answers, dispatch directly, retry or reroute uncertain tasks."
+      ],
+      "environmentNames": [
+        "CODEX_HOME",
+        "AGENTHUB_URL",
+        "HUB_TOKEN"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 124950,
+      "verdict": "pass_attachment_content",
+      "evidence": "<native-lab>/codex-native-agent-attachments-v2.json",
+      "features": {
+        "native_agent": "agenthub_codebuddy_cn",
+        "thinking": "off",
+        "stream_requested": true
+      },
+      "note": "Read-only worker tools were explicitly enabled. Correct nonce/text/image result; worker added explanation beyond the exact-line requested format.",
+      "ref": "codebuddy-cn-1c78554d67",
+      "worker_result": {
+        "agent": "codebuddy-cn",
+        "model": "deepseek-v4.1-flash",
+        "status": "completed",
+        "thinking": "off",
+        "stream": true,
+        "attachments": [
+          {
+            "name": "codex.txt",
+            "kind": "file",
+            "bytes": 35,
+            "mode": "prompt_path"
+          },
+          {
+            "name": "codex.png",
+            "kind": "image",
+            "bytes": 3646,
+            "mode": "prompt_path"
+          }
+        ],
+        "exit_code": 0,
+        "usage": {
+          "model": "deepseek-v4.1-flash",
+          "input_tokens": 15020,
+          "output_tokens": 230,
+          "cache_read_tokens": 11264,
+          "cache_write_tokens": 3756
+        },
+        "text": "Text: a=27, b=16 → 43. Image: 48+19 → 67.\n\nHUB_NATIVE_ATTACH_OK nonce=NATIVE_CX_82164 text=43 image=67"
+      }
+    },
+    {
+      "name": "zcode-host-marker-account",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+        "--json",
+        "--mode",
+        "plan",
+        "--cwd",
+        "<native-lab>\\zcode-project",
+        "--prompt",
+        "Reply exactly HUB_NATIVE_HOST_OK. Do not call tools or read files."
+      ],
+      "environmentNames": [
+        "ZCODE_STORAGE_DIR",
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 12918,
+      "verdict": "pass",
+      "evidence": "<native-lab>/zcode-host-marker-account.json"
+    },
+    {
+      "name": "zcode-native-agent-dispatch-v2",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+        "--json",
+        "--mode",
+        "yolo",
+        "--cwd",
+        "<native-lab>\\zcode-project",
+        "--prompt",
+        "Use the native Agent tool with subagent_type agenthub:mimocode exactly once. Task for that native subagent: call its plugin hub_ask exactly once with worker mimocode and task Compute 29*13 and reply exactly HUB_NATIVE_DISPATCH_OK followed by the integer. The external worker must not use tools or read files. Return the real external worker answer and original ref. Do not compute yourself or directly call Hub in the parent, and do not retry unknown results.",
+        "--disallowed-tools",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep"
+      ],
+      "environmentNames": [
+        "ZCODE_STORAGE_DIR",
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 55908,
+      "verdict": "pass",
+      "evidence": "<native-lab>/zcode-native-agent-dispatch-v2.json",
+      "features": {
+        "native_agent": "agenthub:mimocode"
+      },
+      "ref": "mimocode-dd045eb9ce",
+      "worker_result": {
+        "agent": "mimocode",
+        "model": "xiaomi/mimo-v2.6-flash",
+        "status": "completed",
+        "thinking": "default",
+        "stream": false,
+        "attachments": [],
+        "exit_code": 0,
+        "usage": null,
+        "text": "\u001b[0m\n> build · mimo-v2.6-flash\n\u001b[0m\n\u001b[0m⚙ \u001b[0mskill_search Found 3 skills\nHUB_NATIVE_DISPATCH_OK 377"
+      },
+      "native_definition_path": "plugins/agenthub-workers/agents/mimocode.md"
+    },
+    {
+      "name": "zcode-native-agent-attachments",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+        "--json",
+        "--mode",
+        "yolo",
+        "--cwd",
+        "<native-lab>\\zcode-project",
+        "--prompt",
+        "Use native Agent tool with subagent_type agenthub:mimocode exactly once. Native child must call plugin hub_ask once with worker mimocode, model xiaomi/mimo-v2.6-flash, thinking off, stream true, timeout_s 120, files [\"<native-lab>/client-input/zcode.txt\",\"<native-lab>/client-input/zcode.png\"], and task \"Read only supplied text and image attachments. Add a+b from text and add the two numbers visibly written in image. Reply exactly HUB_NATIVE_ATTACH_OK nonce=<nonce in text> text=<text sum> image=<image sum>. Do not use network, modify any files, or inspect unrelated files.\" Return real answer, original ref, status, and stream delivery. Parent must not read attachments, compute answer, call Hub directly, retry or reroute unknown results.",
+        "--disallowed-tools",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep"
+      ],
+      "environmentNames": [
+        "ZCODE_STORAGE_DIR",
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 68467,
+      "verdict": "failed_before_dispatch",
+      "evidence": "<native-lab>/zcode-native-agent-attachments.json",
+      "features": {
+        "native_agent": "agenthub:mimocode"
+      },
+      "note": "The host model copied one character of a long input path incorrectly. Bridge rejected ENOENT before dispatch; no worker ref was created.",
+      "native_definition_path": "plugins/agenthub-workers/agents/mimocode.md"
+    },
+    {
+      "name": "zcode-native-agent-attachments-v2",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+        "--json",
+        "--mode",
+        "yolo",
+        "--cwd",
+        "<native-lab>\\zcode-project",
+        "--prompt",
+        "Use native Agent tool with subagent_type agenthub:mimocode exactly once. Native child must call plugin hub_ask once with worker mimocode, model xiaomi/mimo-v2.6-flash, thinking off, stream true, timeout_s 120, files [\"<native-input>/zcode.txt\",\"<native-input>/zcode.png\"], and task \"Read only supplied text and image attachments. Add a+b from text and add the two numbers visibly written in image. Reply exactly HUB_NATIVE_ATTACH_OK nonce=<nonce in text> text=<text sum> image=<image sum>. Do not use network, modify any files, or inspect unrelated files.\" Return real answer, original ref, status, and stream delivery. Parent must not read attachments, compute answer, call Hub directly, retry or reroute unknown results.",
+        "--disallowed-tools",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep"
+      ],
+      "environmentNames": [
+        "ZCODE_STORAGE_DIR",
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 78561,
+      "verdict": "pass",
+      "evidence": "<native-lab>/zcode-native-agent-attachments-v2.json",
+      "features": {
+        "native_agent": "agenthub:mimocode",
+        "thinking": "off",
+        "stream_requested": true,
+        "delivery": "buffered_no_progress_token"
+      },
+      "ref": "mimocode-576acdfbbc",
+      "worker_result": {
+        "agent": "mimocode",
+        "model": "xiaomi/mimo-v2.6-flash",
+        "status": "completed",
+        "thinking": "off",
+        "stream": true,
+        "attachments": [
+          {
+            "name": "zcode.txt",
+            "kind": "file",
+            "bytes": 34,
+            "mode": "cli"
+          },
+          {
+            "name": "zcode.png",
+            "kind": "image",
+            "bytes": 3663,
+            "mode": "cli"
+          }
+        ],
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 3006,
+          "output_tokens": 25,
+          "reasoning_tokens": 0,
+          "total_tokens": 39895
+        },
+        "text": "HUB_NATIVE_ATTACH_OK nonce=NATIVE_ZC_74628 text=26 image=51"
+      },
+      "native_definition_path": "plugins/agenthub-workers/agents/mimocode.md"
+    },
+    {
+      "name": "dsh-host-marker-account-v2",
+      "executable": "%LOCALAPPDATA%/Programs/DeepSeek Harness/DeepSeek Harness.exe",
+      "argv": [
+        "--expose-internals",
+        "%LOCALAPPDATA%/Programs/DeepSeek Harness/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js",
+        "native-probe",
+        "--patch",
+        "<native-lab>\\dsh-probe.patch.yml",
+        "--json",
+        "Reply exactly HUB_NATIVE_HOST_OK. Do not call tools or read files."
+      ],
+      "environmentNames": [
+        "DSH_HOME",
+        "ELECTRON_RUN_AS_NODE",
+        "DSH_TELEMETRY_MODE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 3519,
+      "verdict": "pass",
+      "evidence": "<native-lab>/dsh-host-marker-account-v2.json",
+      "features": {
+        "provider": "deepseek-account",
+        "model": "deepseek-flash"
+      }
+    },
+    {
+      "name": "dsh-native-headless-discovery",
+      "executable": "%LOCALAPPDATA%/Programs/DeepSeek Harness/DeepSeek Harness.exe",
+      "argv": [
+        "--expose-internals",
+        "%LOCALAPPDATA%/Programs/DeepSeek Harness/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js",
+        "native-probe",
+        "--patch",
+        "<native-lab>\\dsh-headless-discovery.patch.yml"
+      ],
+      "environmentNames": [
+        "DSH_HOME",
+        "ELECTRON_RUN_AS_NODE",
+        "DSH_TELEMETRY_MODE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 10928,
+      "verdict": "pass_discovery",
+      "evidence": "<native-lab>/dsh-native-headless-discovery.json",
+      "note": "Actual native registry observation only, no vendor call: nine presets, six MCP tools and workflow tool. Observer exits after discovery; no task generation is claimed."
+    },
+    {
+      "name": "dsh-native-preset-dispatch",
+      "executable": "%LOCALAPPDATA%/Programs/DeepSeek Harness/DeepSeek Harness.exe",
+      "argv": [
+        "--expose-internals",
+        "%LOCALAPPDATA%/Programs/DeepSeek Harness/resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js",
+        "native-probe",
+        "--patch",
+        "<native-lab>\\dsh-probe.patch.yml",
+        "--json",
+        "Use the native subagent tool once, selecting the agenthub-mimocode preset if that parameter is available. In the child, call mcp__agenthub__hub_ask exactly once with worker mimocode and task Compute 31*11 and reply exactly HUB_NATIVE_DISPATCH_OK followed by the integer; the external worker must not use tools or read files. Return the real worker result and original ref. Do not calculate the answer yourself or dispatch in the parent. Do not retry or reroute uncertain tasks."
+      ],
+      "environmentNames": [
+        "DSH_HOME",
+        "ELECTRON_RUN_AS_NODE",
+        "DSH_TELEMETRY_MODE",
+        "AGENTHUB_URL"
+      ],
+      "exitCode": 1,
+      "timedOut": false,
+      "elapsedMs": 3282,
+      "verdict": "blocked_official_quota",
+      "evidence": "<native-lab>/dsh-native-preset-dispatch.json",
+      "note": "Actual official host returned HTTP 402 ACCOUNT_QUOTA Insufficient Balance before any dispatch. Not retried; native delegated/workflow model execution is unverified."
+    },
+    {
+      "name": "codex-native-linux-attachments",
+      "executable": "%LOCALAPPDATA%/OpenAI/Codex/bin/9691020b546a15b2/codex.exe",
+      "argv": [
+        "exec",
+        "--enable",
+        "multi_agent",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "-C",
+        "<native-lab>\\codex-project",
+        "Use native custom agent agenthub_codebuddy_cn exactly once. Child must call plugin hub_dispatch followed by hub_fetch only on the original ref exactly once for worker codebuddy-cn with model deepseek-v4.1-flash, thinking off, stream true, timeout_s 120, cwd \"<linux-worker-cwd>\", files [\"<native-input>/cx-linux.txt\",\"<native-input>/cx-linux.png\"], task \"Read only supplied text and image attachments. Add a+b from text and add the two numbers visibly written in image. Reply HUB_NATIVE_LINUX_ATTACH_OK nonce=<nonce in text> text=<text sum> image=<image sum>. Do not use network, modify files, or read unrelated files.\". Return real answer, original ref, status, and stream delivery if present. Parent must not read attachments, calculate, call Hub directly, retry or reroute uncertain tasks. This is a new independent cross-system task."
+      ],
+      "environmentNames": [
+        "CODEX_HOME"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 122659,
+      "verdict": "failed_worker",
+      "evidence": "<native-lab>/codex-native-linux-attachments.json",
+      "features": {
+        "native_agent": "agenthub_codebuddy_cn",
+        "topology": "Windows native host -> Linux Hub -> Linux CodeBuddy CN"
+      },
+      "note": "Remote dispatch accepted but worker exited 1 without verified answer. No redispatch.",
+      "ref": "codebuddy-cn-0c4aa60589"
+    },
+    {
+      "name": "zcode-native-linux-attachments",
+      "executable": "C:\\Program Files\\nodejs\\node.exe",
+      "argv": [
+        "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+        "--json",
+        "--mode",
+        "yolo",
+        "--cwd",
+        "<native-lab>\\zcode-project",
+        "--prompt",
+        "Use native Agent tool with subagent_type agenthub:codebuddy-cn exactly once. Child must call plugin hub_ask exactly once for worker codebuddy-cn with model deepseek-v4.1-flash, thinking off, stream true, timeout_s 120, cwd \"<linux-worker-cwd>\", files [\"<native-input>/zc-linux.txt\",\"<native-input>/zc-linux.png\"], task \"Read only supplied text and image attachments. Add a+b from text and add the two numbers visibly written in image. Reply HUB_NATIVE_LINUX_ATTACH_OK nonce=<nonce in text> text=<text sum> image=<image sum>. Do not use network, modify files, or read unrelated files.\". Return real answer, original ref, status, and stream delivery if present. Parent must not read attachments, calculate, call Hub directly, retry or reroute uncertain tasks. This is a new independent cross-system task.",
+        "--disallowed-tools",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep"
+      ],
+      "environmentNames": [
+        "ZCODE_STORAGE_DIR",
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE",
+        "AGENTHUB_URL",
+        "HUB_TOKEN"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "elapsedMs": 77036,
+      "verdict": "failed_worker",
+      "evidence": "<native-lab>/zcode-native-linux-attachments.json",
+      "features": {
+        "native_agent": "agenthub:codebuddy-cn",
+        "topology": "Windows native host -> Linux Hub -> Linux CodeBuddy CN"
+      },
+      "note": "Remote dispatch accepted but worker returned no verified answer. No redispatch.",
+      "ref": "codebuddy-cn-52ac8218d9",
+      "native_definition_path": "plugins/agenthub-workers/agents/codebuddy-cn.md"
+    },
+    {
+      "name": "codex-native-linux-configuration-fix",
+      "verdict": "failed_acceptance",
+      "exitCode": 0,
+      "elapsedMs": 63903,
+      "ref": "codebuddy-cn-9a816b0a36",
+      "terminal_status": "completed",
+      "answer_verified": false,
+      "note": "Original ref queried to terminal, no redispatch. Linux CodeBuddy 2.161 returned planning text and raw DSML Bash syntax, not the required nonce/sums. Attachment names and bytes staged correctly; content reading unverified.",
+      "evidence": "<native-lab>/codex-native-linux-configuration-fix.json"
+    },
+    {
+      "name": "zcode-native-linux-configuration-fix",
+      "verdict": "failed_acceptance",
+      "exitCode": 0,
+      "elapsedMs": 97673,
+      "ref": "codebuddy-cn-c7578806b1",
+      "terminal_status": "completed",
+      "answer_verified": false,
+      "note": "Original ref queried to terminal, no redispatch. Linux CodeBuddy 2.161 returned planning text and raw DSML Bash syntax, not the required nonce/sums. Attachment names and bytes staged correctly; content reading unverified.",
+      "evidence": "<native-lab>/zcode-native-linux-configuration-fix.json",
+      "native_definition_path": "plugins/agenthub-workers/agents/codebuddy-cn.md"
+    }
+  ],
+  "limitations": [
+    "No native GUI flow or realtime UI stream display verified.",
+    "No progressToken was supplied by observed native client calls; ZCode confirmed buffered_no_progress_token.",
+    "Only selected worker routes were tested through native hosts, not an exhaustive native host x 8 worker matrix.",
+    "DSH delegated model/workflow execution is blocked by quota; fixture VM regressions are not a native end-to-end pass.",
+    "CLI exit 0 alone does not prove accepted worker task success."
+  ],
+  "cleanup": {
+    "own_windows_hub_stopped": true,
+    "original_host_config_changed": false,
+    "existing_credentials_read_or_copied": false,
+    "note": "Existing official login was referenced using an isolated Codex auth symlink, the existing ZCode provider path, and a DSH credentials path. No credential content was inspected.",
+    "native_auth_symlink_removed": true
+  },
+  "source_snapshot": {
+    "version": "0.6.0",
+    "hashes": [
+      {
+        "package": "codex",
+        "file": ".mcp.json",
+        "sha256": "1abe84e49c58e4d6e6bdaa19f7d55b67b4450b5381e651ba3f7cced2a9ea58ea",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "install.py",
+        "sha256": "c4cfd14e6f8cbc3f436c2536be2cf8b1ad4acc8f41098035172d64f9d6ea31e1",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "mcp.json",
+        "sha256": "747033bd4be5f73448cecd6789f518fb1e1b8eee87d2a26f3d880ada78e90dfa",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "package.json",
+        "sha256": "e37790cbb677f431332af3811b9253e46565582bf350adb6c4fca71980e46681",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "plugin.json",
+        "sha256": "cdeaa51623f20c4a10b25db62b76f575e7751427a216770abdd3bab364ef2b75",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "README.md",
+        "sha256": "887a5a3569fff106ae35b1042fad3883651f579acb27d02c0ee8b20abd956859",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": ".codex-plugin/plugin.json",
+        "sha256": "faec4ebab98ef57e24e8f4c4f2c3361786043d6f29af0b9165c7c7b3877ce153",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "mcp/ask.mjs",
+        "sha256": "de9ca45a7c28b4d5cc5e8a8bb0143e8f442db061cbbe6d9741e355c2f8b229f4",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "mcp/hub.mjs",
+        "sha256": "48b2c3a9a947bb5115593e0faf471ab0bafe735cf5fcbe67a2bf3317a8275acc",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "mcp/login.mjs",
+        "sha256": "03f48a2e2cc409649174bcd1b20d82aa576c8900d184fecd0daec493ceed91e6",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "mcp/server.mjs",
+        "sha256": "7ac658626a64e025157982f45d2bae8809b4b2e91efde747b4849cff3e714e46",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "scripts/config.mjs",
+        "sha256": "a6b7db623799f37137fac9da3375c87fc1eba9e3d066903bd03e0ff7cff46fec",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "scripts/start.mjs",
+        "sha256": "bfc2e52f5f8b0da5fe6b2ef1ccb40974bd83ab94c126818801a339fea824a28c",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "skills/hub-consult/SKILL.md",
+        "sha256": "e48e5a6447cd431547c8643f0caab1dff4d1eb6bdc978284309fb02737c4be34",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "skills/hub-implement-review/SKILL.md",
+        "sha256": "758d4d1fec288bf8c432915a5d8666a51d583b4e4d914d46f7c470223ee9aec1",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "skills/hub-parallel-research/SKILL.md",
+        "sha256": "794b77d8fbc81cd64214780e4eab328bdcd0bd4de96fd3de590024887a025d6e",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_antigravity.toml",
+        "sha256": "6b941d8e4988e5dbc1a100fa8c689caeaba81015423d67f892bb962fe075d183",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_codebuddy.toml",
+        "sha256": "17a542434607a78ad7216741ef7ec0f1824830ee9a650b34457ea30ab02432bb",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_codebuddy_cn.toml",
+        "sha256": "d818f1b2614f0467d5d6ff1e77850691b8d07ce6cdfdc950a260b3840c8eff8d",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_github_copilot.toml",
+        "sha256": "a5470d9b7bb05eaaa414a969d636ab7fc36d43932fd447e21782f7015fcfa3a3",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_mimocode.toml",
+        "sha256": "279ab1d09f6bb843f3bd76a3107c7d0b16c47357528271c7ab1df28981a630ce",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_minimaxcode.toml",
+        "sha256": "6dae7cac5e7020daa36b692d9a2de273918f2d05173150a5e43b9d0d0123cadd",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_traecode.toml",
+        "sha256": "f5bde6a48c4bc0de4f04fa6fe6628a0466ac870e71b7eb3445d41cebdd6d8145",
+        "installed_match": true
+      },
+      {
+        "package": "codex",
+        "file": "templates/.codex/agents/agenthub_zcode.toml",
+        "sha256": "5832ca9caea2a928ba9822df4ff0624f79722f029894248c11fc97b4bd18683a",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "icon.png",
+        "sha256": "2e5eeb55c11bf1bf5f72a8b5539cdeb730349ac597ffe980c35d15b3b3b2d876",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "README.md",
+        "sha256": "ae33110c3407dd2ce1428d6f22d4bc66a86a06d9b5c75200d2daf0cc75f2fc7a",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": ".zcode-plugin/plugin.json",
+        "sha256": "e544aa4ec0dcfffb5c017429eeb1ccbaa64d685b43a8905182d0d33b0627f873",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/antigravity.md",
+        "sha256": "3b1f56c37d1e398270eabbe6e91b01878d1f7966cfbcd4ba141a4df36dc576a1",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/codebuddy-cn.md",
+        "sha256": "7bfe8d278cfc9785fff2e4d23618e8e830e5e9166116adcdd4cd207503066300",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/codebuddy.md",
+        "sha256": "31a368393adeb1aa2b4f2a4b2e103818f0e96c4ccb64806f7b4efe79154e20e7",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/github-copilot.md",
+        "sha256": "eae144b384cd9a9eeed6b12ef1a1a08eb1b249ad8c0f88c49f115867902fc32a",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/mimocode.md",
+        "sha256": "9979c9b36b323f658ee42786072d815544ac2316d0c380611b6c6400a13b6a6d",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/minimaxcode.md",
+        "sha256": "27524c8f0c675439bcfb6b82a4f19b1f9050aedcd72cd1a4ce4db477c4a350ca",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/traecode.md",
+        "sha256": "06180b876fdcbfad3aab915b82a1acb3c65cd2573b96b288b33d92d0e9d30221",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "agents/zcode.md",
+        "sha256": "9c148091cbc4993b3b2db1f4c589bbb98ed2ef83ac60d3e1edfd58489dd129f3",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "assets/icon.png",
+        "sha256": "1ade54cc78bdb9e414add9f471ee2918c8672fe8fb8a8d0f6b5d70ed0d62f5ba",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "commands/hub-login.md",
+        "sha256": "a1c604fa78b901946ed15c17ffd0afc0d8c9eab1db7f3c568a5306f7fce5151b",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "commands/hub-status.md",
+        "sha256": "5e6e4e76900ea9219a99c0e86f5ab0931959f738e9873ba6cd0ae9fb52561efc",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "mcp/ask.mjs",
+        "sha256": "de9ca45a7c28b4d5cc5e8a8bb0143e8f442db061cbbe6d9741e355c2f8b229f4",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "mcp/hub.mjs",
+        "sha256": "48b2c3a9a947bb5115593e0faf471ab0bafe735cf5fcbe67a2bf3317a8275acc",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "mcp/login.mjs",
+        "sha256": "03f48a2e2cc409649174bcd1b20d82aa576c8900d184fecd0daec493ceed91e6",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "mcp/server.mjs",
+        "sha256": "7ac658626a64e025157982f45d2bae8809b4b2e91efde747b4849cff3e714e46",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "scripts/test-login.mjs",
+        "sha256": "bedde259e82bb9267c6c69d93fa0af5a234a3d657a8748e5a1780c6058391e67",
+        "installed_match": true
+      },
+      {
+        "package": "zcode-inline",
+        "file": "skills/dispatch-hub/SKILL.md",
+        "sha256": "bf291f33277fea2c93e80467bbf0e2bdef338176efd5f95541030493edb79269",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "cordis.patch.yml",
+        "sha256": "b553a0d760fe476dc8fbfc72ef3fbba4ffd7812ffc46dbc1f99e7716b8d4f370",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "icon.png",
+        "sha256": "df603020296c0a53fbbb4c4635453836476e93aebb48683762bc92fc6d0dc24c",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "index.js",
+        "sha256": "6bcd66b89ac8ed0a3c4b30657b16fa5d70a63219fe454e725976aa9d824a40b0",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "install-dsh.py",
+        "sha256": "77f48d4f80b58f65fe0352e3b8249bce2a611365e5d65802361fbec70c63a096",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "install.bat",
+        "sha256": "d480bb85c6bed2eb306a78e4eb8e40177938f617aa318d1c0e3cb2fad290eb56",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "install.sh",
+        "sha256": "943ad33bfe9862895763a80d60dc37c830e258e5b44a45692dd0d59645963663",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "package.json",
+        "sha256": "b875e5a58ce3400f4e21fae9ac0714ac66f2bb049cd8eb8c0854ac117ddfb2f3",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "README.md",
+        "sha256": "40ac41d67dc4c91468890cc1853cbb83006db75f9e7e2062500d1dbb6f0d58df",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "mcp/ask.mjs",
+        "sha256": "de9ca45a7c28b4d5cc5e8a8bb0143e8f442db061cbbe6d9741e355c2f8b229f4",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "mcp/hub.mjs",
+        "sha256": "48b2c3a9a947bb5115593e0faf471ab0bafe735cf5fcbe67a2bf3317a8275acc",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "mcp/login.mjs",
+        "sha256": "03f48a2e2cc409649174bcd1b20d82aa576c8900d184fecd0daec493ceed91e6",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "mcp/server.mjs",
+        "sha256": "7ac658626a64e025157982f45d2bae8809b4b2e91efde747b4849cff3e714e46",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "workflows/code-audit.dsh.js",
+        "sha256": "e001cadbf980bb7b91fd83b2f784c85d564850995cbc3e6856a898ca9701b2e5",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "workflows/competitive-solve.dsh.js",
+        "sha256": "9e110cc4ae62e11bd71f5a569a7dadba3bef0b8fa4223f4d9384038fdc1cbcf1",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "workflows/hub-fanout.dsh.js",
+        "sha256": "60e145d38b858ef19fc93935fbd7196e44807661d3c8e168d2e0595fa6ed540c",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "workflows/options.mjs",
+        "sha256": "e8198920968fda901bce9d19a23cb2bae7d6317c4d9788b26341a3e21649b512",
+        "installed_match": true
+      },
+      {
+        "package": "dsh",
+        "file": "workflows/runner.mjs",
+        "sha256": "9ec0bdaebb337505ff3635cf52ac706bda1c8ea4e0e0da5b7da2a7e634c88c62",
+        "installed_match": true
+      }
+    ],
+    "note": "Codex fixture refreshed to final package, ZCode inline source; documentation/route instructions updated after real cases. Functional start/config/MCP transport was already exercised."
+  }
+}

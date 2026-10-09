@@ -1,0 +1,250 @@
+{
+  "provenance": "Official installed ZCode 0.16.9 app-server, real session/create snapshots, no session/send; public model/settings fields only; session/provider IDs redacted.",
+  "fixtures": [
+    {
+      "name": "catalog_bootstrap",
+      "session": {
+        "sessionId": "fixture-session",
+        "model": {
+          "providerId": "runtime-provider-redacted",
+          "modelId": "wx/Deepseek-v4-flash"
+        },
+        "mode": "build"
+      },
+      "settings": {
+        "mode": {
+          "current": "build"
+        },
+        "model": {
+          "available": [
+            {
+              "ref": {
+                "providerId": "runtime-provider-redacted",
+                "modelId": "wx/Deepseek-v4-flash"
+              },
+              "reasoning": {
+                "levels": [
+                  {
+                    "value": "disabled",
+                    "label": "disabled"
+                  },
+                  {
+                    "value": "low",
+                    "label": "low"
+                  },
+                  {
+                    "value": "high",
+                    "label": "high"
+                  },
+                  {
+                    "value": "max",
+                    "label": "max"
+                  }
+                ],
+                "defaultLevel": "max"
+              }
+            }
+          ],
+          "current": {
+            "providerId": "runtime-provider-redacted",
+            "modelId": "wx/Deepseek-v4-flash",
+            "options": {
+              "reasoningLevel": "max"
+            }
+          }
+        },
+        "thoughtLevel": {
+          "available": [
+            {
+              "label": "disabled",
+              "value": "disabled"
+            },
+            {
+              "label": "low",
+              "value": "low"
+            },
+            {
+              "label": "high",
+              "value": "high"
+            },
+            {
+              "label": "max",
+              "value": "max"
+            }
+          ],
+          "current": "max",
+          "enabled": true
+        }
+      },
+      "selected": {
+        "providerId": "runtime-provider-redacted",
+        "modelId": "wx/Deepseek-v4-flash",
+        "options": {
+          "reasoningLevel": "max"
+        }
+      }
+    },
+    {
+      "name": "explicit_model_without_thoughtLevel",
+      "session": {
+        "sessionId": "fixture-session",
+        "model": {
+          "providerId": "runtime-provider-redacted",
+          "modelId": "wx/Deepseek-v4-flash"
+        },
+        "mode": "build"
+      },
+      "settings": {
+        "mode": {
+          "current": "build"
+        },
+        "model": {
+          "available": [
+            {
+              "ref": {
+                "providerId": "runtime-provider-redacted",
+                "modelId": "wx/Deepseek-v4-flash"
+              },
+              "reasoning": {
+                "levels": [
+                  {
+                    "value": "disabled",
+                    "label": "disabled"
+                  },
+                  {
+                    "value": "low",
+                    "label": "low"
+                  },
+                  {
+                    "value": "high",
+                    "label": "high"
+                  },
+                  {
+                    "value": "max",
+                    "label": "max"
+                  }
+                ],
+                "defaultLevel": "max"
+              }
+            }
+          ],
+          "current": {
+            "providerId": "runtime-provider-redacted",
+            "modelId": "wx/Deepseek-v4-flash"
+          }
+        },
+        "thoughtLevel": {
+          "available": [
+            {
+              "label": "disabled",
+              "value": "disabled"
+            },
+            {
+              "label": "low",
+              "value": "low"
+            },
+            {
+              "label": "high",
+              "value": "high"
+            },
+            {
+              "label": "max",
+              "value": "max"
+            }
+          ],
+          "enabled": true
+        }
+      },
+      "selected": {
+        "providerId": "runtime-provider-redacted",
+        "modelId": "wx/Deepseek-v4-flash",
+        "options": {
+          "reasoningLevel": "max"
+        }
+      }
+    },
+    {
+      "name": "explicit_model_with_thoughtLevel",
+      "session": {
+        "sessionId": "fixture-session",
+        "model": {
+          "providerId": "runtime-provider-redacted",
+          "modelId": "wx/Deepseek-v4-flash"
+        },
+        "mode": "build"
+      },
+      "settings": {
+        "mode": {
+          "current": "build"
+        },
+        "model": {
+          "available": [
+            {
+              "ref": {
+                "providerId": "runtime-provider-redacted",
+                "modelId": "wx/Deepseek-v4-flash"
+              },
+              "reasoning": {
+                "levels": [
+                  {
+                    "value": "disabled",
+                    "label": "disabled"
+                  },
+                  {
+                    "value": "low",
+                    "label": "low"
+                  },
+                  {
+                    "value": "high",
+                    "label": "high"
+                  },
+                  {
+                    "value": "max",
+                    "label": "max"
+                  }
+                ],
+                "defaultLevel": "max"
+              }
+            }
+          ],
+          "current": {
+            "providerId": "runtime-provider-redacted",
+            "modelId": "wx/Deepseek-v4-flash",
+            "options": {
+              "reasoningLevel": "max"
+            }
+          }
+        },
+        "thoughtLevel": {
+          "available": [
+            {
+              "label": "disabled",
+              "value": "disabled"
+            },
+            {
+              "label": "low",
+              "value": "low"
+            },
+            {
+              "label": "high",
+              "value": "high"
+            },
+            {
+              "label": "max",
+              "value": "max"
+            }
+          ],
+          "current": "max",
+          "enabled": true
+        }
+      },
+      "selected": {
+        "providerId": "runtime-provider-redacted",
+        "modelId": "wx/Deepseek-v4-flash",
+        "options": {
+          "reasoningLevel": "max"
+        }
+      }
+    }
+  ]
+}

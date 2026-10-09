@@ -1,0 +1,77 @@
+{
+  "platform": "Windows",
+  "real_calls": true,
+  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-lj8ti277",
+  "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
+  "results": [
+    {
+      "worker": "antigravity",
+      "requested_model": "gemini-3.8-flash-medium",
+      "thinking": true,
+      "stream": false,
+      "image": false,
+      "file": false,
+      "case": "antigravity-t1s0i0f0",
+      "argv": [
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-probe-antigravity-20261008\\agy.exe",
+        "-p",
+        "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_7fba411e4a.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
+        "--model",
+        "gemini-3.8-flash-medium",
+        "--mode",
+        "plan",
+        "--sandbox",
+        "--disable-slash-commands",
+        "--print-timeout",
+        "50s",
+        "--log-file",
+        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-lj8ti277\\antigravity-t1s0i0f0\\agy.log",
+        "--output-format",
+        "json",
+        "--effort",
+        "medium"
+      ],
+      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-lj8ti277\\antigravity-t1s0i0f0",
+      "status": "blocked_region",
+      "exit_code": 3,
+      "timed_out": false,
+      "elapsed_seconds": 11.158,
+      "expected": {
+        "total": 78,
+        "nonce": "CHECK_7fba411e4a"
+      },
+      "answer_verified": false,
+      "written_artifact_verified": true,
+      "artifact": null,
+      "stdout_chunks": 1,
+      "stdout_timing": [
+        10.638
+      ],
+      "event_types": [],
+      "delta_events": 0,
+      "usage": [
+        {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "thinking_tokens": 0,
+          "cache_read_tokens": 0,
+          "total_tokens": 0
+        }
+      ],
+      "answer_evidence": [],
+      "diagnostic": "warning: --mode plan has no effect while slash command expansion is disabled.\nerror: FAILED_PRECONDITION (code 400): User location is not supported for the API use.\nAGY_ERROR: {\"short_error\":\"FAILED_PRECONDITION (code 400): User location is not supported for the API use.\",\"status\":\"INVALID_ARGUMENT\",\"error_code\":400,\"code_kind\":\"http\",\"retryable\":false,\"error_id\":\"f43c2c38-3279-4e86-9bf5-9e5e5d421b7a-1\"}\n",
+      "public_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0
+      },
+      "observed_reasoning_token_counts": [
+        0
+      ],
+      "strict_json_answer": false,
+      "verification_source": "parse_output-selected public final text only; never raw event/tool/reasoning content"
+    }
+  ]
+}

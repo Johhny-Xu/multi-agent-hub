@@ -3,9 +3,16 @@
 // 工具：hub_ask / hub_dispatch / hub_fetch / hub_status / hub_login。
 // 由插件 mcpServers 注册：node ${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs
 import { createInterface } from "node:readline";
-import { ask, hubStatus, hubLogin, CANONICAL, dispatchOnly, fetchRef } from "./hub.mjs";
+import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef } from "./hub.mjs";
 
-const SERVER = { name: "agenthub-hub-bridge", version: "0.5.0" };
+const SERVER = { name: "agenthub-hub-bridge", version: "0.6.0" };
+const TASK_OPTIONS = {
+  model: { type: "string", description: "模型别名或具体 ID；省略则使用 Hub 配置的默认模型" },
+  thinking: { type: "string", enum: ["default", "on", "off"], default: "default", description: "思考模式；不支持的模式在派发前拒绝，可先查 hub_capabilities" },
+  stream: { type: "boolean", default: false, description: "通过 MCP progress 通知返回已产生的答案进度；客户端需提供 progressToken" },
+  files: { type: "array", items: { type: "string" }, maxItems: 8, description: "插件所在机器上的附件绝对路径（图片或文件），总计≤1 MiB；内容上传到 Hub，支持 Windows→Linux" },
+  cwd: { type: "string", description: "worker 所在 Hub 主机的工作目录，远端 Hub 应使用远端系统路径" },
+};
 
 const TOOLS = [
   {
@@ -20,6 +27,7 @@ const TOOLS = [
         worker: { type: "string", description: "worker 名或简称（如 agy / cb / trae）" },
         task: { type: "string", description: "任务文本，需自包含" },
         timeout_s: { type: "number", exclusiveMinimum: 0, maximum: 86400, default: 300, description: "含派发的总等待上限秒数，默认 300" },
+        ...TASK_OPTIONS,
       },
       required: ["worker", "task"],
       additionalProperties: false,
@@ -29,6 +37,11 @@ const TOOLS = [
     name: "hub_status",
     description: "列出 Agent Hub 注册代理与在线状态（原文文本）。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "hub_capabilities",
+    description: "查询 worker 默认模型以及思考、流式和附件能力，不返回凭据。",
+    inputSchema: { type: "object", properties: { worker: { type: "string" } }, additionalProperties: false },
   },
   {
     name: "hub_login",
@@ -53,6 +66,7 @@ const TOOLS = [
         worker: { type: "string", description: "worker 名或简称" },
         task: { type: "string", description: "任务文本，需自包含" },
         timeout_s: { type: "number", exclusiveMinimum: 0, maximum: 86400, default: 900, description: "worker 侧任务超时秒数，默认 900" },
+        ...TASK_OPTIONS,
       },
       required: ["worker", "task"],
       additionalProperties: false,
@@ -92,7 +106,9 @@ function argumentError(tool, args) {
   for (const [key, value] of Object.entries(args)) {
     const property = schema.properties[key];
     if (!property) return `Unknown argument: ${key}`;
-    if (typeof value !== property.type) return `${key} must be ${property.type}`;
+    if (property.type === "array") {
+      if (!Array.isArray(value) || value.length > property.maxItems || value.some((item) => typeof item !== property.items.type)) return `${key} must be an array of at most ${property.maxItems} strings`;
+    } else if (typeof value !== property.type) return `${key} must be ${property.type}`;
     if (property.type === "number" && (!Number.isFinite(value) || value <= property.exclusiveMinimum || value > property.maximum)) {
       return `${key} must be a finite number greater than 0 and at most 86400`;
     }
@@ -112,7 +128,7 @@ async function handleRequest(req) {
     return out.length ? out : null;
   }
   if (!object(req) || req.jsonrpc !== "2.0" || typeof req.method !== "string" || !req.method ||
-      (Object.hasOwn(req, "id") && req.id !== null && typeof req.id !== "string" && typeof req.id !== "number")) {
+      (Object.hasOwn(req, "id") && req.id !== null && typeof req.id !== "string" && (typeof req.id !== "number" || !Number.isFinite(req.id)))) {
     return err(null, -32600, "Invalid Request");
   }
   const { method, id, params } = req;
@@ -138,20 +154,31 @@ async function handleRequest(req) {
     const invalid = argumentError(tool, args);
     if (invalid) return err(id, -32602, invalid);
     try {
+      const options = Object.fromEntries(Object.keys(TASK_OPTIONS).filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
+      const token = params?._meta?.progressToken;
+      let progress = 0;
+      if (options.stream && (typeof token === "string" || (typeof token === "number" && Number.isFinite(token)))) {
+        options.onProgress = ({ text }) => write({ jsonrpc: "2.0", method: "notifications/progress", params: { progressToken: token, progress: ++progress, message: text } });
+      }
       if (name === "hub_ask") {
-        const r = await ask(args.worker, args.task, args.timeout_s ?? 300);
+        const r = await ask(args.worker, args.task, args.timeout_s ?? 300, options);
+        if (options.stream) r.delivery = options.onProgress ? "mcp_progress" : "buffered_no_progress_token";
         return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: !r.ok });
       }
       if (name === "hub_status") {
         const text = await hubStatus();
         return ok(id, { content: [{ type: "text", text }] });
       }
+      if (name === "hub_capabilities") {
+        const result = await hubCapabilities(args.worker);
+        return ok(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
+      }
       if (name === "hub_login") {
         const r = await hubLogin(args.worker, args.action ?? "status");
         return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: !r.ok });
       }
       if (name === "hub_dispatch") {
-        const r = await dispatchOnly(args.worker, args.task, args.timeout_s ?? 900);
+        const r = await dispatchOnly(args.worker, args.task, args.timeout_s ?? 900, options);
         return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: !r.ok });
       }
       if (name === "hub_fetch") {

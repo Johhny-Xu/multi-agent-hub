@@ -2,7 +2,7 @@
 
 本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
-本次验证使用官方 API 文档、模拟 Hub、工作流 VM 与临时 profile。没有启动真实 DSH 宿主，也没有修改用户的 DSH 配置。
+回归使用模拟 Hub、工作流 VM 与临时 profile。另在 Windows `0.2.0-rc.2` 的真实 DSH 宿主中安装本包、读取原生注册服务，并复用官方登录运行主模型；未修改用户的个人 DSH 配置。子代理/工作流实际模型派发受官方账户 `402 ACCOUNT_QUOTA` 余额不足阻塞，不能据此认定插件不可用或标记端到端通过，详见 [原生验证报告](../../docs/native-plugins-windows.md)。
 
 ## 安装到指定 profile
 
@@ -16,6 +16,8 @@ dsh --profile web --dump-config
 官方 CLI 负责安装依赖、链接包和启用 bundle；新 profile 的创建规则也由官方 CLI 决定。确认组合配置里出现 AgentHub layer 后再启动该 profile。仓库根目录网址不能代替这个子目录包。[官方 bundle/profile 安装说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)
 
 bundle 使用 Cordis 的 insert 操作新增桥和预设。桥入口通过包内绝对路径启动 MCP server，并调用官方 MCP client 的命名导出 apply。默认单次 MCP 调用上限为 310 秒，覆盖默认 300 秒的 hub_ask；更长任务适合使用 hub_dispatch 与 hub_fetch。DSH 会过滤继承环境中的敏感变量，因此 bundle 显式传入 AGENTHUB_URL 与 HUB_TOKEN。[官方 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)
+
+`web`/`desktop` 默认 profile 已提供原生预设注册服务。实测 `headless` 默认 profile 没有 `agentPresets`，仅安装本包会使 9 个预设等待该服务；需要在所选 profile 的外部覆盖 patch 中加入 `@deepseek-ai/dsh-agent-preset-registry`，config.default 可设为 `agenthub-all`，不要在已有注册服务的 profile 重复添加。官方账户模型路由与 API Key 路由也不同，保留所选 profile 的原有登录与模型设置。
 
 ### 可选 profile 配置助手
 
@@ -50,6 +52,10 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 - failed 保留错误结果，工作流停止依赖它的后续阶段。
 
 同一个 worker 的别名在扇出前去重；桥不会因空输出或未知状态自动重做任务。
+
+桥提供 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login` 六个工具。派发和三份工作流脚本/Node runner 都接受 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files`（DSH 插件机器绝对路径数组）与 `cwd`（Hub 主机目录）。最多 8 个附件、合计 1 MiB，由桥编码内容并在 Hub 暂存，支持跨系统传送。先用 `hub_capabilities` 确认可用能力，未支持的选项在派发前拒绝。模型对提示中的选项与派发次数仍可能不遵守；runner 直接传递选项并确保单次派发。
+
+`stream=true` 请求流式生成；客户端有 MCP progressToken 才能获得进度通知，无 token 时 `delivery=buffered_no_progress_token`。本次未验证 DSH UI 的实时流式展示。
 
 ## 原生工作流
 
@@ -92,7 +98,7 @@ node --test tests/mcp_bridge.test.mjs plugins/agenthub-workers/scripts/test-logi
 python tests/dsh_installer_smoke.py
 ~~~
 
-测试涵盖独立 MCP 副本一致性、HTTP/MCP 错误、任务超时、单次派发、原生工作流的 null/failed/unknown 结果、runner 的真实本地 mock HTTP，以及临时 profile 的配置保留。真实 DSH 加载、预设 UI 展示和宿主模型执行仍需在目标 profile 完成安装后验证。
+测试涵盖独立 MCP 副本一致性、HTTP/MCP 错误、任务超时、单次派发、原生工作流的 null/failed/unknown 结果、runner 的真实本地 mock HTTP，以及临时 profile 的配置保留。Windows 原生插件加载、9 个注册预设和官方主模型已另外实测；预设 UI 展示和额度恢复后的子代理/工作流实际任务仍待验证。
 
 ## English
 
@@ -100,4 +106,4 @@ Install this directory as a DSH bundle with the official dsh plugin --profile NA
 
 Native workflow files are JavaScript bodies submitted through the workflow tool's meta/script/args contract. Their schema checks reject null, malformed, failed and uncertain child results. Child agents remain model-driven. For program-controlled single dispatch per stage, use node workflows/runner.mjs MODE INPUT.json. Only completed nonempty results produce exit code 0; running/unknown refs are preserved without automatic redispatch.
 
-The regression suite uses mock Hub servers, workflow VM hooks and temporary profiles. Live DSH activation has not been exercised in this validation.
+The regression suite uses mock Hub servers, workflow VM hooks and temporary profiles. A separate Windows native-host probe loaded all nine presets and called the official host model. Native delegated generation is blocked by an official 402 quota response; it is not reported as an end-to-end pass. See the native verification report.

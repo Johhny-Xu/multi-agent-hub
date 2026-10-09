@@ -1,4 +1,5 @@
 __pycache__/
+Microsoft/Windows/PowerShell/ModuleAnalysisCache
 *.pyc
 node_modules/
 *.log
@@ -7,6 +8,18 @@ logs/
 hub/agents.json
 hub/.env
 .env
+.env.*
+!.env.example
+auth.json
+.auth.json
+credentials.json
+credentials.yaml
+credentials.yml
+.credentials.json
+.credentials.yaml
+.credentials.yml
+*.pem
+*.key
 state/
 results/
 *.bak-*

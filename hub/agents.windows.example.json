@@ -4,68 +4,159 @@
     "codebuddy": {
       "role": "腾讯 CodeBuddy 国际版 CLI",
       "description": "官方 npm CLI；使用 node + 入口脚本，避免 Windows npm shim 的差异。",
-      "cli": ["node", "C:/PATH/TO/npm/node_modules/@tencent-ai/codebuddy-code/bin/codebuddy", "-p", "{task}"],
+      "cli": [
+        "node",
+        "C:/PATH/TO/npm/node_modules/@tencent-ai/codebuddy-code/bin/codebuddy",
+        "-p",
+        "{task}"
+      ],
       "model_arg": "--model",
-      "models": {"default": "deepseek-v4.1-flash", "v41f": "deepseek-v4.1-flash"},
-      "env": {"CODEBUDDY_CONFIG_DIR": "%USERPROFILE%/.codebuddy", "DISABLE_AUTOUPDATER": "1"},
+      "models": {
+        "default": "deepseek-v4.1-flash",
+        "v41f": "deepseek-v4.1-flash"
+      },
+      "env": {
+        "CODEBUDDY_CONFIG_DIR": "%USERPROFILE%/.codebuddy",
+        "DISABLE_AUTOUPDATER": "1"
+      },
       "async_default": true
     },
     "codebuddy-cn": {
       "role": "腾讯 CodeBuddy 国内版 CLI",
       "description": "与国际版使用相同官方入口，配置目录与网络环境分开。",
-      "cli": ["node", "C:/PATH/TO/npm/node_modules/@tencent-ai/codebuddy-code/bin/codebuddy", "-p", "{task}"],
+      "cli": [
+        "node",
+        "C:/PATH/TO/npm/node_modules/@tencent-ai/codebuddy-code/bin/codebuddy",
+        "-p",
+        "{task}"
+      ],
       "model_arg": "--model",
-      "models": {"default": "deepseek-v4.1-flash", "v41f": "deepseek-v4.1-flash"},
-      "env": {"CODEBUDDY_CONFIG_DIR": "%USERPROFILE%/.codebuddy-cn", "CODEBUDDY_INTERNET_ENVIRONMENT": "internal", "DISABLE_AUTOUPDATER": "1"},
+      "models": {
+        "default": "deepseek-v4.1-flash",
+        "v41f": "deepseek-v4.1-flash"
+      },
+      "env": {
+        "CODEBUDDY_CONFIG_DIR": "%USERPROFILE%/.codebuddy-cn",
+        "CODEBUDDY_INTERNET_ENVIRONMENT": "internal",
+        "DISABLE_AUTOUPDATER": "1"
+      },
       "async_default": true
     },
     "antigravity": {
       "role": "Antigravity 官方 agy CLI",
       "description": "填写官方 agy.exe；桌面 Antigravity.exe 不提供此无头接口。",
-      "cli": ["C:/PATH/TO/agy.exe", "-p", "{task}", "--print-timeout", "60s"],
+      "cli": [
+        "C:/PATH/TO/agy.exe",
+        "--print-timeout",
+        "60s",
+        "-p",
+        "{task}"
+      ],
       "model_arg": "--model",
-      "models": {"default": "gemini-3.8-flash-medium"},
-      "async_default": true
+      "models": {
+        "default": "gemini-3.8-flash-medium"
+      },
+      "async_default": true,
+      "options_before_prompt": true
     },
     "github-copilot": {
       "role": "GitHub Copilot 官方 Windows CLI",
       "description": "填写官方 copilot.exe，采用已验证的自动模型与无头提示词参数。",
-      "cli": ["C:/PATH/TO/copilot.exe", "--silent", "-p", "{task}"],
+      "cli": [
+        "C:/PATH/TO/copilot.exe",
+        "--silent",
+        "-p",
+        "{task}"
+      ],
       "model_arg": "--model",
-      "models": {"default": "auto"},
+      "models": {
+        "default": "auto"
+      },
       "async_default": true
     },
     "minimaxcode": {
       "role": "MiniMax 官方 mmx 文本 CLI",
       "description": "纯文本/问答入口；填写稳定安装的 mmx-cli/dist/mmx.mjs。",
-      "cli": ["node", "C:/PATH/TO/npm/node_modules/mmx-cli/dist/mmx.mjs", "text", "chat", "--message", "{task}", "--output", "text"],
+      "cli": [
+        "node",
+        "C:/PATH/TO/npm/node_modules/mmx-cli/dist/mmx.mjs",
+        "text",
+        "chat",
+        "--message",
+        "{task}",
+        "--output",
+        "text"
+      ],
       "model_arg": "--model",
-      "models": {"default": "MiniMax-M3.1-Flash-Preview", "m31flash": "MiniMax-M3.1-Flash-Preview"},
+      "models": {
+        "default": "MiniMax-M3.1-Flash-Preview",
+        "m31flash": "MiniMax-M3.1-Flash-Preview"
+      },
       "async_default": true
     },
     "mimocode": {
       "role": "小米 MiMo 官方 CLI",
       "description": "使用官方纯净配置与用户指定的 v2.6f 模型。",
-      "cli": ["node", "C:/PATH/TO/npm/node_modules/@mimo-ai/cli/bin/mimo", "run", "--pure", "{task}"],
+      "cli": [
+        "node",
+        "C:/PATH/TO/npm/node_modules/@mimo-ai/cli/bin/mimo",
+        "run",
+        "--pure",
+        "{task}"
+      ],
       "model_arg": "--model",
-      "models": {"default": "xiaomi/mimo-v2.6-flash", "v2.6f": "xiaomi/mimo-v2.6-flash"},
+      "models": {
+        "default": "xiaomi/mimo-v2.6-flash",
+        "v2.6f": "xiaomi/mimo-v2.6-flash",
+        "26f": "xiaomi/mimo-v2.6-flash"
+      },
       "async_default": true
     },
     "zcode": {
-      "role": "ZCode Windows 内置 CLI",
-      "description": "标准安装路径示例；若安装目录不同，请替换入口脚本。配置文件环境变量指向桌面端已有的 zcode-builtin.json，不复制其内容。CLI 默认使用当前账号配置的模型。",
-      "cli": ["node", "C:/Program Files/ZCode/resources/glm/zcode.cjs", "--json", "--prompt", "{task}"],
-      "model_arg": null,
-      "models": {},
-      "env": {"ZCODE_BUILTIN_PROVIDER_CONFIG_FILE": "C:/PATH/TO/zcode-builtin.json"},
-      "async_default": true
+      "role": "ZCode 官方 app-server 模型校验通道",
+      "description": "填写本仓库驱动与官方 zcode.cjs 绝对路径；先核验账号模型目录，再指定模型执行。缺少 GLM-5.3-Flash 时明确失败，不回退。plan 模式仅验证读取/问答。",
+      "cli": [
+        "node",
+        "C:/PATH/TO/agenthub/drivers/zcode_rpc.mjs",
+        "--cli",
+        "C:/Program Files/ZCode/resources/glm/zcode.cjs",
+        "--task",
+        "{task}"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "GLM-5.3-Flash"
+      },
+      "env": {
+        "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE": "C:/PATH/TO/zcode-builtin.json"
+      },
+      "async_default": true,
+      "timeout_arg": "--timeout",
+      "capabilities": {
+        "stream": {
+          "on": {
+            "args": [
+              "--stream",
+              "on"
+            ]
+          },
+          "off": {
+            "args": [
+              "--stream",
+              "off"
+            ]
+          }
+        }
+      }
     },
     "traecode": {
       "role": "TraeCode 桌面网关",
       "description": "保留已建立的 trae_delegate 桌面通道，需要另外配置 TRAE_GATEWAY。原生 traecli.exe 的登录链路尚未通过完整验证。",
       "cli": null,
       "model_arg": null,
-      "models": {"default": "GLM-5.3-FlashX"}
+      "models": {
+        "default": "GLM-5.3-FlashX"
+      }
     }
   }
 }

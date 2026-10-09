@@ -1,4 +1,6 @@
-# Windows 8 workers 实测（2026-10-08）
+# Windows 8 workers 首轮基线（2026-10-08）
+
+这是较早的标记任务记录。后续完整组合、账号状态变化与原生宿主验证以[新实测报告](compatibility-2026-10-08.md)为准；例如 CodeBuddy 国际版后续调用返回 401，不能沿用本页早期通过结论。
 
 本机 Windows x64、PowerShell、Node.js 下，6 个官方 CLI 的真实模型调用返回了 `HUB_WINDOWS_OK`，exit 0。Antigravity 与 Trae 仍有外部阻塞，不能宣称 8/8 通过。测试提示词只要求返回标记，没有请求修改文件或执行工具。以下结论限定于表中版本、本机账号、所选模型与当前网络。
 

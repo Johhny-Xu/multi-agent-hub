@@ -17,7 +17,7 @@
 
 **Multi-Agent Hub** 将多个官方 CLI 和桌面代理接到本地任务总线，提供派发、状态查询、任务队列与会话控制台。各 worker 使用自己的官方账号和模型服务；调用厂商模型时，请求仍会发送到对应厂商。
 
-本轮修复与适配见 [CHANGELOG.md](CHANGELOG.md)，Windows 实测见 [兼容性报告](docs/windows-compatibility.md)。
+本轮修复与适配见 [CHANGELOG.md](CHANGELOG.md)，Windows、Linux、Windows 控制 Linux 以及原生宿主结果见 [兼容性实测](docs/compatibility-2026-10-08.md)。任务思考、流式与附件参数见 [任务契约](docs/task-options.md)。
 
 ### 架构与核心组件
 
@@ -33,8 +33,8 @@
 
 ```
 multi-agent-hub/
-├── start.sh                  # ⚡ Linux/macOS 一键拉起全部服务
-├── stop.sh                   # ⏹ Linux/macOS 一键安全停止
+├── start.sh                  # ⚡ Linux 一键拉起全部服务
+├── stop.sh                   # ⏹ Linux 一键安全停止
 ├── start.bat                 # ⚡ Windows 一键启动
 ├── stop.bat                  # ⏹ Windows 一键停止
 ├── .env.example              # 根目录一体化配置文件示例
@@ -71,7 +71,7 @@ multi-agent-hub/
 ### ⚡ 快速开始（一键启动）
 
 #### 依赖环境
-- **Python 3.8+**（标准库，无需 pip 安装）
+- **Python 3.8+**（Hub 标准库，无需 pip 安装）；Codex 安装器与完整回归需要 **Python 3.11+**，本轮 Windows/Linux 实测均为 3.12。
 - **Node.js 20+**（控制台与 MCP 桥无需 npm install）；桌面 CDP 驱动使用原生 WebSocket，需 **Node.js 22+**。见 [Node 官方说明](https://nodejs.org/api/globals.html#websocket)。
 - （可选）VNC + Chromium 系桌面 AI（仅使用 `drivers/` 驱动桌面客户端时需要）
 
@@ -83,15 +83,18 @@ multi-agent-hub/
 
 启动器会加载根目录 `.env`（其次为 `hub/.env`）、验证服务健康并保留配置端口。若 Python 命令只是 Windows Store 别名，可在 `.env` 设置 `HUB_PYTHON` 为实际 `python.exe` 路径。仅停止本目录记录且进程身份匹配的服务。
 
-创建 worker 配置时可使用 [`hub/agents.windows.example.json`](hub/agents.windows.example.json)：把各 `cli` 中的 `C:/PATH/TO` 替换为官方 CLI 的稳定安装位置，只保留已安装的 worker，再保存为 `hub/agents.json`。npm 工具的实际安装根目录可用 `npm root -g` 查询。CodeBuddy 配置使用 `node + 官方入口脚本`，两版分别使用 `%USERPROFILE%/.codebuddy`、`%USERPROFILE%/.codebuddy-cn`；国内版设置 `CODEBUDDY_INTERNET_ENVIRONMENT=internal`。MiniMax 默认采用实测通过的 `MiniMax-M3.1-Flash-Preview`（别名 `m31flash`）。MiMo 默认模型为 `xiaomi/mimo-v2.6-flash`，别名 `v2.6f`。Trae 桌面通道仍需配置网关。
+创建 worker 配置时可使用 [`hub/agents.windows.example.json`](hub/agents.windows.example.json)：把各 `cli` 中的 `C:/PATH/TO` 替换为官方 CLI 的稳定安装位置，只保留已安装的 worker，再保存为 `hub/agents.json`。npm 工具的实际安装根目录可用 `npm root -g` 查询。CodeBuddy 配置使用 `node + 官方入口脚本`，两版分别使用 `%USERPROFILE%/.codebuddy`、`%USERPROFILE%/.codebuddy-cn`；国内版设置 `CODEBUDDY_INTERNET_ENVIRONMENT=internal`。MiniMax 默认采用实测通过的 `MiniMax-M3.1-Flash-Preview`（别名 `m31flash`）。MiMo 默认模型为 `xiaomi/mimo-v2.6-flash`，别名 `26f` / `v2.6f`。Trae 桌面通道仍需配置网关。
 
 ZCode 独立 CLI 还需要把 `env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` 改为桌面端已经生成的 `zcode-builtin.json` 路径，通常位于 `%USERPROFILE%/.zcode/v2/runtime/provider/windows-x86_64/<版本>/<目录>/zcode-builtin.json`。在 PowerShell 中用 `Get-ChildItem -LiteralPath "$env:USERPROFILE/.zcode/v2/runtime/provider/windows-x86_64" -Recurse -Filter zcode-builtin.json | Select-Object -ExpandProperty FullName` 仅列出文件路径，再填入模板中的 `C:/PATH/TO/zcode-builtin.json`；不要把该文件内容或凭据复制进仓库。
 
+ZCode 模板使用 `drivers/zcode_rpc.mjs` 核验官方 `app-server` 模型目录，再创建指定模型的独立任务。当前账号目录缺少 `GLM-5.3-Flash` 时会明确报 `MODEL_UNAVAILABLE`，不会改用其他型号。旧的 `--prompt` / `model_arg: null` 配置无法保证型号，须迁移到新模板。该驱动用于读取与问答，显式禁用 Write/Edit/Bash；不依赖官方可能未生效的 plan 标签来限制权限。
+
 插件 v0.5.0 提供 `hub_login(worker, action="start"|"status"|"cancel")` 和 `/hub-login`：在 worker 所在的 Hub 宿主机获取官方授权链接，用户完成浏览器授权后查询状态。也可运行 `node mcp/login.mjs cb start`，随后 `node mcp/login.mjs cb status`。Windows 上的 MiMo 支持自动获取官方登录链接，可用 `/hub-login mimo start` 发起，授权等待上限为 300 秒，再用 `/hub-login mimo status` 查询。`awaiting_user` 表示等待用户授权，只有 `authenticated` 才表示已登录；Linux 上的 MiMo 仍需按 `manual_required` 指引在宿主机终端登录，Antigravity 等没有已验证链接登录接口的 worker 也返回人工操作指引。工具不返回凭据，临时链接和验证码不要写入仓库。
 
-#### Linux 部署（⏸️ 暂缓搁置·排在 DSH 适配后重构）
-> 💡 **优先级调整公告**：为确保核心功能扎实稳定，团队当前全力攻坚 Windows 平台的极致开箱体验与 DeepSeek Harness (DSH) 原生适配，Linux 的生产级服务化启动（如 systemd 守护进程、跨发行版环境自检）**暂时搁置，排在 DSH 适配完成之后集中推进**。
-> Linux 开发者仍可测试运行：
+#### Linux 部署
+
+Linux 启停器使用 Python 标准库和 `/proc` 检查本目录进程身份、监听端口及 HTTP 健康，加载 `.env` 时不执行 shell。Ubuntu 24.04 实机已验证；macOS 不在此启动器支持范围内。
+
 ```bash
 cp .env.example .env
 ./start.sh
@@ -148,7 +151,7 @@ CLI 通道使用配置中的官方无头命令；桌面通道通过 CDP 驱动�
 
 ### 回归验证
 
-使用可用的 Python 3.11+ 和 Node.js，运行 `python tests/run_regressions.py`。脚本使用隔离目录、合成 worker 和 mock Hub，验证总线、登录运行时、控制台、Codex/DSH 适配与 Windows 启停；结果和源码哈希保存到 [`docs/refactor-validation.json`](docs/refactor-validation.json)。不调用厂商模型，不改当前客户端配置。Unix 启停脚本本轮仅做语法检查。
+使用可用的 Python 3.11+ 和 Node.js，运行 `python tests/run_regressions.py`。脚本使用隔离目录、合成 worker 和 mock Hub，验证总线、登录运行时、控制台、Codex/DSH 适配与 Windows 启停；结果和源码哈希保存到 [`docs/refactor-validation.json`](docs/refactor-validation.json)。不调用厂商模型，不改当前客户端配置。Linux 原生启停及回归也在 Ubuntu 实机执行；真实模型调用与宿主插件验证单独记录，不与 mock 回归合并计数。
 
 ### 🔌 官方客户端插件与集成 / Integrations & Plugins
 
@@ -170,7 +173,7 @@ CLI 通道使用配置中的官方无头命令；桌面通道通过 CDP 驱动�
    - [`integrations/codex/README.md`](integrations/codex/README.md)：本地插件 MCP、8 个项目子代理 TOML 模板和三个工作流技能。
    - 安装预览及测试使用隔离项目；子代理继承宿主模型与权限，通过 Hub 调用外部 worker。
 
-Codex 和 DSH 均尚未安装到当前客户端；源码、配置与 mock 流程已验证，宿主内真实模型调用仍需安装后验证。
+Codex、ZCode、DSH 均已在隔离宿主配置中加载原生插件。Codex/ZCode 的原生子代理已派发真实 worker 任务；DSH 预设与 MCP 被发现，但本机账号在子代理派发前返回余额不足。具体版本、拓扑和组合限制见[实测报告](docs/compatibility-2026-10-08.md)，不代表全部 worker 全部组合通过。
 
 ---
 
@@ -190,8 +193,8 @@ See the bilingual architecture & data-flow diagram at the top of this README.
 
 ```
 multi-agent-hub/
-├── start.sh                  # ⚡ One-command launcher for Linux/macOS
-├── stop.sh                   # ⏹ One-command stopper for Linux/macOS
+├── start.sh                  # ⚡ One-command launcher for Linux
+├── stop.sh                   # ⏹ One-command stopper for Linux
 ├── start.bat                 # ⚡ One-click launcher for Windows
 ├── stop.bat                  # ⏹ One-click stopper for Windows
 ├── .env.example              # Unified root environment configuration
@@ -210,7 +213,7 @@ multi-agent-hub/
 ### ⚡ Quickstart (One-Command)
 
 #### Prerequisites
-- **Python 3.8+** (standard library only, no pip needed)
+- **Python 3.8+** for the Hub; **3.11+** for the Codex installer and complete regression suite. Windows/Linux were tested with Python 3.12.
 - **Node.js 20+** for the console and MCP bridge; desktop CDP drivers require **Node.js 22+** for the built-in WebSocket. See [Node documentation](https://nodejs.org/api/globals.html#websocket).
 - Optional: VNC + Chromium-based desktop AI clients (only needed for desktop drivers)
 
@@ -220,15 +223,16 @@ multi-agent-hub/
 3. Open **`http://localhost:8890/dashboard`** in your browser.
 4. To stop the services, double-click **`stop.bat`**.
 
-For a new worker configuration, use [`hub/agents.windows.example.json`](hub/agents.windows.example.json), replace each `C:/PATH/TO` with the official CLI's stable installation path, keep the installed workers, and save it as `hub/agents.json`. Use `npm root -g` to locate global npm packages. CodeBuddy uses `node + official entry script`, with separate `%USERPROFILE%/.codebuddy` and `%USERPROFILE%/.codebuddy-cn` directories; the CN edition uses `CODEBUDDY_INTERNET_ENVIRONMENT=internal`. MiniMax defaults to the tested `MiniMax-M3.1-Flash-Preview` (alias `m31flash`). MiMo defaults to `xiaomi/mimo-v2.6-flash` (alias `v2.6f`). The Trae desktop channel still requires its gateway.
+For a new worker configuration, use [`hub/agents.windows.example.json`](hub/agents.windows.example.json), replace each `C:/PATH/TO` with the official CLI's stable installation path, keep the installed workers, and save it as `hub/agents.json`. Use `npm root -g` to locate global npm packages. CodeBuddy uses `node + official entry script`, with separate `%USERPROFILE%/.codebuddy` and `%USERPROFILE%/.codebuddy-cn` directories; the CN edition uses `CODEBUDDY_INTERNET_ENVIRONMENT=internal`. MiniMax defaults to the tested `MiniMax-M3.1-Flash-Preview` (alias `m31flash`). MiMo defaults to `xiaomi/mimo-v2.6-flash` (aliases `26f` / `v2.6f`). The Trae desktop channel still requires its gateway.
 
 The standalone ZCode CLI also needs `env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` to point to the desktop-generated `zcode-builtin.json`, usually under `%USERPROFILE%/.zcode/v2/runtime/provider/windows-x86_64/<version>/<directory>/zcode-builtin.json`. In PowerShell, run `Get-ChildItem -LiteralPath "$env:USERPROFILE/.zcode/v2/runtime/provider/windows-x86_64" -Recurse -Filter zcode-builtin.json | Select-Object -ExpandProperty FullName` to list paths only, then replace `C:/PATH/TO/zcode-builtin.json` in the template. Do not copy the file contents or credentials into the repository.
 
 Plugin v0.5.0 adds `hub_login(worker, action="start"|"status"|"cancel")` and `/hub-login`. It obtains an official authorization link on the worker's Hub host; the user completes authorization in their browser and then checks status. The CLI equivalent is `node mcp/login.mjs cb start`, followed by `node mcp/login.mjs cb status`. MiMo on Windows supports automatic official login links: use `/hub-login mimo start`, complete authorization within the 300-second waiting period, then use `/hub-login mimo status`. `awaiting_user` means authorization is pending; only `authenticated` means signed in. MiMo on Linux still returns `manual_required` with host-terminal login instructions, as do workers without a verified link flow, such as Antigravity. Credentials are never returned; do not save temporary authorization links or user codes in the repository.
 
-#### Linux Deployment (⏸️ Paused / Scheduled after DSH)
-> 💡 **Strategic Realignment**: The development team is prioritizing a seamless Windows out-of-the-box experience and native DeepSeek Harness (DSH) adaptation. Production-grade Linux service automation (systemd daemons, multi-distro dependency checks) is **temporarily paused and scheduled right after DSH adaptation**.
-> Linux developers can still test via scripts:
+#### Linux Deployment
+
+The Linux launcher verifies owned processes, listening sockets, and HTTP health through Python and `/proc`. Environment files are parsed as data. Ubuntu 24.04 was tested on a real host; this launcher does not support macOS.
+
 ```bash
 cp .env.example .env
 ./start.sh
