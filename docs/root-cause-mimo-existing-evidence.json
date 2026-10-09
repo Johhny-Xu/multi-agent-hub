@@ -1,0 +1,86 @@
+{
+  "kind": "mimo-existing-private-evidence-root-cause",
+  "new_model_calls": 0,
+  "empty_exit_zero": [
+    {
+      "case": "mimocode-t0s1i0f0",
+      "exit_code": 0,
+      "duration_s": 31.104,
+      "event_types": [],
+      "stdout_chunks": 0,
+      "diagnostic": "",
+      "evidence_files": [
+        {
+          "name": "public-result.json",
+          "bytes": 1408
+        },
+        {
+          "name": "stderr.raw.log",
+          "bytes": 0
+        },
+        {
+          "name": "stdout.raw.log",
+          "bytes": 0
+        },
+        {
+          "name": ".cron-lock",
+          "bytes": 39
+        },
+        {
+          "name": ".gitignore",
+          "bytes": 95
+        }
+      ]
+    },
+    {
+      "case": "mimocode-t1s0i0f0",
+      "exit_code": 0,
+      "duration_s": 31.873,
+      "event_types": [],
+      "stdout_chunks": 0,
+      "diagnostic": "",
+      "evidence_files": [
+        {
+          "name": "public-result.json",
+          "bytes": 1408
+        },
+        {
+          "name": "stderr.raw.log",
+          "bytes": 0
+        },
+        {
+          "name": "stdout.raw.log",
+          "bytes": 0
+        },
+        {
+          "name": ".cron-lock",
+          "bytes": 39
+        },
+        {
+          "name": ".gitignore",
+          "bytes": 95
+        }
+      ]
+    }
+  ],
+  "hub_timeout_outputs": [
+    {
+      "ref": "mimocode-3b3a245c04",
+      "stdout_bytes": 0,
+      "event_types": {},
+      "public_text_lengths": [],
+      "error_names": []
+    },
+    {
+      "ref": "mimocode-4727278cef",
+      "stdout_bytes": 4939,
+      "event_types": {
+        "step_start": 3,
+        "tool_use": 4,
+        "step_finish": 2
+      },
+      "public_text_lengths": [],
+      "error_names": []
+    }
+  ]
+}

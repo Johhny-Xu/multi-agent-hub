@@ -155,6 +155,22 @@ def _known(value):
     return isinstance(value.get("response"), str) and "sessionId" in value and any(key in value for key in ("traceId", "projection", "usage"))
 
 
+def _unexecuted_dsml_call(text):
+    """Recognize a terminal action-shaped call, never a quoted DSML example."""
+    marker = "<｜｜DSML｜｜ calls>"
+    start = text.find(marker)
+    if start < 0:
+        return False
+    prefix = text[:start].strip()
+    if prefix.count("```") % 2 or prefix.count("~~~") % 2:
+        return False
+    if prefix and (re.search(r"\b(?:example|quote|quoted|syntax|protocol|DSML)\b|示例|引用|语法|协议", prefix, re.I)
+                   or not re.search(r"(?:let me (?:use|read|run)|i['’]ll (?:use|read|run)|i will (?:use|read|run)|让我|我将)", prefix, re.I)):
+        return False
+    body = text[start:].strip()
+    return bool(re.fullmatch(r'<｜｜DSML｜｜ calls>\s*(?:<｜｜DSML｜｜ invoke name="[^"\r\n]+">[\s\S]*?</｜｜DSML｜｜ invoke>\s*)+</｜｜DSML｜｜ calls>', body))
+
+
 def parse_output(raw):
     """Return ``{'text': str, 'error': str | None}`` without truncation."""
     if not isinstance(raw, str):
@@ -265,4 +281,6 @@ def parse_output(raw):
             if record.get("error") or isinstance(projection, dict) and projection.get("status") in ("error", "failed"):
                 error = _error_text(record.get("error")) or "CLI projection reported failure"
     text = final if final is not None else "".join(mimo_parts.values()) if mimo_parts else last_assistant or delta
+    if not error and final is not None and _unexecuted_dsml_call(text):
+        error = "TOOL_PROTOCOL_UNVERIFIED: CLI final result contains an unexecuted tool call; preserve this task and do not automatically redispatch."
     return {"text": text.strip(), "error": error}

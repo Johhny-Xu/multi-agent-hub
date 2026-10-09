@@ -249,6 +249,20 @@ def main():
             return json.loads(p.stdout)
 
         refs, metadata, launch_times = {}, {}, {}
+        try:
+            hub.tool_hub_dispatch_cli({"agent": "antigravity", "task": "SYNTHETIC_MISSING_CLI"})
+            missing_rejected = False
+        except ValueError as error:
+            missing_rejected = "UNAVAILABLE: cli_missing" in str(error)
+        check("missing_cli_preflight", missing_rejected and not worker_logs,
+              "A missing executable is rejected before acceptance or child creation",
+              {"rejected": missing_rejected, "spawned_workers": len(worker_logs)}, ["hub/availability_store.py:1"])
+        # A file may exist at preflight yet fail Windows CreateProcess. Keep
+        # covering post-acceptance startup errors independently of missing CLI.
+        invalid_exe = base / "invalid-executable.exe"
+        invalid_exe.write_bytes(b"SYNTHETIC_NOT_AN_EXECUTABLE")
+        agents["antigravity"]["cli"][0] = str(invalid_exe)
+        hub.AGENTS_JSON.write_text(json.dumps({"agents": agents}), encoding="utf-8")
         for agent in ("codebuddy", "codebuddy-cn", "mimocode", "minimaxcode", "github-copilot", "antigravity"):
             launch_times[agent] = time.monotonic()
             text = hub.tool_hub_dispatch_cli({"agent": agent, "task": "SYNTHETIC_LOCAL_TEST_ONLY",

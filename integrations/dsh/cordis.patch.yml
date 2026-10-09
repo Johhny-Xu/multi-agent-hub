@@ -9,9 +9,7 @@
     - id: mcp-agenthub
       name: "dsh-plugin-multi-agent-hub"
       config:
-        env:
-          AGENTHUB_URL: !!js process.env.AGENTHUB_URL || 'http://127.0.0.1:8765/mcp'
-          HUB_TOKEN: !!js process.env.HUB_TOKEN || ''
+        env: {}
         toolCallTimeoutMs: 310000
 
     # 2. 注册 DSH 全量原生子代理 (Agent Presets)

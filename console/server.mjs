@@ -33,6 +33,7 @@ const AGENT_ALIASES = {
   mmx: 'minimaxcode',
   trae: 'traecode',
 };
+const canonicalAgent = (value) => AGENT_ALIASES[String(value || '').trim().toLowerCase()] || String(value || '').trim();
 // 子代理直通端点绑定地址: 默认仅回环; 设 0.0.0.0 才暴露给局域网(无鉴权, 慎用)
 const SUB_BIND_HOST = process.env.HUBCONSOLE_SUB_HOST || '127.0.0.1';
 // 对外公告地址(endpointFile/hub 笔记里写的 URL): 绑定到非回环时自动挑局域网 IPv4, 也可显式指定
@@ -196,113 +197,77 @@ const MODEL_CATALOG = {
   ],
 };
 
-/**
- * 各平台支持的运行控制参数 (思考强度、上下文档位、Auto 路由档位)
- */
-const WORKER_PARAMS = {
-  'github-copilot': {
-    contextTier: {
-      label: '上下文档位',
-      options: ['default', 'long_context'],
-      default: 'default',
-    },
-    autoTier: {
-      label: 'Auto 档位',
-      options: ['efficiency', 'balance', 'intelligence'],
-      default: 'balance',
-    },
-  },
-  codebuddy: {
-    effort: {
-      label: '思考强度',
-      options: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-      default: 'high',
-    },
-  },
-  'codebuddy-cn': {
-    effort: {
-      label: '思考强度',
-      options: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-      default: 'high',
-    },
-  },
-  antigravity: {
-    effort: {
-      label: '思考强度',
-      options: ['low', 'medium', 'high', 'xhigh', 'max'],
-      default: 'low',
-    },
-  },
-  zcode: {
-    effort: {
-      label: '思考强度',
-      options: ['low', 'medium', 'high', 'xhigh', 'max'],
-      default: 'high',
-    },
-    contextTier: {
-      label: '上下文档位',
-      options: ['default', 'long_context'],
-      default: 'default',
-    },
-  },
-  traecode: {
-    effort: {
-      label: '思考强度',
-      options: ['low', 'medium', 'high', 'xhigh', 'max'],
-      default: 'high',
-    },
-    contextTier: {
-      label: '上下文档位',
-      options: ['default', 'long_context'],
-      default: 'default',
-    },
-  },
-  minimaxcode: {
-    effort: {
-      label: '思考强度',
-      options: ['low', 'medium', 'high', 'xhigh', 'max'],
-      default: 'high',
-    },
-    contextTier: {
-      label: '上下文档位',
-      options: ['default', 'long_context'],
-      default: 'default',
-    },
-  },
-};
+// Display labels are historical metadata; only hub_capabilities can authorize
+// a model or runtime option on the selected Hub host.
+const WORKER_PARAMS = {};
+const objectValue = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const publicReason = (value) => typeof value === 'string' ? sanitizeHubError(value).slice(0, 400) : '';
+const availability = (value, fallback) => ({
+  enabled: objectValue(value) ? value.enabled === true : fallback?.enabled === true,
+  code: publicReason(value?.code || fallback?.code),
+  reason: publicReason(value?.reason || fallback?.reason),
+  refreshable: value?.refreshable === true || fallback?.refreshable === true,
+});
 
-/**
- * 构造特定 worker 的控制参数 (effort, contextTier, autoTier)
- * @param {string} agentName
- * @param {{ effort?: string, contextTier?: string, autoTier?: string }} [params]
- * @returns {string[]}
- */
+export function normalizeCapabilities(value) {
+  if (!objectValue(value) || value.schema_version !== 2 || !objectValue(value.workers)) {
+    throw new Error('Hub 未提供新版能力信息，请更新 Hub；运行选项暂不可用');
+  }
+  const workers = {};
+  for (const [name, worker] of Object.entries(value.workers)) {
+    if (!/^[\w.-]{1,64}$/.test(name) || !objectValue(worker)) continue;
+    const ready = availability(worker.availability);
+    const models = (Array.isArray(worker.models) ? worker.models : []).filter((model) => objectValue(model) && typeof model.id === 'string').map((model) => {
+      const attachments = {};
+      for (const kind of ['image', 'file']) {
+        const option = model.attachments?.[kind];
+        attachments[kind] = { supported: option?.supported === true, mode: publicReason(option?.mode), reason: publicReason(option?.reason),
+          content_types: (Array.isArray(option?.content_types) ? option.content_types : []).filter((item) => typeof item === 'string').map(publicReason).slice(0, 16) };
+      }
+      return {
+        id: model.id.slice(0, 180), aliases: (Array.isArray(model.aliases) ? model.aliases : []).filter((a) => typeof a === 'string').slice(0, 40),
+        availability: availability(model.availability, ready),
+        thinking: { allowed: ['default', ...(Array.isArray(model.thinking?.allowed) ? model.thinking.allowed : []).filter((mode) => ['on', 'off'].includes(mode))],
+          default: 'default', reasons: { on: publicReason(model.thinking?.reasons?.on), off: publicReason(model.thinking?.reasons?.off) } },
+        stream: { supported: model.stream?.supported === true, semantics: publicReason(model.stream?.semantics), reason: publicReason(model.stream?.reason) }, attachments,
+      };
+    });
+    workers[name] = { configured: worker.configured === true, default_model: typeof worker.default_model === 'string' ? worker.default_model : null, availability: ready, models };
+  }
+  return { schema_version: 2, platform: publicReason(value.platform) || 'unknown', workers,
+    attachment_limit_bytes: Number(value.attachment_limit_bytes) > 0 ? Number(value.attachment_limit_bytes) : 1024 * 1024 };
+}
+
+export function taskCapability(document, agent, model, options = {}) {
+  agent = canonicalAgent(agent);
+  const fail = (reason) => ({ allowed: false, reason });
+  for (const key of ['effort', 'contextTier', 'autoTier', 'extra_args']) {
+    if (options[key] !== undefined && options[key] !== null && options[key] !== '') return fail(`${key} 不是已验证的运行控制；请使用思考开关和流式选项`);
+  }
+  if (options.thinking !== undefined && !['default', 'on', 'off'].includes(options.thinking)) return fail('thinking 必须为 default/on/off');
+  if (options.stream !== undefined && typeof options.stream !== 'boolean') return fail('stream 必须是布尔值');
+  const worker = document?.workers?.[agent];
+  if (!worker?.configured || !worker.availability?.enabled) return fail(worker?.availability?.reason || '该 worker 尚无可用的能力信息或运行通道');
+  const requested = !model || ['default', '默认'].includes(model) ? worker.default_model : model;
+  const selected = worker.models.find((entry) => entry.id === requested || entry.aliases.includes(requested));
+  if (!selected) return fail(`当前 Hub 未配置模型 ${requested || '(默认模型未知)'}`);
+  if (!selected.availability.enabled) return fail(selected.availability.reason || '选定模型当前不可用');
+  const thinking = options.thinking || 'default';
+  if (!selected.thinking.allowed.includes(thinking)) return fail(selected.thinking.reasons[thinking] || `选定模型不支持 thinking=${thinking}`);
+  if (options.stream === true && !selected.stream.supported) return fail(selected.stream.reason || '该通道尚未验证流式正文输出');
+  if (options.attachments !== undefined && !Array.isArray(options.attachments)) return fail('attachments 必须是数组');
+  for (const attachment of options.attachments || []) {
+    const kind = typeof attachment?.mime_type === 'string' && attachment.mime_type.startsWith('image/') ? 'image' : 'file';
+    if (!selected.attachments[kind].supported) return fail(selected.attachments[kind].reason || `选定模型不支持${kind === 'image' ? '图片' : '文件'}附件`);
+  }
+  return { allowed: true, model: selected.id, capability: selected };
+}
+
 function buildWorkerExtraArgs(agentName, params = {}) {
-  const extra = [];
-  if (!params || typeof params !== 'object') return extra;
-  if (['zcode', 'traecode', 'minimaxcode'].includes(agentName)) {
-    return [];
+  for (const key of ['effort', 'contextTier', 'autoTier']) {
+    if (params[key] !== undefined) { const error = new Error(`${key} 不是已验证的运行控制，请使用 thinking`); error.status = 400; throw error; }
   }
-  const { effort, contextTier, autoTier } = params;
-
-  if (agentName === 'codebuddy' || agentName === 'codebuddy-cn') {
-    if (effort && ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) {
-      extra.push('--effort', effort);
-    }
-  } else if (agentName === 'antigravity') {
-    if (effort && ['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) {
-      extra.push('--effort', effort);
-    }
-  } else if (agentName === 'github-copilot') {
-    if (contextTier && ['default', 'long_context'].includes(contextTier)) {
-      extra.push('--context', contextTier);
-    }
-    if (autoTier && ['efficiency', 'balance', 'intelligence'].includes(autoTier)) {
-      extra.push('--auto-tier', autoTier);
-    }
-  }
-  // mimo/copy 无参数平台忽略这些字段; zcode/traecode/minimaxcode 走任务前缀注入
-  return extra;
+  return [];
 }
 
 /** 各 CLI worker 的会话续接 flag 映射 */
@@ -776,6 +741,24 @@ export async function start(context) {
   };
   const hub = makeHub(getEndpoint);
 
+  async function readCapabilities() {
+    try { return normalizeCapabilities(JSON.parse(await hub.callTool('hub_capabilities', {}))); }
+    catch (error) { throw badReqSoft(publicReason(error?.message) || '无法读取 Hub 能力信息，尚未派发任务'); }
+  }
+  async function requireTaskCapability(agent, model, options, document) {
+    const check = taskCapability(document || await readCapabilities(), agent, model, options);
+    if (!check.allowed) throw badReqSoft(check.reason);
+    return check;
+  }
+  function capabilityCatalog(document) {
+    return Object.fromEntries(Object.entries(document?.workers || {}).map(([agent, worker]) => [agent, worker.models.map((model) => {
+      const label = (MODEL_CATALOG[agent] || []).find((entry) => entry.id === model.id);
+      return { id: model.id, name: label?.name || model.id, default: worker.default_model === model.id,
+        available: worker.availability.enabled && model.availability.enabled,
+        reason: model.availability.reason || worker.availability.reason, capability: model };
+    })]));
+  }
+
   // ---------------- 单一域服务: 所有变更都经这里, 成功(远端已提交)后广播
   const sseClients = new Set();
   function broadcast(payload) {
@@ -805,16 +788,19 @@ export async function start(context) {
           endpoint: { id: ep.id, label: ep.label, host: hostOf(ep.url) },
           agents: [], tasks: [], notes: [], models: {},
           subagent: subagentInfo(),
-          modelCatalog: MODEL_CATALOG,
+          modelCatalog: {}, capabilities: null, capabilitiesError: pingError,
           workerParams: WORKER_PARAMS,
         };
       }
-      const [agentsText, tasksText, modelsText, noteKeysText] = await Promise.all([
+      const [agentsText, tasksText, modelsText, noteKeysText, capsResult] = await Promise.all([
         hub.callTool('hub_list_agents', {}),
         hub.callTool('hub_list_tasks', {}),
         hub.callTool('hub_list_models', {}),
         hub.callTool('hub_note_get', {}),
+        readCapabilities().then((value) => ({ value })).catch((error) => ({ error: publicReason(error.message) })),
       ]);
+      const capabilityDocument = capsResult.value || null;
+      const modelCatalog = capabilityCatalog(capabilityDocument);
       const agents = parseAgents(agentsText);
       const modelsMap = parseModels(modelsText);
       const tasks = parseTasks(tasksText);
@@ -823,21 +809,13 @@ export async function start(context) {
       for (const a of agents) {
         const mi = modelsMap[a.name];
         a.modelArg = mi ? mi.modelArg : null;
-        if (MODEL_CATALOG[a.name]) {
-          a.models = MODEL_CATALOG[a.name].map((m) => ({ alias: m.name, id: m.id, tag: m.tag, credits: m.credits, default: !!m.default }));
-          const def = MODEL_CATALOG[a.name].find((m) => m.default);
-          a.defaultModel = mi?.defaultModelId || def?.id || null;
-          for (const model of mi?.models || []) {
-            if (!a.models.some((entry) => entry.id === model.id)) a.models.push(model);
-          }
-          a.models = a.models.map((model) => ({ ...model, default: model.id === a.defaultModel }));
-        } else {
-          a.models = mi ? mi.models : [];
-          a.defaultModel = mi ? mi.defaultModelId : null;
-        }
+        const worker = capabilityDocument?.workers[a.name];
+        a.models = (modelCatalog[a.name] || []).map((entry) => ({ ...entry, alias: entry.name }));
+        a.defaultModel = worker?.default_model || null;
+        a.availability = worker?.availability || { enabled: false, reason: capsResult.error || 'Hub 未提供此 worker 的能力信息' };
         a.modelNote = mi ? mi.note || '' : (a.cli ? '未出现在模型别名表' : '未配置 CLI 通道');
         // 激活判定优化: 心跳窗口过期 ≠ 不可用。有 CLI 直通/专用通道即可随时派发(服务端主动拉起 worker)
-        a.dispatchable = !!a.cli || !!DISPATCH_OVERRIDES[a.name];
+        a.dispatchable = (!!a.cli || !!DISPATCH_OVERRIDES[a.name]) && !!worker?.configured && worker.availability.enabled;
         a.activation = a.online ? 'online' : (a.dispatchable ? 'standby' : 'queue-only');
         a.activationNote = a.online ? '在线 · 可即时收发消息'
           : (a.dispatchable ? '心跳窗口过期 · CLI/专用通道仍可直通派发（首次响应较慢）' : '心跳过期且无直通通道 · 仅可入队等待其认领');
@@ -856,7 +834,8 @@ export async function start(context) {
         notes: noteResults.filter(Boolean),
         endpoints: config.endpoints.map((e) => ({ id: e.id, label: e.label, host: hostOf(e.url) })),
         subagent: subagentInfo(),
-        modelCatalog: MODEL_CATALOG,
+        modelCatalog, capabilities: capabilityDocument, capabilitiesError: capsResult.error || null,
+        platform: capabilityDocument?.platform || 'unknown',
         workerParams: WORKER_PARAMS,
       };
     })().finally(() => { snapshotInFlight = null; });
@@ -1074,6 +1053,14 @@ export async function start(context) {
     }
     return out;
   }
+  function uploadAttachments(value) {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > 4) throw badReqSoft('attachments 必须是数组，最多 4 个附件');
+    return value.map((item) => {
+      if (!objectValue(item) || typeof item.url !== 'string' || !/^\/uploads\/[\w.%\-]{1,2048}$/.test(item.url)) throw badReqSoft('附件 url 非法');
+      return { url: item.url, name: typeof item.name === 'string' ? item.name.slice(0, 160) : 'file', isImage: !!item.isImage };
+    });
+  }
   /** 把附件拼成 worker 可用文本: 文本类内联内容, 图片/二进制给本机路径提示 */
   function attBlock(text, attachments) {
     if (!attachments || !attachments.length) return text;
@@ -1088,15 +1075,10 @@ export async function start(context) {
 
   // ---------------- auto 自动派发: SELF_AGENT 本机无 CLI, 被调用时转派给可用子代理
   const autoPickAt = new Map(); // agent -> 上次自动选用时间 (轮转均衡)
-  function pickAutoAgent(agents, model) {
-    const cands = (agents || []).filter((a) => a.name !== SELF_AGENT && a.dispatchable);
+  function pickAutoAgent(agents, model, options, document) {
+    const cands = (agents || []).filter((a) => a.name !== SELF_AGENT && a.dispatchable && taskCapability(document, a.name, model, options).allowed);
     if (!cands.length) return null;
     let pool = cands;
-    if (model) {
-      const sup = cands.filter((a) => (a.models || []).some((m) => m.alias === model || m.id === model));
-      if (!sup.length) return null;
-      pool = sup;
-    }
     const rank = (a) => (a.activation === 'online' ? 0 : 1);
     pool = pool.slice().sort((a, b) => rank(a) - rank(b) || ((autoPickAt.get(a.name) || 0) - (autoPickAt.get(b.name) || 0)));
     const pick = pool[0];
@@ -1544,15 +1526,18 @@ export async function start(context) {
       ...(options.stream !== undefined ? { stream: options.stream } : {}),
       ...(direct && atts.length ? { attachments: await portableAttachments(atts) } : {}),
     };
+    // Capabilities are checked before recording a user message or dispatching.
+    // Use MIME determined from the stored upload, never client isImage/content.
+    const capabilityOptions = { ...options, ...taskOptions };
+    const snap = direct ? await snapshot() : null;
+    const pick = mode === 'auto' && snap?.ok ? pickAutoAgent(snap.agents, model, capabilityOptions, snap.capabilities) : null;
+    if (direct) {
+      if (mode === 'auto' && !pick) throw badReqSoft('没有满足所选模型、思考、流式和附件要求的可用 worker；任务尚未派发');
+      await requireTaskCapability(pick?.name || agentName, model, capabilityOptions, snap?.capabilities);
+    }
     const attMeta = atts.length ? atts.map((a) => ({ name: String(a.name || 'file').slice(0, 120), url: a.url, isImage: !!a.isImage })) : undefined;
     addMsg(thread, 'me', text, attMeta ? { att: attMeta } : undefined);
     if (mode === 'auto') {
-      const snap = await snapshot();
-      const pick = snap.ok ? pickAutoAgent(snap.agents, model) : null;
-      if (!pick) {
-        addMsg(thread, 'sys', (model ? `没有支持模型 ${model} 的可派发子代理` : '没有可派发的子代理') + '（需在线或具备直通通道）。可改用「直通派发」指定具体代理，或走「任务」入队等待认领。');
-        return thread;
-      }
       const full = text;
       addMsg(thread, 'sys', `⚡ 自动派发：${SELF_AGENT} 本机无 CLI，任务已转给 ${pick.name}（${pick.activation === 'online' ? '在线' : '待机·CLI 可直派'}${model ? ` · model=${model}` : ''}）。`);
       const ov = DISPATCH_OVERRIDES[pick.name];
@@ -1618,9 +1603,8 @@ export async function start(context) {
         thread.pending.push({ kind: 'ref', ref, tag: 'chat-dispatch', posted: dispatchTime, dispatchTime });
         const paramDesc = [
           model ? `模型 ${model}` : '',
-          options?.effort ? `思考强度 ${options.effort}` : '',
-          options?.contextTier ? `上下文 ${options.contextTier}` : '',
-          options?.autoTier ? `Auto档位 ${options.autoTier}` : '',
+          options?.thinking && options.thinking !== 'default' ? `思考 ${options.thinking}` : '',
+          options?.stream ? '流式正文' : '',
         ].filter(Boolean).join(' · ');
         addMsg(thread, 'sys', `已${paramDesc ? `按【${paramDesc}】` : ''}直通派发（ref=${ref}），完成后自动回复到本对话。`);
       } else {
@@ -1754,7 +1738,7 @@ export async function start(context) {
     const mm = String(t.title).match(/\[model[:：]\s*([\w.\-:/]{1,120})\]/);
     const model = mm ? mm[1] : undefined;
     const snap = await snapshot();
-    const pick = snap.ok ? pickAutoAgent(snap.agents, model) : null;
+    const pick = snap.ok ? pickAutoAgent(snap.agents, model, {}, snap.capabilities) : null;
     if (!pick) {
       try { await hub.callTool('hub_complete_task', { task_id: t.id, agent: SELF_AGENT, success: false, result: `${SELF_AGENT}(自动派发): 没有可派发的子代理${model ? `（无人支持模型 ${model}）` : ''}` }); } catch { /* noop */ }
       addMsg(selfThread, 'sys', `自动派发: 无可用子代理${model ? `（需支持模型 ${model}）` : ''}, 任务 ${t.id} 已置失败`);
@@ -1929,9 +1913,16 @@ export async function start(context) {
   }
 
   async function dispatchAsync(agentName, task, model, opts = {}) {
+    const taskOptions = {
+      ...(model ? { model } : {}),
+      ...(opts.thinking !== undefined ? { thinking: opts.thinking } : {}),
+      ...(opts.stream !== undefined ? { stream: opts.stream } : {}),
+      ...(opts.attachments !== undefined ? { attachments: opts.attachments } : {}),
+      ...(Number(opts.timeout_s) > 0 ? { timeout_s: Number(opts.timeout_s) } : {}),
+    };
     const ov = DISPATCH_OVERRIDES[agentName];
     if (ov) {
-      const text = await hub.callTool(ov.tool, { task, ...ov.asyncFlag }, DISPATCH_TIMEOUT_MS);
+      const text = await hub.callTool(ov.tool, { task, ...ov.asyncFlag, ...taskOptions }, DISPATCH_TIMEOUT_MS);
       return { text, ref: extractDispatchRef(text) };
     }
     const workerExtra = buildWorkerExtraArgs(agentName, opts);
@@ -1944,8 +1935,8 @@ export async function start(context) {
       {
         agent: agentName,
         task,
-        ...(model ? { model } : {}),
         ...(extraArgs.length ? { extra_args: extraArgs } : {}),
+        ...taskOptions,
       },
       DISPATCH_TIMEOUT_MS
     );
@@ -1954,26 +1945,27 @@ export async function start(context) {
 
   /** 一次性子代理调用: 服务端派发+轮询, 完整输出落盘, 只回摘要 */
   async function runSubagent(agentName, task, opts = {}) {
+    agentName = canonicalAgent(agentName);
     // auto 入口: SELF_AGENT(本控制台, 无 CLI)被调用 → 自动挑选最优可派发子代理转派
     if (agentName === 'auto' || agentName === SELF_AGENT) {
       const snap = await snapshot();
-      const pick = snap.ok ? pickAutoAgent(snap.agents, opts.model) : null;
+      const pick = snap.ok ? pickAutoAgent(snap.agents, opts.model, opts, snap.capabilities) : null;
       if (!pick) {
-        return { status: 'failed', ref: null, summary: `auto: 没有可派发的子代理${opts.model ? `（无人支持模型 ${opts.model}）` : ''}（需在线或具备直通通道）`, artifactPath: null, elapsedMs: 0, note: 'auto 选路失败' };
+        return { status: 'failed', ref: null, summary: 'auto: 没有满足模型、思考、流式和附件要求的可用 worker，任务尚未派发', artifactPath: null, elapsedMs: 0, note: 'auto 能力预检失败' };
       }
       return runSubagent(pick.name, task, { ...opts, viaAuto: true });
     }
     const timeoutMs = Math.min(Math.max(Number(opts.timeout_s) || 240, 20), 1_800) * 1000;
-    const key = JSON.stringify([agentName, task, opts.model, opts.extra_args, opts.effort, opts.contextTier, opts.autoTier, timeoutMs]);
+    await requireTaskCapability(agentName, opts.model, opts);
+    const key = JSON.stringify([agentName, task, opts.model, opts.thinking, opts.stream, opts.attachments, timeoutMs]);
     if (subInflight.has(key)) return subInflight.get(key);
     const p = (async () => {
       recordRun(agentName, true);
       const thread = getThread(agentName, true);
       const paramTag = [
         opts.model ? `model=${opts.model}` : '',
-        opts.effort ? `effort=${opts.effort}` : '',
-        opts.contextTier ? `context=${opts.contextTier}` : '',
-        opts.autoTier ? `auto-tier=${opts.autoTier}` : '',
+        opts.thinking ? `thinking=${opts.thinking}` : '',
+        opts.stream ? 'stream=true' : '',
       ].filter(Boolean).join(' ');
       addMsg(thread, 'sys', `⚡ 本机会话经子代理直通派发: ${task.slice(0, 120)}${task.length > 120 ? '…' : ''}${paramTag ? ` (${paramTag})` : ''}`);
       const { text, ref } = await dispatchAsync(agentName, task, opts.model, opts);
@@ -2045,6 +2037,8 @@ export async function start(context) {
               task: { type: 'string', description: '完整任务描述/提示词' },
               model: { type: 'string', description: '可选: 模型别名' },
               timeout_s: { type: 'number', description: '等待上限秒数 20-1800, 默认 240' },
+              thinking: { type: 'string', enum: ['default', 'on', 'off'], description: '仅允许该平台/worker/模型已验证的思考开关' },
+              stream: { type: 'boolean', description: '请求已验证的正文进度，非隐藏思考' },
             },
             required: ['agent', 'task'],
           },
@@ -2250,7 +2244,7 @@ export async function start(context) {
       done(404, { error: 'not_found', hint: 'GET /health · POST /run · POST /mcp' });
     };
     route().catch((err) => {
-      if (!response.headersSent) done(500, { error: sanitizeHubError(err && err.message) });
+      if (!response.headersSent) done(err.status || 500, { error: sanitizeHubError(err && err.message) });
     });
   });
 
@@ -2509,15 +2503,20 @@ export async function start(context) {
           return;
         }
         if (p === '/api/dispatch') {
-          const agent = safeName(body.agent, 'agent');
+          const agent = canonicalAgent(safeName(body.agent, 'agent'));
           const task = str(body.task, 20_000, 'task');
           const model = typeof body.model === 'string' && body.model.trim() && !['默认', 'default'].includes(body.model.trim()) ? body.model.trim().slice(0, 120) : undefined;
           const cwd = typeof body.cwd === 'string' && body.cwd.trim() ? body.cwd.trim().slice(0, 500) : undefined;
           const to = Number(body.timeout_s) > 0 ? Math.min(Number(body.timeout_s), 600) : undefined;
+          const portable = await portableAttachments(uploadAttachments(body.attachments));
+          const options = { ...body, attachments: portable };
+          await requireTaskCapability(agent, model, options);
+          const taskOptions = { thinking: body.thinking || 'default', stream: body.stream === true,
+            ...(portable.length ? { attachments: portable } : {}), ...(model ? { model } : {}), ...(to ? { timeout_s: to } : {}) };
           const ov = DISPATCH_OVERRIDES[agent];
           const text = await mutate('dispatch', () => (ov
-            ? hub.callTool(ov.tool, { task, ...ov.asyncFlag }, DISPATCH_TIMEOUT_MS)
-            : hub.callTool('hub_dispatch_cli', { agent, task, ...(model ? { model } : {}), ...(cwd ? { cwd } : {}), ...(to ? { timeout_s: to } : {}) }, DISPATCH_TIMEOUT_MS)));
+            ? hub.callTool(ov.tool, { task, ...ov.asyncFlag, ...taskOptions }, DISPATCH_TIMEOUT_MS)
+            : hub.callTool('hub_dispatch_cli', { agent, task, ...taskOptions, ...(cwd ? { cwd } : {}) }, DISPATCH_TIMEOUT_MS)));
           const ref = extractDispatchRef(text);
           if (ref) {
             const thread = getThread(agent, true);
@@ -2526,6 +2525,17 @@ export async function start(context) {
             addMsg(thread, 'sys', `🛫 控制台派活已受理 (ref=${ref})，结果回来后自动进入「对话」线程。`);
           }
           send(200, { text, ref });
+          return;
+        }
+        if (p === '/api/capabilities/refresh') {
+          const agent = canonicalAgent(safeName(body.agent, 'agent'));
+          const document = await readCapabilities();
+          const worker = document.workers[agent];
+          const model = typeof body.model === 'string' ? body.model : worker?.default_model;
+          const selected = worker?.models.find((entry) => entry.id === model || entry.aliases.includes(model));
+          if (!selected?.availability.refreshable) throw badReq('该状态不能通过清除近期失败提示恢复，请检查本机配置或供应商支持');
+          await hub.callTool('hub_capabilities', { agent, model: selected.id, refresh: true });
+          send(200, { ok: true, note: '已清除该模型的近期失败提示；此操作不验证登录或调用模型' });
           return;
         }
         if (p === '/api/result') {
@@ -2598,18 +2608,7 @@ export async function start(context) {
           if (body.thinking !== undefined && !['default', 'on', 'off'].includes(body.thinking)) throw badReq('thinking 无效');
           if (body.stream !== undefined && typeof body.stream !== 'boolean') throw badReq('stream 必须是布尔值');
           // 附件：客户端先经 /api/upload 落盘，这里只认 url 白名单与元数据
-          let attachments;
-          if (Array.isArray(body.attachments) && body.attachments.length) {
-            if (body.attachments.length > 4) throw badReq('最多 4 个附件');
-            attachments = [];
-            for (const a of body.attachments.slice(0, 4)) {
-              const attUrl = typeof a?.url === 'string' ? a.url : '';
-              if (!/^\/uploads\/[\w.%\-]{1,2048}$/.test(attUrl)) throw badReq('附件 url 非法');
-              const att = { url: attUrl, name: typeof a?.name === 'string' ? a.name.slice(0, 160) : 'file', isImage: !!a?.isImage };
-              if (typeof a?.content === 'string' && a.content.length <= INLINE_TEXT_MAX + 100) att.content = a.content.slice(0, INLINE_TEXT_MAX);
-              attachments.push(att);
-            }
-          }
+          const attachments = uploadAttachments(body.attachments);
           try {
             const thread = await chatSend(agent, text, mode, model, attachments, sessionId, { effort, contextTier, autoTier, thinking: body.thinking, stream: body.stream });
             send(200, { thread: { id: thread.id, agent: thread.agent } });

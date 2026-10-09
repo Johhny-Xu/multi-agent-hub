@@ -34,6 +34,7 @@ from command_runtime import positive_timeout, spawn_owned, terminate_owned
 from result_store import read_result as stored_result, update_result
 from task_contract import cleanup_attachments
 from output_parser import parse_output, parse_usage
+from availability_store import record_outcome
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -99,6 +100,10 @@ def load_task_meta(path):
             "env": d.get("env"),
             "attachment_dir": d.get("attachment_dir"),
             "attachment_parent": d.get("attachment_parent"),
+            "input_file": d.get("input_file"),
+            "availability_state": d.get("availability_state"),
+            "profile_signature": d.get("profile_signature"),
+            "public_options": d.get("public_options") or {},
         }
     # JSON 标量/数组: 当作任务文本使用
     text = d if isinstance(d, str) else json.dumps(d, ensure_ascii=False)
@@ -273,11 +278,12 @@ def _read_cli_output(path, final=False):
     return dict(parse_output(raw), usage=parse_usage(raw))
 
 
-def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
+def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None, input_file=None, watch_result=False):
     """执行 CLI 命令并回传输出尾部作为进度; 结束后整组回收子进程。"""
     tmpout = taskfile + ".out"
     tmperr = taskfile + ".err"
     proc = None
+    input_stream = None
     child_env = os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
     child_env["PYTHONUTF8"] = "1"
@@ -286,11 +292,17 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
     timeout_s = positive_timeout(timeout_s, 600)
     try:
         with open(tmpout, "w", encoding="utf-8") as fo, open(tmperr, "w", encoding="utf-8") as fe:
-            proc = spawn_owned(cmd_list, cwd=cwd, env=child_env, stdin=subprocess.DEVNULL,
+            if input_file:
+                input_stream = open(input_file, "rb")
+            proc = spawn_owned(cmd_list, cwd=cwd, env=child_env, stdin=input_stream or subprocess.DEVNULL,
                                stdout=fo, stderr=fe)
             deadline = time.monotonic() + timeout_s
             last = ""
             while proc.poll() is None:
+                if watch_result:
+                    current = read_result(ref)
+                    if current and current.get("status") != "running":
+                        raise CommandCancelled("任务已有终态，已停止其剩余子进程；保留原 ref。")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise CommandTimeout(f"CLI 任务超时 (>{timeout_s}s), 已回收子进程树")
@@ -325,6 +337,8 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None):
         return text or "(无输出)", proc.returncode or (1 if parsed["error"] else 0)
     finally:
         kill_process_group(proc)
+        if input_stream:
+            input_stream.close()
         for path in (tmpout, tmperr):
             try:
                 os.unlink(path)
@@ -368,7 +382,8 @@ def main():
     try:
         meta = load_task_meta(taskfile)
     except RuntimeError as e:
-        save(ref, agent=mode, status="error", text=str(e)[:500], progress=None)
+        current = read_result(ref) or {}
+        save(ref, only_if_running=bool(current), agent=current.get("agent") or mode, status="error", text=str(e)[:500], progress=None)
         cleanup_taskfile(taskfile)
         return 1
 
@@ -382,37 +397,53 @@ def main():
 
     outcome = 0
     try:
-        initial = {"agent": (read_result(ref) or {}).get("agent") or mode, "status": "running"}
+        current = read_result(ref) or {}
+        if current.get("status") and current["status"] != "running":
+            return 1
+        initial = {"agent": current.get("agent") or mode, "status": "running"}
         if mode != "cmd":
             initial["task"] = task
-        save(ref, **initial)
+        current = save(ref, only_if_running=bool(current), **initial)
+        if current.get("status") != "running":
+            return 1
         if mode == "trae":
             text, sid = trae_run(task, session_id, ref, new_chat=meta.get("new_chat", False),
                                  timeout=positive_timeout(meta.get("timeout_s"), TRAE_TIMEOUT))
-            save(ref, status="completed", text=text, session_id=sid or None,
+            save(ref, only_if_running=True, status="completed", text=text, session_id=sid or None,
                  progress=None)
         elif mode == "cmd":
             cmd_list = cmd if isinstance(cmd, list) else json.loads(task)
             text, code = run_cmd_mode(cmd_list, taskfile, ref, cwd=meta.get("cwd"),
-                                      timeout_s=meta.get("timeout_s", 600), env=meta.get("env"))
-            save(ref, status="completed" if code == 0 else "error", text=text or "(无输出)",
+                                      timeout_s=meta.get("timeout_s", 600), env=meta.get("env"), input_file=meta.get("input_file"), watch_result=True)
+            save(ref, only_if_running=True, status="completed" if code == 0 else "error", text=text or "(无输出)",
                  exit_code=code, progress=None)
             outcome = 0 if code == 0 else 1
         else:
             text = zcode_run(task, session_id, ref, timeout=positive_timeout(meta.get("timeout_s"), ZCODE_TIMEOUT))
-            save(ref, status="completed", text=text, session_id=session_id or None,
+            save(ref, only_if_running=True, status="completed", text=text, session_id=session_id or None,
                  progress=None)
+        push_callback(callback_url, read_result(ref))
+    except CommandCancelled:
+        outcome = 1
         push_callback(callback_url, read_result(ref))
     except CommandTimeout as e:
         outcome = 1
-        save(ref, status="timeout", text=str(e), progress=None)
-        push_callback(callback_url, {"ref": ref, "status": "timeout", "text": str(e)})
+        save(ref, only_if_running=True, status="timeout", text=str(e), progress=None)
+        push_callback(callback_url, read_result(ref))
     except Exception as e:  # noqa: BLE001 - 任何异常都必须落盘, 否则调用方会永久轮询
         outcome = 1
-        save(ref, status="error", text=f"执行出错: {e}"[:500], progress=None)
-        push_callback(callback_url, {"ref": ref, "status": "error",
-                                     "text": f"执行出错: {e}"[:300]})
+        save(ref, only_if_running=True, status="error", text=f"执行出错: {e}"[:500], progress=None)
+        push_callback(callback_url, read_result(ref))
     finally:
+        if meta.get("availability_state"):
+            current = read_result(ref) or {}
+            options = meta.get("public_options") or {}
+            try:
+                record_outcome(meta["availability_state"], current.get("agent") or mode, options.get("model"),
+                               current.get("status"), current.get("text", ""), meta.get("profile_signature"))
+            except (OSError, ValueError, TimeoutError):
+                # Optional availability hints must never hide a task result.
+                pass
         if meta.get("attachment_dir") and meta.get("attachment_parent"):
             try:
                 cleanup_attachments(meta["attachment_dir"], meta["attachment_parent"])

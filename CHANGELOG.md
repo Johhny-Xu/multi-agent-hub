@@ -9,6 +9,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，ZIP 尚未上传远程 Release。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [0.7.0] - 2026-10-09
+
+### 能力约束与独立部署
+
+- 分开提供 hub / plugins / both 三种可安装 ZIP，Windows / Linux 自动检测运行时与官方 CLI；应用、私有连接配置和运行数据分离。Hub 默认单独运行，控制台可选，客户端不会启动本地 Hub；重复安装保留配置并备份旧应用。
+- 四份 MCP 桥统一读取外部 client.json；支持标准 Windows/XDG 路径和显式配置路径，保留 Codex PLUGIN_DATA 兼容。切换 Hub 端点不复用其他端点 token；DSH 不再以默认 localhost/空 token 覆盖配置文件。Codex/ZCode/MCP 版本 0.7.0，DSH 包从 1.0.0 升至 1.1.0。
+- 能力查询升级到按 Hub 系统、worker、型号返回可用性。控制台删除没有对应官方参数的伪思考强度/上下文档位；动态禁用不支持的思考、流式和附件，Auto 与各派发入口使用相同服务端预检。
+- 最近认证、区域、额度和型号错误使用有期限的结构化状态；手动清除状态不自动调用模型，偶发超时/空答不永久封禁 worker。
+- 修复 worker 只存在于 profile 自定义 PATH 时预检误报缺失的问题；预检和派发统一继承环境与变量展开，Windows/Linux 真实临时入口均有回归覆盖。
+- 修复 CodeBuddy 继承 lastUsed 代理模式后缺少 Read、只返回未执行 DSML 的根因；使用标准代理和明确的文件工具授权，Linux 图文任务已重新验证。思考与附件能力继续受所选型号限制。
+- Windows Hub/Trae HTTP 使用独占端口绑定，避免同端口多个进程共监听导致健康检查误判；Linux 保留正常的地址复用行为。
+- 修复原生安装的实际路径与缓存问题：创建隔离 Codex home，ZCode 使用安装副本的绝对目录 source，并通过官方保留数据重装刷新自有插件缓存；DSH 固定 Node 入口与外部连接文件。保留既有插件数据、禁用状态和其他插件。
+- Linux 用户服务按安装目录派生独立 unit 并验证归属，启停与升级统一经过 systemctl；不支持的 systemd + console 组合提前拒绝。实机生命周期 18/18 检查通过。
+- 支持插件跨 Windows/Linux 连接远端 Hub。新增实际双向网络探针：Windows→Linux 直连图文任务通过；当前 Linux→Windows 直连端口不可达，显式 SSH 反向转发后的图文任务通过。报告区分两种通道，没有把转发结果计成直连成功。
+- 重写 README 的安装、服务端/客户端分工与数据流说明：请求和附件仍可能发送到模型服务商，自托管不等于模型离线或保证不泄露。详见 docs/release-0.7.md。
+- 最终完整回归 Windows 19/19 组、Linux 17/17 组通过，期间源码哈希未变；正式三 ZIP 在真实 Linux 解压安装验收 43/43 通过。产物清单、SHA256、组件隔离和凭据模式审计均通过；账号授权、余额、区域、模型目录与直接网络不可达等外部限制保留为未通过。
+
+---
+
 ## [0.6.0] - 2026-10-09
 
 ### 新增 / Added

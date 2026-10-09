@@ -21,7 +21,7 @@ from command_runtime import atomic_write_json, spawn_owned, terminate_owned
 
 def source_hashes():
     hashes = {}
-    for folder in ("hub", "console", "mcp", "drivers", "integrations", "plugins", "tests", "scripts"):
+    for folder in ("hub", "console", "mcp", "drivers", "integrations", "plugins", "tests", "scripts", "packaging"):
         for path in (ROOT / folder).rglob("*"):
             if not path.is_file() or path.suffix not in {".py", ".js", ".mjs", ".toml", ".yml", ".sh", ".ps1", ".bat", ".md", ".json"}:
                 continue
@@ -52,19 +52,22 @@ def main():
         ("hub_core", "hub_core_regressions.py"),
         ("runtime", "runtime_regressions.py"),
         ("task_contract", "task_contract_regressions.py"),
+        ("capability_availability", "capability_availability_regressions.py"),
         ("worker_output", "worker_output_regressions.py"),
         ("live_probe_validation", "live_workers_probe_regressions.py"),
         ("login_manager", "login_manager_smoke.py"),
         ("codex_adapter", "codex_adapter_smoke.py"),
         ("dsh_installer", "dsh_installer_smoke.py"),
+        ("packaging", "packaging_smoke.py"),
+        ("packaging_audit", "packaging_audit_regressions.py"),
     )]
     groups += [("mcp_bridge", [node, "--test", "tests/mcp_bridge.test.mjs", "tests/task_bridge.test.mjs", "plugins/agenthub-workers/scripts/test-login.mjs"]),
                ("zcode_rpc", [node, "--test", "tests/zcode_rpc.test.mjs"]),
-               ("native_plugin_config", [node, "--test", "tests/native_plugins_config.mjs", "tests/native_plugins_contract.mjs"]),
-               ("console", [node, "--test", "tests/console_smoke.mjs"]),
-               ("dsh_workflows", [node, "--test", "tests/dsh_workflows.test.mjs"])]
+               ("native_plugin_config", [node, "--test", "tests/native_plugins_config.mjs", "tests/native_plugins_contract.mjs", "tests/client_config.test.mjs"]),
+               ("console", [node, "--test", "tests/console_smoke.mjs", "tests/console_capabilities_dom.mjs", "tests/console_capabilities_core.mjs"]),
+               ("dsh_workflows", [node, "--test", "tests/dsh_workflows.test.mjs", "tests/dsh_connection.test.mjs"])]
     if os.name == "nt":
-        groups += [("windows_bus", [sys.executable, "tests/windows_dispatch_smoke.py"]),
+        groups += [("windows_bus", [sys.executable, "tests/windows_dispatch_smoke.py", "--report", str(options.report.with_name(options.report.stem + "-windows-bus.json"))]),
                    ("windows_pty", [sys.executable, "tests/windows_login_smoke.py"]),
                    ("windows_launcher", [node, "--test", "tests/windows_launcher.test.mjs"])]
     else:
@@ -78,7 +81,7 @@ def main():
             proc = spawn_owned(command, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                env=suite_env)
-            output, _ = proc.communicate(timeout=90)
+            output, _ = proc.communicate(timeout=180 if name in {"packaging", "packaging_audit"} else 90)
             code = proc.returncode
         except (OSError, subprocess.TimeoutExpired) as exc:
             output, code = str(exc), 1

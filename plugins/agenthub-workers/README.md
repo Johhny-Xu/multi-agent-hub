@@ -15,7 +15,7 @@
 | agenthub-workers:mimocode | mimocode |
 | agenthub-workers:traecode | traecode |
 
-模型与工具能力以 Hub 配置及 hub_capabilities 返回为准。别名由桥归一；国际版和国内版使用独立官方登录。MiniMax 当前只处理文本输入/输出；Trae 可采用 Hub 配置的 CLI 或桌面网关。
+模型与工具能力以 Hub 配置及 hub_capabilities 返回为准。别名由桥归一；国际版和国内版使用独立官方登录。MiniMax 支持适配范围内的图文输入与文本输出，但没有本地文件编辑工具；Trae 可采用 Hub 配置的 CLI 或桌面网关。
 
 `skills/dispatch-hub/SKILL.md` 提供并发协作与原生工作流节点配方；`commands/` 提供 hub-status、hub-login。技能不自动注册全局保存的命名工作流。
 
@@ -39,6 +39,8 @@ stream=true 请求流式生成。客户端提供 MCP `_meta.progressToken` 才�
 ## 加载
 
 需要 Node.js 20+、已运行的 Hub，以及插件主机与 Hub 的网络连通。无需另装外部 subagent MCP 服务。
+
+0.7.0 的独立 `plugins` 安装包不启动本地 Hub，可连接 Windows 或 Linux 服务器。外部连接设置统一放在 Windows `%LOCALAPPDATA%/AgentHub/client.json` 或 Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME），字段为 `url` 和可选 `token`；自定义位置使用 `AGENTHUB_CONFIG`。见[安装说明](../../packaging/README.md)。
 
 可在 ZCode 设置的插件发现页安装仓库 https://github.com/Johhny-Xu/multi-agent-hub.git，或在独立测试项目 zcode.json 中使用官方本地目录配置：
 

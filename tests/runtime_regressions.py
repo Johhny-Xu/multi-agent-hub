@@ -123,13 +123,13 @@ class RuntimeRegressions(unittest.TestCase):
 
     def test_gui_mode_receives_explicit_timeout(self):
         meta = {"task": "synthetic", "cmd": None, "callback_url": None, "timeout_s": .25}
-        with patch.object(sys, "argv", ["worker", "zcode", "fixture", "unused"]), patch.object(worker, "load_task_meta", return_value=meta), patch.object(worker, "save"), patch.object(worker, "read_result", return_value={}), patch.object(worker, "cleanup_taskfile"), patch.object(worker, "zcode_run", return_value="synthetic") as driver:
+        with patch.object(sys, "argv", ["worker", "zcode", "fixture", "unused"]), patch.object(worker, "load_task_meta", return_value=meta), patch.object(worker, "save", return_value={"status": "running"}), patch.object(worker, "read_result", return_value={}), patch.object(worker, "cleanup_taskfile"), patch.object(worker, "zcode_run", return_value="synthetic") as driver:
             self.assertEqual(worker.main(), 0)
             self.assertEqual(driver.call_args.kwargs.get("timeout"), .25)
 
     def test_cmd_argv_and_callback_credentials_not_persisted(self):
         meta = {"task": None, "cmd": [sys.executable, "--api-key", "PRIVATE_FIXTURE"], "callback_url": "https://invalid.local/callback?token=PRIVATE_FIXTURE", "timeout_s": 1}
-        with patch.object(sys, "argv", ["worker", "cmd", "fixture", "unused"]), patch.object(worker, "load_task_meta", return_value=meta), patch.object(worker, "run_cmd_mode", return_value=("synthetic", 0)), patch.object(worker, "read_result", return_value={}), patch.object(worker, "push_callback"), patch.object(worker, "cleanup_taskfile"), patch.object(worker, "save") as save:
+        with patch.object(sys, "argv", ["worker", "cmd", "fixture", "unused"]), patch.object(worker, "load_task_meta", return_value=meta), patch.object(worker, "run_cmd_mode", return_value=("synthetic", 0)), patch.object(worker, "read_result", return_value={}), patch.object(worker, "push_callback"), patch.object(worker, "cleanup_taskfile"), patch.object(worker, "save", return_value={"status": "running"}) as save:
             self.assertEqual(worker.main(), 0)
             self.assertNotIn("PRIVATE_FIXTURE", str(save.call_args_list))
 

@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "probe": "isolated official host registration; no vendor inference",
+  "began_utc": "2026-10-08T11:59:07Z",
+  "model_calls": 0,
+  "personal_profiles_touched": false,
+  "entrypoints": {
+    "codex": [
+      "<USER_HOME>\\AppData\\Local\\OpenAI\\Codex\\bin\\9691020b546a15b2\\codex.exe"
+    ],
+    "zcode": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs"
+    ],
+    "dsh": [
+      "<USER_HOME>\\AppData\\Local\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe",
+      "--expose-internals",
+      "<USER_HOME>\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js"
+    ]
+  },
+  "node": "C:\\Program Files\\nodejs\\node.exe",
+  "installed_payload_node_command": true,
+  "routing_agents_discovered_on_disk": 8,
+  "source_logs_kept": false,
+  "isolated_paths_cleaned": true,
+  "before_fixes": {
+    "install": {
+      "exit": 1,
+      "elapsed_s": 6.04,
+      "native_hosts": [
+        {
+          "host": "codex",
+          "status": "failed",
+          "error": "Official native registration rejected the command (exit 1); inspect host installation/version",
+          "configuration_backups": 0
+        },
+        {
+          "host": "zcode",
+          "status": "failed",
+          "error": "Official native registration rejected the command (exit 1); inspect host installation/version",
+          "configuration_backups": 0
+        },
+        {
+          "host": "dsh",
+          "status": "registered",
+          "configuration_backups": 0,
+          "project": null,
+          "profile": "agenthub-audit"
+        }
+      ],
+      "local_hub_started": false
+    },
+    "repeat_install": {
+      "exit": 1,
+      "elapsed_s": 5.104,
+      "native_hosts": [
+        {
+          "host": "codex",
+          "status": "failed",
+          "error": "Official native registration rejected the command (exit 1); inspect host installation/version",
+          "configuration_backups": 0
+        },
+        {
+          "host": "zcode",
+          "status": "failed",
+          "error": "Official native registration rejected the command (exit 1); inspect host installation/version",
+          "configuration_backups": 0
+        },
+        {
+          "host": "dsh",
+          "status": "registered",
+          "configuration_backups": 2,
+          "project": null,
+          "profile": "agenthub-audit"
+        }
+      ],
+      "local_hub_started": false
+    },
+    "actual_hosts": {
+      "codex": {
+        "list_exit": 1,
+        "plugin_discovered": false,
+        "load_and_generation_verified": false
+      },
+      "zcode": {
+        "list_exit": 0,
+        "plugin_discovered": false,
+        "load_and_generation_verified": false
+      },
+      "dsh": {
+        "managed_patch_exists": true,
+        "file_mode_configured": true,
+        "load_and_generation_verified": false
+      }
+    }
+  },
+  "install": {
+    "exit": 0,
+    "elapsed_s": 6.738,
+    "native_hosts": [
+      {
+        "host": "codex",
+        "status": "registered",
+        "configuration_backups": 0,
+        "project": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
+        "profile": null
+      },
+      {
+        "host": "zcode",
+        "status": "registered",
+        "configuration_backups": 0,
+        "project": null,
+        "profile": null
+      },
+      {
+        "host": "dsh",
+        "status": "registered",
+        "configuration_backups": 0,
+        "project": null,
+        "profile": "agenthub-audit"
+      }
+    ],
+    "local_hub_started": false
+  },
+  "repeat_install": {
+    "exit": 0,
+    "elapsed_s": 5.809,
+    "native_hosts": [
+      {
+        "host": "codex",
+        "status": "registered",
+        "configuration_backups": 1,
+        "project": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
+        "profile": null
+      },
+      {
+        "host": "zcode",
+        "status": "registered",
+        "configuration_backups": 0,
+        "project": null,
+        "profile": null
+      },
+      {
+        "host": "dsh",
+        "status": "registered",
+        "configuration_backups": 2,
+        "project": null,
+        "profile": "agenthub-audit"
+      }
+    ],
+    "local_hub_started": false
+  },
+  "same_version_refresh": {
+    "registrations": [
+      {
+        "host": "codex",
+        "status": "registered",
+        "configuration_backups": 1,
+        "project": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
+        "profile": null
+      },
+      {
+        "host": "zcode",
+        "status": "registered",
+        "configuration_backups": 0,
+        "project": null,
+        "profile": null
+      }
+    ]
+  },
+  "actual_hosts": {
+    "codex": {
+      "list_exit": 0,
+      "plugin_discovered": true,
+      "same_version_source_refreshed": true,
+      "load_and_generation_verified": false,
+      "routing_agents_discovered_on_disk": 8
+    },
+    "zcode": {
+      "list_exit": 0,
+      "plugin_discovered": true,
+      "same_version_source_refreshed": true,
+      "load_and_generation_verified": false,
+      "installed_source_and_connection_verified": true
+    },
+    "dsh": {
+      "managed_patch_exists": true,
+      "file_mode_configured": true,
+      "stable_node_command_configured": true,
+      "load_and_generation_verified": false,
+      "native_discovery_verified": true
+    }
+  },
+  "fixed_bugs": [
+    "missing_explicit_codex_home_created",
+    "zcode_exact_marketplace_manifest",
+    "DSH_stable_node_and_authoritative_file_mode",
+    "DSH_cross_endpoint_ambient_token_pairing",
+    "DSH_Electron_process_execPath_default",
+    "owned_Codex_routing_upgrade_with_hash_and_backup",
+    "explicit_missing_native_entry_is_failed",
+    "ZCode_relative_file_marketplace_source",
+    "ZCode_same_version_cache_refresh_with_keep_data"
+  ],
+  "pre_absolute_source_failure": {
+    "code": "cached_manifest_missing_env",
+    "active_source_marker": false,
+    "reason": "file marketplace relative source did not install configured app payload; fixed installed manifest uses official absolute directory source"
+  },
+  "zcode_cache_refresh_after_fix": {
+    "initial_install_exit": 0,
+    "first_registration": [
+      {
+        "host": "zcode",
+        "status": "registered",
+        "configuration_backups": 0,
+        "project": null,
+        "profile": null
+      }
+    ],
+    "registrations": [
+      {
+        "host": "zcode",
+        "status": "registered",
+        "configuration_backups": 2,
+        "project": null,
+        "profile": null
+      }
+    ],
+    "active_cache_marker": true,
+    "active_external_config_updated": true,
+    "active_file_mode": true,
+    "stable_node_command": true,
+    "data_preserved": true,
+    "disabled_state_preserved": true,
+    "other_plugin_states_preserved": true,
+    "private_backup_snapshot_exists": true,
+    "generation_verified": false
+  },
+  "dsh_native_discovery_after_fix": {
+    "registrations": [
+      {
+        "host": "dsh",
+        "status": "registered",
+        "configuration_backups": 2,
+        "project": null,
+        "profile": "audit"
+      }
+    ],
+    "native_exit": 0,
+    "timed_out": false,
+    "preset_names": [
+      "agenthub-all",
+      "agenthub-antigravity",
+      "agenthub-codebuddy",
+      "agenthub-codebuddy-cn",
+      "agenthub-zcode",
+      "agenthub-traecode",
+      "agenthub-copilot",
+      "agenthub-minimaxcode",
+      "agenthub-mimocode"
+    ],
+    "registry_entry_count": 9,
+    "registry_entry_keys": [
+      "id",
+      "name",
+      "description",
+      "order"
+    ],
+    "mcp_tool_names": [
+      "mcp__agenthub__hub_ask",
+      "mcp__agenthub__hub_status",
+      "mcp__agenthub__hub_capabilities",
+      "mcp__agenthub__hub_login",
+      "mcp__agenthub__hub_dispatch",
+      "mcp__agenthub__hub_fetch"
+    ],
+    "workflow_present": true,
+    "actual_native_services_observed": true,
+    "model_calls": 0,
+    "local_hub_started": false,
+    "owned_processes_cleaned": true,
+    "generation_verified": false
+  },
+  "sources": [
+    "https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md",
+    "https://github.com/zai-org/ZCode/blob/main/apps/zcode-cli/README.md",
+    "https://zcode.z.ai/en/docs/plugin"
+  ],
+  "completed_utc": "2026-10-08T12:16:16Z",
+  "source_frozen": true,
+  "offline_regressions": {
+    "packaging_audit_regressions.py": {
+      "passed": 9
+    },
+    "dsh_installer_smoke.py": {
+      "passed": 9
+    },
+    "dsh_connection.test.mjs": {
+      "passed": 4
+    },
+    "dsh_workflows.test.mjs": {
+      "passed": 6
+    },
+    "client_config.test.mjs": {
+      "passed": 3
+    },
+    "total": 31,
+    "model_calls": 0
+  },
+  "native_commands": {
+    "codex": [
+      [
+        "plugin",
+        "marketplace",
+        "add",
+        "<installed-app>",
+        "--json"
+      ],
+      [
+        "plugin",
+        "add",
+        "agenthub-workers@agenthub-local",
+        "--json"
+      ],
+      [
+        "plugin",
+        "list",
+        "--json"
+      ]
+    ],
+    "zcode": [
+      [
+        "plugins",
+        "marketplace",
+        "add",
+        "<installed-app>/.zcode-plugin/marketplace.json"
+      ],
+      [
+        "plugins",
+        "uninstall",
+        "agenthub-workers@agenthub-local",
+        "--force",
+        "--keep-data"
+      ],
+      [
+        "plugins",
+        "install",
+        "agenthub-workers@agenthub-local"
+      ],
+      [
+        "plugins",
+        "list",
+        "--json"
+      ]
+    ],
+    "dsh": [
+      [
+        "--profile",
+        "audit",
+        "--from-default-profile",
+        "headless",
+        "--dump-config"
+      ],
+      [
+        "plugin",
+        "--profile",
+        "audit",
+        "add",
+        "file:<installed-app>/integrations/dsh",
+        "--ignore-scripts"
+      ],
+      [
+        "--profile",
+        "audit",
+        "--patch",
+        "<owned-public-observer.patch.yml>"
+      ]
+    ]
+  },
+  "native_commands_note": "ZCode uninstall is only used for an existing exact local plugin whose marketplace source matches this installed app; data and disabled state are preserved. DSH discovery uses an isolated headless profile and an observer, not inference.",
+  "scope_note": "Official native host installation/listing/cache refresh and DSH native registry observation are real. Offline suites use temporary fixtures/mock transports. No vendor model was invoked, no personal CLI profile was edited, and no end-to-end generation success is claimed."
+}

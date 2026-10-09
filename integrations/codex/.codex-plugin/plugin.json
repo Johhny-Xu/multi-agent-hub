@@ -1,6 +1,6 @@
 {
   "name": "agenthub-workers",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Codex workflows and an MCP bridge to eight self-hosted AgentHub workers.",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",

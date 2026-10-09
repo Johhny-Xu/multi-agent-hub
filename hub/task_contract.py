@@ -4,6 +4,7 @@ import binascii
 import json
 import os
 import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def merge_cli_arguments(command, additions):
     Call before substituting {task}, so arbitrary prompt text cannot be parsed
     as an option. Repeated attachment flags intentionally remain repeated.
     """
-    scalars = {"--model", "-m", "--format", "--output-format", "--output", "--settings", "--reasoning-effort", "--effort", "--timeout"}
+    scalars = {"--model", "-m", "--agent", "--input-format", "--format", "--output-format", "--output", "--settings", "--reasoning-effort", "--effort", "--timeout"}
     result = list(command)
     index = 0
     while index < len(additions):
@@ -73,18 +74,90 @@ def merge_cli_arguments(command, additions):
     return result
 
 
-def capabilities(agent, profile):
+def platform_name():
+    return "windows" if os.name == "nt" else "darwin" if sys.platform == "darwin" else "linux"
+
+
+def resolve_model(profile, requested=None):
+    aliases = profile.get("models") or {}
+    requested = str(requested or "").strip()
+    if requested in ("", "default", "默认"):
+        requested = str(aliases.get("default") or "")
+    return str(aliases.get(requested, requested))
+
+
+def capabilities(agent, profile, model=None, platform=None):
     catalog = json.loads((Path(__file__).with_name("capabilities.json")).read_text(encoding="utf-8"))
+    def merge(left, right):
+        result = dict(left)
+        for key, value in right.items():
+            result[key] = merge(result[key], value) if isinstance(value, dict) and isinstance(result.get(key), dict) else value
+        return result
     result = dict(catalog.get(agent, {}))
     override = profile.get("capabilities", {})
     if not isinstance(override, dict):
         raise ValueError("capabilities must be an object")
-    result.update(override)
+    result = merge(result, override)
+    result = merge(result, (result.get("platforms") or {}).get(platform or platform_name(), {}))
+    result = merge(result, (result.get("models") or {}).get(model or resolve_model(profile), {}))
     return result
 
 
+def _read_authorized(profile):
+    cli = [str(item) for item in (profile.get("cli") or [])]
+    def values(flag):
+        if flag not in cli:
+            return []
+        start = cli.index(flag) + 1
+        stop = next((i for i in range(start, len(cli)) if cli[i].startswith("-")), len(cli))
+        return [part for item in cli[start:stop] for part in re.split(r"[,\s]+", item)]
+    # Tools must actually be exposed AND pre-authorized in headless mode.
+    allowed, tools = values("--allowedTools"), values("--tools")
+    denied = values("--disallowedTools")
+    return "Read" not in denied and (not tools or "Read" in tools or "default" in tools) and "Read" in allowed and "--permission-mode" in cli and cli[cli.index("--permission-mode") + 1:cli.index("--permission-mode") + 2] == ["acceptEdits"]
+
+
+def attachment_config(caps, kind, profile):
+    config = (caps.get("attachments") or {}).get(kind)
+    if not isinstance(config, dict) or config.get("supported") is False:
+        return None, (config or {}).get("reason", "该模型/平台未声明此附件能力")
+    if config.get("requires_read_authorization") and not _read_authorized(profile):
+        return None, "图像读取需要官方 standard 代理、Read 工具和窄范围预授权配置。"
+    return config, None
+
+
+def public_model_capabilities(agent, profile, model):
+    caps = capabilities(agent, profile, model)
+    thinking = ["default"]
+    reasons = {}
+    for mode in ("on", "off"):
+        config = (caps.get("thinking") or {}).get(mode)
+        if isinstance(config, dict) and config.get("supported") is not False and (not config.get("models") or model in config["models"]):
+            thinking.append(mode)
+        else:
+            reasons[mode] = (config or {}).get("reason", "该模型未验证此思考控制")
+    on = (caps.get("stream") or {}).get("on")
+    stream_supported = isinstance(on, dict) and on.get("supported") is not False
+    stream = {"supported": stream_supported, "semantics": caps.get("stream_semantics", "answer_snapshots" if stream_supported else "unverified")}
+    if not stream_supported:
+        stream["reason"] = (on or {}).get("reason", "该通道未验证实时回答流；只能查询终态")
+    attachments = {}
+    for kind in ("file", "image"):
+        config, reason = attachment_config(caps, kind, profile)
+        attachments[kind] = {"supported": config is not None, "platforms": [platform_name()]}
+        if config:
+            attachments[kind]["mode"] = config.get("mode")
+            if kind == "image" and (config.get("mode") in {"stdin_json", "messages_file"} or config.get("requires_read_authorization")):
+                attachments[kind]["content_types"] = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+            if config.get("mode") in {"stdin_json", "inline_text", "messages_file"} and kind == "file":
+                attachments[kind]["content_types"] = ["text/plain; charset=utf-8"]
+        else:
+            attachments[kind]["reason"] = reason
+    return {"thinking": {"allowed": thinking, "default": "default", "reasons": reasons}, "stream": stream, "attachments": attachments}
+
+
 def _mode_config(value, label):
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or value.get("supported") is False:
         raise UnsupportedCapability("UNSUPPORTED: " + label)
     args, env = value.get("args", []), value.get("env", {})
     if not isinstance(args, list) or any(not isinstance(arg, str) for arg in args):
@@ -96,13 +169,28 @@ def _mode_config(value, label):
 
 def prepare_task(agent, profile, args, directory):
     """Reject unsupported requests before creating files or launching a process."""
-    caps = capabilities(agent, profile)
+    model = resolve_model(profile, args.get("model"))
+    caps = capabilities(agent, profile, model)
+    declared = set((profile.get("models") or {}).values())
+    if model and declared and model not in declared and profile.get("allow_unlisted_models") is not True:
+        raise UnsupportedCapability("UNSUPPORTED: 所选模型未在本机 worker 配置中声明")
+    if any(args.get(key) is not None for key in ("effort", "contextTier", "autoTier")):
+        raise UnsupportedCapability("UNSUPPORTED: effort/contextTier/autoTier 不是已验证的 CLI 控制；请使用 thinking")
+    if args.get("extra_args") is not None:
+        values = args["extra_args"]
+        if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
+            raise ValueError("extra_args must be a string array")
+        protected = {"--model", "-m", "--agent", "--input-format", "--output-format", "--format", "--output", "--stream", "--include-partial-messages", "--thinking", "--effort", "--reasoning-effort", "--settings", "--messages-file", "--file", "--attach", "--attachment", "--tools", "--allowedTools", "--disallowedTools", "--permission-mode"}
+        if any(item.partition("=")[0] in protected for item in values):
+            raise UnsupportedCapability("UNSUPPORTED: extra_args 不能覆盖已校验的模型、思考、流式、附件或工具授权；请修改本机 profile 或使用任务选项")
     thinking, stream = args.get("thinking", "default"), args.get("stream", False)
     if thinking not in ("default", "on", "off") or not isinstance(thinking, str):
         raise ValueError("thinking must be default/on/off")
     if not isinstance(stream, bool):
         raise ValueError("stream must be a boolean")
-    extra, env = [], {}
+    extra, env = _mode_config({"args": caps.get("task_args", [])}, agent + " task")
+    extra, env = list(extra), dict(env)
+    remove_args = []
     if thinking != "default":
         config = (caps.get("thinking") or {}).get(thinking)
         more, values = _mode_config(config, agent + " thinking=" + thinking)
@@ -116,10 +204,15 @@ def prepare_task(agent, profile, args, directory):
         extra.extend(more)
         env.update(values)
     output_mode = (caps.get("stream") or {}).get("on" if stream else "off")
-    if output_mode is not None:
+    if stream and (not isinstance(output_mode, dict) or output_mode.get("supported") is False):
+        raise UnsupportedCapability("UNSUPPORTED: " + (output_mode or {}).get("reason", agent + " 未验证实时输出流"))
+    if output_mode is not None and output_mode.get("supported") is not False:
         more, values = _mode_config(output_mode, agent + " stream")
         extra.extend(more)
         env.update(values)
+        remove_args = output_mode.get("remove_args", [])
+        if not isinstance(remove_args, list) or any(flag not in {"--stream", "--include-partial-messages"} for flag in remove_args):
+            raise ValueError("Invalid removable CLI boolean flags")
     raw = args.get("attachments", [])
     if not isinstance(raw, list) or len(raw) > MAX_ATTACHMENTS:
         raise ValueError("attachments must be an array with at most 8 files")
@@ -142,11 +235,11 @@ def prepare_task(agent, profile, args, directory):
         if total > MAX_ATTACHMENT_BYTES:
             raise ValueError("Attachments exceed the 1 MiB combined limit")
         kind = "image" if mime.startswith("image/") else "file"
-        config = (caps.get("attachments") or {}).get(kind)
-        if not isinstance(config, dict) or config.get("mode") not in {"cli", "prompt_path", "inline_text", "messages_file"}:
-            raise UnsupportedCapability("UNSUPPORTED: " + agent + " " + kind + " attachment")
+        config, reason = attachment_config(caps, kind, profile)
+        if not isinstance(config, dict) or config.get("mode") not in {"cli", "prompt_path", "inline_text", "messages_file", "stdin_json"}:
+            raise UnsupportedCapability("UNSUPPORTED: " + agent + " " + kind + " attachment: " + str(reason or "未声明"))
         text = None
-        if config["mode"] == "inline_text" or config["mode"] == "messages_file" and kind == "file":
+        if config["mode"] == "inline_text" or config["mode"] in {"messages_file", "stdin_json"} and kind == "file":
             if kind == "image":
                 raise UnsupportedCapability("UNSUPPORTED: image cannot be treated as text")
             try:
@@ -157,7 +250,7 @@ def prepare_task(agent, profile, args, directory):
                 raise UnsupportedCapability("UNSUPPORTED: binary attachment")
             if config["mode"] == "inline_text" and len(args["task"]) + sum(len(entry[3] or "") for entry in decoded) + len(text) > 24000:
                 raise UnsupportedCapability("UNSUPPORTED: inline text exceeds the portable 24000-character command limit")
-        if config["mode"] == "messages_file" and kind == "image" and mime not in {"image/png", "image/jpeg", "image/gif", "image/webp"}:
+        if kind == "image" and (config["mode"] in {"messages_file", "stdin_json"} or config.get("requires_read_authorization")) and mime not in {"image/png", "image/jpeg", "image/gif", "image/webp"}:
             raise UnsupportedCapability("UNSUPPORTED: this message API accepts PNG/JPEG/GIF/WebP images only")
         if config["mode"] == "cli" and (not isinstance(config.get("flag"), str) or not config["flag"]):
             raise ValueError("Attachment CLI flag is missing")
@@ -167,6 +260,8 @@ def prepare_task(agent, profile, args, directory):
     staging = None
     message_file = None
     message_content = []
+    stdin_content = []
+    input_file = None
     try:
         if decoded:
             parent = Path(directory).resolve()
@@ -192,9 +287,19 @@ def prepare_task(agent, profile, args, directory):
                         message_content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.b64encode(data).decode("ascii")}})
                     else:
                         message_content.append({"type": "text", "text": "[Attached file: " + name + "]\n" + text})
+                elif mode == "stdin_json":
+                    if kind == "image":
+                        stdin_content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.b64encode(data).decode("ascii")}})
+                    else:
+                        stdin_content.append({"type": "text", "text": "[Attached file: " + name + "]\n" + text})
                 else:
                     task += "\n\n[Attached file: " + name + "]\n" + text + "\n[End attachment]"
                 attachments.append({"name": name, "kind": kind, "bytes": len(data), "mode": mode})
+            if stdin_content:
+                input_file = staging / "input.jsonl"
+                input_file.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": task}, *stdin_content]}}, ensure_ascii=False) + "\n", encoding="utf-8")
+                input_file.chmod(0o600)
+                extra = merge_cli_arguments(extra, ["--input-format", "stream-json", "--output-format", "stream-json"])
             if message_content:
                 message_file = staging / "messages.json"
                 message_file.write_text(json.dumps([{"role": "user", "content": [{"type": "text", "text": task}, *message_content]}], ensure_ascii=False), encoding="utf-8")
@@ -203,7 +308,7 @@ def prepare_task(agent, profile, args, directory):
     except BaseException:
         cleanup_attachments(str(staging) if staging else None, directory)
         raise
-    return {"task": task, "extra_args": extra, "env": env, "staging": str(staging) if staging else None, "message_file": bool(message_file),
+    return {"task": task, "extra_args": extra, "remove_args": remove_args, "env": env, "staging": str(staging) if staging else None, "message_file": bool(message_file), "input_file": str(input_file) if input_file else None,
             "metadata": {"thinking": thinking, "stream": stream, "attachments": attachments}}
 
 
