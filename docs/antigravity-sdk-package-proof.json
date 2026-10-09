@@ -1,0 +1,20 @@
+{
+  "package": "google-antigravity",
+  "version": "0.1.21",
+  "source": "https://pypi.org/pypi/google-antigravity/0.1.21/json",
+  "windows_wheel": "google_antigravity-0.1.21-py3-none-win_amd64.whl",
+  "sha256": "7bce9e1af34a724898154fc84d59c2295d60f3dd82a9bebb191f00c757a4c956",
+  "official_digest_matches": true,
+  "installed_python_files_compared": 99,
+  "installed_python_files_match_official_wheel": true,
+  "workflow_python_files": [],
+  "beta_run_workflow_available": false,
+  "sdk_model_called": false,
+  "authentication": "GEMINI_API_KEY_missing",
+  "linux_wheel_api_checks": {
+    "version": "0.1.21",
+    "RUN_WORKFLOW": false,
+    "beta_workflows": false,
+    "installed_from": "https://pypi.org/simple"
+  }
+}

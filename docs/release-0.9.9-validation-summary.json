@@ -1,0 +1,15 @@
+{
+  "version": "0.9.9",
+  "full_regression_groups": {
+    "windows": 32,
+    "linux": 29
+  },
+  "agy_timeout_fix_tests_per_platform": 83,
+  "codearts_catalog_tests_per_platform": 22,
+  "native_installer_followup_tests_per_platform": 13,
+  "final_sources_identical": true,
+  "runtime_sources_match_combined_validation": true,
+  "later_documentation_changes": {},
+  "six_mcp_copies_identical": true,
+  "package_manifest_integrity_verified": true
+}

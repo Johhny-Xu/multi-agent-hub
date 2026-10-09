@@ -10,30 +10,33 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { discoverHubs, probeHealth, hubDiscover } from '../mcp/discovery.mjs';
 
-async function httpFixture(handler) {
+async function httpFixture(handler, host = '127.0.0.1') {
   const server = createServer(handler);
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  return { server, url: `http://127.0.0.1:${server.address().port}/mcp`, port: server.address().port,
+  await new Promise(resolve => server.listen(0, host, resolve));
+  return { server, url: `http://${host}:${server.address().port}/mcp`, port: server.address().port,
     close: () => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }) };
 }
-async function udpFixture(handler) {
+async function udpFixture(handler, host = '127.0.0.1') {
   const socket = createSocket('udp4');
   socket.on('message', (message, peer) => handler(JSON.parse(message), reply => socket.send(Buffer.from(JSON.stringify(reply)), peer.port, peer.address)));
-  await new Promise(resolve => socket.bind(0, '127.0.0.1', resolve));
+  await new Promise(resolve => socket.bind(0, host, resolve));
   return { port: socket.address().port, close: () => new Promise(resolve => socket.close(resolve)) };
 }
 
 test('UDP discovery validates nonce and health, deduplicates, ignores advertised URL and sends no credentials', async () => {
+  // Isolate the fixture from discovery's intentional legacy fallback probe at
+  // 127.0.0.1:8765, where a developer may already have a real Hub running.
+  const host = '127.0.0.2';
   const received = [];
-  const web = await httpFixture((req, res) => { received.push({ path: req.url, auth: req.headers.authorization }); res.end(JSON.stringify({ service: 'agent-hub', status: 'ok', auth_required: true })); });
+  const web = await httpFixture((req, res) => { received.push({ path: req.url, auth: req.headers.authorization }); res.end(JSON.stringify({ service: 'agent-hub', status: 'ok', auth_required: true })); }, host);
   const udp = await udpFixture((request, send) => {
     assert.deepEqual(Object.keys(request).sort(), ['nonce', 'service', 'version']);
     const reply = { ...request, port: web.port, path: '/mcp', name: 'Fixture\n<injected>', url: 'http://untrusted.invalid/mcp', token: 'SYNTHETIC_ADVERTISED_SECRET' };
     send({ ...reply, nonce: 'wrong' }); send({ ...reply, service: 'other' }); send({ ...reply, path: '/unsafe' });
     send(reply); send(reply);
-  });
+  }, host);
   try {
-    const result = await discoverHubs({ targets: ['127.0.0.1'], port: udp.port, timeoutMs: 150 });
+    const result = await discoverHubs({ targets: [host], port: udp.port, timeoutMs: 150 });
     assert.equal(result.candidates.length, 1);
     assert.deepEqual(result.candidates[0], { url: web.url, auth_required: true, name: 'Fixtureinjected', source: 'discovery' });
     assert.equal(result.manual_required, false);

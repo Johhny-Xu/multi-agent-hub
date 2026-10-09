@@ -1,0 +1,69 @@
+{
+  "kind": "release_readme_svg_visual_validation",
+  "release": "0.9.9",
+  "tested_on": "2026-10-09T15:07:41.844Z",
+  "assets": [
+    {
+      "file": "docs/architecture.svg",
+      "sha256": "4f4a163cf35a8574e9c5f580adb17507ef6968613f6d932a14e201db732e0a26",
+      "xml_valid": true,
+      "viewBox": "0 0 1280 980",
+      "text_elements": 68,
+      "text_outside_canvas": [],
+      "text_overlaps": [],
+      "text_outside_group_panel": [],
+      "external_resources": [],
+      "scripts_or_foreign_objects": 0,
+      "visually_reviewed": true,
+      "screenshot": "architecture-full.png"
+    },
+    {
+      "file": "docs/roadmap.svg",
+      "sha256": "e8f233eeb6495a553dcbeae41577bfd85220e743919a82886d02052fcd518653",
+      "xml_valid": true,
+      "viewBox": "0 0 1280 1040",
+      "text_elements": 43,
+      "text_outside_canvas": [],
+      "text_overlaps": [],
+      "text_outside_group_panel": [],
+      "external_resources": [],
+      "scripts_or_foreign_objects": 0,
+      "visually_reviewed": true,
+      "screenshot": "roadmap-full.png"
+    }
+  ],
+  "architecture_first_after_title": true,
+  "readme_image_width_tested_px": 832,
+  "both_images_rendered": true,
+  "horizontal_overflow": false,
+  "local_links_checked": 16,
+  "local_links_missing": [],
+  "local_link_anchors_missing": [],
+  "screenshots_saved_outside_repository": true,
+  "runtime_code_changed": false,
+  "passed": true,
+  "geometry_and_links_passed": true,
+  "readme_sha256": "0c81e3cd4d57a3b094de67e9d215620229af50f956bf052a8de978530b7a3b98",
+  "screenshot_directory": "%LOCALAPPDATA%/AgentHub-Validation/release-0.9.9-svg",
+  "renderer": "Bundled Playwright Chromium 151.0.7922.34, Windows installed fonts",
+  "visual_review": {
+    "reviewed_full_size": true,
+    "reviewed_readme_image_embedding": true,
+    "readme_preview_uses_isolated_img_elements": true,
+    "client_count": 5,
+    "worker_count": 9,
+    "source_version": "0.9.9",
+    "current_focus": "优化使用体验",
+    "antigravity_client_visible": true,
+    "codearts_model_boundary_preserved": true,
+    "minor_edit": "Changed MiMo · 26f to MiMo, with root approval, to distinguish worker type from the tested server default model.",
+    "screenshots_backup_outside_repository": true,
+    "full_readme_html_rendered": false
+  },
+  "visual_review_readme_sha256": "dae8aac41d2ef35cfd9a76da8d710875c093b70a306e7ce40db87d720c22b004",
+  "final_document_check": {
+    "svg_bytes_unchanged_since_visual_review": true,
+    "readme_prose_and_navigation_updated_after_visual_review": true,
+    "final_readme_local_links_checked": true
+  }
+}

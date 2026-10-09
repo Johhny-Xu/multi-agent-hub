@@ -111,6 +111,51 @@ class CodeArtsDriver(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn("--model", calls[0])
 
+    def test_official_two_column_catalog_allows_the_selected_model(self):
+        # CLI 26.9.12 pads model_id to the longest provider/model plus two
+        # spaces, followed by model_name; each provider has its own header.
+        def table(rows):
+            width = max(len(identifier) for identifier, _ in rows) + 2
+            return "\r\n".join([
+                "model_id".ljust(width) + "model_name", "-" * (width + 10),
+                *(identifier.ljust(width) + name for identifier, name in rows),
+            ])
+        catalog = table([("other/model", "Other Model")]) + "\r\n" + table([
+            ("provider/chosen", "Chosen Model"), ("provider/longer-name", "Longer Model"),
+        ])
+        calls = []
+        def fake(command, **kwargs):
+            calls.append(command)
+            return (catalog, "", 0) if "models" in command else (success("46"), "", 0)
+        result = driver.run_task(task="17+29. Only the number.", cli=sys.executable, model="provider/chosen", capture=fake)
+        self.assertEqual(result["result"], "46")
+        self.assertEqual(len(calls), 2)
+
+    def test_official_short_ids_have_a_collapsed_header(self):
+        for identifier in ("p/m", "ab/mod", "abc/mod"):
+            width = len(identifier) + 2
+            catalog = ("model_id".ljust(width) + "model_name\n"
+                       + "-" * (width + 10) + "\n" + identifier.ljust(width) + "Short Model\n")
+            self.assertEqual(driver.parse_model_catalog(catalog), {identifier})
+
+    def test_catalog_rejects_banner_mentions_and_malformed_table_rows(self):
+        invalid = [
+            "provider/chosen  was mentioned in a diagnostic",  # no table header
+            "model_id         model_name\nprovider/chosen  Chosen",  # no ruler
+            "model_id         model_name\n---------------------------\nprovider/chosen Chosen",  # only one gap
+            "model_id         model_name\n---------------------------\n!provider/chosen Chosen",
+            "model_id         model_name\n---------------------------\nwarning: unavailable\nprovider/chosen  Chosen",
+        ]
+        for catalog in invalid:
+            with self.subTest(catalog=catalog):
+                calls = []
+                def fake(command, **kwargs):
+                    calls.append(command)
+                    return catalog, "", 0
+                result = driver.run_task(task="hi", cli=sys.executable, model="provider/chosen", capture=fake)
+                self.assertEqual(result["status"], "blocked_model")
+                self.assertEqual(len(calls), 1)
+
     def test_unsupported_controls_do_not_launch(self):
         def never(*args, **kwargs):
             self.fail("must not start process")

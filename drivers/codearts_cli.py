@@ -90,6 +90,44 @@ def diagnostic_error(text: str) -> AdapterError | None:
     return None
 
 
+def parse_model_catalog(stdout: str) -> set[str]:
+    """Read single IDs or the official CLI's model_id/model_name tables.
+
+    A table row is accepted only after its exact header and ruler. Splitting
+    arbitrary diagnostic lines on whitespace would mistake model mentions for
+    an available model.
+    """
+    catalog, column, pending = set(), None, None
+    for line in stdout.splitlines():
+        if MODEL_ID.fullmatch(line.strip()):
+            catalog.add(line.strip())
+            continue
+        if re.fullmatch(r"model_id +model_name", line):
+            pending, column = line.index("model_name"), None
+            continue
+        if line == "model_idmodel_name":
+            # padEnd does not truncate the header for provider IDs as short as
+            # p/m. The official ruler still carries the actual column width.
+            pending, column = -1, None
+            continue
+        if pending is not None:
+            if pending == -1:
+                column = len(line) - 10 if re.fullmatch(r"-{15,18}", line) else None
+            else:
+                column = pending if line == "-" * (pending + 10) else None
+            pending = None
+            continue
+        if column is not None:
+            identifier = line[:column].rstrip(" ")
+            if (MODEL_ID.fullmatch(identifier) and len(identifier) <= column - 2
+                    and line[len(identifier):column] == " " * (column - len(identifier))
+                    and not any(ord(char) < 32 or ord(char) == 127 for char in line)):
+                catalog.add(identifier)
+                continue
+        column = None
+    return catalog
+
+
 def parse_events(stdout: str, stderr: str, returncode: int, model="") -> dict:
     """Accept one fresh session with an explicit completed final model step."""
     records, diagnostics = [], [stderr]
@@ -267,7 +305,7 @@ def run_task(*, task, cli=None, model="", timeout=300, stream="off", thinking="d
                 error = diagnostic_error(stdout + "\n" + stderr)
                 if error:
                     raise error
-                catalog = {line.strip() for line in stdout.splitlines() if MODEL_ID.fullmatch(line.strip())}
+                catalog = parse_model_catalog(stdout)
                 if code or model not in catalog:
                     raise AdapterError("CODEARTS_MODEL_UNAVAILABLE", "blocked_model")
             # Linux 26.9.12 lacks --dir; setting the child process cwd works on

@@ -325,9 +325,11 @@ def install(args):
             shutil.rmtree(stage)
     registrations = native.register(app, config_dir, node, args.native_hosts, args.project, args.profile,
                                     {'codex': args.codex_home, 'zcode': args.zcode_home, 'dsh': args.dsh_home,
-                                     'codearts': getattr(args, 'codearts_home', None)},
+                                     'codearts': getattr(args, 'codearts_home', None),
+                                     'antigravity': getattr(args, 'antigravity_home', None)},
                                     {'codex': args.codex_cli, 'zcode': args.zcode_cli, 'dsh': args.dsh_cli,
-                                     'codearts': getattr(args, 'codearts_cli', None)},
+                                     'codearts': getattr(args, 'codearts_cli', None),
+                                     'antigravity': getattr(args, 'antigravity_exe', None)},
                                     codearts_ide_settings=getattr(args, 'codearts_ide_settings', None),
                                     codearts_target=getattr(args, 'codearts_target', 'both')) if component in ('plugins', 'both') else []
     started = None
@@ -356,9 +358,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle', type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument('--component', choices=('hub', 'plugins', 'both'))
-    for name in ('prefix', 'config-dir', 'token-file', 'project', 'codex-home', 'zcode-home', 'dsh-home', 'codearts-home', 'codearts-ide-settings'):
+    for name in ('prefix', 'config-dir', 'token-file', 'project', 'codex-home', 'zcode-home', 'dsh-home', 'codearts-home', 'codearts-ide-settings', 'antigravity-home'):
         parser.add_argument('--' + name, type=Path)
-    for name in ('url', 'bind', 'python', 'node', 'codex-cli', 'zcode-cli', 'dsh-cli', 'codearts-cli'):
+    for name in ('url', 'bind', 'python', 'node', 'codex-cli', 'zcode-cli', 'dsh-cli', 'codearts-cli', 'antigravity-exe'):
         parser.add_argument('--' + name)
     parser.add_argument('--port', type=int)
     parser.add_argument('--console-port', type=int)

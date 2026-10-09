@@ -1,0 +1,178 @@
+{
+  "release": "0.9.9",
+  "date": "2026-10-09",
+  "scope": "CodeArts Windows IDE kernel and Linux CLI custom-provider diagnosis; official model-catalog parser repair",
+  "overall": "adapter_defect_fixed_account_requirements_still_block_real_CodeArts_completion",
+  "provider_route": {
+    "id": "9router/trae",
+    "kind": "custom OpenAI-compatible provider, not Huawei-native model authentication",
+    "source": "existing authorized private MiMo provider.9router configuration on each host",
+    "windows_models_http_status": 200,
+    "linux_models_http_status": 200,
+    "windows_route_in_catalog": true,
+    "linux_route_in_catalog": true,
+    "private_endpoints_or_keys_in_report": false
+  },
+  "windows": {
+    "runtime": "installed official CodeArts IDE AgentKernel 26.9.501",
+    "configured_candidate": true,
+    "effective_config_contained_provider": true,
+    "effective_config_contained_model": "9router/trae",
+    "effective_enabled_providers": [
+      "inferhub-provider",
+      "benefit-model"
+    ],
+    "catalog_command": "models --pure",
+    "catalog_exit_code": 0,
+    "catalog_included_custom_route": false,
+    "finding": "Standalone IDE kernel did not register the custom provider. Vendor custom-provider registration depends on its identity and custom-model permission initialization; adding provider JSON alone did not enable it. This does not establish that the user's IDE account lacks permission.",
+    "post_rollback_real_worker_attempt": {
+      "prompt_kind": "numbers-only arithmetic",
+      "status": "blocked_auth",
+      "error_code": "CODEARTS_PROVIDER_UNAVAILABLE",
+      "completed": false,
+      "response_text_present": false
+    },
+    "private_config_rollback": {
+      "files": [
+        "USER_HOME/.codeartsdoer/codearts-data/codearts.json",
+        "USER_HOME/.codeartsdoer/codearts_cli.jsonc"
+      ],
+      "both_sha256_equal_original_backup": true,
+      "backup_and_inactive_candidate_parent": "%LOCALAPPDATA%/AgentHub-CodeArts/private-backups/",
+      "existing_default_model_restored": true
+    }
+  },
+  "linux": {
+    "runtime": "official CodeArts CLI 26.9.12",
+    "configured_candidate": true,
+    "catalog_command": "models --pure",
+    "catalog_exit_code": 0,
+    "catalog_included_custom_route": false,
+    "catalog_error_code": "CODEARTS_AUTH_REQUIRED",
+    "acp_help": "command_not_supported",
+    "finding": "The noninteractive CLI requires Huawei identity via the officially documented AK/SK flow before loading models. Existing provider credentials and interactive OAuth state did not satisfy that command's authentication requirement.",
+    "post_rollback_real_worker_attempt": {
+      "prompt_kind": "numbers-only arithmetic",
+      "status": "blocked_auth",
+      "error_code": "CODEARTS_AUTH_REQUIRED",
+      "completed": false,
+      "response_text_present": false
+    },
+    "private_config_rollback": {
+      "files": [
+        "USER_HOME/.codeartsdoer/codearts_cli.json"
+      ],
+      "sha256_equal_original_backup": true,
+      "backup_and_inactive_candidate_parent": "USER_HOME/.local/state/agenthub-codearts/private-backups/",
+      "existing_default_model_restored": true
+    }
+  },
+  "official_version_check": {
+    "advertised_cli_version": "26.9.12",
+    "platform_entries_checked": 12,
+    "installed_linux_matches_manifest": true,
+    "upgrade_performed": false,
+    "install_script_executed": false,
+    "ide_kernel_version_is_separate_build_stream": true
+  },
+  "adapter_repair": {
+    "source": "drivers/codearts_cli.py",
+    "defect": "Explicit model validation accepted only single-column catalogs; official Linux CLI 26.9.12 prints model_id and model_name columns.",
+    "evidence": "Read-only inspection of installed official CLI formatter confirmed per-provider model_id/model_name headers, max ID length plus two spaces, and a matching dash ruler.",
+    "behavior": "Accept the original single-ID format and strict header/ruler/column-validated official tables, including collapsed headers for short IDs; reject diagnostic mentions and malformed rows without dispatching a model request.",
+    "regression_file": "tests/codearts_driver_regressions.py",
+    "windows_tests": {
+      "passed": 22,
+      "failed": 0
+    },
+    "linux_tests": {
+      "passed": 22,
+      "failed": 0
+    },
+    "windows_linux_source_hashes_equal": true,
+    "driver_sha256": "0573638e8fd86ef4217ceaae19d50019dd266094cc703c9675d2501f709e81af",
+    "tests_sha256": "a20eda0320c451bb316f3a616075c88de57836f46f79773f69ef6001d344f5d7",
+    "tests_are_live_provider_evidence": false,
+    "production_deployment": {
+      "status": "deployed",
+      "platform": "linux",
+      "time_local": "2026-10-09 23:10:20 +08:00",
+      "driver_sha256": "0573638e8fd86ef4217ceaae19d50019dd266094cc703c9675d2501f709e81af",
+      "checks": {
+        "health": "passed",
+        "tools_count": 24,
+        "workers_count": 9,
+        "authentication": "passed",
+        "history_preserved": "passed",
+        "config_byte_protection": "passed"
+      },
+      "backup": "USER_HOME/.agenthub-validation-backups/release-0.9.9-20261009-231020",
+      "evidence_source": "parent release deployment verification"
+    },
+    "independent_review": {
+      "source_sha256_verified": true,
+      "official_formatter_fixture_provider_tables": 62,
+      "full_model_id_length_range": [
+        3,
+        64
+      ],
+      "all_rows_recognized": true,
+      "diagnostic_mentions_rejected": true,
+      "blocking_findings": 0
+    }
+  },
+  "secret_validation": {
+    "method": "Compare the existing authorized router key bytes in memory against source files; print counts only.",
+    "windows_source_files_checked": 413,
+    "linux_source_files_checked": 398,
+    "windows_literal_key_matches": 0,
+    "linux_literal_key_matches": 0,
+    "final_package_scan": {
+      "status": "passed",
+      "method": "Every uncompressed ZIP member compared against each host's own authorized router key bytes in memory. Linux key remained on Linux; only public release archives transferred.",
+      "packages": [
+        {
+          "package": "agenthub-0.9.9-hub.zip",
+          "sha256": "cc0a94e3aa4e7976280e647364fca7b5626fe30ed37cf66f79cbb3c0a935f9b1",
+          "members_checked_per_platform": 47,
+          "windows_router_key_matches": 0,
+          "linux_router_key_matches": 0
+        },
+        {
+          "package": "agenthub-0.9.9-plugins.zip",
+          "sha256": "0434ca3dee3ad185dd3780094dd095a194a6cc53b2f5ebbf3ad9b96a8e2b6ce1",
+          "members_checked_per_platform": 147,
+          "windows_router_key_matches": 0,
+          "linux_router_key_matches": 0
+        },
+        {
+          "package": "agenthub-0.9.9-both.zip",
+          "sha256": "823c70991658a3de1b7609d00d9641c542fbd0a2213f7af0fd4b8f9d99de04d5",
+          "members_checked_per_platform": 171,
+          "windows_router_key_matches": 0,
+          "linux_router_key_matches": 0
+        }
+      ],
+      "total_member_checks": 730,
+      "total_credential_byte_matches": 0,
+      "windows_linux_package_sha256_equal": true
+    }
+  },
+  "remaining_requirements": [
+    "Complete the official Huawei identity/authentication path for noninteractive CLI operation.",
+    "Where the account's edition requires it, enable custom-model permission through the official Huawei account/enterprise settings.",
+    "Verify the custom provider/model appears in codearts models before selecting it as a default or claiming a real CodeArts task passed."
+  ],
+  "not_claimed": [
+    "Huawei account authentication repaired by a router key",
+    "CodeArts model completion",
+    "CodeArts model-driven native MCP dispatch completion"
+  ],
+  "official_sources": [
+    "https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_00022.html",
+    "https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_0026.html",
+    "https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_0025.html",
+    "https://cnnorth4-cloudide-marketplace.obs.cn-north-4.myhuaweicloud.com/codearts/cli_tui/install_script/codearts_cli_versioninfo_v1.0.json"
+  ]
+}

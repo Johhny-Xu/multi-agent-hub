@@ -1,0 +1,47 @@
+{
+  "kind": "targeted-readonly-vendor-session-comparison",
+  "configured_worker_model": "9router/trae",
+  "vendor_reasoning_read_or_exported": false,
+  "credentials_read_or_exported": false,
+  "automatic_redispatch": false,
+  "evidence": [
+    {
+      "ref": "mimocode-e7cba3e3e9",
+      "hub_status": "completed",
+      "hub_text": "RELEASE099_ZCODE_M",
+      "vendor_assistant_parts": [
+        {
+          "role": "assistant",
+          "text": "RELEASE099_ZCODE_M",
+          "finish": "stop",
+          "error_present": false,
+          "time": {
+            "start": 1791557243209,
+            "end": 1791557243365
+          }
+        }
+      ],
+      "vendor_text_matches_hub": true,
+      "acceptance_passed": false
+    },
+    {
+      "ref": "mimocode-9bc457cd61",
+      "hub_status": "completed",
+      "hub_text": "RELEASE099_CODEX_M",
+      "vendor_assistant_parts": [
+        {
+          "role": "assistant",
+          "text": "RELEASE099_CODEX_M",
+          "finish": "stop",
+          "error_present": false,
+          "time": {
+            "start": 1791557266458,
+            "end": 1791557266605
+          }
+        }
+      ],
+      "vendor_text_matches_hub": true,
+      "acceptance_passed": false
+    }
+  ]
+}

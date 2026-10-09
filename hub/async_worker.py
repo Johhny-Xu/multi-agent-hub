@@ -259,7 +259,7 @@ def zcode_run(task, session_id, ref, timeout=ZCODE_TIMEOUT):
             poller.join(timeout=2)
 
 
-def _read_cli_output(path, final=False):
+def _read_cli_output(path, final=False, stderr=""):
     limit = 2 * 1024 * 1024 if final else 256 * 1024
     with open(path, "rb") as stream:
         stream.seek(0, os.SEEK_END)
@@ -275,7 +275,24 @@ def _read_cli_output(path, final=False):
                 json.loads(fragment)
             except ValueError:
                 raw = raw.rpartition("\n")[0]
-    return dict(parse_output(raw), usage=parse_usage(raw))
+    return dict(parse_output(raw, stderr=stderr), usage=parse_usage(raw))
+
+
+def _read_cli_stderr(path):
+    """Scan exact terminal diagnostics without retaining unbounded stderr."""
+    tail, error, line_start = b"", None, True
+    with open(path, "rb") as stream:
+        while True:
+            chunk = stream.readline(4096)
+            if not chunk:
+                break
+            tail = (tail + chunk)[-12000:]
+            # The known diagnostic is a short complete line. A long log line
+            # must not manufacture a new line boundary at a chunk split.
+            if line_start and (chunk.endswith(b"\n") or len(chunk) < 4096):
+                error = error or parse_output("", stderr=chunk.decode("utf-8", errors="replace"))["error"]
+            line_start = chunk.endswith(b"\n")
+    return tail.decode("utf-8", errors="replace").strip(), error
 
 
 def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None, input_file=None, watch_result=False):
@@ -317,17 +334,16 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None, inp
                         save(ref, only_if_running=True, progress=tail, exit_code=None)
                 except OSError:
                     pass
+        diagnostic, terminal_error = _read_cli_stderr(tmperr)
         parsed = _read_cli_output(tmpout, final=True)
+        if terminal_error:
+            parsed.update(text="", error=terminal_error)
         if parsed["usage"]:
             save(ref, only_if_running=True, usage=parsed["usage"])
         text = parsed["error"] or parsed["text"]
         if proc.returncode and not parsed["error"]:
             # CLI spinners/status messages on stderr are not model answers.
             # Keep diagnostics only for failed executions, bounded in memory.
-            with open(tmperr, "rb") as errors:
-                errors.seek(0, os.SEEK_END)
-                errors.seek(max(0, errors.tell() - 12000))
-                diagnostic = errors.read(12000).decode("utf-8", errors="replace").strip()
             if diagnostic:
                 text = (text + "\n" if text else "") + diagnostic
         if not text.strip() and proc.returncode == 0:

@@ -1,0 +1,62 @@
+{
+  "scope": "actual_linux_sdk_0.1.21_offline_validation_and_missing_auth_guard",
+  "model_called": false,
+  "checks": [
+    {
+      "action": "doctor",
+      "exit_code": 1,
+      "result": {
+        "ok": false,
+        "status": "blocked_auth",
+        "dependency_checks_ok": true,
+        "checks": {
+          "sdk": true,
+          "sdk_runtime": true,
+          "node": true,
+          "client_file": true,
+          "workspace": true,
+          "bridge": true
+        },
+        "sdk_required": "0.1.21",
+        "model": "SDK default (inherited)",
+        "worker_models": "Hub configured defaults",
+        "authentication": "missing_environment_key",
+        "credential_setup_url": "https://aistudio.google.com/app/api-keys",
+        "model_called": false,
+        "sdk_workflow_engine": "bounded_python_with_sdk_subagents",
+        "beta_run_workflow_available": false,
+        "workflow_note": "The verified 0.1.21 wheel has no beta.run_workflow API; Python orchestrates native typed SDK subagents.",
+        "note": "IDE sign-in is separate from SDK API authentication. doctor does not contact a model or Hub."
+      }
+    },
+    {
+      "action": "validate",
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "status": "validated_offline",
+        "sdk_version": "0.1.21",
+        "subagents": 9,
+        "planned_workers": [
+          "mimocode",
+          "codearts"
+        ],
+        "mode": "parallel",
+        "model_called": false,
+        "hub_called": false
+      }
+    },
+    {
+      "action": "run",
+      "exit_code": 1,
+      "result": {
+        "ok": false,
+        "status": "blocked_auth",
+        "error": "GEMINI_API_KEY_MISSING",
+        "credential_setup_url": "https://aistudio.google.com/app/api-keys",
+        "model_called": false,
+        "results": []
+      }
+    }
+  ]
+}

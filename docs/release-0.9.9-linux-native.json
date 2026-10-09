@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "release": "0.9.9",
+  "date": "2026-10-09",
+  "platform": "linux",
+  "target_hub_platform": "linux",
+  "target_hub_version": "0.9.9",
+  "scope": "Existing authenticated native hosts, registered 0.9.9 plugins, real routing subagents and text-only worker tasks. Thinking, streaming and attachments were not requested. No removed test CLI was reinstalled.",
+  "secret_handling": {
+    "credentials_copied_into_repository": false,
+    "raw_cli_logs_copied_into_repository": false,
+    "host_authentication": "Existing official host authentication retained; no secrets included in this report.",
+    "hub_configuration": "Existing private external client.json referenced by installed native plugins; configuration and credentials preserved."
+  },
+  "installation": {
+    "component": "plugins",
+    "native_hosts": ["antigravity", "zcode"],
+    "package_name": "agenthub-0.9.9-plugins.zip",
+    "package_sha256": "6cd9a0777d9def2cd2a0bbdfff058d491d327c72c09fa2eec09e3ef4dcdd0ac5",
+    "package_scope": "Linux native test package built from the synchronized release source before final documentation edits; not the final release ZIP hash.",
+    "installer": "packaging/install.py --component plugins --native-hosts antigravity,zcode --no-start",
+    "stable_prefix": "~/.local/share/multi-agent-hub-0.9.9",
+    "shared_private_config_dir": "~/.config/agenthub-codearts",
+    "backups": [
+      "~/.agenthub-validation-backups/native-0.9.9-20261009-224554",
+      "~/.config/agenthub-codearts/native-backups/1791557157847643939-antigravity"
+    ],
+    "previous_zcode_plugin": "agenthub-workers@dev-plugin-work-2acc6d65 version 0.4.0 disabled through the official CLI after registry backup; files and history retained.",
+    "hub_started_by_plugin_install": false
+  },
+  "worker": {
+    "name": "mimocode",
+    "model_requested": null,
+    "configured_default_model": "9router/trae",
+    "configured_model_evidence": "Existing private profile and hub_capabilities. This does not independently identify the upstream provider model.",
+    "model_26f_tested": false
+  },
+  "hosts": {
+    "antigravity": {
+      "cli_version": "1.3.1",
+      "model_requested": "gemini-3.8-flash-medium",
+      "native_plugin_root": "~/.gemini/config/plugins/multi-agent-hub",
+      "official_validate": {
+        "status": "passed",
+        "agents": 9,
+        "skills": 4,
+        "mcp_servers": 1
+      },
+      "plugin_inventory_note": "plugin list reports imported-plugin records, not every auto-discovered native directory. It returned No imported plugins while real plugin hub_status and routing worked; no import-manifest mutation was needed.",
+      "permissions": "Bounded sandbox tasks used the user's existing agy wrapper, which adds --dangerously-skip-permissions for print mode. Direct agy.bin without that wrapper auto-denied read_file in noninteractive mode. No global permission settings were modified.",
+      "sanity": {
+        "status": "passed",
+        "exit_code": 0,
+        "exact_answer": "AGY_LINUX_NATIVE_READY",
+        "duration_seconds": 2.5093
+      },
+      "plugin_hub_status": {
+        "status": "passed",
+        "conversation_id": "4c4f08f9-0c4c-4e2f-961b-4d2afce582d3",
+        "server_namespace": "multi-agent-hub_multi-agent-hub",
+        "registered_workers": 9,
+        "duration_seconds": 22.1383
+      },
+      "native_dispatch": {
+        "status": "passed",
+        "conversation_id": "412734b8-d06b-4b78-b644-9d203a328f78",
+        "native_agent": "hub-mimocode",
+        "task": "Compute 37+58. Reply with only the decimal integer; no explanation.",
+        "ref": "mimocode-79e2416c91",
+        "worker_status": "completed",
+        "exact_worker_answer": "95",
+        "cli_exit_code": 0,
+        "cli_status": "SUCCESS",
+        "duration_seconds": 85.281164084,
+        "partial_timeout": false,
+        "stderr_nonempty": false,
+        "server_record_verified": true,
+        "server_record_checks": ["same ref", "same exact task", "agent mimocode", "completed", "text 95", "exit code 0"],
+        "evidence": "Read-only official host SQLite tool records independently confirm invoke_subagent(TypeName=hub-mimocode, Model=inherit), the child cascade identity, and that child's capabilities -> one dispatch -> six fetch calls against the plugin namespace and original ref. The production Hub result file independently confirms the matching task and answer. Only allowlisted tool metadata was extracted; model/thought steps and credentials were not read.",
+        "native_trace": {
+          "source": "Official parent and child conversation SQLite steps, protobuf tool-call fields only",
+          "parent_invoke_step": 18,
+          "parent_invoke_call_id": "call_84647",
+          "parent_tool": "invoke_subagent",
+          "parent_invoke_count": 1,
+          "registered_type_name": "hub-mimocode",
+          "requested_subagent_model": "inherit",
+          "registered_definition_path": "~/.gemini/config/plugins/multi-agent-hub/agents/hub-mimocode.md",
+          "registered_definition_sha256": "3e45ba582920178e77bb72947d7324eb297eb20bd7ebc2476c234fa3a4d95c6f",
+          "parent_definition_read_step": 12,
+          "child_cascade_id": "e37bffe4-b4ea-4ba9-913b-cfadcdffcf33",
+          "child_trajectory_id": "c2293ee1-7f49-4ae0-8b03-9f4082c3c39e",
+          "child_mcp_tool": "call_mcp_tool",
+          "child_server_namespace": "multi-agent-hub_multi-agent-hub",
+          "child_call_counts": {"hub_capabilities": 1, "hub_dispatch": 1, "hub_fetch": 6},
+          "child_fetch_refs": ["mimocode-79e2416c91"],
+          "child_tool_record_status_values": [3],
+          "other_child_tools": {"send_message": 1},
+          "parent_behavior_limit": "The host attempted one run_command, recorded failed status 7, and wrote its own brain plan/walkthrough artifacts twice. The native routing passed, but this run does not demonstrate strict compliance with the prompt's no-shell/no-file-writing constraint. The child used only MCP routing tools and its parent-message tool."
+        }
+      },
+      "quota": {
+        "status": "not_exposed_by_supported_cli",
+        "evidence": "Official --help and models --help were inspected. models succeeded with available model names, but exposes no remaining-quota value. No zero-quota or unlimited-quota claim is made."
+      },
+      "observed_failures": [
+        {
+          "operation": "Initial bounded read-only review",
+          "cli_exit_code": 0,
+          "cli_status": "SUCCESS",
+          "answer_empty": true,
+          "stderr_diagnostic": "[agy] print timeout after 1m0s with turn in progress; returning partial output",
+          "classification": "partial_timeout_not_success",
+          "fix": "Hub sync and async parsers now reject the diagnostic as CLI_PARTIAL_TIMEOUT; the production Hub was redeployed before successful native tests."
+        },
+        {
+          "operation": "Direct binary noninteractive plugin probe without preauthorized read_file",
+          "classification": "permission_auto_denied_not_plugin_missing",
+          "answer_empty": true
+        }
+      ],
+      "optional_python_sdk": {
+        "version": "0.1.21",
+        "authentication": "separate from IDE and CLI login",
+        "real_model_status": "blocked_missing_sdk_authentication",
+        "offline_protocol_status": "real SDK HookRunner, HookRouter and protobuf tests pass; these are not real SDK model calls"
+      }
+    },
+    "zcode": {
+      "cli_version": "0.16.9",
+      "entrypoint": "ZCode desktop bundled resources/glm/zcode.cjs",
+      "registered_plugin": "agenthub-workers@agenthub-local",
+      "registered_version": "0.9.9",
+      "enabled": true,
+      "plugin_diagnostics": [],
+      "mcp_server": "plugin:agenthub-workers:hub-bridge",
+      "slash_commands": ["hub-discover", "hub-login", "hub-status"],
+      "launch_environment": {
+        "initial_result": "Built-in provider configuration lookup failed before any model request because the desktop-bundled CLI used standalone relative paths.",
+        "resolution": "Set the official ZCODE_BUILTIN_PROVIDER_CONFIG_FILE environment variable for this process to the existing resources/config/provider/zcode-builtin.json. The official CLI then resolved the existing personal provider configuration.",
+        "global_configuration_modified": false,
+        "credentials_copied": false
+      },
+      "permissions": "Isolated working directory; official headless yolo mode; Bash, Edit, Write and NotebookEdit disabled for this invocation.",
+      "native_dispatch": {
+        "status": "passed",
+        "session_id": "sess_45510840-ed7f-4e48-aa6e-7ef33a9f722e",
+        "native_agent": "agenthub-workers:mimocode",
+        "task": "Compute 46+27. Reply with only the decimal integer; no explanation.",
+        "ref": "mimocode-d8c6829cec",
+        "worker_status": "completed",
+        "exact_worker_answer": "73",
+        "cli_exit_code": 0,
+        "server_record_verified": true,
+        "server_record_checks": ["same ref", "same exact task", "agent mimocode", "completed", "text 73", "exit code 0"],
+        "evidence": "Official agent metadata and profileSnapshot independently identify the registered 0.9.9 mimocode agent file and matching system-prompt snapshot. Parent tool_usage records exactly one completed Agent call; the real child session records one capabilities call, one dispatch and three fetch calls. The production Hub result file independently confirms the matching task and answer. Only allowlisted metadata and tool fields were extracted; prompts, model reasoning and credentials were not exported.",
+        "native_trace": {
+          "metadata_source": "~/.zcode/cli/agents/sess_45510840-ed7f-4e48-aa6e-7ef33a9f722e/agent_5db27b76-f92d-4b3c-8954-6e6727177121/metadata.json",
+          "parent_tool": "Agent",
+          "parent_tool_completed_call_count": 1,
+          "agent_id": "agent_5db27b76-f92d-4b3c-8954-6e6727177121",
+          "child_session_id": "sess_subagent_agent_5db27b76-f92d-4b3c-8954-6e6727177121",
+          "profile_id": "agenthub-workers:mimocode",
+          "profile_snapshot_name": "agenthub-workers:mimocode",
+          "profile_snapshot_source": "user",
+          "profile_snapshot_path": "~/.zcode/cli/plugins/cache/agenthub-local/agenthub-workers/0.9.9/agents/mimocode.md",
+          "registered_definition_sha256": "cbe9bcb9bb414ac1c7e3cc1812738eac524ef662a7348c2092f53aabb647a0fa",
+          "snapshot_system_prompt_sha256": "5715943ec8ca4f23724782cd77914f1abd7044263dc26ac471d5cded4e11963e",
+          "snapshot_prompt_found_in_registered_definition": true,
+          "metadata_status": "completed",
+          "duration_ms": 31604,
+          "total_tool_use_count": 5,
+          "child_tool_call_counts": {
+            "mcp__plugin_agenthub-workers_hub-bridge__hub_capabilities": 1,
+            "mcp__plugin_agenthub-workers_hub-bridge__hub_dispatch": 1,
+            "mcp__plugin_agenthub-workers_hub-bridge__hub_fetch": 3
+          },
+          "child_tool_status_values": ["completed"]
+        }
+      }
+    },
+    "codex": {
+      "status": "not_installed",
+      "evidence": "No existing runnable Codex CLI found in the user's known stable installation locations, PATH and relevant user directories. No CLI installed for this test.",
+      "real_native_task_executed": false
+    },
+    "dsh": {
+      "status": "not_installed",
+      "evidence": "Existing configuration/history and a separate LAN UI source directory do not provide a runnable official DSH CLI. No existing official executable found in known installation locations; no CLI installed for this test.",
+      "real_native_task_executed": false
+    },
+    "codearts": {
+      "status": "blocked_auth",
+      "note": "The existing router authentication succeeded, but Linux CLI 26.9.12 still requires Huawei authentication. The catalog parser was repaired and deployed; private configurations were restored. See release-0.9.9-codearts-repair.json. Native component detection is not a successful CodeArts model task."
+    }
+  },
+  "agy_document_authoring": {
+    "workspace": "Isolated three-document copy outside the release source",
+    "actual_author": "Existing authenticated Antigravity CLI 1.3.1",
+    "model_selection": "The initial medium-model edit changed architecture.svg before a partial timeout. A subsequent official gemini-3.8-flash-low continuation completed README.md, and a separate bounded low-model task completed roadmap.svg. --model medium plus --effort low was rejected locally before model execution, so the available low model was selected explicitly.",
+    "files": [
+      {"file": "README.md", "sha256_before_maintainer_review": "18fd5b590d323550dad9b3fc4db8e13d9df3422c0f5954079a93622397724e5b"},
+      {"file": "docs/architecture.svg", "sha256_before_maintainer_review": "8768f286872d5a595dd91c0fbcce8008bb0cfab24bfe956273b4c9892f49f89a"},
+      {"file": "docs/roadmap.svg", "sha256_before_maintainer_review": "4fd41a6faef584d684e8dd23816d8be3aa728a9f98f688eb29574cfeae712d0b"}
+    ],
+    "verification": "All three files have actual diffs. The maintainer corrected stale release wording and final platform evidence, then reviewed both SVGs as XML and rendered images. See release-0.9.9-svg-validation.json. Original author hashes above identify the pre-review files."
+  },
+  "limits": [
+    "Native host final receipts and independently verified Hub results prove these two bounded text-task chains; they do not exhaust every native workflow or SDK execution mode.",
+    "No thinking on/off, streaming, images or file attachments were tested in these native-host tasks.",
+    "The actual worker configuration selected 9router/trae; this report does not claim a direct MiMo v2.6f provider test.",
+    "Antigravity CLI native plugin success does not establish optional Python SDK authentication or SDK model execution.",
+    "No supported CLI quota output was available; token usage is not a remaining-quota measurement.",
+    "No final release push, tag or GitHub asset upload is established by this validation report."
+  ]
+}

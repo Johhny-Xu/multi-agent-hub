@@ -191,6 +191,36 @@ class HubCoreRegressions(unittest.TestCase):
             hub.tool_zcode_delegate({"task": "fixture", "wait": False, "timeout_s": .5})
             self.assertEqual(spawn.call_args.args[3]["timeout_s"], .5)
 
+    def test_sync_antigravity_zero_exit_partial_timeout_is_not_completed(self):
+        diagnostic = "[agy] print timeout after 1m0s with turn in progress; returning partial output"
+        cases = (
+            ("timeout_before_long_stderr_suffix", "unfinished answer", diagnostic + "\n" + "fixture noise\n" * 1200, False),
+            ("colored_crlf_timeout", "unfinished answer", "\x1b[31m" + diagnostic + "\x1b[0m\r\n", False),
+            ("diagnostic_quoted_in_answer", "A quoted CLI diagnostic:\n" + diagnostic, "CLI_SPINNER\n", True),
+            ("diagnostic_quoted_in_stderr", "verified final answer", "Documentation example: " + diagnostic + "\n", True),
+        )
+        script = self.base / "antigravity_fixture.py"
+        hub.AGENTS_JSON.write_text(json.dumps({"agents": {"antigravity": {
+            "cli": [sys.executable, str(script), "{task}"], "async_default": False,
+            "models": {"default": "gemini-3.8-flash-medium"},
+        }}}), encoding="utf-8")
+        for name, answer, stderr, completed in cases:
+            with self.subTest(case=name):
+                payload = json.dumps({"conversation_id": "synthetic-sync-fixture", "status": "SUCCESS",
+                                      "response": answer, "usage": {}})
+                script.write_text("import sys\nprint(" + repr(payload) + ")\nsys.stderr.write(" + repr(stderr) + ")\n",
+                                  encoding="utf-8")
+                with patch.object(hub, "_record_cli_outcome") as record, patch.object(hub, "_start_async") as asynchronous:
+                    reply = hub.tool_hub_dispatch_cli({"agent": "antigravity", "task": "SYNTHETIC_LOCAL_TEST_ONLY", "timeout_s": 3})
+                asynchronous.assert_not_called()
+                self.assertIn("exit=" + ("0" if completed else "1"), reply)
+                self.assertEqual(record.call_args.args[3], "completed" if completed else "error")
+                if completed:
+                    self.assertIn(answer, reply)
+                else:
+                    self.assertIn("CLI_PARTIAL_TIMEOUT", reply)
+                    self.assertNotIn("unfinished answer", reply)
+
     def test_invalid_timeout_never_launches_gui_worker(self):
         with patch.object(hub, "_start_async") as spawn:
             for value in (True, 0, -1, float("nan"), float("inf")):

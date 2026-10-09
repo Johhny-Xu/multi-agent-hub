@@ -1,0 +1,30 @@
+{
+  "version": "0.9.9",
+  "artifacts": [
+    {
+      "file": "agenthub-0.9.9-hub.zip",
+      "bytes": 295480,
+      "sha256": "cc0a94e3aa4e7976280e647364fca7b5626fe30ed37cf66f79cbb3c0a935f9b1",
+      "verified_manifest_files": 45,
+      "component": "hub"
+    },
+    {
+      "file": "agenthub-0.9.9-plugins.zip",
+      "bytes": 520305,
+      "sha256": "0434ca3dee3ad185dd3780094dd095a194a6cc53b2f5ebbf3ad9b96a8e2b6ce1",
+      "verified_manifest_files": 145,
+      "component": "plugins"
+    },
+    {
+      "file": "agenthub-0.9.9-both.zip",
+      "bytes": 769472,
+      "sha256": "823c70991658a3de1b7609d00d9641c542fbd0a2213f7af0fd4b8f9d99de04d5",
+      "verified_manifest_files": 169,
+      "component": "both"
+    }
+  ],
+  "manifest_integrity_verified": true,
+  "source_only": true,
+  "private_credentials_packaged": false,
+  "release_assets_uploaded": false
+}

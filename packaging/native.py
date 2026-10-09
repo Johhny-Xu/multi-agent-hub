@@ -31,6 +31,13 @@ def discover(node, overrides=None):
         'zcode': [os.environ.get('ZCODE_CLI'), '/opt/ZCode/resources/glm/zcode.cjs', str(home / 'zcode-app/opt/ZCode/resources/glm/zcode.cjs'),
                   'C:/Program Files/ZCode/resources/glm/zcode.cjs', shutil.which('zcode')],
         'dsh': [shutil.which('dsh')],
+        # Native Antigravity plugins are discovered from directories. This
+        # executable is an installation marker; never launch a CLI to register.
+        'antigravity': [shutil.which('antigravity'), shutil.which('agy'),
+                        str(local / 'Programs/antigravity/Antigravity.exe'),
+                        str(Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / 'Antigravity/Antigravity.exe'),
+                        str(home / '.local/bin/agy'), '/opt/Antigravity/antigravity',
+                        '/opt/antigravity/antigravity', '/usr/share/antigravity/antigravity'],
         'codearts': [os.environ.get('CODEARTS_CLI'), shutil.which('codearts'),
                      str(home / '.local/bin/codearts'), str(home / '.codeartsdoer/installers/codearts'),
                      str(home / '.codeartsdoer/installers/bin/codearts'),
@@ -165,16 +172,37 @@ def register(app, config_dir, node, selected='auto', project=None, profile='agen
     hosts = discover(node, overrides)
     requested = list(hosts) if selected == 'auto' else [] if selected == 'none' else selected.split(',')
     if any(name not in hosts for name in requested):
-        raise SetupError('--native-hosts must be auto, none, or a comma-separated codex,zcode,dsh,codearts list')
+        raise SetupError('--native-hosts must be auto, none, or a comma-separated codex,zcode,dsh,codearts,antigravity list')
     records = []
     for name in requested:
         argv = hosts[name]
-        if not argv:
+        # An explicit customization root supports portable installations even
+        # when the desktop application is not in a conventional location.
+        if not argv and not (name == 'antigravity' and homes.get(name) and not (overrides or {}).get(name)):
             explicit = bool((overrides or {}).get(name))
             records.append({'host': name, 'status': 'failed' if explicit else 'not_installed',
                             **({'error': 'Configured native CLI was not found or is not an executable entry'} if explicit else {})})
             continue
         env = dict(os.environ, AGENTHUB_CONFIG=str(config_dir / 'client.json'), AGENTHUB_CONNECTION_MODE='file')
+        if name == 'antigravity':
+            home = Path(homes.get(name) or Path.home() / '.gemini/config').expanduser().absolute()
+            backup = config_dir / 'native-backups' / (str(time.time_ns()) + '-antigravity')
+            try:
+                spec = importlib.util.spec_from_file_location('agenthub_antigravity_native', app / 'integrations/antigravity/native.py')
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                outcome = module.install(home, app / 'integrations/antigravity', config_dir / 'client.json',
+                                         node=node['argv'][0], backup_dir=backup, apply=True)
+                if not isinstance(outcome, dict) or outcome.get('ok') is not True:
+                    raise SetupError('Antigravity registration preserved conflicting or invalid user configuration; review its installer plan')
+                records.append({'host': name, 'status': 'registered', 'reload_required': True,
+                                'registration': 'native_plugin_directory',
+                                'plugin_dir': str(home / 'plugins/multi-agent-hub'),
+                                'next_step': 'Restart Antigravity to discover the new native plugin directory',
+                                'configuration_backups': str(backup) if backup.exists() else None})
+            except (SetupError, OSError, ValueError, ImportError) as error:
+                records.append({'host': name, 'status': 'failed', 'error': str(error)})
+            continue
         if name == 'codearts':
             # Preserve the original path so the native installer's reparse and
             # symlink checks cannot be bypassed by resolving it prematurely.

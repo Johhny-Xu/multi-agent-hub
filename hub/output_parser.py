@@ -171,10 +171,16 @@ def _unexecuted_dsml_call(text):
     return bool(re.fullmatch(r'<｜｜DSML｜｜ calls>\s*(?:<｜｜DSML｜｜ invoke name="[^"\r\n]+">[\s\S]*?</｜｜DSML｜｜ invoke>\s*)+</｜｜DSML｜｜ calls>', body))
 
 
-def parse_output(raw):
+def parse_output(raw, stderr=""):
     """Return ``{'text': str, 'error': str | None}`` without truncation."""
     if not isinstance(raw, str):
         raise TypeError("CLI output must be a string")
+    # agy 1.3.1 can exit zero with status=SUCCESS after its print deadline,
+    # including a nonempty but unfinished response. Only trust the exact
+    # diagnostic on stderr; an answer quoting this text remains an answer.
+    diagnostic = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", stderr)
+    if re.search(r"^\[agy\] print timeout after [0-9.hms]+ with turn in progress; returning partial output\s*$", diagnostic, re.M):
+        return {"text": "", "error": "CLI_PARTIAL_TIMEOUT: Antigravity returned an unfinished turn; preserve the task ref and do not automatically redispatch."}
     clean = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", raw).strip()
     # CodeBuddy's headless runner can exit 0 with this diagnostic instead of a
     # result envelope. Match its complete login instruction, not generic 401
