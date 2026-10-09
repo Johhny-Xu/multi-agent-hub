@@ -8,7 +8,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = '0.9.0'
+VERSION = '0.9.9'
 COMMON = ['README.md', 'install.cmd', 'install.sh', 'start.cmd', 'start.sh', 'stop.cmd', 'stop.sh', 'status.cmd', 'status.sh', 'connect.cmd', 'connect.sh',
           'packaging/install.py', 'packaging/runtime.py', 'packaging/service.py', 'packaging/native.py',
           'packaging/bootstrap.ps1', 'packaging/launch.sh', 'packaging/README.md', 'packaging/connect.py', 'packaging/discovery.py']
@@ -32,10 +32,10 @@ def package_files(component):
     if component in ('plugins', 'both'):
         files['payload/packaging/README.md'] = ROOT / 'packaging/README.md'
         files['payload/LICENSE'] = ROOT / 'LICENSE'
-        for directory in ('integrations/codex', 'integrations/dsh', 'integrations/codearts', 'plugins/agenthub-workers'):
+        for directory in ('integrations/codex', 'integrations/dsh', 'integrations/codearts', 'integrations/antigravity', 'plugins/agenthub-workers'):
             for source in (ROOT / directory).rglob('*'):
-                if source.is_file() and source.suffix.lower() in ('.json', '.mjs', '.js', '.toml', '.md', '.yml', '.yaml', '.py', '.sh', '.bat', '.png'):
-                    if any(part in ('node_modules', '__pycache__', 'cache', 'data', 'sessions') for part in source.relative_to(ROOT).parts):
+                if source.is_file() and (source.suffix.lower() in ('.json', '.mjs', '.js', '.toml', '.md', '.yml', '.yaml', '.py', '.sh', '.bat', '.png', '.svg') or source.name == 'requirements.txt'):
+                    if any(part in ('node_modules', '__pycache__', 'cache', 'data', 'sessions', '.venv', 'venv', 'site-packages', 'dist-packages') for part in source.relative_to(ROOT).parts):
                         continue
                     files['payload/' + source.relative_to(ROOT).as_posix()] = source
     for name, source in files.items():

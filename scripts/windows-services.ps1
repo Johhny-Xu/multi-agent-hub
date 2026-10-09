@@ -54,6 +54,44 @@ function Find-Python {
     throw 'No working Python 3.8+ found. Set HUB_PYTHON to the full python.exe path in .env.'
 }
 
+function Get-OwnedProcessRows([object[]]$Snapshot, [uint32]$RootId) {
+    $rootRow = $Snapshot | Where-Object { $_.ProcessId -eq $RootId } | Select-Object -First 1
+    if (-not $rootRow -or -not $rootRow.CreationDate) { return }
+    $owned = @{}
+    $owned[$RootId] = [pscustomobject]@{ ProcessId=$RootId; CreationTicks=$rootRow.CreationDate.ToUniversalTime().Ticks; Depth=0 }
+    do {
+        $added = $false
+        foreach ($row in $Snapshot) {
+            $child = [uint32]$row.ProcessId
+            $parent = [uint32]$row.ParentProcessId
+            if ($owned.ContainsKey($child) -or -not $owned.ContainsKey($parent) -or -not $row.CreationDate) { continue }
+            $ticks = $row.CreationDate.ToUniversalTime().Ticks
+            if ($ticks -ge $owned[$parent].CreationTicks) {
+                $owned[$child] = [pscustomobject]@{ ProcessId=$child; CreationTicks=$ticks; Depth=($owned[$parent].Depth + 1) }
+                $added = $true
+            }
+        }
+    } while ($added)
+    $owned.Values | Sort-Object -Property Depth -Descending
+}
+
+function Stop-OwnedProcessRows([object[]]$Rows) {
+    foreach ($row in $Rows) {
+        $tracked = Get-Process -Id ([int]$row.ProcessId) -ErrorAction SilentlyContinue
+        if (-not $tracked) { continue }
+        try {
+            $null = $tracked.Handle
+            $ticks = $tracked.StartTime.ToUniversalTime().Ticks
+            if (($ticks - ($ticks % 10)) -ne [long]$row.CreationTicks) { continue }
+            $tracked.Kill()
+            if (-not $tracked.WaitForExit(5000)) { throw 'Owned service process did not exit.' }
+        } catch {
+            if ($tracked.HasExited) { continue }
+            throw
+        }
+    }
+}
+
 function Stop-Recorded([string]$Service) {
     $recordPath = Join-Path $RunDirectory ($Service + '.windows.json')
     if (-not (Test-Path -LiteralPath $recordPath -PathType Leaf)) { return }
@@ -62,13 +100,17 @@ function Stop-Recorded([string]$Service) {
         if ([string]$record.Root -ne $Root -or -not $record.Pid -or -not $record.StartTicks -or -not $record.Entry) { throw 'Invalid process record.' }
         $tracked = Get-Process -Id ([int]$record.Pid) -ErrorAction SilentlyContinue
         if ($tracked -and $tracked.StartTime.ToUniversalTime().Ticks.ToString() -eq [string]$record.StartTicks) {
-            $native = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + [int]$record.Pid)
+            $snapshot = @(Get-CimInstance Win32_Process)
+            $native = $snapshot | Where-Object { $_.ProcessId -eq [int]$record.Pid } | Select-Object -First 1
             if ($native -and $native.CommandLine.IndexOf([string]$record.Entry, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                Stop-Process -InputObject $tracked -Force -ErrorAction Stop
-                $tracked.WaitForExit(5000) | Out-Null
+                # A Windows venv's python.exe is a redirector. Its child owns
+                # the Hub, so stop the validated launch tree, not just its root.
+                $tracked.Refresh()
+                if ($tracked.HasExited -or $tracked.StartTime.ToUniversalTime().Ticks.ToString() -ne [string]$record.StartTicks) { throw 'Owned process identity changed.' }
+                Stop-OwnedProcessRows @(Get-OwnedProcessRows $snapshot ([uint32]$record.Pid))
             }
         }
-    } catch { Write-Warning ('Could not validate/stop owned ' + $Service + ' process: ' + $_.Exception.Message); return }
+    } catch { throw ('Could not validate/stop owned ' + $Service + ' process; record preserved: ' + $_.Exception.Message) }
     Remove-Item -LiteralPath $recordPath -Force
 }
 
@@ -86,7 +128,40 @@ function Start-Recorded([string]$Service, [string]$Executable, [string[]]$Argume
     return $proc
 }
 
-function Wait-Health($Process, [string]$Url, [string]$ExpectedService = '') {
+function Test-OwnedListener($Process, [int]$Port, [string]$Entry, [string]$StartTicks) {
+    $Process.Refresh()
+    if ($Process.HasExited -or $Process.StartTime.ToUniversalTime().Ticks.ToString() -ne $StartTicks) { return $false }
+    $snapshot = @(Get-CimInstance Win32_Process)
+    $rootRow = $snapshot | Where-Object { $_.ProcessId -eq $Process.Id } | Select-Object -First 1
+    if (-not $rootRow -or -not $rootRow.CommandLine -or $rootRow.CommandLine.IndexOf($Entry, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return $false }
+    $owned = @{}
+    $owned[[uint32]$Process.Id] = $rootRow.CreationDate.ToUniversalTime().Ticks
+    do {
+        $added = $false
+        foreach ($row in $snapshot) {
+            $child = [uint32]$row.ProcessId
+            $parent = [uint32]$row.ParentProcessId
+            if ($owned.ContainsKey($child) -or -not $owned.ContainsKey($parent) -or -not $row.CreationDate -or -not $row.CommandLine) { continue }
+            $ticks = $row.CreationDate.ToUniversalTime().Ticks
+            if ($ticks -ge $owned[$parent] -and $row.CommandLine.IndexOf($Entry, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $owned[$child] = $ticks
+                $added = $true
+            }
+        }
+    } while ($added)
+    foreach ($listener in @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) {
+        $ownerId = [uint32]$listener.OwningProcess
+        if (-not $owned.ContainsKey($ownerId)) { continue }
+        $current = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $ownerId)
+        $Process.Refresh()
+        if ($current -and $current.CreationDate.ToUniversalTime().Ticks -eq $owned[$ownerId] -and
+            -not $Process.HasExited -and $Process.StartTime.ToUniversalTime().Ticks.ToString() -eq $StartTicks) { return $true }
+    }
+    return $false
+}
+
+function Wait-Health($Process, [string]$Url, [string]$ExpectedService = '', [string]$Entry) {
+    $startTicks = $Process.StartTime.ToUniversalTime().Ticks.ToString()
     $deadline = [DateTime]::UtcNow.AddSeconds($HealthTimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         $Process.Refresh()
@@ -96,9 +171,7 @@ function Wait-Health($Process, [string]$Url, [string]$ExpectedService = '') {
             $content = $response.Content
             if ($content -is [byte[]]) { $content = [Text.Encoding]::UTF8.GetString($content) }
             if ($response.StatusCode -eq 200 -and (-not $ExpectedService -or (($content | ConvertFrom-Json).service -eq $ExpectedService))) {
-                $listeners = @(Get-NetTCPConnection -LocalPort ([Uri]$Url).Port -State Listen -ErrorAction Stop | Where-Object { $_.OwningProcess -eq $Process.Id })
-                $Process.Refresh()
-                if ($listeners.Count -gt 0 -and -not $Process.HasExited) { return }
+                if (Test-OwnedListener $Process ([Uri]$Url).Port $Entry $startTicks) { return }
             }
         } catch { }
         Start-Sleep -Milliseconds 100
@@ -153,14 +226,14 @@ try {
     try {
         $hubProcess = Start-Recorded 'hub' $python.Executable (@($python.Prefix) + @($hubEntry, '--http', $env:AGENTHUB_PORT, '--host', $env:AGENTHUB_HOST)) $hubEntry
         $started += 'hub'
-        Wait-Health $hubProcess ('http://' + $connectHost + ':' + $env:AGENTHUB_PORT + '/health') 'agent-hub'
+        Wait-Health $hubProcess ('http://' + $connectHost + ':' + $env:AGENTHUB_PORT + '/health') 'agent-hub' $hubEntry
         $consoleProcess = Start-Recorded 'console' $node.Source @($consoleEntry) $consoleEntry
         $started += 'console'
         $consoleHost = $env:HUBCONSOLE_HOST
         if ($consoleHost -eq '0.0.0.0') { $consoleHost = '127.0.0.1' }
         if ($consoleHost -eq '::') { $consoleHost = '::1' }
         if ($consoleHost.Contains(':')) { $consoleHost = '[' + $consoleHost + ']' }
-        Wait-Health $consoleProcess ('http://' + $consoleHost + ':' + $env:HUBCONSOLE_PORT + '/dashboard')
+        Wait-Health $consoleProcess ('http://' + $consoleHost + ':' + $env:HUBCONSOLE_PORT + '/dashboard') '' $consoleEntry
     } catch {
         foreach ($service in $started) { Stop-Recorded $service }
         throw

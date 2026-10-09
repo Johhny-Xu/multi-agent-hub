@@ -1,0 +1,44 @@
+{
+  "source": "official MCP Python client -> Antigravity plugin stdio bridge -> existing Hub",
+  "desktop_host_loaded": false,
+  "sdk_model_called": false,
+  "checks": [
+    {
+      "name": "initialize_and_tools",
+      "ok": true,
+      "protocol": "2025-11-25",
+      "tools": [
+        "hub_ask",
+        "hub_capabilities",
+        "hub_discover",
+        "hub_dispatch",
+        "hub_fetch",
+        "hub_login",
+        "hub_status"
+      ]
+    },
+    {
+      "name": "live_hub_status",
+      "ok": true,
+      "content_blocks": 1
+    },
+    {
+      "name": "live_mimo_capabilities",
+      "ok": true
+    },
+    {
+      "name": "explicit_model_request_rejected",
+      "ok": true,
+      "status": "failed",
+      "ref": "",
+      "answer_is_42": false,
+      "tool_request_count": 1
+    }
+  ],
+  "ok": true,
+  "requested_model": "26f",
+  "outcome": "blocked_by_capabilities",
+  "worker_model_called": false,
+  "reason": "model_not_configured",
+  "separate_default_model_probe": "antigravity-live-mcp-default-windows.json"
+}

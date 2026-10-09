@@ -1,0 +1,2 @@
+# Optional controller SDK; the Hub and native IDE plugin do not require it.
+google-antigravity==0.1.21

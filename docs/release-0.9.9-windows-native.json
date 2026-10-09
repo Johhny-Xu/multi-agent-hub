@@ -1,0 +1,360 @@
+{
+  "schema_version": 1,
+  "release": "0.9.9",
+  "date_utc": "2026-10-09T14:49:55.838895+00:00",
+  "platform": "windows",
+  "target_hub_platform": "linux",
+  "target_hub_version": "0.9.9",
+  "scope": "Real existing native hosts and public plugin assets; isolated profiles for Codex/ZCode/DSH. Text-only tasks, all external options omitted, no attachments.",
+  "secret_handling": {
+    "credential_contents_read": false,
+    "credentials_copied_into_repository": false,
+    "host_authentication": "Original official authentication referenced by external file path or symlink; no new CLI installation.",
+    "hub_configuration": "Existing private external client.json path passed by native plugin config; contents not exported."
+  },
+  "worker": {
+    "name": "mimocode",
+    "model_requested": null,
+    "configured_default_model": "9router/trae",
+    "model_26f_tested": false
+  },
+  "bridge_checks": [
+    {
+      "host": "codex",
+      "bridge": {
+        "name": "agenthub-hub-bridge",
+        "version": "0.9.9"
+      },
+      "tool_names": [
+        "hub_discover",
+        "hub_ask",
+        "hub_status",
+        "hub_capabilities",
+        "hub_login",
+        "hub_dispatch",
+        "hub_fetch"
+      ],
+      "capabilities_is_error": false
+    },
+    {
+      "host": "zcode",
+      "bridge": {
+        "name": "agenthub-hub-bridge",
+        "version": "0.9.9"
+      },
+      "tool_names": [
+        "hub_discover",
+        "hub_ask",
+        "hub_status",
+        "hub_capabilities",
+        "hub_login",
+        "hub_dispatch",
+        "hub_fetch"
+      ],
+      "capabilities_is_error": false
+    },
+    {
+      "host": "antigravity",
+      "bridge": {
+        "name": "agenthub-hub-bridge",
+        "version": "0.9.9"
+      },
+      "tool_names": [
+        "hub_discover",
+        "hub_ask",
+        "hub_status",
+        "hub_capabilities",
+        "hub_login",
+        "hub_dispatch",
+        "hub_fetch"
+      ],
+      "capabilities_is_error": false
+    }
+  ],
+  "hosts": {
+    "codex": {
+      "version": "codex-cli 0.162.0-alpha.2",
+      "plugin_version": "0.9.9",
+      "installation": "Official plugin add via local marketplace in isolated CODEX_HOME",
+      "loaded": true,
+      "native_agent_definitions": 9,
+      "native_calls": [
+        {
+          "tool": "spawn_agent",
+          "agent_type": "agenthub_mimocode"
+        },
+        {
+          "tool": "hub_capabilities"
+        },
+        {
+          "tool": "hub_dispatch"
+        },
+        {
+          "tool": "hub_fetch"
+        },
+        {
+          "tool": "hub_fetch"
+        }
+      ],
+      "model_invocation_attempted": true,
+      "task_ref": "mimocode-9bc457cd61",
+      "status": "completed",
+      "answer": "RELEASE099_CODEX_M",
+      "expected_answer": "RELEASE099_CODEX_MIMO 611",
+      "answer_verified": false,
+      "process": {
+        "name": "codex-native",
+        "exit_code": 0,
+        "timed_out": false,
+        "elapsed_s": 104.18,
+        "stdout_bytes": 3018,
+        "stderr_bytes": 197
+      },
+      "initial_outcome": "native_dispatch_proven_but_worker_answer_truncated",
+      "outcome": "native_end_to_end_passed_short_arithmetic_with_upstream_long_answer_limitation",
+      "independent_acceptance_task": {
+        "expression": "73*29",
+        "task_ref": "mimocode-d77b81632d",
+        "answer": "2117",
+        "expected_answer": "2117",
+        "status": "completed",
+        "answer_verified": true,
+        "original_ref_fetched_independently": true,
+        "dispatch_count": 1,
+        "optional_arguments_supplied": [],
+        "process": {
+          "name": "codex-native-short",
+          "exit_code": 0,
+          "timed_out": false,
+          "elapsed_s": 112.26,
+          "stdout_bytes": 3050,
+          "stderr_bytes": 197
+        },
+        "native_calls": [
+          {
+            "tool": "spawn_agent",
+            "agent_type": "agenthub_mimocode"
+          },
+          {
+            "tool": "hub_capabilities"
+          },
+          {
+            "tool": "hub_dispatch"
+          },
+          {
+            "tool": "hub_fetch"
+          },
+          {
+            "tool": "hub_fetch"
+          }
+        ]
+      }
+    },
+    "zcode": {
+      "version": "0.16.9",
+      "plugin_version": "0.9.9",
+      "validate": {
+        "ok": true,
+        "diagnostics": []
+      },
+      "loaded": true,
+      "native_agent_evidence": [
+        {
+          "profile_id": "agenthub-workers:mimocode",
+          "profile_definition": "plugins/agenthub-workers/agents/mimocode.md",
+          "profile_definition_verified": true,
+          "status": "completed",
+          "tool_use_count": 2
+        }
+      ],
+      "model_invocation_attempted": true,
+      "task_ref": "mimocode-e7cba3e3e9",
+      "status": "completed",
+      "answer": "RELEASE099_ZCODE_M",
+      "expected_answer": "RELEASE099_ZCODE_MIMO 697",
+      "same_ref_fetch_answer": "RELEASE099_ZCODE_M",
+      "answer_verified": false,
+      "process": {
+        "name": "zcode-native",
+        "exit_code": 0,
+        "timed_out": false,
+        "elapsed_s": 84.24,
+        "stdout_bytes": 2222,
+        "stderr_bytes": 56
+      },
+      "initial_outcome": "native_dispatch_proven_but_worker_answer_truncated",
+      "outcome": "native_end_to_end_passed_short_arithmetic_with_upstream_long_answer_limitation",
+      "independent_acceptance_task": {
+        "expression": "67*31",
+        "task_ref": "mimocode-9cc619270d",
+        "answer": "2077",
+        "expected_answer": "2077",
+        "status": "completed",
+        "answer_verified": true,
+        "original_ref_fetched_independently": true,
+        "dispatch_count": 1,
+        "optional_arguments_supplied": [],
+        "process": {
+          "name": "zcode-native-short",
+          "exit_code": 0,
+          "timed_out": false,
+          "elapsed_s": 52.1,
+          "stdout_bytes": 2178,
+          "stderr_bytes": 33
+        },
+        "native_agent_evidence": {
+          "profile_id": "agenthub-workers:mimocode",
+          "profile_definition": "plugins/agenthub-workers/agents/mimocode.md",
+          "profile_definition_verified": true,
+          "tool_use_count": 2,
+          "status": "completed"
+        }
+      },
+      "native_plugin_listing": {
+        "id": "agenthub-workers@inline",
+        "enabled": true,
+        "version": "0.9.9",
+        "skillCount": 1,
+        "commandRootCount": 1,
+        "mcpServerNames": [
+          "plugin:agenthub-workers:hub-bridge"
+        ],
+        "diagnostics": []
+      }
+    },
+    "dsh": {
+      "version": "0.2.0-rc.2",
+      "plugin_package_version": "1.4.0",
+      "loaded": true,
+      "native_presets": [
+        "agenthub-all",
+        "agenthub-antigravity",
+        "agenthub-codebuddy",
+        "agenthub-codebuddy-cn",
+        "agenthub-zcode",
+        "agenthub-traecode",
+        "agenthub-copilot",
+        "agenthub-minimaxcode",
+        "agenthub-mimocode",
+        "agenthub-codearts"
+      ],
+      "plugin_tools": [
+        "mcp__agenthub__hub_discover",
+        "mcp__agenthub__hub_ask",
+        "mcp__agenthub__hub_status",
+        "mcp__agenthub__hub_capabilities",
+        "mcp__agenthub__hub_login",
+        "mcp__agenthub__hub_dispatch",
+        "mcp__agenthub__hub_fetch"
+      ],
+      "native_workflow_tool_registered": true,
+      "native_subagent_tool_registered": true,
+      "model_invocation_attempted": true,
+      "outcome": "blocked_by_official_account_quota",
+      "error": {
+        "http_status": 402,
+        "code": "ACCOUNT_QUOTA",
+        "message": "Insufficient Balance"
+      },
+      "hub_task_dispatched": false,
+      "workflow_executed": false,
+      "process": {
+        "name": "dsh-native",
+        "exit_code": 1,
+        "timed_out": false,
+        "elapsed_s": 4.76,
+        "stdout_bytes": 622,
+        "stderr_bytes": 92
+      },
+      "isolation_detail": "Official headless profile plus official preset registry overlay; auth route deepseek-account; only test telemetry set DISABLED.",
+      "version_evidence": "Installed desktop app.asar/package.json version read through the existing Electron Node runtime."
+    },
+    "antigravity": {
+      "desktop_version": "2.21.1",
+      "cli_installed": false,
+      "installed_plugin_version": "0.9.9",
+      "previous_installed_version": "0.9.0",
+      "ownership_before_upgrade": {
+        "owned": true,
+        "modified_files": []
+      },
+      "backup_created": true,
+      "external_configuration_preserved": true,
+      "native_agents": 9,
+      "native_skills": 4,
+      "mcp_servers": 1,
+      "disk_inventory_verified": true,
+      "host_loaded_verified": false,
+      "restart_required": true,
+      "model_invocation_attempted": false,
+      "outcome": "native_host_restart_and_invocation_unverified",
+      "limitation": "No existing agy CLI or authenticated language-server environment in this process. Did not close the desktop or extract session credentials. Independent stdio bridge check does not prove invoke_subagent/skill execution."
+    }
+  },
+  "initial_tasks_redispatched": false,
+  "source_manifest_sha256": {
+    "integrations/codex/plugin.json": "004c8ffd19de4b55d119d009e8d45e65a751940bf8c9b8a3d5cae73f3f055f04",
+    "integrations/dsh/package.json": "1398ba96362f88acb92cc512357a73f5658bdc7a0c8beca1f1766ae527f42177",
+    "plugins/agenthub-workers/.zcode-plugin/plugin.json": "604e84027feac0cf855d39da9cb20b957464087c9ea3777253b402071127a2e1",
+    "integrations/antigravity/plugin.json": "78bde9770949b8886a1f7ff6cb139017ecacb4d1733f0011ea17fb1218136add"
+  },
+  "limitations": [
+    "No GUI rendering or streaming UI verification.",
+    "No attachment/thinking/model matrix in this focused native smoke test.",
+    "Completed Hub status with incomplete answer is not an end-to-end pass.",
+    "DSH 402 prevents evaluation of actual workflow child execution; native registrations are independently verified.",
+    "Antigravity SDK validation is a separate layer and is not counted as native desktop plugin execution."
+  ],
+  "cleanup": {
+    "model_host_processes_exited": true,
+    "timeout_tree_kill_used": false,
+    "test_logs_location": "External private release-0.9.9-native directory; not included in repository",
+    "daily_client_configuration_modified": false,
+    "production_installation_changed": [
+      "Managed Antigravity multi-agent-hub plugin upgraded with ownership/hash check and backup."
+    ],
+    "codex_auth_reference_removed": true,
+    "remaining_native_host_or_mcp_processes": 0
+  },
+  "upstream_long_answer_evidence": {
+    "report": "release-0.9.9-mimo-vendor-evidence.json",
+    "finding": "Vendor assistant text itself stopped at the same 16 characters with finish=stop and no reported error. Hub results match vendor text exactly. No Hub parser truncation was observed.",
+    "original_failed_tasks_preserved": true,
+    "new_arithmetic_tasks_are_independent": true
+  },
+  "tested_bridge_sha256": {
+    "codex": {
+      "ask.mjs": "e1ade1f7bfc0bc10065dd9bfc40bb75d2b9b67d4633cf002bc4b1179e5199e63",
+      "config.mjs": "019a067963b0d2c6ae709bf957e06cd5da91b362c90cece4cb6a63d8e4bd4795",
+      "discovery.mjs": "a186a084aa5aad9c9190cac1979b5b902ea6382e1ea7f749b6390d59a85a048e",
+      "hub.mjs": "e1e190a1c7c3b6e3c7b53dc6d6e0337f4f66bf9bdab7910a6c026ce55ace934d",
+      "login.mjs": "460961e90ac74bca06e9bd380c7e48a8828f9151fc5c0827f0fde0e09a7ca951",
+      "server.mjs": "5bc2c134b5eabbbfc1bb9ed83dd913c751125e38d53b75d929b14ec3cb633bb4"
+    },
+    "zcode": {
+      "ask.mjs": "e1ade1f7bfc0bc10065dd9bfc40bb75d2b9b67d4633cf002bc4b1179e5199e63",
+      "config.mjs": "019a067963b0d2c6ae709bf957e06cd5da91b362c90cece4cb6a63d8e4bd4795",
+      "discovery.mjs": "a186a084aa5aad9c9190cac1979b5b902ea6382e1ea7f749b6390d59a85a048e",
+      "hub.mjs": "e1e190a1c7c3b6e3c7b53dc6d6e0337f4f66bf9bdab7910a6c026ce55ace934d",
+      "login.mjs": "460961e90ac74bca06e9bd380c7e48a8828f9151fc5c0827f0fde0e09a7ca951",
+      "server.mjs": "5bc2c134b5eabbbfc1bb9ed83dd913c751125e38d53b75d929b14ec3cb633bb4"
+    },
+    "antigravity": {
+      "ask.mjs": "e1ade1f7bfc0bc10065dd9bfc40bb75d2b9b67d4633cf002bc4b1179e5199e63",
+      "config.mjs": "019a067963b0d2c6ae709bf957e06cd5da91b362c90cece4cb6a63d8e4bd4795",
+      "discovery.mjs": "a186a084aa5aad9c9190cac1979b5b902ea6382e1ea7f749b6390d59a85a048e",
+      "hub.mjs": "e1e190a1c7c3b6e3c7b53dc6d6e0337f4f66bf9bdab7910a6c026ce55ace934d",
+      "login.mjs": "460961e90ac74bca06e9bd380c7e48a8828f9151fc5c0827f0fde0e09a7ca951",
+      "server.mjs": "5bc2c134b5eabbbfc1bb9ed83dd913c751125e38d53b75d929b14ec3cb633bb4"
+    }
+  },
+  "verification_summary": {
+    "codex_native_short_arithmetic": "passed",
+    "zcode_native_short_arithmetic": "passed",
+    "dsh_native_registration": "passed",
+    "dsh_native_execution": "blocked_ACCOUNT_QUOTA_402",
+    "antigravity_owned_install_and_stdio_bridge": "passed",
+    "antigravity_native_desktop_execution": "not_verified_restart_required",
+    "upstream_long_answer_acceptance": "failed_preserved"
+  }
+}

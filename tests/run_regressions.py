@@ -23,11 +23,11 @@ def source_hashes():
     hashes = {}
     for folder in ("hub", "console", "mcp", "drivers", "integrations", "plugins", "tests", "scripts", "packaging"):
         for path in (ROOT / folder).rglob("*"):
-            if not path.is_file() or path.suffix not in {".py", ".js", ".mjs", ".toml", ".yml", ".sh", ".ps1", ".bat", ".md", ".json"}:
+            if not path.is_file() or path.suffix not in {".py", ".js", ".mjs", ".toml", ".yml", ".sh", ".ps1", ".bat", ".md", ".json", ".txt", ".svg"}:
                 continue
             if path.name in {"agents.json", "auth.json", "credentials.json"}:
                 continue
-            if any(part in {"state", "results", "node_modules", "__pycache__"} for part in path.parts):
+            if any(part in {"state", "results", "node_modules", "__pycache__", ".venv", "venv", "site-packages", "dist-packages"} for part in path.parts):
                 continue
             hashes[path.relative_to(ROOT).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     for name in ("start.sh", "stop.sh", "start.bat", "stop.bat", ".env.example",
@@ -66,6 +66,11 @@ def main():
         ("codearts_native_install", "codearts_native_install.py"),
         ("codearts_hub_contract", "codearts_hub_contract.py"),
         ("codearts_packaging", "codearts_packaging.py"),
+        ("antigravity_native", "antigravity_native_install.py"),
+        ("antigravity_sdk", "antigravity_sdk.test.py"),
+        ("antigravity_sdk_protocol", "antigravity_sdk_protocol.py"),
+        ("antigravity_packaging", "antigravity_packaging.py"),
+        ("antigravity_hub_contract", "antigravity_hub_contract.py"),
     )]
     groups += [("mcp_bridge", [node, "--test", "tests/mcp_bridge.test.mjs", "tests/task_bridge.test.mjs", "plugins/agenthub-workers/scripts/test-login.mjs", "tests/discovery.test.mjs"]),
                ("zcode_rpc", [node, "--test", "tests/zcode_rpc.test.mjs"]),
@@ -76,6 +81,7 @@ def main():
     if os.name == "nt":
         groups += [("windows_bus", [sys.executable, "tests/windows_dispatch_smoke.py", "--report", str(options.report.with_name(options.report.stem + "-windows-bus.json"))]),
                    ("windows_pty", [sys.executable, "tests/windows_login_smoke.py"]),
+                   ("windows_venv_service", [sys.executable, "tests/windows_venv_service.py"]),
                    ("windows_launcher", [node, "--test", "tests/windows_launcher.test.mjs"])]
     else:
         groups += [("linux_launcher", [sys.executable, "tests/platform_linux_smoke.py"])]

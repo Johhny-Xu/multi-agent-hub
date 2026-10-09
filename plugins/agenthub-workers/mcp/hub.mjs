@@ -249,14 +249,22 @@ function taskError(task, timeoutS) {
   return null;
 }
 
+function recursiveDispatchError(worker) {
+  // Hub sets this only for an actual worker child process. Canonicalize both
+  // sides so native plugins cannot bypass the guard with a worker alias.
+  if (resolveWorker(process.env.AGENTHUB_WORKER_ID) !== worker) return null;
+  return `RECURSIVE_DISPATCH_DENIED: ${worker} worker cannot dispatch another ${worker} task through this bridge.`;
+}
+
 /** 派发一次并在总预算内回收。空回复不能证明任务未执行，因此不自动重复有副作用的任务。 */
 export async function ask(workerRaw, task, timeoutS = 300, options = {}) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
     return { ok: false, status: "failed", worker: String(workerRaw || ""), ref: "", answer: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
-  if (worker === "codearts" && process.env.AGENTHUB_WORKER_ID === "codearts") {
-    return { ok: false, status: "failed", worker, ref: "", answer: "RECURSIVE_DISPATCH_DENIED: CodeArts worker cannot dispatch another CodeArts task through this bridge." };
+  const recursive = recursiveDispatchError(worker);
+  if (recursive) {
+    return { ok: false, status: "failed", worker, ref: "", answer: recursive };
   }
   const error = taskError(task, timeoutS);
   if (error) return { ok: false, status: "failed", worker, ref: "", answer: error };
@@ -345,8 +353,9 @@ export async function dispatchOnly(workerRaw, task, timeoutS = 900, options = {}
   if (!worker) {
     return { ok: false, worker: String(workerRaw || ""), ref: "", error: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
-  if (worker === "codearts" && process.env.AGENTHUB_WORKER_ID === "codearts") {
-    return { ok: false, status: "failed", worker, ref: "", error: "RECURSIVE_DISPATCH_DENIED: CodeArts worker cannot dispatch another CodeArts task through this bridge." };
+  const recursive = recursiveDispatchError(worker);
+  if (recursive) {
+    return { ok: false, status: "failed", worker, ref: "", error: recursive };
   }
   const error = taskError(task, timeoutS);
   if (error) return { ok: false, worker, ref: "", error };

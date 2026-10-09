@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/", "../integrations/codearts/mcp/"];
+const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/", "../integrations/codearts/mcp/", "../integrations/antigravity/mcp/"];
 
 test("Hub tokens are sent in Authorization and explicit URL credentials take precedence", async (t) => {
   const received = [];
@@ -102,18 +102,48 @@ test("bridge task and transport regressions", async (t) => {
         assert.equal(bridge.resolveWorker(" CA "), "codearts");
         assert.equal(bridge.resolveWorker("huawei-codearts"), "codearts");
       });
-      await t.test("CodeArts workers cannot recursively dispatch through any bridge copy", async () => {
+      await t.test("workers cannot recursively dispatch through any bridge copy, including aliases", async () => {
         const previous = process.env.AGENTHUB_WORKER_ID;
         requests = [];
         try {
-          process.env.AGENTHUB_WORKER_ID = 'codearts';
-          for (const alias of ['codearts', 'ca', 'huawei-codearts']) {
-            const reply = await bridge.ask(alias, 'This must never reach the Hub');
-            assert.equal(reply.ok, false);
-            assert.match(reply.answer, /RECURSIVE_DISPATCH_DENIED/);
-            assert.equal((await bridge.dispatchOnly(alias, 'This must never reach the Hub')).ok, false);
+          for (const worker of bridge.CANONICAL) {
+            process.env.AGENTHUB_WORKER_ID = worker;
+            const aliases = worker === 'antigravity' ? ['antigravity', ' AGY ']
+              : worker === 'codearts' ? ['codearts', 'ca', 'huawei-codearts'] : [worker];
+            for (const alias of aliases) {
+              const reply = await bridge.ask(alias, 'This must never reach the Hub');
+              assert.equal(reply.ok, false);
+              assert.match(reply.answer, /RECURSIVE_DISPATCH_DENIED/);
+              assert.equal(reply.ref, '');
+              const dispatch = await bridge.dispatchOnly(alias, 'This must never reach the Hub');
+              assert.equal(dispatch.ok, false);
+              assert.match(dispatch.error, /RECURSIVE_DISPATCH_DENIED/);
+              assert.equal(dispatch.ref, '');
+            }
           }
+          process.env.AGENTHUB_WORKER_ID = ' AGY ';
+          assert.equal((await bridge.ask('antigravity', 'Alias worker identity')).ok, false);
           assert.equal(requests.length, 0);
+        } finally {
+          if (previous === undefined) delete process.env.AGENTHUB_WORKER_ID;
+          else process.env.AGENTHUB_WORKER_ID = previous;
+        }
+      });
+      await t.test("ordinary native hosts and cross-worker calls still dispatch exactly once", async () => {
+        const previous = process.env.AGENTHUB_WORKER_ID;
+        mode = 'sync';
+        try {
+          for (const [identity, target] of [[undefined, 'agy'], [undefined, 'ca'], ['antigravity', 'ca'], ['codearts', 'agy']]) {
+            if (identity === undefined) delete process.env.AGENTHUB_WORKER_ID;
+            else process.env.AGENTHUB_WORKER_ID = identity;
+            for (const method of ['ask', 'dispatchOnly']) {
+              requests = [];
+              const reply = await bridge[method](target, 'Single synthetic dispatch');
+              assert.equal(reply.status, 'completed');
+              assert.equal(requests.length, 1);
+              assert.equal(requests[0].arguments.agent, bridge.resolveWorker(target));
+            }
+          }
         } finally {
           if (previous === undefined) delete process.env.AGENTHUB_WORKER_ID;
           else process.env.AGENTHUB_WORKER_ID = previous;

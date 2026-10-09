@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "multi-agent-hub": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/mcp/server.mjs"],
+      "env": {
+        "AGENTHUB_CONNECTION_MODE": "file"
+      }
+    }
+  }
+}

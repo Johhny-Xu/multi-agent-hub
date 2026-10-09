@@ -1,4 +1,4 @@
-multi-agent-hub 0.9.0 将服务器与原生客户端分开安装：`hub` 包提供 Python HTTP Hub 和可选控制台，`plugins` 包只提供 Codex、ZCode、DSH、CodeArts 客户端，`both` 包可安装任一组件或同机共存。
+multi-agent-hub 将服务器与原生客户端分开安装：`hub` 包提供 Python HTTP Hub 和可选控制台，`plugins` 包提供 Codex、ZCode、DSH、CodeArts、Antigravity 客户端，`both` 包可安装任一组件或同机共存。
 
 解压后，Windows 双击 `install.cmd`，Linux 运行 `./install.sh`。默认组件跟随包名；Hub 安装后自动启动在 `127.0.0.1:8765`，控制台默认关闭。`--no-start` 可只安装。插件安装不会启动或停止已有 Hub；检测到的官方宿主通过各自原生 CLI 注册，缺少的宿主会显示 `not_installed`，注册失败返回非零退出码。
 
@@ -38,7 +38,11 @@ Linux 可显式使用 `--systemd-user`，需要可工作的用户 systemd 会话
 
 worker 配置只发现稳定的官方 CLI 路径，不证明账号或模型权限。仅发现的入口写入外部 `agents.json`；任意临时目录的便携程序不会自动加入。CodeBuddy 使用 standard 代理、Read 工具及 acceptEdits 预授权；MiMo 提供 default、26f、v2.6f 别名；ZCode 请求的 GLM 型号不存在时会在发送前拒绝，不换用其他模型。
 
-原生选项：`--native-hosts auto|none|codex,zcode,dsh,codearts`、`--project PATH`、`--profile NAME`、`--codex-home PATH`、`--zcode-home PATH`、`--dsh-home PATH`、`--codearts-home PATH`，以及对应 `--codex-cli` / `--zcode-cli` / `--dsh-cli` / `--codearts-cli`。逗号列表可以只选所需宿主。Codex 项目代理默认放在稳定的 `PREFIX/workspace`，或指定项目；打开该项目即可发现代理。
+原生选项：`--native-hosts auto|none|codex,zcode,dsh,codearts,antigravity`、`--project PATH`、`--profile NAME`、`--codex-home PATH`、`--zcode-home PATH`、`--dsh-home PATH`、`--codearts-home PATH`，以及对应 `--codex-cli` / `--zcode-cli` / `--dsh-cli` / `--codearts-cli`。逗号列表可以只选所需宿主。Codex 项目代理默认放在稳定的 `PREFIX/workspace`，或指定项目；打开该项目即可发现代理。
+
+Antigravity 原生插件使用当前 `plugin.json`、`agents/*.md`、`skills/*/SKILL.md` 和 `mcp_config.json` 标准。安装器自动识别桌面程序或官方 CLI；不需要重新安装测试 CLI。例：`install.cmd --component plugins --native-hosts antigravity --url SERVER:8765 --token-file C:\private\hub-token.txt`。默认注册到 `~/.gemini/config/plugins/multi-agent-hub`，可用 `--antigravity-home PATH` 指定 customization 根（即 `.gemini/config` 这一层），或 `--antigravity-exe PATH` 指定已安装程序入口。新建目录需要重启 Antigravity 才会被发现；安装返回 `registered` 只表示文件注册成功，不表示宿主加载或模型调用成功。安装前校验归属并备份，不覆盖用户修改。
+
+Antigravity 的九个原生子代理继承宿主模型，通过同一 MCP 桥调用已有九种 worker；它是第五种客户端，不增加 worker 数量。现代 slash 工作流采用原生 skills。可选 Python SDK 适配器另在 `integrations/antigravity/sdk`，固定 `google-antigravity==0.1.21`，使用真实 `SubagentConfig` 和 `START_SUBAGENT`，由 Python 编排并行或顺序任务。已核实的 Windows 官方轮子没有仓库示例中的 `beta.run_workflow`，因此不会调用不存在的接口。使用 SDK 需要 Python 3.10+ 和单独认证。普通原生插件只需 Node，安装器不会下载 Python SDK、重建 Hub 或复制桌面登录信息。详细 SDK 使用方式见该目录 README。
 
 CodeArts 支持 `--codearts-target ide|cli|both`。IDE 连接需要 `--project` 指向实际 CodeArts 工作区，或 `--codearts-ide-settings` 指定其“配置 MCP”打开的文件。默认 both 未指定工作区时会登记 CLI 与公共原生资产，并将 IDE 标为 `pending_targets`，不会将猜测的配置位置标成 IDE 已连接。例：`install.cmd --component plugins --native-hosts codearts --project C:\Work\my-project --url SERVER:8765 --token-file C:\private\hub-token.txt`。原生插件登记后重载 IDE，CLI 则重新启动；不会自动重启你的会话。
 

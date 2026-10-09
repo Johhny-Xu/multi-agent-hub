@@ -7,17 +7,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，ZIP 尚未上传远程 Release。检查点来源见 [版本记录](docs/version-history.md)。
+版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
 ## [Unreleased]
 
-### 0.9.0：CodeArts 双向接入
+## [0.9.9] - 2026-10-09
+
+Hub、安装包、共享 MCP 和 Codex / ZCode / CodeArts / Antigravity 插件统一为 0.9.9；DSH 独立包为 1.4.0。Windows 32/32 组、Linux 29/29 组全量回归通过，后续修复通过对应增量验证并同步 Linux Hub；原生客户端实测及账号限制见 [0.9.9 交付记录](docs/release-0.9.9.md)。
+
+### Antigravity 原生客户端与 SDK 子代理
+
+- 新增第五种原生客户端 Antigravity：按桌面 2.21.1 的插件规范提供 manifest、SVG、九个 `agents/*.md` 路由子代理、四个 slash workflow skills 与独立 MCP 桥。沿用现有九种 worker，插件可连接独立的 Windows/Linux Hub。
+- 新增原生目录安装器及一键安装包入口，支持自动发现、外部连接文件、幂等升级、归属哈希、冲突保留、备份及失败回滚；新目录需要重启宿主发现，文件安装不冒充宿主已加载。SDK 运行环境不会进入插件包。
+- 增加可选 `google-antigravity==0.1.21` 适配，使用官方 `LocalAgentConfig`、`SubagentConfig`、MCP 与 Hooks，由 Python 有界编排 SDK 子代理。官方 Windows 轮子实测不含仓库示例中的 `beta.run_workflow`，按实际已发布能力实现；SDK 认证与桌面登录分开。
+- Hub 为同步及异步 CLI 任务传入真实 worker 身份，六份 MCP 桥统一阻止 worker 派发给自身，同时保留普通客户端、跨 worker 派发和原 ref 查询。
+- 修复 Windows venv Python 启动 Hub 时监听 PID 位于子解释器而被误判启动失败的问题；健康检查验证真实后代归属，停止按创建时间与固定进程实例筛选，不误停旧 PPID 外来进程，停止失败保留记录并返回失败。Linux 发现测试隔离已有 Hub，避免把正常发现的生产服务当成失败。
+- 修复 Linux agy CLI 1.3.1 的 print 超时被误报成功：即使退出码为 0、JSON 为 `SUCCESS` 且已有部分文字，检测到官方明确的未完成诊断仍返回失败并保留原 ref。同步与异步均覆盖，异步有界扫描完整 stderr，避免后续长日志掩盖诊断；两端各 83 项增量检查通过，修复已同步 Linux 服务。
+- Antigravity 接入阶段先保留当时的 README，独立说明和验收边界写入 `integrations/antigravity` 与 `docs/antigravity-compatibility.md`。0.9.9 的 README 更新和 Linux 原生验收另行记录，不改写这一阶段的报告。
+- 接入阶段最终 Windows 32 组、Linux 29 组回归全部通过，两端测试源码哈希一致；保留初始失败及修复记录。Windows 原生组件已安装，新增桥跨机器真实 MiMo 默认任务返回 42；宿主模型自主调用和缺少独立 API 认证的 SDK 推理未验收。基础版本 0.9.0 的三种 ZIP 是未发布预览包；0.9.9 的回归与包校验使用新的独立报告。
+
+### 发布与部署
+
+- 安装包提供五种客户端与现有九种 worker；客户端、Hub 与可选 SDK 保持独立组件。SDK 源码随插件包分发，虚拟环境、认证文件、私有连接和模型会话不进入包。
+- Windows Codex、ZCode 与 Linux ZCode、Antigravity 的真实原生子代理派发通过，宿主工具记录与 Hub 回执匹配。Windows DSH 受 402 额度限制，Linux 未安装 Codex / DSH，Windows Antigravity 桌面重启后的自主调用待验证，各项单独记录。
+- Linux 生产 Hub 0.9.9 的 24 工具、9 worker、鉴权和历史结果检查通过，既有私有配置逐字节保持，每次切换前提供回滚备份。README 和两张 SVG 由 Linux agy 实际修改后核对事实与排版。
+- 修复 CodeArts 官方两列模型列表及短模型 ID 的解析，两端各 22 项回归通过。9router 鉴权有效，但不能替代 CodeArts 独立身份及模型权限初始化；真实模型仍受认证阻止，尝试后的三份私有配置已恢复，未计为模型验收成功。
+
+---
+
+## [0.9.1] - 2026-10-09
+
+`v0.9.1` 源码标签包括已推送的 CodeArts 实现与随后 README、SVG 的体验说明更新；该阶段运行组件仍为 0.9.0，未单独创建 `v0.9.0` 标签。
+
+### CodeArts 双向接入（0.9.0 实现阶段）
 
 - 增加华为 CodeArts 第九种 worker，支持 Windows IDE 内置 AgentKernel 与 Linux 官方 CLI 的自动发现、独立任务、模型目录校验和严格结果判定。退出码 0 但认证失败、无 provider、空回答或未确认完成均不会算成功。
 - 增加 CodeArts 原生 Hooks 插件、九个子代理、三个命令、调度技能与独立 MCP；分别适配 IDE `mcpServers` 和 CLI `mcp` 配置，安装前备份并保护用户修改。
 - Codex、ZCode、DSH 增加 CodeArts 路由；四种客户端共用任务和结果协议，可连接另一台 Windows/Linux Hub。安装器与三种分发包增加 CodeArts。
 - 当前默认仅开放默认思考、非流式文本任务。CLI 的 `--thinking` 是显示开关，JSON 文本按完成块输出，图片 MIME 也未证明可用；相应选项关闭。模型默认沿用官方 CLI 配置，不猜测账号可用型号。
-- 实测发现 Windows IDE 登录不能证明独立内核已配置 provider；Linux 26.9.12 非交互 CLI 要求独立认证。原生安装、通信验证与真实模型完成分开记录，详细边界见 `docs/codearts-compatibility.md`。此版本尚未发布 Git 标签。
+- 实测发现 Windows IDE 登录不能证明独立内核已配置 provider；Linux 26.9.12 非交互 CLI 要求独立认证。原生安装、通信验证与真实模型完成分开记录，详细边界见 `docs/codearts-compatibility.md`。此实现阶段没有独立 Git 标签，源码包含在后续 `v0.9.1` 标签中。
 - 已在两端安装原生组件；Linux Hub 升级至 0.9.0，保留原 worker、历史任务、鉴权并提供回滚备份。Windows→Linux 局域网、Linux→Windows SSH 反向通信通过；CodeArts MCP 桥派发 MiMo 单次任务得到真实答案。CodeArts 自身模型调用仍因上述官方认证/provider 问题受阻。
 - Windows 全量 26 组回归通过；Linux 首次全量的打包测试夹具错误已修复，最终六组增量和同步后的驱动测试通过，报告保留各轮覆盖范围与源码哈希。原生安装器支持工作区 IDE MCP 路径，未提供时明确标为待配置，不误报安装生效。
 - README 增加当前四种宿主/九种 worker 架构、CodeArts 两端安装示例与实测表；明确源码推送、版本标签和 Release 附件的状态，并将 0.8 SVG 标为历史范围。

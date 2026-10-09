@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.0 重点优化体验</title>
-  <desc id="roadmap-desc">截至 2026 年 10 月 9 日，当前 v0.9.0 源码已推送，尚未发布 v0.9 标签。当前重点为优化体验：已有能力与失败提示、先扫描再配对、CodeArts 双向接入以及安装时保护配置；后续继续优化登录引导、连接反馈和常见故障提示。版本沿 v0.5 登录与 Windows 兼容、v0.6 统一契约与原生宿主、v0.7 独立部署与跨机器连接、v0.8 发现与配对、v0.9 体验优化演进。Windows 26 组 407 项检查通过，Linux 修复后相关增量检查通过，双向通信通过；CodeArts 自身模型调用仍需配置官方认证。</desc>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.9 重点优化使用体验</title>
+  <desc id="roadmap-desc">v0.9.9 当前重点为优化使用体验：五种原生客户端、九种 worker、连接选择、失败原因、ref 续查与升级备份。Windows 32 组回归通过，Linux 29 组回归通过；Linux Antigravity 与 ZCode、Windows Codex 与 ZCode 已通过原生任务。不代表所有模型和功能均已实测。</desc>
   <defs>
     <style>
       .title { font-size:34px; font-weight:700; fill:#0f172a; }
@@ -22,28 +22,28 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-09　·　当前源码 v0.9.0　·　最新 Git 标签 v0.8</text>
+  <text x="64" y="108" class="meta">更新：2026-10-09　·　当前版本 v0.9.9　·　五种原生客户端</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.0 · 当前重点</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.9 · 当前重点</text>
     <rect x="938" y="151" width="246" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">源码已推送 · 未发布标签</text>
-    <text x="96" y="227" class="focus">优化体验</text>
-    <text x="96" y="262" class="lead">四种宿主 · 九个 worker · Windows / Linux 双向连接</text>
+    <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">原生接入 · 跨机验证</text>
+    <text x="96" y="227" class="focus">优化使用体验</text>
+    <text x="96" y="262" class="lead">五种原生客户端(含Antigravity) · 九种 worker · Windows / Linux 双向连接</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
     <circle cx="102" cy="343" r="5" fill="#0f766e"/>
-    <text x="120" y="351" class="body">清晰的能力说明与失败提示</text>
+    <text x="120" y="351" class="body">连接选择与多节点发现配对</text>
     <circle cx="102" cy="376" r="5" fill="#0f766e"/>
-    <text x="120" y="384" class="body">先扫描 Hub，再选择与配对</text>
+    <text x="120" y="384" class="body">明确的失败原因与恢复指引</text>
     <circle cx="102" cy="409" r="5" fill="#0f766e"/>
-    <text x="120" y="417" class="body">CodeArts 原生接入与双向派发</text>
+    <text x="120" y="417" class="body">ref 续查支持长任务追踪</text>
     <circle cx="102" cy="442" r="5" fill="#0f766e"/>
-    <text x="120" y="450" class="body">安装、升级时保护现有配置</text>
+    <text x="120" y="450" class="body">升级备份保护现有配置安全</text>
 
     <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">接下来继续优化</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
@@ -52,7 +52,7 @@
     <text x="716" y="384" class="body">扫描、配对与连接状态反馈</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
     <text x="716" y="417" class="body">常见故障的说明与恢复指引</text>
-    <text x="692" y="456" class="note">按实际验证开放能力，持续补齐体验。</text>
+    <text x="692" y="456" class="note">按实际验证开放能力，持续优化使用体验。</text>
   </g>
 
   <text x="64" y="541" class="section">版本演进</text>
@@ -84,8 +84,8 @@
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
     <text x="1024" y="602" font-size="27" font-weight="700" fill="#2563eb">v0.9</text>
-    <text x="1024" y="646" font-size="21" font-weight="700" fill="#1d4ed8">体验优化</text>
-    <text x="1024" y="675" class="stage">CodeArts 接入</text>
+    <text x="1024" y="646" font-size="21" font-weight="700" fill="#1d4ed8">使用体验优化</text>
+    <text x="1024" y="675" class="stage">多端原生适配</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->
@@ -93,11 +93,11 @@
   <g id="validation-summary">
     <rect x="64" y="775" width="368" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
     <text x="88" y="807" class="body">Windows 完整回归</text>
-    <text x="88" y="848" class="stat">26 组 · 407 项通过</text>
+    <text x="88" y="848" class="stat">32 组回归通过</text>
 
     <rect x="448" y="775" width="368" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="472" y="807" class="body">Linux 修复后复测</text>
-    <text x="472" y="848" class="stat">相关增量检查通过</text>
+    <text x="472" y="807" class="body">Linux 完整回归</text>
+    <text x="472" y="848" class="stat">29 组回归通过</text>
 
     <rect x="832" y="775" width="384" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
     <text x="856" y="807" class="body">Windows ↔ Linux</text>
@@ -106,8 +106,8 @@
 
   <g id="authentication-boundary">
     <rect x="64" y="891" width="1152" height="70" rx="14" fill="#fffbeb" stroke="#fcd34d"/>
-    <text x="88" y="921" font-size="22" font-weight="700" fill="#92400e">CodeArts 自身模型调用：官方认证仍待配置。</text>
-    <text x="88" y="949" font-size="20" fill="#92400e">通信、插件和回归通过，不代表每个模型的思考、流式与附件能力均已通过。</text>
+    <text x="88" y="921" font-size="22" font-weight="700" fill="#92400e">验证范围说明：现有回归通过，不声称所有模型实测通过。</text>
+    <text x="88" y="949" font-size="20" fill="#92400e">通信与基础契约验证通过，不代表每个模型的思考、流式与附件能力均已全部实测完毕。</text>
   </g>
-  <text x="64" y="993" class="note">实测与限制详见 docs/codearts-compatibility.md　·　v0.9.0 尚未发布 Git 标签或 Release</text>
+  <text x="64" y="993" class="note">完整实测与限制见 docs/release-0.9.9.md　·　安装包附件尚未上传 GitHub Release</text>
 </svg>

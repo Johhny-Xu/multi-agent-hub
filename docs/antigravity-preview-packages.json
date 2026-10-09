@@ -1,0 +1,49 @@
+{
+  "kind": "unreleased_preview",
+  "base_version": "0.9.0",
+  "release_uploaded": false,
+  "git_tag_created": false,
+  "artifacts": [
+    {
+      "component": "hub",
+      "file": "agenthub-0.9.0-hub.zip",
+      "sha256": "7d3639b412801d92124baeed33b5c3750b544991d5928424ed92644a79185ea3",
+      "bytes": 294490,
+      "manifest_verified": true
+    },
+    {
+      "component": "plugins",
+      "file": "agenthub-0.9.0-plugins.zip",
+      "sha256": "09eb7eb4f6bc45bd81fa326d5ef0322fd45fec5d788ea385cab1e972d80bc5f5",
+      "bytes": 519886,
+      "manifest_verified": true
+    },
+    {
+      "component": "both",
+      "file": "agenthub-0.9.0-both.zip",
+      "sha256": "a42f73804d0614806a3225c89b0a4f55da42be6cc4a9c9a59ed5852e514d4a12",
+      "bytes": 768084,
+      "manifest_verified": true
+    }
+  ],
+  "superseded_artifacts": [
+    {
+      "component": "hub",
+      "file": "agenthub-0.9.0-hub.zip",
+      "sha256": "60ae6dea127f0fb40f99e6b9c53cc0a2add779f95b664f0fcdfe88958092c5b8",
+      "bytes": 292795
+    },
+    {
+      "component": "plugins",
+      "file": "agenthub-0.9.0-plugins.zip",
+      "sha256": "0d9e1cdd1cc6974bb65272e60fa2ae5643d64a73109799b0d16244b050d9aef4",
+      "bytes": 518186
+    },
+    {
+      "component": "both",
+      "file": "agenthub-0.9.0-both.zip",
+      "sha256": "2391a46a0621f1abacf16906b368a1c47cae8663d00a689239cfed71cf20244f",
+      "bytes": 766393
+    }
+  ]
+}

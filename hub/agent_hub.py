@@ -31,7 +31,7 @@ from availability_store import local_availability, record_outcome, refresh as re
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "0.9.0"
+SERVER_VERSION = "0.9.9"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -501,6 +501,11 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         from login_manager import worker_env
         process_env = worker_env(prof, agent)
     process_env = apply_environment(process_env, plan["env"])
+    # Only Hub-launched workers carry this identity. Set it after every profile
+    # and capability override so a stale/inherited value cannot make the native
+    # MCP bridge dispatch the worker back to itself. Ordinary host clients keep
+    # their own environment and can still select any worker.
+    process_env["AGENTHUB_WORKER_ID"] = agent
     try:
         cmd = prepare_command(cmd, env=process_env)
     except (OSError, ValueError) as exc:
@@ -546,7 +551,7 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         terminate_owned(proc)
         if input_stream:
             input_stream.close()
-    parsed = parse_output(stdout or "")
+    parsed = parse_output(stdout or "", stderr=stderr or "")
     out = parsed["error"] or parsed["text"] or stderr or ""
     code = proc.returncode or (1 if parsed["error"] else 0)
     if code == 0 and not parsed["text"].strip():

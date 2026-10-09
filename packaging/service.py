@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Start/stop only services owned by this external AgentHub installation."""
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,74 @@ import sys
 import time
 from urllib.request import urlopen
 from runtime import SetupError, atomic_json, read_json, run
+
+
+# This pure snapshot filter is also exercised with a stale-PPID fixture. The
+# launcher mirrors it because a source checkout need not have packaging files.
+WINDOWS_PROCESS_TREE = r'''
+function Get-OwnedProcessRows([object[]]$Snapshot, [uint32]$RootId) {
+    $rootRow = $Snapshot | Where-Object { $_.ProcessId -eq $RootId } | Select-Object -First 1
+    if (-not $rootRow -or -not $rootRow.CreationDate) { return }
+    $owned = @{}
+    $owned[$RootId] = [pscustomobject]@{ ProcessId=$RootId; CreationTicks=$rootRow.CreationDate.ToUniversalTime().Ticks; Depth=0 }
+    do {
+        $added = $false
+        foreach ($row in $Snapshot) {
+            $child = [uint32]$row.ProcessId
+            $parent = [uint32]$row.ParentProcessId
+            if ($owned.ContainsKey($child) -or -not $owned.ContainsKey($parent) -or -not $row.CreationDate) { continue }
+            $ticks = $row.CreationDate.ToUniversalTime().Ticks
+            if ($ticks -ge $owned[$parent].CreationTicks) {
+                $owned[$child] = [pscustomobject]@{ ProcessId=$child; CreationTicks=$ticks; Depth=($owned[$parent].Depth + 1) }
+                $added = $true
+            }
+        }
+    } while ($added)
+    $owned.Values | Sort-Object -Property Depth -Descending
+}
+
+function Stop-OwnedProcessRows([object[]]$Rows) {
+    foreach ($row in $Rows) {
+        $tracked = Get-Process -Id ([int]$row.ProcessId) -ErrorAction SilentlyContinue
+        if (-not $tracked) { continue }
+        # Opening the handle binds this Process object to the current process;
+        # keep it through the identity check and Kill to avoid a PID-only kill.
+        try {
+            $null = $tracked.Handle
+            $ticks = $tracked.StartTime.ToUniversalTime().Ticks
+            # CIM CreationDate is microsecond precision, Get-Process is 100ns.
+            if (($ticks - ($ticks % 10)) -ne [long]$row.CreationTicks) { continue }
+            $tracked.Kill()
+            if (-not $tracked.WaitForExit(5000)) { throw 'Owned service process did not exit.' }
+        } catch {
+            if ($tracked.HasExited) { continue }
+            throw
+        }
+    }
+}
+'''
+
+
+def stop_windows_tree(record):
+    encoded_entry = base64.b64encode(str(record['entry']).encode('utf-8')).decode('ascii')
+    script = r'''
+$ErrorActionPreference = 'Stop'
+$rootId = __ROOT_PID__
+$rootTicks = '__ROOT_TICKS__'
+$entry = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__ENTRY__'))
+$tracked = Get-Process -Id $rootId -ErrorAction SilentlyContinue
+if (-not $tracked -or $tracked.StartTime.ToUniversalTime().Ticks.ToString() -ne $rootTicks) { exit 0 }
+$snapshot = @(Get-CimInstance Win32_Process)
+$rootRow = $snapshot | Where-Object { $_.ProcessId -eq $rootId } | Select-Object -First 1
+if (-not $rootRow -or -not $rootRow.CommandLine -or $rootRow.CommandLine.IndexOf($entry, [StringComparison]::OrdinalIgnoreCase) -lt 0) { throw 'Owned service entry changed.' }
+$tracked.Refresh()
+if ($tracked.HasExited) { exit 0 }
+if ($tracked.StartTime.ToUniversalTime().Ticks.ToString() -ne $rootTicks) { throw 'Owned service identity changed.' }
+Stop-OwnedProcessRows @(Get-OwnedProcessRows $snapshot $rootId)
+'''.replace('__ROOT_PID__', str(int(record['pid']))).replace('__ROOT_TICKS__', str(int(record['identity']))).replace('__ENTRY__', encoded_entry)
+    result = run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_PROCESS_TREE + script], timeout=20)
+    if result.returncode:
+        raise SetupError('Could not stop all owned service processes; the process record was preserved')
 
 
 def identity(pid):
@@ -42,9 +111,58 @@ def command_matches(pid, entry):
         return False
 
 
-def owns_listener(pid, port):
+def owns_listener(pid, port, entry=None, stamp=None):
     if os.name == 'nt':
         try:
+            if entry is not None and stamp is not None:
+                # Windows venv python.exe is a redirector: the base interpreter
+                # is its child and owns the actual socket. Match a live, stamped
+                # launch root and a creation-ordered, entry-matching descendant
+                # chain. A healthy unrelated listener must never be adopted.
+                encoded_entry = base64.b64encode(str(entry).encode('utf-8')).decode('ascii')
+                script = r'''
+$ErrorActionPreference = 'Stop'
+$rootId = __ROOT_PID__
+$expectedTicks = '__ROOT_TICKS__'
+$entry = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__ENTRY__'))
+$root = Get-Process -Id $rootId -ErrorAction SilentlyContinue
+if (-not $root -or $root.StartTime.ToUniversalTime().Ticks.ToString() -ne $expectedTicks) { return }
+$snapshot = @(Get-CimInstance Win32_Process)
+$rootRow = $snapshot | Where-Object { $_.ProcessId -eq $rootId } | Select-Object -First 1
+if (-not $rootRow -or -not $rootRow.CommandLine -or $rootRow.CommandLine.IndexOf($entry, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return }
+$owned = @{}
+$owned[[uint32]$rootId] = $rootRow.CreationDate.ToUniversalTime().Ticks
+do {
+    $added = $false
+    foreach ($row in $snapshot) {
+        $child = [uint32]$row.ProcessId
+        $parent = [uint32]$row.ParentProcessId
+        if ($owned.ContainsKey($child) -or -not $owned.ContainsKey($parent) -or -not $row.CreationDate -or -not $row.CommandLine) { continue }
+        $ticks = $row.CreationDate.ToUniversalTime().Ticks
+        if ($ticks -ge $owned[$parent] -and $row.CommandLine.IndexOf($entry, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $owned[$child] = $ticks
+            $added = $true
+        }
+    }
+} while ($added)
+$listeners = @(Get-NetTCPConnection -State Listen -LocalPort __PORT__ -ErrorAction SilentlyContinue)
+foreach ($listener in $listeners) {
+    $ownerId = [uint32]$listener.OwningProcess
+    if (-not $owned.ContainsKey($ownerId)) { continue }
+    # Re-read the candidate after the socket lookup so a recycled descendant PID
+    # cannot inherit ownership from the earlier snapshot.
+    $current = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $ownerId)
+    $root.Refresh()
+    if ($current -and $current.CreationDate.ToUniversalTime().Ticks -eq $owned[$ownerId] -and
+        -not $root.HasExited -and $root.StartTime.ToUniversalTime().Ticks.ToString() -eq $expectedTicks) {
+        Write-Output 'true'
+        return
+    }
+}
+'''.replace('__ROOT_PID__', str(int(pid))).replace('__ROOT_TICKS__', str(int(stamp))).replace(
+                    '__ENTRY__', encoded_entry).replace('__PORT__', str(int(port)))
+                result = run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script], timeout=8)
+                return result.returncode == 0 and result.stdout.strip() == 'true'
             result = run(['powershell.exe', '-NoProfile', '-Command',
                           'Get-NetTCPConnection -State Listen -LocalPort ' + str(int(port)) + ' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess'], timeout=5)
             return str(pid) in result.stdout.split()
@@ -95,7 +213,7 @@ def stop_record(path, prefix):
         return
     if running(record):
         if os.name == 'nt':
-            run(['taskkill.exe', '/PID', str(record['pid']), '/T', '/F'], timeout=10)
+            stop_windows_tree(record)
         else:
             try:
                 (os.killpg if os.getpgid(record['pid']) == record['pid'] else os.kill)(record['pid'], signal.SIGTERM)
@@ -184,7 +302,7 @@ def local_url(host, port, suffix):
     return 'http://' + host + ':' + str(port) + suffix
 
 
-def wait_health(process, port, url, expected_service=None, timeout=15):
+def wait_health(process, port, url, expected_service=None, timeout=15, entry=None, stamp=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -194,7 +312,7 @@ def wait_health(process, port, url, expected_service=None, timeout=15):
                 good = response.status == 200
                 if expected_service:
                     good = good and json.loads(response.read()).get('service') == expected_service
-            if good and process.poll() is None and owns_listener(process.pid, port):
+            if good and process.poll() is None and owns_listener(process.pid, port, entry, stamp):
                 return
         except (OSError, ValueError):
             pass
@@ -258,7 +376,7 @@ def start(prefix, with_console=False):
                 raise SetupError('Could not identify the newly started service')
             atomic_json(record_path, {'prefix': str(Path(prefix).resolve()), 'pid': process.pid, 'identity': stamp, 'entry': str(entry)})
             started.append(record_path)
-            wait_health(process, port, url, expected)
+            wait_health(process, port, url, expected, entry=entry, stamp=stamp)
         return {'ok': True, 'hub_url': local_url(settings['bind'], settings['port'], '/mcp'), 'console': len(services) == 2}
     except Exception:
         for path in reversed(started):

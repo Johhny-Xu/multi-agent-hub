@@ -41,7 +41,7 @@ stream=true 请求流式生成。客户端提供 MCP `_meta.progressToken` 才�
 
 需要 Node.js 20+、已运行的 Hub，以及插件主机与 Hub 的网络连通。无需另装外部 subagent MCP 服务。
 
-0.9.0 的独立 `plugins` 安装包不启动本地 Hub，可连接 Windows 或 Linux 服务器。外部连接设置统一放在 Windows `%LOCALAPPDATA%/AgentHub/client.json` 或 Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME），字段为 `url` 和可选 `token`；自定义位置使用 `AGENTHUB_CONFIG`。安装器设置 `AGENTHUB_CONNECTION_MODE=file` 固定使用该文件，忽略宿主继承的旧 URL/token。见[安装说明](../../packaging/README.md)。
+0.9.9 的独立 `plugins` 安装包不启动本地 Hub，可连接 Windows 或 Linux 服务器。外部连接设置统一放在 Windows `%LOCALAPPDATA%/AgentHub/client.json` 或 Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME），字段为 `url` 和可选 `token`；自定义位置使用 `AGENTHUB_CONFIG`。安装器设置 `AGENTHUB_CONNECTION_MODE=file` 固定使用该文件，忽略宿主继承的旧 URL/token。见[安装说明](../../packaging/README.md)。
 
 首次连接或 Hub 连接失败时，调用 `hub_discover {}` 或 `/hub-discover`，展示候选地址让用户选择。扫描使用 UDP 18766 和无凭据 `/health` 确认，不自动切换、不保存连接。用安装目录的 `connect.cmd` 或 `./connect.sh` 完成所选目标的配对；未发现目标时手动填写地址。保存后重启宿主或 MCP 连接。连接文件缺失或损坏时仍可发现，固定文件模式的派发返回 `SETUP_REQUIRED`。已有 ref 仍属于原 Hub，不能因连接故障重派任务。
 

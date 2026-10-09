@@ -216,6 +216,26 @@ class TaskContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(text, 'synthetic provider failure')
 
+    def test_antigravity_partial_timeout_exit_zero_is_failed_async(self):
+        payload = json.dumps({'conversation_id': 'test', 'status': 'SUCCESS', 'response': 'unfinished answer', 'usage': {}})
+        diagnostic = '[agy] print timeout after 1m0s with turn in progress; returning partial output'
+        script = self.root / 'partial.py'
+        # More than the stderr diagnostic tail must not hide the timeout.
+        script.write_text('import sys\nprint(' + repr(payload) + ')\nprint(' + repr(diagnostic) + ', file=sys.stderr)\nprint("x" * 13000, file=sys.stderr)\n', encoding='utf-8')
+        with patch.object(worker, 'RESULTS', str(self.root / 'results')):
+            text, code = worker.run_cmd_mode([sys.executable, str(script)], str(self.root / 'task'), 'fixture', timeout_s=3)
+        self.assertEqual(code, 1)
+        self.assertIn('CLI_PARTIAL_TIMEOUT', text)
+        self.assertNotIn('unfinished answer', text)
+
+    def test_stderr_scan_preserves_true_line_boundaries_and_ansi(self):
+        path = self.root / 'stderr.txt'
+        diagnostic = '[agy] print timeout after 1m0s with turn in progress; returning partial output'
+        path.write_bytes(('x' * 4096 + diagnostic + '\n').encode())
+        self.assertIsNone(worker._read_cli_stderr(path)[1])
+        path.write_bytes(('x' * 4094 + '\r\n\x1b[33m' + diagnostic + '\x1b[0m\r\n' + 'y' * 13000).encode())
+        self.assertIn('CLI_PARTIAL_TIMEOUT', worker._read_cli_stderr(path)[1])
+
     def test_empty_zero_exit_is_unverified_and_not_completed(self):
         with patch.object(worker, 'RESULTS', str(self.root / 'results')):
             text, code = worker.run_cmd_mode([sys.executable, '-c', 'pass'], str(self.root / 'task'), 'fixture', timeout_s=3)

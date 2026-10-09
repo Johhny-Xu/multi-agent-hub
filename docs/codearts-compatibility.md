@@ -1,6 +1,8 @@
 # CodeArts 双向接入与验证边界
 
-检查日期：2026-10-09。实现版本：multi-agent-hub 0.9.0；此版本尚未创建远程源码标签。
+本页保留 0.9.0 接入阶段的历史结果，该实现随后随 v0.9.1 源码标签发布。最新部署、修复及验收见 [0.9.9 交付记录](release-0.9.9.md)，自定义路由接入步骤见 [CodeArts 私有模型配置](codearts-custom-provider.md)。
+
+检查日期：2026-10-09。实现版本：multi-agent-hub 0.9.0。
 
 CodeArts 同时有两种角色：作为客户端，通过原生 Hooks、子代理、命令、技能和 MCP 调度 Hub 上的 worker；作为 worker，通过正式 CodeArts CLI 或 IDE 内置 AgentKernel 接收其他客户端的任务。两种角色的认证要求不同，安装插件不代表 worker 已能调用模型。
 

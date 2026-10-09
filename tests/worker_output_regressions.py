@@ -69,6 +69,16 @@ class WorkerOutputTests(unittest.TestCase):
         failed = dict(completed,status="ERROR",response="",error="User location is not supported for the API use")
         self.assertEqual(parse_output(json.dumps({"event":"result","result":failed})), {"text":"","error":failed["error"]})
 
+    def test_antigravity_print_timeout_overrides_success_only_on_stderr(self):
+        diagnostic = '[agy] print timeout after 1m0s with turn in progress; returning partial output\n'
+        for response in ('', 'unfinished answer'):
+            payload = json.dumps({'conversation_id': 'test', 'status': 'SUCCESS', 'response': response, 'usage': {}})
+            result = parse_output(payload, stderr=diagnostic)
+            self.assertEqual(result['text'], '')
+            self.assertIn('CLI_PARTIAL_TIMEOUT', result['error'])
+        self.assertIsNone(parse_output(diagnostic)['error'])
+        self.assertIsNone(parse_output('answer', stderr='CLI_SPINNER')['error'])
+
     def test_public_usage_allowlist_never_returns_reasoning_or_metadata(self):
         raw = lines({"type":"assistant","session_id":"test","message":{"model":"deepseek-v4.1-flash","content":[{"type":"thinking","thinking":"PRIVATE"}],"usage":{"input_tokens":9,"reasoning_tokens":0,"api_key":"PRIVATE"}}},
             {"type":"result","is_error":False,"result":"answer","usage":{"reasoning_tokens":11,"output_tokens":12,"total_tokens":21,"account":{"token":"PRIVATE"},"thinking":"PRIVATE"}})

@@ -1,8 +1,8 @@
 # multi-agent-hub for DeepSeek Harness (DSH)
 
-本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
+本目录提供独立 MCP 桥、9 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
-DSH 包版本为 1.3.0，随 multi-agent-hub 0.9.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
+DSH 包版本为 1.4.0，随 multi-agent-hub 0.9.9 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
 
 首次连接或 Hub 连接失败时，调用 `mcp__agenthub__hub_discover {}` 只读扫描。扫描通过 UDP 18766 查找候选，并用无凭据 `/health` 确认；不发送 token、不写配置、不静默切换。展示候选地址供用户选择，再用安装目录的 `connect.cmd` 或 `./connect.sh` 完成配对；跨网段或防火墙阻止扫描时，在向导中手动填写地址。保存后重启该 profile 或 MCP 连接。连接文件损坏不会阻止发现，但派发会返回 `SETUP_REQUIRED`，固定文件模式也不会回退到旧环境连接。
 
@@ -21,7 +21,7 @@ dsh --profile web --dump-config
 
 bundle 使用 Cordis 的 insert 操作新增桥和预设。桥入口通过包内绝对路径启动 MCP server，并调用官方 MCP client 的命名导出 apply。默认单次 MCP 调用上限为 310 秒，覆盖默认 300 秒的 hub_ask；更长任务适合使用 hub_dispatch 与 hub_fetch。DSH 会过滤部分继承环境，安装器因此显式传递外部连接文件路径；旧版显式 AGENTHUB_URL / HUB_TOKEN 仍可用，没有显式值时不再注入 localhost 或空 token 去覆盖连接文件。[官方 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)
 
-`web`/`desktop` 默认 profile 已提供原生预设注册服务。实测 `headless` 默认 profile 没有 `agentPresets`，仅安装本包会使 9 个预设等待该服务；需要在所选 profile 的外部覆盖 patch 中加入 `@deepseek-ai/dsh-agent-preset-registry`，config.default 可设为 `agenthub-all`，不要在已有注册服务的 profile 重复添加。官方账户模型路由与 API Key 路由也不同，保留所选 profile 的原有登录与模型设置。
+`web`/`desktop` 默认 profile 已提供原生预设注册服务。实测 `headless` 默认 profile 没有 `agentPresets`，仅安装本包会使 10 个预设等待该服务；需要在所选 profile 的外部覆盖 patch 中加入 `@deepseek-ai/dsh-agent-preset-registry`，config.default 可设为 `agenthub-all`，不要在已有注册服务的 profile 重复添加。官方账户模型路由与 API Key 路由也不同，保留所选 profile 的原有登录与模型设置。
 
 ### 可选 profile 配置助手
 
@@ -46,7 +46,7 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 
 ## MCP 与预设
 
-桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。
+桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode、codearts，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。CodeArts 默认继承官方配置，认证及思考、流式、附件能力以 Hub 检查为准。
 
 派发后保留原始 ok、status、ref：
 
@@ -73,7 +73,7 @@ DSH 的 workflow 工具接收 meta、script 和可选 args；script 是带顶层
 | workflows/code-audit.dsh.js | code、timeout_s | CodeBuddy 架构审查成功后启动 Antigravity 安全审查 |
 | workflows/competitive-solve.dsh.js | problem、timeout_s | 两个独立解答均成功后启动一次比较 |
 
-workers 可使用数组或逗号分隔字符串，最多 8 项；timeout_s 默认为 300，范围为大于 0 且不超过 86400 秒。模板使用官方 agent(prompt, { schema, label }) 与 parallel()，检查返回对象的状态、worker、ref 和答案类型。null、失败、未知、未完成及无效 JSON 都不会被字符串化后当成成功。
+workers 可使用数组或逗号分隔字符串，最多 9 项；timeout_s 默认为 300，范围为大于 0 且不超过 86400 秒。模板使用官方 agent(prompt, { schema, label }) 与 parallel()，检查返回对象的状态、worker、ref 和答案类型。null、失败、未知、未完成及无效 JSON 都不会被字符串化后当成成功。
 
 原生子代理由模型执行工具调用，模板通过提示要求只调用一次，并校验结果；它不能保证模型必然遵守工具调用次数。官方普通子代理失败会返回 null，基础设施或脚本错误可能使整次 workflow 失败。[官方引擎实现](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/workflow/workflow-ptc/src/runtime.ts)
 
@@ -104,7 +104,7 @@ node --test tests/mcp_bridge.test.mjs plugins/agenthub-workers/scripts/test-logi
 python tests/dsh_installer_smoke.py
 ~~~
 
-测试涵盖独立 MCP 副本一致性、HTTP/MCP 错误、任务超时、单次派发、原生工作流的 null/failed/unknown 结果、runner 的真实本地 mock HTTP，以及临时 profile 的配置保留。Windows 原生插件加载、9 个注册预设和官方主模型已另外实测；预设 UI 展示和额度恢复后的子代理/工作流实际任务仍待验证。
+测试涵盖独立 MCP 副本一致性、HTTP/MCP 错误、任务超时、单次派发、原生工作流的 null/failed/unknown 结果、runner 的真实本地 mock HTTP，以及临时 profile 的配置保留。此前 Windows 原生插件加载、当时的 9 个注册预设和官方主模型已另外实测；该轮预设 UI 展示和额度恢复后的子代理/工作流实际任务未验收。0.9.9 的 Linux 原生实测与新增 CodeArts 预设范围见 [本轮交付记录](../../docs/release-0.9.9.md)。
 
 ## English
 
