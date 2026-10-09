@@ -1,0 +1,28 @@
+[
+  {
+    "name": "authenticated-prompt-cn-retry",
+    "edition": "cn",
+    "executable": "C:\\Program Files\\nodejs\\node.exe",
+    "argv": [
+      "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+      "-p",
+      "Reply exactly HUB_WINDOWS_OK. Do not use tools or read files.",
+      "--model",
+      "deepseek-v4.1-flash"
+    ],
+    "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\work",
+    "envOverrides": {
+      "CODEBUDDY_CONFIG_DIR": "<USER_HOME>\\.codebuddy-cn",
+      "DISABLE_AUTOUPDATER": "1",
+      "CODEBUDDY_INTERNET_ENVIRONMENT": "internal"
+    },
+    "durationMs": 8460,
+    "timedOut": false,
+    "code": 0,
+    "signal": null,
+    "stdoutLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-cn-retry.stdout.log",
+    "stderrLog": "<USER_HOME>\\Desktop\\agenthub\\docs\\windows-probe-logs-codebuddy\\authenticated-prompt-cn-retry.stderr.log",
+    "stdoutPreview": "HUB_WINDOWS_OK\n",
+    "stderrPreview": ""
+  }
+]

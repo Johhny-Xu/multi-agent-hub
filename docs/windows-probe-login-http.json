@@ -1,0 +1,29 @@
+{
+  "kind": "real_http_node_bridge_official_login_status",
+  "date": "2026-10-08",
+  "exit_code": 0,
+  "checks": [
+    {
+      "worker": "cb",
+      "status": "authenticated",
+      "ok": true
+    },
+    {
+      "worker": "cbcn",
+      "status": "authenticated",
+      "ok": true
+    },
+    {
+      "worker": "mmx",
+      "status": "authenticated",
+      "ok": true
+    },
+    {
+      "worker": "mimo",
+      "status": "authenticated",
+      "ok": true
+    }
+  ],
+  "passed": 4,
+  "credentials_or_account_output_saved": false
+}

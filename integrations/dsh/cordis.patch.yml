@@ -1,160 +1,170 @@
-# ==============================================================================
-# Multi-Agent Hub for DeepSeek Harness (DSH)
-# 完整原生支持层：MCP 工具总线 + 全量 8 大原生子代理预设 (Agent Presets)
-# ==============================================================================
+# Bundle patch inserts its rows once; profile patches only override owned config.
+- insert:
+    # ==============================================================================
+    # Multi-Agent Hub for DeepSeek Harness (DSH)
+    # 完整原生支持层：MCP 工具总线 + 全量 8 大原生子代理预设 (Agent Presets)
+    # ==============================================================================
 
-# 1. 挂载 Multi-Agent Hub 核心任务总线 (采用 stdio 本地桥接，自带 Token、无需本地开端口)
-- id: mcp-agenthub
-  name: "@deepseek-ai/dsh-mcp-client"
-  config:
-    serverName: agenthub
-    transport: stdio
-    command: node
-    args:
-      - "${MCP_SERVER_SCRIPT}"
+    # 1. 本包 wrapper 按稳定包目录挂载官方 MCP client；profile 可覆盖 config.env。
+    - id: mcp-agenthub
+      name: "dsh-plugin-multi-agent-hub"
+      config:
+        env:
+          AGENTHUB_URL: !!js process.env.AGENTHUB_URL || 'http://127.0.0.1:8765/mcp'
+          HUB_TOKEN: !!js process.env.HUB_TOKEN || ''
+        toolCallTimeoutMs: 310000
 
-# 2. 注册 DSH 全量原生子代理 (Agent Presets)
-# 会话中可在顶部预设下拉直接切换，或在会话中通过子代理委派机制调用
+    # 2. 注册 DSH 全量原生子代理 (Agent Presets)
+    # 会话中可在顶部预设下拉直接切换，或在会话中通过子代理委派机制调用
 
-- id: preset-agenthub-all
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-all
-    name: "AgentHub 全能总线"
-    description: "一站式中枢：按任务难度自动向 8 大 AI 代理智能分流调度"
-    order: 20
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是连接 Multi-Agent Hub 的全能协同中枢。
-            遇到具体任务时，请调用已挂载的 mcp__agenthub__hub_ask 工具派发给最合适的子代理：
-            - antigravity: 复杂算法、长思维链推演、数学证明、深入反思
-            - codebuddy: 国际版全栈工程代码编写、项目重构、Bug 修复
-            - codebuddy-cn: 国内版全栈代码开发
-            - zcode: Linux 服务器运维排查、环境构建与桌面协同
-            - traecode: 极速代码审查、轻量生成 (GLM-5.3-FlashX)
-            - github-copilot: GitHub Copilot 自动选型编程代理
-            - minimaxcode: 长文本问答、文字创作与自包含代码生成
-            - mimocode: 小米 MiMo 架构编程代理
+    - id: preset-agenthub-all
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-all
+        name: "AgentHub 全能总线"
+        description: "一站式中枢：按任务难度自动向 8 大 AI 代理智能分流调度"
+        order: 20
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是连接 Multi-Agent Hub 的全能协同中枢。
+                遇到具体任务时，请调用已挂载的 mcp__agenthub__hub_ask 工具派发给最合适的子代理：
+                - antigravity: 复杂算法、长思维链推演、数学证明、深入反思
+                - codebuddy: 国际版全栈工程代码编写、项目重构、Bug 修复
+                - codebuddy-cn: 国内版全栈代码开发
+                - zcode: Linux 服务器运维排查、环境构建与桌面协同
+                - traecode: 极速代码审查、轻量生成 (GLM-5.3-FlashX)
+                - github-copilot: GitHub Copilot 自动选型编程代理
+                - minimaxcode: 长文本问答、文字创作与自包含代码生成
+                - mimocode: 小米 MiMo 架构编程代理
+                每次任务只派发一次，保留原始 ok/status/ref；running/unknown 时续查原 ref，不自动改派；只有 ok=true 且 status=completed 才表示完成。
 
-- id: preset-agenthub-antigravity
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-antigravity
-    name: "Antigravity (算法/推理)"
-    description: "专精长思维链、算法证明与深度推理 (Google Antigravity / Gemini)"
-    order: 21
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是专精算法与逻辑证明的 Antigravity 代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "antigravity") 执行核心深度推理任务并回传精炼结果。
+    - id: preset-agenthub-antigravity
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-antigravity
+        name: "Antigravity (算法/推理)"
+        description: "专精长思维链、算法证明与深度推理 (Google Antigravity / Gemini)"
+        order: 21
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是专精算法与逻辑证明的 Antigravity 代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "antigravity") 执行核心深度推理任务并回传精炼结果。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-codebuddy
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-codebuddy
-    name: "CodeBuddy 国际版"
-    description: "专精工业级代码开发、项目构建与错误修复 (DeepSeek-V4.1-Flash)"
-    order: 22
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是专精全栈代码编写与工程实现的 CodeBuddy 国际版代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "codebuddy") 执行代码编写、重构与排障任务。
+    - id: preset-agenthub-codebuddy
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-codebuddy
+        name: "CodeBuddy 国际版"
+        description: "专精工业级代码开发、项目构建与错误修复 (DeepSeek-V4.1-Flash)"
+        order: 22
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是专精全栈代码编写与工程实现的 CodeBuddy 国际版代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "codebuddy") 执行代码编写、重构与排障任务。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-codebuddy-cn
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-codebuddy-cn
-    name: "CodeBuddy 国内版"
-    description: "专精国内独立部署全栈工程实现 (DeepSeek-V4.1-Flash)"
-    order: 23
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是专精国内全栈工程代码编写的 CodeBuddy-CN 代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "codebuddy-cn") 执行代码编写与实现任务。
+    - id: preset-agenthub-codebuddy-cn
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-codebuddy-cn
+        name: "CodeBuddy 国内版"
+        description: "专精国内独立部署全栈工程实现 (DeepSeek-V4.1-Flash)"
+        order: 23
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是专精国内全栈工程代码编写的 CodeBuddy-CN 代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "codebuddy-cn") 执行代码编写与实现任务。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-zcode
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-zcode
-    name: "ZCode (运维/桌面)"
-    description: "专精 Linux 远端运维、系统级脚本与桌面 AI 协同 (GLM-5.3-Flash)"
-    order: 24
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是专精系统级操作与 Linux 远端调度的 ZCode 代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "zcode") 执行系统检查、构建脚本与运维操作。
+    - id: preset-agenthub-zcode
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-zcode
+        name: "ZCode (运维/桌面)"
+        description: "专精 Linux 远端运维、系统级脚本与桌面 AI 协同 (GLM-5.3-Flash)"
+        order: 24
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是专精系统级操作与 Linux 远端调度的 ZCode 代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "zcode") 执行系统检查、构建脚本与运维操作。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-traecode
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-traecode
-    name: "TraeCode (极速审查)"
-    description: "专精极速并发代码审查与轻量任务生成 (GLM-5.3-FlashX)"
-    order: 25
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是专精快速代码审查与极速生成的 TraeCode 代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "traecode") 快速处理轻量代码任务并回传结果。
+    - id: preset-agenthub-traecode
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-traecode
+        name: "TraeCode (极速审查)"
+        description: "专精极速并发代码审查与轻量任务生成 (GLM-5.3-FlashX)"
+        order: 25
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是专精快速代码审查与极速生成的 TraeCode 代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "traecode") 快速处理轻量代码任务并回传结果。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-copilot
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-copilot
-    name: "GitHub Copilot"
-    description: "GitHub Copilot 自动选型无头编程代理 (Auto 模式)"
-    order: 26
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是对接 GitHub Copilot 的专业代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "github-copilot") 执行代码生成任务并回传结果。
+    - id: preset-agenthub-copilot
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-copilot
+        name: "GitHub Copilot"
+        description: "GitHub Copilot 自动选型无头编程代理 (Auto 模式)"
+        order: 26
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是对接 GitHub Copilot 的专业代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "github-copilot") 执行代码生成任务并回传结果。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-minimaxcode
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-minimaxcode
-    name: "MiniMax (长文本/问答)"
-    description: "专精长文本问答、文字创作与纯文本代码 (MiniMax-M3.1-Flash-Preview)"
-    order: 27
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是专精长文本问答与文字创作的 MiniMax 代理通道（纯文本输入/输出）。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "minimaxcode") 执行问答与文本生成任务。
+    - id: preset-agenthub-minimaxcode
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-minimaxcode
+        name: "MiniMax (长文本/问答)"
+        description: "专精长文本问答、文字创作与纯文本代码 (MiniMax-M3.1-Flash-Preview)"
+        order: 27
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是专精长文本问答与文字创作的 MiniMax 代理通道（纯文本输入/输出）。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "minimaxcode") 执行问答与文本生成任务。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。
 
-- id: preset-agenthub-mimocode
-  name: "@deepseek-ai/dsh-agent-preset"
-  config:
-    id: agenthub-mimocode
-    name: "MiMoCode"
-    description: "小米 MiMo 架构编程代理 (Baseline Pure 模式)"
-    order: 28
-    plugins:
-      - id: persona
-        name: "@deepseek-ai/dsh-persona"
-        config:
-          prefix: >
-            你是对接小米 MiMoCode 的专业代理通道。
-            请优先调用 mcp__agenthub__hub_ask 工具 (worker: "mimocode") 执行代码编写任务并回传结果。
+    - id: preset-agenthub-mimocode
+      name: "@deepseek-ai/dsh-agent-preset"
+      config:
+        id: agenthub-mimocode
+        name: "MiMoCode"
+        description: "小米 MiMo 架构编程代理 (Baseline Pure 模式)"
+        order: 28
+        plugins:
+          - id: persona
+            name: "@deepseek-ai/dsh-persona"
+            config:
+              prefix: >
+                你是对接小米 MiMoCode 的专业代理通道。
+                请优先调用 mcp__agenthub__hub_ask 工具 (worker: "mimocode") 执行代码编写任务并回传结果。
+                每次任务只派发一次，保留原始 ok/status/ref；只有 ok=true 且 status=completed 才表示完成。running/unknown 时用原 ref 续查，不自动改派；失败原文如实回传。

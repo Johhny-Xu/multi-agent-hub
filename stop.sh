@@ -1,36 +1,23 @@
 #!/usr/bin/env bash
-# ==============================================================
-# Multi-Agent Hub 一键停止脚本 / Stopper
-# ==============================================================
-
+# Stop only processes whose recorded creation time and command match this checkout.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SILENT=0
-if [ "${1:-}" = "--silent" ]; then
-  SILENT=1
-fi
-
-[ $SILENT -eq 0 ] && echo "正在停止 Multi-Agent Hub 服务..."
-
-# 1. 按 PID 停止
-if [ -f "$ROOT_DIR/.run/console.pid" ]; then
-  CPID=$(cat "$ROOT_DIR/.run/console.pid" 2>/dev/null || true)
-  if [ -n "$CPID" ] && kill -0 "$CPID" 2>/dev/null; then
-    kill "$CPID" 2>/dev/null || true
-    [ $SILENT -eq 0 ] && echo "  - 已停止 Web Console (PID: $CPID)"
+[ "${1:-}" = "--silent" ] && SILENT=1
+[ "$SILENT" -eq 0 ] && echo "正在停止 Multi-Agent Hub 服务..."
+for service in console hub; do
+  pid_file="$ROOT_DIR/.run/$service.pid"
+  started_file="$ROOT_DIR/.run/$service.started"
+  [ -f "$pid_file" ] || continue
+  service_pid=$(cat "$pid_file")
+  case "$service_pid" in ''|*[!0-9]*) continue ;; esac
+  if [ "$service" = hub ]; then entry="$ROOT_DIR/hub/agent_hub.py"; else entry="$ROOT_DIR/console/server.mjs"; fi
+  current_started=$(ps -p "$service_pid" -o lstart= 2>/dev/null || true)
+  recorded_started=$(cat "$started_file" 2>/dev/null || true)
+  current_args=$(ps -p "$service_pid" -o args= 2>/dev/null || true)
+  if [ -n "$recorded_started" ] && [ "$current_started" = "$recorded_started" ]; then
+    case "$current_args" in *"$entry"*) kill "$service_pid" 2>/dev/null || true ;; esac
   fi
-  rm -f "$ROOT_DIR/.run/console.pid"
-fi
-
-if [ -f "$ROOT_DIR/.run/hub.pid" ]; then
-  HPID=$(cat "$ROOT_DIR/.run/hub.pid" 2>/dev/null || true)
-  if [ -n "$HPID" ] && kill -0 "$HPID" 2>/dev/null; then
-    kill "$HPID" 2>/dev/null || true
-    [ $SILENT -eq 0 ] && echo "  - 已停止 Task Bus (PID: $HPID)"
-  fi
-  rm -f "$ROOT_DIR/.run/hub.pid"
-fi
-
-# 2. 兜底清理残留 (仅匹配本仓库启动特征)
-pkill -f "agent_hub.py.*--http" 2>/dev/null || true
-
-[ $SILENT -eq 0 ] && echo "✅ 服务已全部停止。"
+  rm -f -- "$pid_file" "$started_file"
+done
+[ "$SILENT" -eq 0 ] && echo "已停止本仓库记录且匹配的服务。"
+exit 0

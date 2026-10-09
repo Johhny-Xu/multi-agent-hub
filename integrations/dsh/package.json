@@ -5,7 +5,18 @@
   "type": "module",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./mcp/*": "./mcp/*",
+    "./workflows/*": "./workflows/*"
+  },
+  "files": ["index.js", "cordis.patch.yml", "mcp", "workflows", "README.md", "install-dsh.py", "install.bat", "install.sh", "icon.png"],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-mcp-client": "*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-mcp-client": "*"
   },
   "dsh": {
     "bundle": {

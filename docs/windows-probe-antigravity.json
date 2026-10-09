@@ -1,0 +1,211 @@
+{
+  "worker": "antigravity",
+  "tested_date": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "platform": "Windows x64",
+  "result": "headless_runtime_verified_provider_region_blocked",
+  "installed_before_test": {
+    "desktop_path": "%LOCALAPPDATA%/Programs/antigravity/Antigravity.exe",
+    "desktop_version": "2.21.1",
+    "desktop_is_cli": false,
+    "path_commands_found": [],
+    "official_default_cli_path_exists": false,
+    "official_default_cli_path": "%LOCALAPPDATA%/agy/bin/agy.exe",
+    "desktop_resource_bin_executables": [
+      "language_server.exe",
+      "webm_encoder.exe"
+    ],
+    "notes": "The preexisting desktop application was preserved and was never launched or controlled for this probe. No installed agy command was found."
+  },
+  "temporary_official_cli": {
+    "installer_source": "https://antigravity.google/cli/install.ps1",
+    "installer_executed": false,
+    "native_install_subcommand_executed": false,
+    "manifest_source": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/windows_amd64.json",
+    "download_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.3.1-4582356770750464/windows-x64/cli_windows_x64.exe",
+    "version": "1.3.1",
+    "sha512": "f346d2cd9d68e7e5395cb94ff95e7e8ab2e0c65cf2ad835d0eb671fb41f12f5fc713d7a26ceb4510678eb9baa62c6cd9ab8205211e3661c6cd1e23ca7bc69781",
+    "sha512_verified_against_official_manifest": true,
+    "temporary_path": "%TEMP%/agenthub-probe-antigravity-20261008/agy.exe",
+    "global_path_profile_security_settings_changed": false,
+    "authentication_settings_changed": false,
+    "retained_for_followup_login_tests": true,
+    "cleanup_note": "Recursive temporary-folder cleanup was rejected by automatic approval review (blocked by policy). Parent then requested retaining the verified binary for login capability tests; no cleanup retries performed."
+  },
+  "cli_checks": [
+    {
+      "arguments": [
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "1.3.1"
+    },
+    {
+      "arguments": [
+        "--help"
+      ],
+      "exit_code": 0,
+      "confirmed_flags": [
+        "-p",
+        "--print",
+        "--prompt",
+        "--model",
+        "--dangerously-skip-permissions",
+        "--print-timeout",
+        "--output-format",
+        "--mode",
+        "--sandbox",
+        "--log-file"
+      ],
+      "print_timeout_help_default": "0s",
+      "notes": "The official CLI accepts the repository's prompt/model/permission flag family. Its executable is agy.exe, not the preexisting desktop Antigravity.exe. The current binary advertises an unlimited default print timeout; use an explicit dispatcher deadline."
+    }
+  ],
+  "generation_probe": {
+    "command": [
+      "<temporary-official-agy.exe>",
+      "-p",
+      "Reply exactly AGENTHUB_WINDOWS_OK. Do not use tools, read or write files, execute commands, or access external websites.",
+      "--mode",
+      "plan",
+      "--model",
+      "gemini-3.8-flash-medium",
+      "--print-timeout",
+      "45s",
+      "--output-format",
+      "json",
+      "--log-file",
+      "<temporary-probe-log>"
+    ],
+    "cwd": "<isolated-temporary-workspace>",
+    "stdin": "DEVNULL",
+    "outer_timeout_seconds": 60,
+    "timed_out": false,
+    "duration_seconds": 15.875,
+    "exit_code": 3,
+    "status": "ERROR",
+    "response": "",
+    "error": "FAILED_PRECONDITION (code 400): User location is not supported for the API use.",
+    "stderr_error_status": "INVALID_ARGUMENT",
+    "stderr_error_code": 400,
+    "stderr_code_kind": "http",
+    "retryable": false,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "broad_permission_flags_used": false,
+    "child_profile_directories_isolated": true,
+    "secret_environment_values_inherited": false,
+    "workspace_files_after_probe": [],
+    "cleanup": "A Windows Job Object with kill-on-close owned only the probe process and its descendants. Closing it reclaimed those processes. Preexisting apps and services were preserved.",
+    "interpretation": "Native CLI launch, flags, headless response transport and nonzero provider-error reporting were verified on Windows. Successful inference was not verified because the provider rejected this machine's region. An isolated filesystem profile does not isolate Windows Credential Manager; official CLI may read a preexisting desktop login silently. No sign-in, sign-out or authentication configuration changes were performed."
+  },
+  "static_dispatch_findings": [
+    {
+      "file": "hub/agent_hub.py",
+      "lines": [
+        422,
+        423,
+        455,
+        463,
+        476,
+        482
+      ],
+      "finding": "The async_default branch returns before cwd/workdir_via/executable resolution. Its task JSON contains only cmd and callback_url, so caller cwd and timeout_s cannot reach async_worker.",
+      "runtime_validation": "Delegated to the parent agent's central subprocess probe."
+    },
+    {
+      "file": "hub/async_worker.py",
+      "lines": [
+        264,
+        275,
+        277,
+        349,
+        350
+      ],
+      "finding": "run_cmd_mode has no execution deadline and marks every returned exit code as completed, including provider errors such as agy exit 3.",
+      "runtime_validation": "Delegated to the parent agent's central subprocess probe."
+    },
+    {
+      "file": "hub/async_worker.py",
+      "lines": [
+        130,
+        136,
+        149,
+        161,
+        272
+      ],
+      "finding": "CREATE_NEW_PROCESS_GROUP is used, but Windows cleanup falls back to terminate/kill of the root process only; it also returns immediately if that root has exited. Descendants may survive. A Windows Job Object or other verified tree cleanup is needed.",
+      "runtime_validation": "Static review; this vendor probe independently used a Job Object for its own cleanup."
+    },
+    {
+      "files": [
+        "hub/agent_hub.py",
+        "hub/async_worker.py"
+      ],
+      "finding": "No general Windows wrapper normalization exists. .ps1 requires an explicit PowerShell interpreter; the async branch also lacks shutil.which resolution. .cmd lookup/quoting needs a runtime check, and blanket shell=True is unsafe with user prompt arguments.",
+      "runtime_validation": "Not claimed as a .cmd runtime failure here; parent agent handles subprocess shim tests."
+    },
+    {
+      "files": [
+        "hub/agent_hub.py",
+        "hub/async_worker.py"
+      ],
+      "finding": "Output is decoded as UTF-8 with replacement, but child encoding is not normalized. Python or shell workers using a Windows code page can produce replacement characters; setting parent file encoding alone does not change bytes emitted by a child.",
+      "runtime_validation": "Static review; agy returned valid UTF-8 for this English diagnostic."
+    }
+  ],
+  "primary_sources": [
+    {
+      "url": "https://antigravity.google/docs/cli/install/",
+      "supports": "Native Windows CLI install path and silent authentication using the OS keyring."
+    },
+    {
+      "url": "https://antigravity.google/docs/cli/headless/",
+      "supports": "agy -p, --model, JSON output, headless error handling, and --dangerously-skip-permissions."
+    },
+    {
+      "url": "https://antigravity.google/cli/install.ps1",
+      "supports": "Official Windows native binary manifest endpoint and SHA512 verification procedure."
+    }
+  ],
+  "limitations": [
+    "This is a real native CLI/runtime probe; it is not a successful model-generation or coding test.",
+    "The shared hub source and active agents.json were not edited by this agent.",
+    "Regional restrictions were reported without attempting routing, account or authentication workarounds."
+  ],
+  "login_capability_check": {
+    "binary_version": "1.3.1",
+    "login_help": {
+      "outcome": "global help; no login-specific flags",
+      "command": [
+        "agy.exe",
+        "login",
+        "--help"
+      ]
+    },
+    "help_login": {
+      "stderr": "Error: unknown subcommand: login",
+      "exit_code": 1,
+      "command": [
+        "agy.exe",
+        "help",
+        "login"
+      ]
+    },
+    "login_subcommand": false,
+    "official_machine_auth_status_subcommand_found": false,
+    "official_no_browser_device_flag_found": false,
+    "local_login_command": [
+      "agy.exe"
+    ],
+    "local_login_behavior": "Interactive TUI; uses Windows keyring silently if available, otherwise launches default browser",
+    "remote_ssh_behavior": "Official docs: starts interactive authorization URL/code loop when CLI detects a real SSH environment",
+    "automatic_local_login_link_retrieval": "unsupported_or_unverified",
+    "login_started_for_this_check": false,
+    "logout_or_auth_config_changes": false,
+    "sources": [
+      "https://antigravity.google/docs/cli/install/",
+      "https://antigravity.google/docs/cli/reference/"
+    ]
+  }
+}

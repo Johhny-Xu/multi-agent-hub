@@ -1,139 +1,103 @@
-# Multi-Agent Hub for DeepSeek Harness (DSH)
+# AgentHub for DeepSeek Harness (DSH)
 
-[中文](#中文) | [English](#english)
+本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
-> 💡 **适配状态公告 / Adaptation Status**：
-> 本模块目前处于 **积极适配与优化阶段 (Under Active Adaptation)**。核心工作流与预设原型代码均已就绪（详见下文），团队正在全面测试适配 DSH 官方桌面端的 Cordis 微内核多环境隔离机制，以确保生产环境的绝对稳定与平滑体验。欢迎关注主仓库路线图获取最新进展！
->
-> This module is currently **under active adaptation & testing**. The native presets, workflows, and bridge definitions are available below, while we finalize smooth integration with DSH's Cordis microkernel layer.
+本次验证使用官方 API 文档、模拟 Hub、工作流 VM 与临时 profile。没有启动真实 DSH 宿主，也没有修改用户的 DSH 配置。
 
----
+## 安装到指定 profile
 
-## 中文
+使用已安装的官方 DSH CLI 安装这个子目录包。将路径与 profile 名换成实际值：
 
-本项目为 **DeepSeek Harness (DSH)** 官方桌面客户端提供全能插件与扩展集成。
-不仅支持 MCP 工具面直通，还完整支持 **DSH 原生工作流 (Workflow)** 与 **DSH 原生子代理预设 (Agent Presets)**！
-安装后，DeepSeek 助手可直接协同调用 Multi-Agent Hub 背后 **8 大 AI 代理**（CodeBuddy、Antigravity、GitHub Copilot、MiniMax、TraeCode、ZCode 等）。
+~~~powershell
+dsh plugin --profile web add "file:C:/PATH/TO/agenthub/integrations/dsh"
+dsh --profile web --dump-config
+~~~
 
-### 核心能力体系
+官方 CLI 负责安装依赖、链接包和启用 bundle；新 profile 的创建规则也由官方 CLI 决定。确认组合配置里出现 AgentHub layer 后再启动该 profile。仓库根目录网址不能代替这个子目录包。[官方 bundle/profile 安装说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)
 
-1. **DSH 原生子代理 (Native Presets 全量 8 通道)**：
-   - 基于 `@deepseek-ai/dsh-agent-preset` 标准，注入全套子代理预设：
-     - `agenthub-all`：AgentHub 全能协同总线
-     - `agenthub-antigravity`：专精复杂算法推演与长思维链 (Gemini 3.8 Flash / Claude 思维链)
-     - `agenthub-codebuddy`：专精工业全栈代码实现与 Bug 修复 (DeepSeek-V4.1-Flash 国际版)
-     - `agenthub-codebuddy-cn`：专精国内全栈工程代码编写 (DeepSeek-V4.1-Flash 国内版)
-     - `agenthub-zcode`：专精 Linux 远端运维排查与系统脚本 (GLM-5.3-Flash)
-     - `agenthub-traecode`：专精极速并发代码审查与轻量生成 (GLM-5.3-FlashX)
-     - `agenthub-copilot`：专精 GitHub Copilot 自动选型编程代理 (Auto 模式)
-     - `agenthub-minimaxcode`：专精长文本问答与创作 (MiniMax-M3.1-Flash-Preview)
-     - `agenthub-mimocode`：专精小米 MiMo 架构编程代理 (Baseline Pure 模式)
-   - 在 DSH 顶部预设下拉中可直接切换，或在会话中通过 `@` 引用。
+bundle 使用 Cordis 的 insert 操作新增桥和预设。桥入口通过包内绝对路径启动 MCP server，并调用官方 MCP client 的命名导出 apply。默认单次 MCP 调用上限为 310 秒，覆盖默认 300 秒的 hub_ask；更长任务适合使用 hub_dispatch 与 hub_fetch。DSH 会过滤继承环境中的敏感变量，因此 bundle 显式传入 AGENTHUB_URL 与 HUB_TOKEN。[官方 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)
 
-2. **DSH 原生工作流 (Native Workflows)**：
-   - 适配 DSH 官方 `@deepseek-ai/dsh-workflow` 规范（纯 JavaScript 编排脚本）；
-   - 支持 DSH 原生全局钩子：`agent()`、`parallel()`、`pipeline()`、`phase()`、`log()`；
-   - 随包提供 3 个开箱即用的工作流模板（位于 [`workflows/`](workflows/)）：
-     - [`hub-fanout.dsh.js`](workflows/hub-fanout.dsh.js)：多智能体并发扇出与结果汇流
-     - [`code-audit.dsh.js`](workflows/code-audit.dsh.js)：双代理流水线代码架构与安全审查
-     - [`competitive-solve.dsh.js`](workflows/competitive-solve.dsh.js)：多模型交叉竞速解题与一致性验证
+### 可选 profile 配置助手
 
-3. **MCP 原生工具面**：
-   - `mcp__agenthub__hub_ask`：单调用直派任意 Agent 并阻塞带回最终结果；
-   - `mcp__agenthub__hub_dispatch` / `hub_fetch`：异步派发与状态轮询；
-   - `mcp__agenthub__hub_status`：查看各代理实时在线情况。
+官方 CLI 安装完成后，可用本目录助手写入 Hub 地址等 profile 覆盖配置：
 
----
+~~~powershell
+python install-dsh.py --profile web --url http://127.0.0.1:8765/mcp
+python install-dsh.py --profile web --check
+~~~
 
-### ⚡ 一键安装与网址输入安装
+Windows 可运行 install.bat --profile web；Linux/macOS 可运行 ./install.sh --profile web。两者会从脚本所在目录定位安装器、转发全部参数，并检查 Python 3.8+。若系统 Python 命令不可用，设置 HUB_PYTHON 为实际解释器路径。直接运行 Python 安装器时默认 profile 为 web；启动脚本要求传入参数。
 
-#### 方式 1：Windows 双击一键安装（最推荐）
-直接双击运行本目录下的 **`install.bat`**：
-- 自动将 `dsh-plugin-multi-agent-hub` 注册进 DSH 当前 profile 的 `package.json`（插件设置面板立即可见！）；
-- 自动注入 MCP 任务总线与全量 8 大子代理预设；
-- 写入前自动生成带时间戳的安全备份。
+助手只处理选中的既有 profile，找不到时直接失败，不切换到其他 profile。它保留用户 persona 和其他 patch，只管理 AgentHub 标记块及旧版 AgentHub 顶层条目。省略 --url / --token 时保留已有地址、token 和自定义 env；显式空字符串应写成 YAML 引号字符串，空/null 环境值会在写入前报错。更新前备份配置，写入失败时恢复原文件。
 
-#### 方式 2：在 DSH 客户端“安装插件”输入框中输入安装
-如果你希望在 DSH 图形界面的“插件”设置面板输入框里安装：
-- **输入本地路径**：
-  ```
-  file:<USER_HOME>/Desktop/agenthub/integrations/dsh
-  ```
-- **输入 Git 仓库网址**（在仓库公开后）：
-  ```
-  https://github.com/Johhny-Xu/multi-agent-hub.git
-  ```
-DSH 底层 pnpm 即可自动读取本目录的 `package.json` 与 `cordis.patch.yml` 并完成安装！
+--check 只检查配置记录，不能证明宿主已加载或 worker 在线。--uninstall 删除助手管理的配置与 bundle 记录；完整移除包请同时执行：
 
-#### 方式 3：Linux / macOS
-```bash
-chmod +x install.sh
-./install.sh
-```
+~~~powershell
+dsh plugin --profile web remove dsh-plugin-multi-agent-hub
+~~~
 
-#### 高级参数（Python 命令行）
-```bash
-# 默认安装（自动注入 MCP 与 8 大原生子代理预设）
-python3 install-dsh.py
+助手不下载依赖或启动宿主，不能代替官方 CLI 的包链接步骤。
 
-# 远程总线 (指定远程局域网 URL 与 Token)
-python3 install-dsh.py --url http://192.168.1.100:8765/mcp --token your_token_here
+## MCP 与预设
 
-# 检查当前集成状态
-python3 install-dsh.py --check
+桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_login。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode，以及 agenthub-all。模型与可用性以 Hub 配置和状态返回为准。
 
-# 一键卸载与配置还原
-python3 install-dsh.py --uninstall
-```
+派发后保留原始 ok、status、ref：
 
----
+- ok=true 且 status=completed，并有有效答案，才计入工作流成功。
+- running 表示任务仍在运行；unknown 表示状态无法确认。
+- 有 ref 时继续查同一任务；没有 ref 的 unknown 也不能自动重复派发。
+- failed 保留错误结果，工作流停止依赖它的后续阶段。
 
-### 如何在 DSH 中调用原生工作流？
+同一个 worker 的别名在扇出前去重；桥不会因空输出或未知状态自动重做任务。
 
-在 DeepSeek Harness 客户端中，直接向 AI 助手发送以下指令即可启动原生工作流：
+## 原生工作流
 
-#### 场景 1：全代理并发扇出 (hub-fanout)
-> “请使用 workflow 工具运行 `hub-fanout.dsh.js` 工作流，参数 task='写一个高效的 LRU Cache 实现'，workers='antigravity,codebuddy,traecode'”
+DSH 的 workflow 工具接收 meta、script 和可选 args；script 是带顶层 await、以 return JSON 结束的 JavaScript 脚本体。请将下面文件的完整内容作为 script 提交，不能只提供文件名。官方目前没有保存工作流名称注册机制。[官方工作流 API](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/workflow/workflow/README.md)
 
-#### 场景 2：双代理流水线代码审查 (code-audit)
-> “请使用 workflow 工具运行 `code-audit.dsh.js` 工作流，审查当前工作区的核心业务代码”
+| 脚本 | args | 行为 |
+| --- | --- | --- |
+| workflows/hub-fanout.dsh.js | task、workers、timeout_s | 独立 worker 并发，各启动一次子代理 |
+| workflows/code-audit.dsh.js | code、timeout_s | CodeBuddy 架构审查成功后启动 Antigravity 安全审查 |
+| workflows/competitive-solve.dsh.js | problem、timeout_s | 两个独立解答均成功后启动一次比较 |
 
----
+workers 可使用数组或逗号分隔字符串，最多 8 项；timeout_s 默认为 300，范围为大于 0 且不超过 86400 秒。模板使用官方 agent(prompt, { schema, label }) 与 parallel()，检查返回对象的状态、worker、ref 和答案类型。null、失败、未知、未完成及无效 JSON 都不会被字符串化后当成成功。
+
+原生子代理由模型执行工具调用，模板通过提示要求只调用一次，并校验结果；它不能保证模型必然遵守工具调用次数。官方普通子代理失败会返回 null，基础设施或脚本错误可能使整次 workflow 失败。[官方引擎实现](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/workflow/workflow-ptc/src/runtime.ts)
+
+## 确定性 Node runner
+
+需要由程序确保每个阶段仅调用一次 Hub 时，直接运行包内 runner。它使用相同桥接代码，无中间编排模型，不依赖工作流 VM 的文件或命令执行 API。
+
+例如 input.json：
+
+~~~json
+{"task":"审查一个给定设计","workers":["cb","cbcn"],"timeout_s":60}
+~~~
+
+~~~powershell
+node workflows/runner.mjs hub-fanout input.json
+node workflows/runner.mjs code-audit audit-input.json
+node workflows/runner.mjs competitive-solve problem-input.json
+~~~
+
+第二个参数也可为 -，从标准输入读取 JSON。输出为 JSON；只有全部必要阶段成功时退出码为 0，其他情况为 1。code-audit 使用 code 字段，competitive-solve 使用 problem 字段。失败或不确定结果会保留原 ref，runner 不自动重派。
+
+## 离线验证
+
+在仓库根目录运行：
+
+~~~text
+node --test tests/mcp_bridge.test.mjs plugins/agenthub-workers/scripts/test-login.mjs tests/dsh_workflows.test.mjs
+python tests/dsh_installer_smoke.py
+~~~
+
+测试涵盖独立 MCP 副本一致性、HTTP/MCP 错误、任务超时、单次派发、原生工作流的 null/failed/unknown 结果、runner 的真实本地 mock HTTP，以及临时 profile 的配置保留。真实 DSH 加载、预设 UI 展示和宿主模型执行仍需在目标 profile 完成安装后验证。
 
 ## English
 
-This integration connects **Multi-Agent Hub** natively into the official **DeepSeek Harness (DSH)** desktop application.
-It provides full native support for **DSH Workflows** and **DSH Subagent Presets**!
+Install this directory as a DSH bundle with the official dsh plugin --profile NAME add file:PATH command, then inspect dsh --profile NAME --dump-config. The optional Python helper prepares only the selected existing profile; it preserves user patches and existing Hub env settings, backs up changes, and does not install dependencies or activate a host.
 
-### Core Capabilities
+Native workflow files are JavaScript bodies submitted through the workflow tool's meta/script/args contract. Their schema checks reject null, malformed, failed and uncertain child results. Child agents remain model-driven. For program-controlled single dispatch per stage, use node workflows/runner.mjs MODE INPUT.json. Only completed nonempty results produce exit code 0; running/unknown refs are preserved without automatic redispatch.
 
-1. **DSH Native Subagent Presets (All 8 Channels)**:
-   - Built on `@deepseek-ai/dsh-agent-preset`, injecting native presets:
-     - `agenthub-all`: General orchestration hub
-     - `agenthub-antigravity`: Complex algorithm proof & deep reasoning (Gemini/Claude)
-     - `agenthub-codebuddy`: Production full-stack code implementation (DeepSeek-V4.1-Flash Intl)
-     - `agenthub-codebuddy-cn`: Domestic full-stack code implementation (DeepSeek-V4.1-Flash CN)
-     - `agenthub-zcode`: Remote Linux operations & desktop AI tasks (GLM-5.3-Flash)
-     - `agenthub-traecode`: High-speed code review & lightweight generation (GLM-5.3-FlashX)
-     - `agenthub-copilot`: GitHub Copilot auto-routing agent
-     - `agenthub-minimaxcode`: Long-text generation & Q&A (MiniMax-M3.1-Flash-Preview)
-     - `agenthub-mimocode`: MiMoCode architecture programming agent
-2. **DSH Native Workflows**:
-   - Built for DSH's `@deepseek-ai/dsh-workflow` engine (pure JS orchestration scripts with `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()`).
-   - Includes 3 ready-to-run workflows in [`workflows/`](workflows/):
-     - `hub-fanout.dsh.js`: Multi-agent parallel fan-out & result aggregation
-     - `code-audit.dsh.js`: Pipeline multi-agent architecture and security audit
-     - `competitive-solve.dsh.js`: Multi-model competitive problem solving
-3. **MCP Tool Suite**:
-   - `mcp__agenthub__hub_ask`, `hub_dispatch`, `hub_fetch`, `hub_status`.
-
-### ⚡ One-Click Installation
-
-#### Windows
-Double-click **`install.bat`** to install automatically.
-
-#### Linux / macOS
-```bash
-chmod +x install.sh
-./install.sh
-```
+The regression suite uses mock Hub servers, workflow VM hooks and temporary profiles. Live DSH activation has not been exercised in this validation.

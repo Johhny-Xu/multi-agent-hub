@@ -17,12 +17,14 @@ import secrets
 import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from command_runtime import atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
+from state_store import StateFileLock, safe_component
+from result_store import read_result, update_result
 
 SERVER_NAME = "agent-hub"
 SERVER_VERSION = "0.2.0"
@@ -31,7 +33,7 @@ ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
 LOCK_TIMEOUT_SEC = 10
 # 结果长期停留在 running 的判定阈值 (秒), 超过即视为 worker 异常退出
-STALE_RUNNING_SEC = float(os.environ.get("HUB_STALE_RUNNING_SEC", "1800"))
+STALE_RUNNING_SEC = positive_timeout(os.environ.get("HUB_STALE_RUNNING_SEC", "1800"), 1800)
 # 终态: 命中即停止轮询
 TERMINAL_STATUSES = ("completed", "error", "timeout")
 
@@ -65,49 +67,15 @@ ZCODE_DOM_DRIVER = (
     or (str(DRIVERS_DIR / "zcode_dom.js") if (DRIVERS_DIR / "zcode_dom.js").exists() else os.path.expanduser("~/TraeClaw/zcode_dom.js"))
 )
 
-_locks_guard = threading.Lock()
-_locks = {}
-
-
 def _state_path(name: str) -> Path:
     STATE.mkdir(parents=True, exist_ok=True)
     return STATE / name
 
 
-class _LockCtx:
-    """跨进程简单锁: O_EXCL 建锁文件 + 超时, 进程内再加线程锁。"""
-
+class _LockCtx(StateFileLock):
+    """Process-owned locks are bounded and released even after a crash."""
     def __init__(self, name: str):
-        self.path = _state_path(name + ".lock")
-
-    def __enter__(self):
-        with _locks_guard:
-            tlock = _locks.setdefault(str(self.path), threading.Lock())
-        tlock.acquire()
-        deadline = time.time() + LOCK_TIMEOUT_SEC
-        while True:
-            try:
-                fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, str(os.getpid()).encode())
-                os.close(fd)
-                return self
-            except FileExistsError:
-                if time.time() > deadline:
-                    # 锁文件残留(如进程被杀)时强行接管, 避免永久卡死
-                    try:
-                        self.path.unlink()
-                    except OSError:
-                        pass
-                    deadline = time.time() + LOCK_TIMEOUT_SEC
-                time.sleep(0.03)
-
-    def __exit__(self, *exc):
-        try:
-            self.path.unlink()
-        except OSError:
-            pass
-        _locks[str(self.path)].release()
-        return False
+        super().__init__(_state_path(safe_component(name) + ".lock"), LOCK_TIMEOUT_SEC)
 
 
 def _read_json(path: Path, default):
@@ -118,17 +86,7 @@ def _read_json(path: Path, default):
 
 
 def _write_json_atomic(path: Path, data):
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, str(path))
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    atomic_write_json(path, data)
 
 
 def _now() -> float:
@@ -160,6 +118,10 @@ def _as_bool(value, default=False) -> bool:
     return str(value).strip().lower() not in ("", "0", "false", "no", "off")
 
 
+def _positive_seconds(value, default):
+    return positive_timeout(value, default)
+
+
 def _reap_result(d):
     """把长期停留在 running 的记录判定为 timeout。
 
@@ -174,15 +136,18 @@ def _reap_result(d):
     ref = d.get("ref")
     if not ref:
         return d
-    _save_result(ref, status="timeout", progress=None,
-                 text=(f"任务超时: 已 {age / 60:.0f} 分钟无任何进展, 判定 worker 已异常退出。"
-                       f"请重新派发 (若反复出现, 检查 async_worker 日志)。"))
-    return _read_result(ref)
+    return update_result(RESULTS_DIR, ref,
+                         {"status": "timeout", "progress": None,
+                          "text": f"任务超时: 已 {age / 60:.0f} 分钟无任何进展, 判定 worker 已异常退出。请检查 async_worker 日志。"},
+                         only_if_running=True, expected_updated_at=d.get("updated_at"))
 
 
 def _load_agents() -> dict:
     data = _read_json(AGENTS_JSON, {})
-    return data.get("agents", {})
+    agents = data.get("agents", {}) if isinstance(data, dict) else {}
+    if not isinstance(agents, dict):
+        return {}
+    return {name: profile for name, profile in agents.items() if isinstance(profile, dict)}
 
 # ---------------------------------------------------------------- 别名自动识别 (2026-10-06)
 # 用户口中的简称统一映射到 agents.json 规范名; 未命中别名时再做一次大小写无关兜底
@@ -207,15 +172,19 @@ def _resolve_agent(name: str) -> str:
         return n
     if low in agents:
         return low
-    return n
+    for known in agents:
+        if known.lower() == low:
+            return known
+    return low
 
 
 # ---------------------------------------------------------------- tools
 
 def tool_hub_heartbeat(args):
-    agent = str(args.get("agent") or "").strip()
+    agent = _resolve_agent(str(args.get("agent") or ""))
     if not agent:
         raise ValueError("缺少 agent 名称")
+    agent = safe_component(agent)
     with _LockCtx("registry"):
         reg = _read_json(_state_path("registry.json"), {})
         entry = reg.get(agent, {})
@@ -248,10 +217,12 @@ def tool_hub_list_agents(args):
 
 
 def tool_hub_post_task(args):
-    from_agent = str(args.get("from_agent") or "").strip()
+    from_agent = _resolve_agent(str(args.get("from_agent") or ""))
     title = str(args.get("title") or "").strip()
     if not from_agent or not title:
         raise ValueError("缺少 from_agent 或 title")
+    from_agent = safe_component(from_agent)
+    to_agent = safe_component(_resolve_agent(str(args["to_agent"]))) if args.get("to_agent") else None
     with _LockCtx("tasks"):
         data = _read_json(_state_path("tasks.json"), {"seq": 0, "tasks": []})
         data["seq"] = data.get("seq", 0) + 1
@@ -260,7 +231,7 @@ def tool_hub_post_task(args):
             "title": title,
             "detail": str(args.get("detail") or ""),
             "from_agent": from_agent,
-            "to_agent": (_resolve_agent(args.get("to_agent")) if args.get("to_agent") else None),
+            "to_agent": to_agent,
             "priority": args.get("priority") or "normal",
             "cwd": args.get("cwd") or None,
             "status": "open",
@@ -280,7 +251,7 @@ def tool_hub_post_task(args):
 def tool_hub_list_tasks(args):
     data = _read_json(_state_path("tasks.json"), {"tasks": []})
     status = args.get("status")
-    agent = args.get("agent")
+    agent = _resolve_agent(str(args["agent"])) if args.get("agent") else None
     out = []
     for t in data.get("tasks", []):
         if status and t["status"] != status:
@@ -301,7 +272,7 @@ def tool_hub_list_tasks(args):
 
 def tool_hub_claim_task(args):
     task_id = str(args.get("task_id") or "").strip()
-    agent = str(args.get("agent") or "").strip()
+    agent = _resolve_agent(str(args.get("agent") or ""))
     if not task_id or not agent:
         raise ValueError("缺少 task_id 或 agent")
     with _LockCtx("tasks"):
@@ -324,15 +295,17 @@ def tool_hub_claim_task(args):
 
 def tool_hub_complete_task(args):
     task_id = str(args.get("task_id") or "").strip()
-    agent = str(args.get("agent") or "").strip()
+    agent = _resolve_agent(str(args.get("agent") or ""))
     result = str(args.get("result") or "")
-    success = bool(args.get("success", True))
+    success = _as_bool(args.get("success"), True)
     if not task_id or not agent:
         raise ValueError("缺少 task_id 或 agent")
     with _LockCtx("tasks"):
         data = _read_json(_state_path("tasks.json"), {"tasks": []})
         for t in data.get("tasks", []):
             if t["id"] == task_id:
+                if t.get("status") != "in_progress" or t.get("claimed_by") != agent:
+                    return f"任务 {task_id} 必须由已认领的代理完成，当前操作未写入。"
                 t["status"] = "done" if success else "failed"
                 t["result"] = _truncate(result)
                 t["done_ts"] = _now()
@@ -344,6 +317,7 @@ def tool_hub_complete_task(args):
 
 
 def _mail_push(to_agent: str, from_agent: str, text: str):
+    to_agent = safe_component(to_agent)
     box = _state_path(f"mailbox-{to_agent}.json")
     with _LockCtx(f"mailbox-{to_agent}"):
         msgs = _read_json(box, [])
@@ -362,23 +336,25 @@ def tool_hub_send_message(args):
 
 
 def tool_hub_read_messages(args):
-    agent = str(args.get("agent") or "").strip()
+    agent = _resolve_agent(str(args.get("agent") or ""))
     if not agent:
         raise ValueError("缺少 agent")
+    agent = safe_component(agent)
     box = _state_path(f"mailbox-{agent}.json")
-    mark = bool(args.get("mark_read", True))
+    mark = _as_bool(args.get("mark_read"), True)
     with _LockCtx(f"mailbox-{agent}"):
         msgs = _read_json(box, [])
         unread = [m for m in msgs if not m.get("read")]
+        delivered = unread[:50]
         if mark and unread:
-            for m in msgs:
+            for m in delivered:
                 m["read"] = True
             _write_json_atomic(box, msgs)
     if not unread:
         return f"{agent} 没有未读消息。"
     lines = [f"- [{time.strftime('%m-%d %H:%M', time.localtime(m['ts']))}] {m['from']}: {m['text']}"
-             for m in unread[-50:]]
-    return f"{agent} 有 {len(unread)} 条未读:\n" + "\n".join(lines)
+             for m in delivered]
+    return f"{agent} 有 {len(unread)} 条未读，本次返回 {len(delivered)} 条:\n" + "\n".join(lines)
 
 
 def tool_hub_note_set(args):
@@ -419,8 +395,10 @@ def tool_hub_dispatch_cli(args):
     if not cli:
         return (f"{agent} 未配置 CLI (agents.json 中 cli 为 null)。"
                 f"确认该工具的无头调用命令后, 填入 agents.json 的 cli 字段即可。")
-    cwd = args.get("cwd") or None
-    timeout = float(args.get("timeout_s") or 600)
+    cwd = args.get("cwd") or prof.get("cwd") or None
+    timeout = _positive_seconds(args.get("timeout_s"), 600)
+    if not isinstance(cli, list) or not cli:
+        raise ValueError("agents.json 的 cli 必须是非空参数数组")
     has_placeholder = any("{task}" in str(c) for c in cli)
     cmd = [str(c).replace("{task}", task) if "{task}" in str(c) else str(c) for c in cli]
     if not has_placeholder:
@@ -447,47 +425,56 @@ def tool_hub_dispatch_cli(args):
                     cmd.append(str(a))
         else:
             cmd.append(str(extra_args))
+    # Apply these to both synchronous and asynchronous runs. In particular,
+    # CN/intl account directories must match the official login flow.
+    via = prof.get("workdir_via")
+    if via and args.get("cwd"):
+        cmd += [str(via), str(args["cwd"])]
+        cwd = prof.get("cwd") or cwd
+    if cwd:
+        cwd = os.path.expandvars(os.path.expanduser(str(cwd)))
+    process_env = os.environ.copy()
+    for key, value in (prof.get("env") or {}).items():
+        process_env[str(key)] = os.path.expandvars(os.path.expanduser(str(value)))
+    if agent in ("codebuddy", "codebuddy-cn"):
+        from login_manager import worker_env
+        process_env = worker_env(prof, agent)
+    try:
+        cmd = prepare_command(cmd, env=process_env)
+    except (OSError, ValueError) as exc:
+        return f"{agent} CLI 启动失败: {exc}"
     # async_default: 该 worker 任务耗时长(CDP GUI 驱动/CLI 长生成), 强制异步受理
     # 立即返回受理号, 后台经 async_worker 执行, 调度方用 hub_result/ref 轮询
     # (置于函数体顶层: 占位符 {task} 模式与无 model_arg 的 worker 同样走异步,
     #  否则掉进同步分支; 且不可在函数内 import subprocess —— 模块级已导入,
     #  函数内导入会让 subprocess 变成局部变量, 同步分支触发 UnboundLocalError)
-    if prof.get("async_default"):
-        import uuid
-        ref = agent + "-" + uuid.uuid4().hex[:10]
+    if _as_bool(prof.get("async_default"), False):
         cb = args.get("callback_url")
-        _save_result(ref, agent=agent, status="running", task=task, cmd=cmd,
-                     callback_url=cb)
-        tf = os.path.join(RESULTS_DIR, ref + ".task")
-        with open(tf, "w", encoding="utf-8") as f:
-            json.dump({"cmd": cmd, "callback_url": cb}, f, ensure_ascii=False)
-        popen_kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-        if os.name == "nt":
-            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            popen_kwargs["start_new_session"] = True
-        subprocess.Popen(
-            [sys.executable, ASYNC_WORKER_SCRIPT, "cmd", ref, tf, ""],
-            **popen_kwargs)
+        try:
+            ref = _start_async(agent, "cmd", task,
+                               {"cmd": cmd, "callback_url": cb, "cwd": cwd, "timeout_s": timeout},
+                               env=process_env)
+        except (OSError, RuntimeError) as exc:
+            return f"{agent} CLI 启动失败: {exc}"
         cb_note = f"\n完成后将回调: {cb}" if cb else ""
         return (f"[{agent}/{ref}] 任务已异步受理 (此类任务耗时长, 不阻塞等待)。{cb_note}\n"
                 f"查询结果: hub_result(ref=\"{ref}\")\n"
                 f"轮询至 status=completed 即可取回回答 (running 时附受控端进度快照)。请勿因超时重复派发同一任务。")
     # workdir_via: 某些 CLI 的登录态绑定特定目录 (如 codebuddy-cn 绑 home),
     # 用 --add-dir 把真实目标目录挂进工作区, 而进程本身固定在 prof.cwd 下运行
-    via = prof.get("workdir_via")
-    if via and cwd:
-        cmd += [str(via), cwd]
-        cwd = prof.get("cwd") or cwd
-    exe = shutil.which(cmd[0]) or cmd[0]
+    proc = None
     try:
-        proc = subprocess.run([exe] + cmd[1:], cwd=cwd, capture_output=True,
-                              timeout=timeout, text=True, encoding="utf-8", errors="replace")
+        proc = spawn_owned(cmd, cwd=cwd, env=process_env, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           text=True, encoding="utf-8", errors="replace")
+        stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         return f"{agent} CLI 执行超时 (> {timeout}s)。"
     except OSError as e:
         return f"{agent} CLI 启动失败: {e}"
-    out = (proc.stdout or "") + (("\n[stderr]\n" + proc.stderr) if proc.stderr else "")
+    finally:
+        terminate_owned(proc)
+    out = (stdout or "") + (("\n[stderr]\n" + stderr) if stderr else "")
     tag = f"{agent}/{model}" if model else agent
     return _truncate(f"[{tag}] exit={proc.returncode}\n{out or '(无输出)'}")
 
@@ -511,6 +498,14 @@ def tool_hub_list_models(args):
             seg += " | 未配别名表 (model 参数将原样传给 CLI)"
         lines.append(seg)
     return "各 worker 可选模型:\n" + ("\n".join(lines) if lines else "(还没有配置 CLI 的 worker)")
+
+
+def tool_hub_login(args):
+    from login_manager import MANAGER
+    worker = _resolve_agent(str(args.get("agent") or ""))
+    action = str(args.get("action") or "status")
+    reply = MANAGER.handle(worker, action, _load_agents().get(worker) or {})
+    return json.dumps(reply, ensure_ascii=False)
 
 
 # ---------------- Trae 桥接 (经 TraeClaw 网关驱动 TraeCode CN 桌面) ----------------
@@ -553,30 +548,34 @@ def tool_hub_wait_result(args):
     ref = str(args.get("ref") or "").strip()
     if not ref:
         raise ValueError("缺少 ref")
-    budget = min(float(args.get("wait_s") or 110), 115)
-    start = time.time()
+    budget = min(_positive_seconds(args.get("wait_s"), 110), 115)
+    start = time.monotonic()
     idx = 0
     last_progress = ""
     schedule = WAIT_CHECK_SCHEDULE
     while True:
         target = schedule[idx] if idx < len(schedule) else (schedule[-1] + 300 * (idx - len(schedule) + 1))
-        remaining = budget - (time.time() - start)
+        remaining = budget - (time.monotonic() - start)
         if remaining <= 0:
             break
-        wait = min(max(target - (time.time() - start), 0), remaining)
+        wait = min(max(target - (time.monotonic() - start), 0), remaining)
         if wait > 0:
             time.sleep(wait)
         d = _reap_result(_read_result(ref))
-        if d and d.get("status") in TERMINAL_STATUSES:
+        if not d:
+            return f"[{ref}] status=unknown\n未找到任务结果，请核对 ref。"
+        if d.get("status") in TERMINAL_STATUSES:
             return _format_result(d)
         if d and d.get("progress") and d["progress"] != last_progress:
             last_progress = d["progress"]
         idx += 1
-        if time.time() - start >= budget:
+        if time.monotonic() - start >= budget:
             break
     d = _reap_result(_read_result(ref))
     if d and d.get("status") in TERMINAL_STATUSES:
         return _format_result(d)
+    if not d:
+        return f"[{ref}] status=unknown\n未找到任务结果，请核对 ref。"
     out = (f"[{ref}] status=running (等待预算用尽, 任务仍在执行)\n"
            f"[受控端界面快照] {last_progress[:500] or '(暂无)'}\n"
            f"建议: 再次调用本工具 (wait_s=110) 继续等待, 或按 1分钟→2分钟→3分钟→5分钟 节奏轮询。")
@@ -589,7 +588,7 @@ def tool_hub_result(args):
         raise ValueError("缺少 ref")
     d = _reap_result(_read_result(ref))
     if not d:
-        return f"未找到 {ref} 的结果 (可能尚未落盘, 稍后再查; running 状态请继续轮询)。"
+        return f"[{ref}] status=unknown\n未找到任务结果，请核对 ref。"
     return _format_result(d)
 
 
@@ -609,33 +608,39 @@ WAIT_CHECK_SCHEDULE = [0, 3, 6, 12, 25, 45, 70, 95]
 
 
 def _save_result(ref, **kv):
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    p = os.path.join(RESULTS_DIR, ref + ".json")
-    d = {}
-    if os.path.exists(p):
-        try:
-            with open(p, encoding="utf-8") as f:
-                d = json.load(f)
-        except Exception:
-            d = {}
-    d.update(kv)
-    d["ref"] = ref
-    d["updated_at"] = time.time()
-    tmp = p + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False)
-    os.replace(tmp, p)
+    return update_result(RESULTS_DIR, ref, kv)
 
 
 def _read_result(ref):
-    p = os.path.join(RESULTS_DIR, ref + ".json")
-    if not os.path.exists(p):
-        return None
+    return read_result(RESULTS_DIR, ref)
+
+
+def _start_async(agent, mode, task, metadata, session_id="", env=None):
+    """Persist one task and launch one worker with identical runtime paths."""
+    import uuid
+    ref = safe_component(agent) + "-" + uuid.uuid4().hex[:10]
+    task_path = Path(RESULTS_DIR) / (ref + ".task")
+    process_env = dict(os.environ if env is None else env)
+    process_env.update(HUB_RESULTS_DIR=str(RESULTS_DIR), TRAE_GATEWAY=TRAE_GATEWAY,
+                       TRAE_DOM_READ=TRAE_DOM_READ, ZCODE_DOM_DRIVER=ZCODE_DOM_DRIVER)
+    _save_result(ref, agent=agent, status="running", task=task)
     try:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
+        atomic_write_json(task_path, metadata)
+        kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+                  "stderr": subprocess.DEVNULL, "env": process_env}
+        if os.name == "nt":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        else:
+            kwargs["start_new_session"] = True
+        worker = subprocess.Popen([sys.executable, ASYNC_WORKER_SCRIPT, mode, ref, str(task_path), session_id], **kwargs)
+        # Keep the handle alive until exit and reap finished workers even when
+        # no later dispatch occurs. Workers still run independently of a client.
+        threading.Thread(target=worker.wait, name="hub-worker-" + ref, daemon=True).start()
+    except OSError as exc:
+        _save_result(ref, status="error", text=f"异步执行器启动失败: {exc}")
+        task_path.unlink(missing_ok=True)
+        raise RuntimeError(f"异步执行器启动失败 (ref={ref}): {exc}") from exc
+    return ref
 
 
 def tool_trae_delegate(args):
@@ -644,56 +649,27 @@ def tool_trae_delegate(args):
         raise ValueError("缺少 task")
     wait = _as_bool(args.get("wait"), True)
     sid = args.get("session_id")
-    timeout = int(float(args.get("timeout_s") or 240))
+    timeout = _positive_seconds(args.get("timeout_s"), 240)
     if not wait:
-        import uuid
-        ref = "trae-" + uuid.uuid4().hex[:10]
-        _save_result(ref, agent="trae", status="running", task=content)
-        tf = os.path.join(RESULTS_DIR, ref + ".task")
-        # 必须写成 JSON: async_worker 按 JSON 解析任务文件,
-        # 旧版直接写纯文本会导致 worker 解析崩溃、结果永久卡 running。
-        with open(tf, "w", encoding="utf-8") as f:
-            json.dump({"task": content,
-                       "new_chat": _as_bool(args.get("new_chat"), False)},
-                      f, ensure_ascii=False)
-        popen_kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-        if os.name == "nt":
-            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            popen_kwargs["start_new_session"] = True
-        subprocess.Popen(
-            [sys.executable, ASYNC_WORKER_SCRIPT, "trae", ref, tf, sid or ""],
-            **popen_kwargs)
+        ref = _start_async("trae", "trae", content,
+                           {"task": content, "new_chat": _as_bool(args.get("new_chat"), False), "timeout_s": timeout},
+                           session_id=sid or "")
         return (f"[trae/{ref}] 已异步受理, status=running。\n"
                 f"查询结果: trae_result(ref=\"{ref}\")")
-    payload = {"content": content}
-    if sid:
-        payload["sessionId"] = sid
-    # 默认延续当前对话; 仅当显式传 new_chat=true 才让驱动新开一个对话
-    if _as_bool(args.get("new_chat"), False):
-        payload["newChat"] = True
-    resp = _trae_gw_post("/v1/chat", payload, timeout=max(timeout, 30) + 30)
-    if "error" in resp:
-        return f"[trae 派发失败] {resp['error']}"
-    data = resp.get("data", {})
-    sess = data.get("session", {})
-    result = data.get("result") or {}
-    text = result.get("text") or ""
-    status = sess.get("status") or result.get("status")
-    sid = sid or sess.get("sessionId", "new")
-    if not text.strip() and os.path.exists(TRAE_DOM_READ):
-        try:
-            p = subprocess.run([NODE_BIN, TRAE_DOM_READ], capture_output=True,
-                               text=True, timeout=100)
-            if p.stdout.strip():
-                text = p.stdout.strip()
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-    _save_result("trae-last", agent="trae", status=status, text=text,
-                 session_id=sess.get("sessionId"))
-    out = f"[trae/{sid}] status={status}\n{text[:4000] or '(空响应)'}"
-    if sess.get("sessionId"):
-        out += f"\n(继续对话请带 session_id: {sess['sessionId']})"
+    from async_worker import trae_run, CommandTimeout
+    try:
+        text, returned_sid = trae_run(content, sid or "", "", timeout=timeout,
+                                      new_chat=_as_bool(args.get("new_chat"), False),
+                                      gateway=TRAE_GATEWAY, dom_read=TRAE_DOM_READ, node=NODE_BIN)
+        status = "completed"
+    except CommandTimeout as exc:
+        text, returned_sid, status = str(exc), sid or "", "timeout"
+    except (RuntimeError, OSError, ValueError) as exc:
+        text, returned_sid, status = str(exc), sid or "", "error"
+    _save_result("trae-last", agent="trae", status=status, text=text, session_id=returned_sid)
+    out = f"[trae/{returned_sid or 'new'}] status={status}\n{_truncate(str(text)) or '(空响应)'}"
+    if returned_sid:
+        out += f"\n(继续对话请带 session_id: {returned_sid})"
     return out
 
 
@@ -703,7 +679,7 @@ def _format_result(d):
     out = f"[{ref}] agent={d.get('agent')} status={d.get('status')}"
     if d.get("status") == "running" and d.get("progress"):
         out += f"\n[执行中·受控端界面快照] {str(d['progress'])[:600]}"
-    out += f"\n{text[:4000] or '(尚无文本)'}"
+    out += f"\n{_truncate(str(text)) or '(尚无文本)'}"
     if d.get("session_id"):
         out += f"\n(继续对话 session_id: {d['session_id']})"
     if d.get("exit_code") is not None:
@@ -726,32 +702,30 @@ def tool_zcode_delegate(args):
     if not content:
         raise ValueError("缺少 task")
     wait = _as_bool(args.get("wait"), True)
+    timeout = _positive_seconds(args.get("timeout_s"), 300)
     if not wait:
-        import uuid
-        ref = "zcode-" + uuid.uuid4().hex[:10]
-        _save_result(ref, agent="zcode", status="running", task=content)
-        tf = os.path.join(RESULTS_DIR, ref + ".task")
-        # 同 trae_delegate: 任务文件必须是 JSON, 否则 async_worker 解析崩溃
-        with open(tf, "w", encoding="utf-8") as f:
-            json.dump({"task": content}, f, ensure_ascii=False)
-        popen_kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-        if os.name == "nt":
-            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            popen_kwargs["start_new_session"] = True
-        subprocess.Popen(
-            [sys.executable, ASYNC_WORKER_SCRIPT, "zcode", ref, tf, ""],
-            **popen_kwargs)
+        ref = _start_async("zcode", "zcode", content, {"task": content, "timeout_s": timeout})
         return (f"[zcode/{ref}] 已异步受理, status=running。\n"
                 f"查询结果: zcode_result(ref=\"{ref}\")")
     driver = ZCODE_DOM_DRIVER
     if not os.path.exists(driver):
         return f"[zcode] 驱动脚本不存在: {driver}。请确认 drivers/ 目录已包含 zcode_dom.js 脚本。"
-    p = subprocess.run([NODE_BIN, driver, content], capture_output=True,
-                       text=True, encoding="utf-8", errors="replace", timeout=300)
-    text = (p.stdout or "").strip()[-2500:]
-    _save_result("zcode-last", agent="zcode", status="completed", text=text)
-    return f"[zcode] exit={p.returncode}\n{text or '(空响应)'}"
+    proc = None
+    try:
+        proc = spawn_owned([NODE_BIN, driver, content], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+        stdout, stderr = proc.communicate(timeout=timeout)
+        text = (stdout or "").strip()[-MAX_OUTPUT_CHARS:]
+        if proc.returncode:
+            text = (stderr or stdout or "驱动没有返回诊断输出").strip()[-MAX_OUTPUT_CHARS:]
+        status = "completed" if proc.returncode == 0 else "error"
+        _save_result("zcode-last", agent="zcode", status=status, text=text, exit_code=proc.returncode)
+        return f"[zcode] status={status} exit={proc.returncode}\n{text or '(空响应)'}"
+    except subprocess.TimeoutExpired:
+        _save_result("zcode-last", agent="zcode", status="timeout", text=f"驱动执行超时 (>{timeout}s)")
+        return f"[zcode] status=timeout\n驱动执行超时 (>{timeout}s)"
+    finally:
+        terminate_owned(proc)
 
 
 def tool_zcode_result(args):
@@ -765,7 +739,9 @@ def tool_zcode_result(args):
 
 
 def tool_trae_new_chat(args):
-    _trae_gw_post("/v1/mode", {"mode": str(args.get("mode") or "chat")}, timeout=15)
+    response = _trae_gw_post("/v1/mode", {"mode": str(args.get("mode") or "chat")}, timeout=15)
+    if response.get("error"):
+        raise RuntimeError(response["error"])
     return "已请求 Trae 切换/新建会话。"
 
 
@@ -786,8 +762,11 @@ def tool_hub_reap(args):
             continue
         age = _now() - float(d.get("updated_at") or 0)
         if age >= STALE_RUNNING_SEC:
-            _reap_result(d)
-            reaped.append((ref, age))
+            current = _reap_result(d)
+            if current.get("status") == "timeout":
+                reaped.append((ref, age))
+            elif current.get("status") == "running":
+                still_running.append((ref, age))
         else:
             still_running.append((ref, age))
     lines = []
@@ -842,6 +821,9 @@ TOOL_DEFS = [
       "cwd": {"type": "string"}, "timeout_s": {"type": "number"}}, ["agent", "task"]),
     ("hub_list_models", "查看各 worker 可用的模型别名表和模型参数名。",
      {"agent": {"type": "string", "description": "只看某个 worker"}}, []),
+    ("hub_login", "获取官方 worker CLI 登录链接、查看登录状态或取消本次等待；凭据由官方 CLI 保存到 Hub 主机，不回传密码、Token 或 API Key。",
+     {"agent": {"type": "string"},
+      "action": {"type": "string", "enum": ["start", "status", "cancel"], "default": "status"}}, ["agent"]),
     ("hub_result", "查询异步受理任务的结果 (zcode 等长任务 worker 派活时自动返回 ref)。即时返回, 不等待。",
      {"ref": {"type": "string"}}, ["ref"]),
     ("hub_wait_result", "阻塞等待异步任务完成 (服务端按 0/3/6/12/25/45/70/95秒 前置密集+递进回查)。快任务几秒命中秒回; 长任务预算尽返回进度快照。推荐代替反复 hub_result, 减少模型输入。",
@@ -863,7 +845,7 @@ TOOL_DEFS = [
     ("zcode_delegate", "把任务派给 ZCode Linux 桌面版 (GLM-5.3-Flash, 体验套餐额度)。wait=false 异步受理。",
      {"task": {"type": "string"},
       "wait": {"type": "boolean", "default": True},
-      "timeout_s": {"type": "number", "default": 240}},
+      "timeout_s": {"type": "number", "default": 300}},
      ["task"]),
     ("zcode_result", "查询异步 ZCode 任务的结果 (配合 zcode_delegate wait=false)。",
      {"ref": {"type": "string"}}, ["ref"]),
@@ -881,6 +863,7 @@ HANDLERS = {n: (f, ) for n, f in [
     ("hub_send_message", tool_hub_send_message), ("hub_read_messages", tool_hub_read_messages),
     ("hub_note_set", tool_hub_note_set), ("hub_note_get", tool_hub_note_get),
     ("hub_dispatch_cli", tool_hub_dispatch_cli), ("hub_list_models", tool_hub_list_models),
+    ("hub_login", tool_hub_login),
     ("trae_status", tool_trae_status), ("trae_delegate", tool_trae_delegate),
     ("trae_result", tool_trae_result),
     ("trae_new_chat", tool_trae_new_chat),
@@ -892,47 +875,9 @@ HANDLERS = {n: (f, ) for n, f in [
 # ---------------------------------------------------------------- json-rpc
 
 def handle_request(req):
-    if isinstance(req, list):  # 兼容批量请求
-        return [r for r in (handle_request(x) for x in req) if r is not None] or None
-    if not isinstance(req, dict) or req.get("jsonrpc") != "2.0":
-        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}}
-    method, rid, params = req.get("method"), req.get("id"), req.get("params") or {}
-    is_notification = "id" not in req
-
-    def ok(result):
-        return {"jsonrpc": "2.0", "id": rid, "result": result} if not is_notification else None
-
-    def err(code, message):
-        if is_notification:
-            return None
-        return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}}
-
-    try:
-        if method == "initialize":
-            pv = (params or {}).get("protocolVersion") or PROTOCOL_VERSION_DEFAULT
-            return ok({"protocolVersion": pv,
-                       "capabilities": {"tools": {}},
-                       "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION}})
-        if method == "ping":
-            return ok({})
-        if method.startswith("notifications/"):
-            return None
-        if method == "tools/list":
-            return ok({"tools": TOOLS_JSON})
-        if method == "tools/call":
-            name = params.get("name")
-            entry = HANDLERS.get(name)
-            if not entry:
-                return err(-32602, f"Unknown tool: {name}")
-            try:
-                text = entry[0](params.get("arguments") or {})
-                return ok({"content": [{"type": "text", "text": text}], "isError": False})
-            except Exception as e:  # noqa: BLE001 - 作为工具错误返回给调用方
-                return ok({"content": [{"type": "text", "text": f"工具执行出错: {e}"}],
-                           "isError": True})
-        return err(-32601, f"Method not found: {method}")
-    except Exception as e:  # noqa: BLE001 - 兜底, 保证 hub 不崩
-        return err(-32603, f"Internal error: {e}")
+    from rpc_protocol import handle_request as dispatch
+    return dispatch(req, tools=TOOLS_JSON, handlers={key: entry[0] for key, entry in HANDLERS.items()},
+                    name=SERVER_NAME, version=SERVER_VERSION, protocol=PROTOCOL_VERSION_DEFAULT)
 
 
 # ---------------------------------------------------------------- transports
@@ -958,10 +903,16 @@ def run_stdio():
 class _HTTPHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def dispatch_request(self, req):
+        return handle_request(req)
+
+    def access_token(self):
+        return HUB_TOKEN
+
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers",
-                         "Content-Type, Accept, Mcp-Session-Id")
+                         "Content-Type, Accept, Authorization, Mcp-Session-Id")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 
     def do_OPTIONS(self):
@@ -971,13 +922,23 @@ class _HTTPHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if urllib.parse.urlparse(self.path).path == "/health":
+            body = json.dumps({"service": SERVER_NAME, "status": "ok"}).encode("utf-8")
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self.send_response(405)
         self._cors()
         self.send_header("Content-Length", "0")
         self.end_headers()
 
     def _authorized(self) -> bool:
-        if not HUB_TOKEN:
+        token = self.access_token()
+        if not token:
             return True
         auth = self.headers.get("Authorization") or ""
         if auth.lower().startswith("bearer "):
@@ -985,7 +946,7 @@ class _HTTPHandler(BaseHTTPRequestHandler):
         else:
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             supplied = (q.get("token") or [""])[0]
-        return bool(supplied) and secrets.compare_digest(supplied, HUB_TOKEN)
+        return bool(supplied) and secrets.compare_digest(supplied.encode("utf-8"), token.encode("utf-8"))
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path.rstrip("/")
@@ -1000,11 +961,21 @@ class _HTTPHandler(BaseHTTPRequestHandler):
             self.send_header("WWW-Authenticate", 'Bearer realm="agent-hub"')
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(body)
+            self.close_connection = True
             return
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if length < 0 or length > 2 * 1024 * 1024:
+                self.send_response(413)
+                self._cors()
+                self.send_header("Content-Length", "0")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.close_connection = True
+                return
             raw = self.rfile.read(length)
             try:
                 req = json.loads(raw.decode("utf-8"))
@@ -1015,9 +986,11 @@ class _HTTPHandler(BaseHTTPRequestHandler):
             self.send_response(400)
             self._cors()
             self.send_header("Content-Length", "0")
+            self.send_header("Connection", "close")
             self.end_headers()
+            self.close_connection = True
             return
-        resp = handle_request(req)
+        resp = self.dispatch_request(req)
         if resp is None:
             self.send_response(202)
             self._cors()
@@ -1033,7 +1006,8 @@ class _HTTPHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("[agent-hub.http] %s\n" % (fmt % args))
+        safe_args = tuple(str(item).split("?", 1)[0] + " [query omitted]" if "?" in str(item) else item for item in args)
+        sys.stderr.write("[agent-hub.http] %s\n" % (fmt % safe_args))
 
 
 def run_http(port: int, host: str = "127.0.0.1"):
@@ -1051,6 +1025,10 @@ def run_http(port: int, host: str = "127.0.0.1"):
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        from login_manager import MANAGER
+        MANAGER.close()
+        server.server_close()
 
 
 def main():

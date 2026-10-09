@@ -27,7 +27,7 @@ fi
 export AGENTHUB_HOST="${AGENTHUB_HOST:-127.0.0.1}"
 export AGENTHUB_PORT="${AGENTHUB_PORT:-8765}"
 export HUB_TOKEN="${HUB_TOKEN:-}"
-export HUBCONSOLE_HOST="${HUBCONSOLE_HOST:-0.0.0.0}"
+export HUBCONSOLE_HOST="${HUBCONSOLE_HOST:-127.0.0.1}"
 export HUBCONSOLE_PORT="${HUBCONSOLE_PORT:-8890}"
 export HUBCONSOLE_SERVER_URL="${HUBCONSOLE_SERVER_URL:-http://127.0.0.1:${AGENTHUB_PORT}/mcp}"
 export HUBCONSOLE_SERVER_TOKEN="${HUBCONSOLE_SERVER_TOKEN:-$HUB_TOKEN}"
@@ -47,6 +47,8 @@ if [ -f "$ROOT_DIR/stop.sh" ]; then
   bash "$ROOT_DIR/stop.sh" --silent || true
 fi
 
+trap 'bash "$ROOT_DIR/stop.sh" --silent || true' ERR
+
 echo "=========================================================="
 echo "          🚀 Starting Multi-Agent Hub...             "
 echo "=========================================================="
@@ -54,16 +56,18 @@ echo "=========================================================="
 # 5. 启动 Task Bus (Python MCP Server)
 echo "[1/2] 正在拉起任务总线 (Task Bus :${AGENTHUB_PORT})..."
 cd "$ROOT_DIR/hub"
-nohup python3 agent_hub.py --http "${AGENTHUB_PORT}" --host "${AGENTHUB_HOST}" > "$ROOT_DIR/logs/hub.log" 2>&1 &
+nohup python3 "$ROOT_DIR/hub/agent_hub.py" --http "${AGENTHUB_PORT}" --host "${AGENTHUB_HOST}" > "$ROOT_DIR/logs/hub.log" 2>&1 &
 HUB_PID=$!
 echo "$HUB_PID" > "$ROOT_DIR/.run/hub.pid"
+ps -p "$HUB_PID" -o lstart= > "$ROOT_DIR/.run/hub.started"
 
 # 6. 启动 Web 控制台 (Node.js Console)
 echo "[2/2] 正在拉起 Web 控制台 (Web Console :${HUBCONSOLE_PORT})..."
 cd "$ROOT_DIR/console"
-nohup node server.mjs > "$ROOT_DIR/logs/console.log" 2>&1 &
+nohup node "$ROOT_DIR/console/server.mjs" > "$ROOT_DIR/logs/console.log" 2>&1 &
 CONSOLE_PID=$!
 echo "$CONSOLE_PID" > "$ROOT_DIR/.run/console.pid"
+ps -p "$CONSOLE_PID" -o lstart= > "$ROOT_DIR/.run/console.started"
 
 cd "$ROOT_DIR"
 
