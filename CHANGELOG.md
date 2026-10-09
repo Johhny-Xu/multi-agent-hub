@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 文档 / Documentation
 
+- 统一项目正式展示名称为 `multi-agent-hub`：README、两张 SVG、控制台标题、原生插件展示信息与相关说明保持一致。既有安装目录、连接配置位置及插件 ID 保留兼容。
 - 补齐 0.8 架构 SVG：Codex / ZCode / DSH、hub / plugins / both 独立部署、扫描与配对、7 个工具、8 个默认模型，以及真实的数据流与连接边界；MiMo 标为 26f。
 - 更新 0.5–0.8 路线 SVG，纠正 Linux 仍搁置、Codex 尚未适配等旧描述；分别显示回归、网络发现和正式安装包验收范围，并保留 DSH 额度、网络与账号模型限制。
 - README 展示两张可缩放矢量图；完成实际浏览器渲染及文字重叠、边界检查。此为后续文档更新，既有版本标签保持原提交。

@@ -1,6 +1,6 @@
 # agenthub-workers
 
-将 AgentHub 的八个外部 worker 注册为 ZCode 原生子代理，并提供自包含 stdio MCP。宿主模型负责任务编排，worker 的 CLI、模型与认证在 Hub 主机上执行。
+将 multi-agent-hub 的八个外部 worker 注册为 ZCode 原生子代理，并提供自包含 stdio MCP。宿主模型负责任务编排，worker 的 CLI、模型与认证在 Hub 主机上执行。
 
 ## 原生组件
 

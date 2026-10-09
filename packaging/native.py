@@ -135,7 +135,7 @@ def install_zcode_plugin(argv, env, app, backup):
             raise SetupError('Unexpected ZCode marketplace source; existing plugin was preserved')
         expected = manifest if source.get('source') == 'file' else Path(app) if source.get('source') == 'directory' else None
         if expected is None or not isinstance(source.get('path'), str) or Path(source['path']).resolve() != expected.resolve():
-            raise SetupError('Existing AgentHub marketplace belongs to another installation; plugin was preserved')
+            raise SetupError('Existing multi-agent-hub marketplace belongs to another installation; plugin was preserved')
         atomic_json(Path(backup) / 'agenthub-registration.json', {
             'plugin': {key: existing.get(key) for key in ('id', 'name', 'version', 'enabled', 'rootPath', 'manifestPath')},
             'marketplace': {'id': market['id'], 'source': source},
@@ -151,7 +151,7 @@ def install_zcode_plugin(argv, env, app, backup):
         command(argv + ['plugins', 'disable', identifier], env)
     listing = command(argv + ['plugins', 'list', '--json'], env)
     if not contains_plugin(json.loads(listing.stdout)):
-        raise SetupError('ZCode did not report the installed AgentHub plugin')
+        raise SetupError('ZCode did not report the installed multi-agent-hub plugin')
 
 
 def register(app, config_dir, node, selected='auto', project=None, profile='agenthub-client', homes=None, overrides=None):
@@ -184,7 +184,7 @@ def register(app, config_dir, node, selected='auto', project=None, profile='agen
                 command(argv + ['plugin', 'add', 'agenthub-workers@agenthub-local', '--json'], env)
                 listing = command(argv + ['plugin', 'list', '--json'], env)
                 if not contains_plugin(json.loads(listing.stdout)):
-                    raise SetupError('Codex did not report the installed AgentHub plugin')
+                    raise SetupError('Codex did not report the installed multi-agent-hub plugin')
                 workspace = Path(project).resolve() if project else app.parent / 'workspace'
                 workspace.mkdir(parents=True, exist_ok=True)
                 installer_path = app / 'integrations/codex/install.py'
@@ -203,7 +203,7 @@ def register(app, config_dir, node, selected='auto', project=None, profile='agen
                 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
                 module.prepare_profile(home, profile, config_file=config_dir / 'client.json', command=node['argv'][0])
                 if not package.is_file() or 'dsh-plugin-multi-agent-hub' not in json.loads(package.read_text(encoding='utf-8')).get('dependencies', {}):
-                    raise SetupError('DSH did not link the AgentHub bundle')
+                    raise SetupError('DSH did not link the multi-agent-hub bundle')
             records.append({'host': name, 'status': 'registered', 'configuration_backups': len(backups),
                             'project': str(workspace) if name == 'codex' else None, 'profile': profile if name == 'dsh' else None})
         except (SetupError, OSError, ValueError, ImportError) as error:

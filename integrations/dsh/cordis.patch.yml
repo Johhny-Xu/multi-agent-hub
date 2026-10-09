@@ -1,7 +1,7 @@
 # Bundle patch inserts its rows once; profile patches only override owned config.
 - insert:
     # ==============================================================================
-    # Multi-Agent Hub for DeepSeek Harness (DSH)
+    # multi-agent-hub for DeepSeek Harness (DSH)
     # 完整原生支持层：MCP 工具总线 + 全量 8 大原生子代理预设 (Agent Presets)
     # ==============================================================================
 
@@ -19,7 +19,7 @@
       name: "@deepseek-ai/dsh-agent-preset"
       config:
         id: agenthub-all
-        name: "AgentHub 全能总线"
+        name: "multi-agent-hub 全能总线"
         description: "一站式中枢：按任务难度自动向 8 大 AI 代理智能分流调度"
         order: 20
         plugins:
@@ -27,7 +27,7 @@
             name: "@deepseek-ai/dsh-persona"
             config:
               prefix: >
-                你是连接 Multi-Agent Hub 的全能协同中枢。
+                你是连接 multi-agent-hub 的全能协同中枢。
                 遇到具体任务时，请调用已挂载的 mcp__agenthub__hub_ask 工具派发给最合适的子代理：
                 - antigravity: 复杂算法、长思维链推演、数学证明、深入反思
                 - codebuddy: 国际版全栈工程代码编写、项目重构、Bug 修复

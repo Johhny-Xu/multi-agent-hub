@@ -1,10 +1,10 @@
-# AgentHub
+# multi-agent-hub
 
-把 Codex、ZCode、DeepSeek Harness（DSH）里的任务派发给八种外部 worker。插件负责连接和编排，AgentHub 在它所在的机器运行官方 CLI、管理任务与返回结果。
+把 Codex、ZCode、DeepSeek Harness（DSH）里的任务派发给八种外部 worker。插件负责连接和编排，multi-agent-hub 在它所在的机器运行官方 CLI、管理任务与返回结果。
 
 **插件和 Hub 可以装在不同机器，也可以一起安装。** Windows 的 Codex 可以连接 Linux 服务器上的 Hub，Linux 的 ZCode 也可以连接 Windows 上的 Hub。客户端不需要启动本地 Hub，服务器也不需要安装三种宿主插件。
 
-![AgentHub 0.8 架构：插件与 Hub 独立部署、连接选择、八个 worker 与模型服务商数据流](docs/architecture.svg)
+![multi-agent-hub 0.8 架构：插件与 Hub 独立部署、连接选择、八个 worker 与模型服务商数据流](docs/architecture.svg)
 
 ## 选择安装包
 
@@ -101,7 +101,7 @@ Hub 默认常驻一个 Python 服务，任务执行时才启动对应 worker。�
 
 从登录与 Windows 兼容性、跨平台任务契约，到独立部署和自动发现，各阶段均保留独立源码标签。Linux 服务和 Codex 适配已经完成对应验证；账号、模型、网络和宿主流程的剩余限制单独列明。
 
-![AgentHub 0.5 至 0.8 版本路线与验证范围：各版进展、回归结果和待复测限制](docs/roadmap.svg)
+![multi-agent-hub 0.5 至 0.8 版本路线与验证范围：各版进展、回归结果和待复测限制](docs/roadmap.svg)
 
 图示对应 0.8.0；详细阶段来源见[版本记录](docs/version-history.md)，实际验收边界以各测试报告为准。
 

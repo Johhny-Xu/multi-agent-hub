@@ -1,4 +1,4 @@
-# AgentHub for Codex
+# multi-agent-hub for Codex
 
 此目录是独立的 Codex 插件包：3 个工作流技能、stdio MCP 桥接，以及 8 个项目级原生代理模板。包版本为 `0.8.0`。Node.js 需要 **20 或更高**；项目安装脚本需要 Python **3.11 或更高**。MCP 的六个文件（含 `discovery.mjs`）直接复制仓库根 `mcp/`，无需 npm 依赖。可独立安装并连接其他机器上的 Hub，见[安装包说明](../../packaging/README.md)。
 

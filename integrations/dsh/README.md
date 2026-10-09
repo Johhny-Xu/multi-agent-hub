@@ -1,8 +1,8 @@
-# AgentHub for DeepSeek Harness (DSH)
+# multi-agent-hub for DeepSeek Harness (DSH)
 
 本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
-DSH 包版本为 1.2.0，随 AgentHub 0.8.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
+DSH 包版本为 1.2.0，随 multi-agent-hub 0.8.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
 
 首次连接或 Hub 连接失败时，调用 `mcp__agenthub__hub_discover {}` 只读扫描。扫描通过 UDP 18766 查找候选，并用无凭据 `/health` 确认；不发送 token、不写配置、不静默切换。展示候选地址供用户选择，再用安装目录的 `connect.cmd` 或 `./connect.sh` 完成配对；跨网段或防火墙阻止扫描时，在向导中手动填写地址。保存后重启该 profile 或 MCP 连接。连接文件损坏不会阻止发现，但派发会返回 `SETUP_REQUIRED`，固定文件模式也不会回退到旧环境连接。
 
@@ -17,7 +17,7 @@ dsh plugin --profile web add "file:C:/PATH/TO/agenthub/integrations/dsh"
 dsh --profile web --dump-config
 ~~~
 
-官方 CLI 负责安装依赖、链接包和启用 bundle；新 profile 的创建规则也由官方 CLI 决定。确认组合配置里出现 AgentHub layer 后再启动该 profile。仓库根目录网址不能代替这个子目录包。[官方 bundle/profile 安装说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)
+官方 CLI 负责安装依赖、链接包和启用 bundle；新 profile 的创建规则也由官方 CLI 决定。确认组合配置里出现 multi-agent-hub layer 后再启动该 profile。仓库根目录网址不能代替这个子目录包。[官方 bundle/profile 安装说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)
 
 bundle 使用 Cordis 的 insert 操作新增桥和预设。桥入口通过包内绝对路径启动 MCP server，并调用官方 MCP client 的命名导出 apply。默认单次 MCP 调用上限为 310 秒，覆盖默认 300 秒的 hub_ask；更长任务适合使用 hub_dispatch 与 hub_fetch。DSH 会过滤部分继承环境，安装器因此显式传递外部连接文件路径；旧版显式 AGENTHUB_URL / HUB_TOKEN 仍可用，没有显式值时不再注入 localhost 或空 token 去覆盖连接文件。[官方 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md)
 
@@ -34,7 +34,7 @@ python install-dsh.py --profile web --check
 
 Windows 可运行 install.bat --profile web；Linux/macOS 可运行 ./install.sh --profile web。两者会从脚本所在目录定位安装器、转发全部参数，并检查 Python 3.8+。若系统 Python 命令不可用，设置 HUB_PYTHON 为实际解释器路径。直接运行 Python 安装器时默认 profile 为 web；启动脚本要求传入参数。
 
-助手只处理选中的既有 profile，找不到时直接失败，不切换到其他 profile。它保留用户 persona 和其他 patch，只管理 AgentHub 标记块及旧版 AgentHub 顶层条目。省略 --url / --token 时保留已有地址、token 和自定义 env；显式空字符串应写成 YAML 引号字符串，空/null 环境值会在写入前报错。更新前备份配置，写入失败时恢复原文件。
+助手只处理选中的既有 profile，找不到时直接失败，不切换到其他 profile。它保留用户 persona 和其他 patch，只管理 multi-agent-hub 标记块及旧版 multi-agent-hub 顶层条目。省略 --url / --token 时保留已有地址、token 和自定义 env；显式空字符串应写成 YAML 引号字符串，空/null 环境值会在写入前报错。更新前备份配置，写入失败时恢复原文件。
 
 --check 只检查配置记录，不能证明宿主已加载或 worker 在线。--uninstall 删除助手管理的配置与 bundle 记录；完整移除包请同时执行：
 

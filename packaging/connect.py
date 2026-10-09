@@ -150,7 +150,7 @@ def validate_connection(url, token='', timeout=3):
     deadline = time.monotonic() + timeout
     health = _response(urlunsplit((parsed.scheme, parsed.netloc, health_path, '', '')), deadline)
     if health.get('service') != 'agent-hub' or health.get('status') != 'ok':
-        raise SetupError('Address is not a healthy AgentHub server')
+        raise SetupError('Address is not a healthy multi-agent-hub server')
     request_id = 'connect-' + uuid.uuid4().hex
     body = json.dumps({'jsonrpc': '2.0', 'id': request_id, 'method': 'ping', 'params': {}}).encode('utf-8')
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
@@ -177,7 +177,7 @@ def scan(timeout=1.5, port=18766, known_urls=None):
         seen.add(url)
         def label(value):
             return ''.join(char for char in str(value) if char.isprintable())[:120]
-        candidates.append({'url': url, 'name': label(item.get('name', 'AgentHub')),
+        candidates.append({'url': url, 'name': label(item.get('name', 'multi-agent-hub')),
                            'auth_required': bool(item.get('auth_required', True)), 'source': label(item.get('source', 'discovery'))})
     return {'candidates': candidates, 'errors': result.get('errors', []), 'manual_required': not bool(candidates)}
 

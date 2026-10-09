@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1120" viewBox="0 0 1280 1120" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">AgentHub 0.5 至 0.8 发展路线图与后续复测范围</title>
+  <title id="roadmap-title">multi-agent-hub 0.5 至 0.8 发展路线图与后续复测范围</title>
   <desc id="roadmap-desc">四个源码检查点于 2026 年 10 月 9 日发布，实测记录来自 10 月 8 日。0.5 增加登录与 Windows worker 检查，0.6 统一任务契约并适配 Codex、ZCode 和 DSH，0.7 拆分安装并验证 Linux 服务与跨机器任务，0.8 增加只读 Hub 发现、用户选择和鉴权配对，提供七个 MCP 工具。验证统计仅表示相应回归、发现和安装范围；DSH 付费模型流程、反向直连及部分厂商授权能力仍待复测。</desc>
   <defs>
     <style>
@@ -21,7 +21,7 @@
   <!-- Native SVG: edit the text and card positions directly; no external assets. -->
   <rect width="1280" height="1120" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="1080" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="64" y="72" class="title">AgentHub 发展路线图</text>
+  <text x="64" y="72" class="title">multi-agent-hub 发展路线图</text>
   <text x="64" y="108" class="subtitle">Git 发布：2026-10-09　｜　实测记录：2026-10-08　｜　当前源码版本：v0.8.0</text>
   <text x="64" y="140" class="note">按真实检查点连续演进；已适配的平台与宿主，不等于全部账号、模型和任务能力都通过。</text>
 
