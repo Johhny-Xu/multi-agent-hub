@@ -7,10 +7,13 @@ Git 发布日期：2026-10-09。按下表顺序独立提交、打标签并逐次
 | v0.5.0 | agenthub-stage01-before-20261008-175905.zip | 133 | `5f59cbde7113747d41797b58853c014d7fe37cb006c4755afc3e7a1b2ef79474` |
 | v0.6.0 | agenthub-stage06-final-verified-20261008-192350.zip | 222 | `6e5cead3ad48d89b7dff6d1985686d0739394e94d386f43db2592d62cf1ed233` |
 | v0.7.0 | agenthub-stage10-final-release-20261008-202551.zip | 272 | `cffd002dabe9ff05ebc22d9021c176f68422c2946f974f855b58931b251f8a57` |
+| v0.8.0 | agenthub-stage14-before-version-push-20261009-081155.zip | 298 | `67b85a0d69b30de0b9327ee62dce777a198603a6465a2a0937711b1b4b423157` |
 
 0.5.0 使用最早保存的 stage01：其中 ZCode/MCP 为 0.5.0，但已包含标为 0.6.0 的 Codex 初稿。该标签如实保存这一混合阶段，不改写组件版本，也不称为历史正式安装包。
 
 0.6.0 和后续版本使用各阶段完成验收后的快照。
+
+0.8.0 的 stage14 与 stage13 的源码一致，仅多两份 2026-10-09 测试 CLI 卸载记录。
 
 所有备份均核对 ZIP CRC 与每个文件的 SHA256；各版推送前扫描源码和 Git 历史中的密钥模式。模式扫描存在覆盖边界，不代表对所有秘密形式的绝对保证。
 

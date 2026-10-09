@@ -1,0 +1,603 @@
+{
+  "kind": "windows-built-0.8-release-zips-on-real-linux",
+  "version": "0.8.0",
+  "temporary_directory": "/tmp/agenthub-release08-validation-70gF15QX",
+  "extractor": "busybox unzip",
+  "permission_repairs_applied": false,
+  "hub_udp_discovery_disabled": true,
+  "broadcast_validation": "separate prior real LAN report",
+  "model_calls": 0,
+  "native_host_registrations": 0,
+  "existing_services_or_configuration_modified": false,
+  "artifacts": [
+    {
+      "component": "hub",
+      "checks": [
+        {
+          "name": "scp_zip_sha256_matches_windows",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "zip_unix_shell_script_metadata",
+          "passed": true,
+          "evidence": {
+            "agenthub-0.8.0-hub/connect.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-hub/install.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-hub/packaging/launch.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-hub/start.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-hub/status.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-hub/stop.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            }
+          }
+        },
+        {
+          "name": "shell_script_lf",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "busybox_unzip_without_permission_repair",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "extracted_entrypoints_executable",
+          "passed": true,
+          "evidence": {
+            "install.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "start.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "stop.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "status.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "connect.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "packaging/launch.sh": {
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "root_install_sh_succeeds",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "ok": true,
+            "setup_required": false,
+            "connection_status": "connected",
+            "started": true,
+            "token_values_printed": false
+          }
+        },
+        {
+          "name": "no_native_host_registration",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "dedicated_prefix_config_components",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "selected_components_exist",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_connect_and_service_scripts_executable",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_status_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": true,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "real_hub_auto_start_health",
+          "passed": true,
+          "evidence": {
+            "service": "agent-hub",
+            "status": "ok",
+            "version": "0.8.0",
+            "auth_required": true
+          }
+        },
+        {
+          "name": "install_confirms_authenticated_ping",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "pure_hub_only_one_owned_process",
+          "passed": true,
+          "evidence": {
+            "owned_process_count": 1
+          }
+        },
+        {
+          "name": "pure_hub_no_console",
+          "passed": true,
+          "evidence": null
+        }
+      ],
+      "file": "agenthub-0.8.0-hub.zip",
+      "sha256": "12be1bbd1a9b066b895494b45bf24c91583ecb8680735ffb3b83bc2761df1eb9",
+      "windows_sha256": "12be1bbd1a9b066b895494b45bf24c91583ecb8680735ffb3b83bc2761df1eb9",
+      "bytes": 281653,
+      "passed": true
+    },
+    {
+      "component": "plugins",
+      "checks": [
+        {
+          "name": "scp_zip_sha256_matches_windows",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "zip_unix_shell_script_metadata",
+          "passed": true,
+          "evidence": {
+            "agenthub-0.8.0-plugins/connect.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-plugins/install.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-plugins/packaging/launch.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-plugins/payload/integrations/dsh/install.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-plugins/start.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-plugins/status.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-plugins/stop.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            }
+          }
+        },
+        {
+          "name": "shell_script_lf",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "busybox_unzip_without_permission_repair",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "extracted_entrypoints_executable",
+          "passed": true,
+          "evidence": {
+            "install.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "start.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "stop.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "status.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "connect.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "packaging/launch.sh": {
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "root_install_sh_succeeds",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "ok": true,
+            "setup_required": true,
+            "connection_status": "setup_required",
+            "started": false,
+            "token_values_printed": false
+          }
+        },
+        {
+          "name": "no_native_host_registration",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "dedicated_prefix_config_components",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "selected_components_exist",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_connect_and_service_scripts_executable",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_status_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": false,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "first_non_tty_install_requires_setup",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "deferred_setup_does_not_write_client_json",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "plugins_no_started_service",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_connect_sh_authenticated_pair",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "verified": true,
+            "token_values_printed": false
+          }
+        },
+        {
+          "name": "saved_private_client_matches_own_hub",
+          "passed": true,
+          "evidence": {
+            "url_matches": true,
+            "token_present": true,
+            "token_matches_own_hub": true
+          }
+        },
+        {
+          "name": "private_client_permissions",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "codex_native_stdio_initialize",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "version": "0.8.0"
+          }
+        },
+        {
+          "name": "codex_native_stdio_tools_list_7",
+          "passed": true,
+          "evidence": {
+            "tool_count": 7,
+            "tool_names": [
+              "hub_discover",
+              "hub_ask",
+              "hub_status",
+              "hub_capabilities",
+              "hub_login",
+              "hub_dispatch",
+              "hub_fetch"
+            ]
+          }
+        },
+        {
+          "name": "codex_hub_discover_known_configured_endpoint",
+          "passed": true,
+          "evidence": {
+            "configured_endpoint_found": true,
+            "credentials_sent": false,
+            "connection_changed": false,
+            "candidate_count": 1
+          }
+        },
+        {
+          "name": "dsh_native_stdio_initialize",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "version": "0.8.0"
+          }
+        },
+        {
+          "name": "dsh_native_stdio_tools_list_7",
+          "passed": true,
+          "evidence": {
+            "tool_count": 7,
+            "tool_names": [
+              "hub_discover",
+              "hub_ask",
+              "hub_status",
+              "hub_capabilities",
+              "hub_login",
+              "hub_dispatch",
+              "hub_fetch"
+            ]
+          }
+        },
+        {
+          "name": "dsh_hub_discover_known_configured_endpoint",
+          "passed": true,
+          "evidence": {
+            "configured_endpoint_found": true,
+            "credentials_sent": false,
+            "connection_changed": false,
+            "candidate_count": 1
+          }
+        },
+        {
+          "name": "zcode_native_stdio_initialize",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "version": "0.8.0"
+          }
+        },
+        {
+          "name": "zcode_native_stdio_tools_list_7",
+          "passed": true,
+          "evidence": {
+            "tool_count": 7,
+            "tool_names": [
+              "hub_discover",
+              "hub_ask",
+              "hub_status",
+              "hub_capabilities",
+              "hub_login",
+              "hub_dispatch",
+              "hub_fetch"
+            ]
+          }
+        },
+        {
+          "name": "zcode_hub_discover_known_configured_endpoint",
+          "passed": true,
+          "evidence": {
+            "configured_endpoint_found": true,
+            "credentials_sent": false,
+            "connection_changed": false,
+            "candidate_count": 1
+          }
+        }
+      ],
+      "file": "agenthub-0.8.0-plugins.zip",
+      "sha256": "2b860a73f7fcb81598d014d5625fb19d5670aaf9897a31593e8d9d595e7ef2dd",
+      "windows_sha256": "2b860a73f7fcb81598d014d5625fb19d5670aaf9897a31593e8d9d595e7ef2dd",
+      "bytes": 405014,
+      "passed": true
+    },
+    {
+      "component": "both",
+      "checks": [
+        {
+          "name": "scp_zip_sha256_matches_windows",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "zip_unix_shell_script_metadata",
+          "passed": true,
+          "evidence": {
+            "agenthub-0.8.0-both/connect.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-both/install.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-both/packaging/launch.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-both/payload/integrations/dsh/install.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-both/start.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-both/status.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            },
+            "agenthub-0.8.0-both/stop.sh": {
+              "create_system": 3,
+              "mode": "0o755"
+            }
+          }
+        },
+        {
+          "name": "shell_script_lf",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "busybox_unzip_without_permission_repair",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "extracted_entrypoints_executable",
+          "passed": true,
+          "evidence": {
+            "install.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "start.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "stop.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "status.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "connect.sh": {
+              "mode": "0o755",
+              "executable": true
+            },
+            "packaging/launch.sh": {
+              "mode": "0o755",
+              "executable": true
+            }
+          }
+        },
+        {
+          "name": "root_install_sh_succeeds",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "ok": true,
+            "setup_required": false,
+            "connection_status": "configured_unverified",
+            "started": false,
+            "token_values_printed": false
+          }
+        },
+        {
+          "name": "no_native_host_registration",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "dedicated_prefix_config_components",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "selected_components_exist",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_connect_and_service_scripts_executable",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "installed_status_sh",
+          "passed": true,
+          "evidence": {
+            "exit": 0,
+            "status": {
+              "hub": false,
+              "console": false
+            }
+          }
+        },
+        {
+          "name": "both_no_start",
+          "passed": true,
+          "evidence": null
+        },
+        {
+          "name": "both_has_connect_py_and_discovery_client",
+          "passed": true,
+          "evidence": null
+        }
+      ],
+      "file": "agenthub-0.8.0-both.zip",
+      "sha256": "f2de47f24bfd85cc16e11cc7957b762a4292980fca15f26ecc00cad3c202d285",
+      "windows_sha256": "f2de47f24bfd85cc16e11cc7957b762a4292980fca15f26ecc00cad3c202d285",
+      "bytes": 646147,
+      "passed": true
+    }
+  ],
+  "cleanup": {
+    "both": {
+      "stop_exit": 0,
+      "owned_processes_remaining": []
+    },
+    "plugins": {
+      "stop_exit": 0,
+      "owned_processes_remaining": []
+    },
+    "hub": {
+      "stop_exit": 0,
+      "owned_processes_remaining": []
+    },
+    "hub_http_port_released": true,
+    "private_temporary_evidence_retained": true,
+    "foreign_processes_stopped": false
+  },
+  "checks_total": 54,
+  "checks_passed": 54,
+  "passed": true
+}

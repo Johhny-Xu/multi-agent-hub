@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-multi-agent-hub",
-  "version": "1.1.0",
-  "description": "Multi-Agent Hub 的 DSH 原生插件：外部 worker 调度、代理预设与工作流",
+  "version": "1.2.0",
+  "description": "AgentHub 的 DSH 原生 MCP 桥、worker 预设、工作流与只读 Hub 发现工具",
   "type": "module",
   "main": "index.js",
   "exports": {

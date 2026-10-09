@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('install','start','stop','status')][string]$Action = 'install',
+    [ValidateSet('install','start','stop','status','connect')][string]$Action = 'install',
+    [switch]$KeepOpen,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$ForwardArgs
 )
 $ErrorActionPreference = 'Stop'
@@ -42,8 +43,14 @@ try {
     $python = Find-InstallerPython
     if ($Action -eq 'install') {
         & $python.Exe @($python.Prefix) (Join-Path $PSScriptRoot 'install.py') --bundle $packageRoot @ForwardArgs
+    } elseif ($Action -eq 'connect') {
+        & $python.Exe @($python.Prefix) (Join-Path $PSScriptRoot 'connect.py') --prefix $packageRoot @ForwardArgs
     } else {
         & $python.Exe @($python.Prefix) (Join-Path $PSScriptRoot 'service.py') $Action --prefix $packageRoot @ForwardArgs
     }
-    exit $LASTEXITCODE
-} catch { Write-Error $_.Exception.Message; exit 1 }
+    $installerExitCode = $LASTEXITCODE
+} catch { Write-Error $_.Exception.Message -ErrorAction Continue; $installerExitCode = 1 }
+if ($KeepOpen -and -not [Console]::IsInputRedirected) {
+    [void](Read-Host 'Press Enter to close this window')
+}
+exit $installerExitCode

@@ -4,8 +4,9 @@
 // 由插件 mcpServers 注册：node ${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs
 import { createInterface } from "node:readline";
 import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef } from "./hub.mjs";
+import { hubDiscover } from "./discovery.mjs";
 
-const SERVER = { name: "agenthub-hub-bridge", version: "0.7.0" };
+const SERVER = { name: "agenthub-hub-bridge", version: "0.8.0" };
 const TASK_OPTIONS = {
   model: { type: "string", description: "模型别名或具体 ID；省略则使用 Hub 配置的默认模型" },
   thinking: { type: "string", enum: ["default", "on", "off"], default: "default", description: "思考模式；不支持的模式在派发前拒绝，可先查 hub_capabilities" },
@@ -15,6 +16,11 @@ const TASK_OPTIONS = {
 };
 
 const TOOLS = [
+  {
+    name: "hub_discover",
+    description: "只读扫描本机与局域网可达的 AgentHub。初次连接或连接失败时调用；返回候选 Hub，不自动切换、不发送 token、不调用模型。没找到时提示使用安装目录 connect.cmd/connect.sh 手动配置，找到后由用户选择并配对。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
   {
     name: "hub_ask",
     description:
@@ -157,6 +163,10 @@ async function handleRequest(req) {
     const invalid = argumentError(tool, args);
     if (invalid) return err(id, -32602, invalid);
     try {
+      if (name === "hub_discover") {
+        const result = await hubDiscover();
+        return ok(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
+      }
       const options = Object.fromEntries(Object.keys(TASK_OPTIONS).filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
       const token = params?._meta?.progressToken;
       let progress = 0;

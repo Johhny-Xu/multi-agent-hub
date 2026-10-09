@@ -17,9 +17,9 @@
 
 模型与工具能力以 Hub 配置及 hub_capabilities 返回为准。别名由桥归一；国际版和国内版使用独立官方登录。MiniMax 支持适配范围内的图文输入与文本输出，但没有本地文件编辑工具；Trae 可采用 Hub 配置的 CLI 或桌面网关。
 
-`skills/dispatch-hub/SKILL.md` 提供并发协作与原生工作流节点配方；`commands/` 提供 hub-status、hub-login。技能不自动注册全局保存的命名工作流。
+`skills/dispatch-hub/SKILL.md` 提供并发协作与原生工作流节点配方；`commands/` 提供 hub-status、hub-login、hub-discover。技能不自动注册全局保存的命名工作流。
 
-## 六个 MCP 工具
+## 七个 MCP 工具
 
 server 名为 hub-bridge；宿主会给工具名添加插件命名空间。 原生 Agent 的登记 ID 也可能带插件前缀；以当前 Agent 工具实际列出的类型为准。已实测的 profileId 为 agenthub-workers:mimocode 和 codebuddy-cn，其定义路径均来自本插件 agents/；不要硬编码旧的 agenthub: 前缀或绕到其他代理。
 
@@ -29,6 +29,7 @@ server 名为 hub-bridge；宿主会给工具名添加插件命名空间。 原�
 - hub_status：查询 Hub 注册代理。
 - hub_capabilities：查询每个 worker 已验证的模型与选项能力。
 - hub_login：status/start/cancel 官方登录流程，仅返回公开状态与用户需要的链接和验证码。
+- hub_discover：只读扫描本机和局域网 Hub，返回候选地址，不发送凭据、不修改连接。
 
 派发接受 worker、task、timeout_s，以及 model、thinking（default/on/off）、stream（布尔值）、files、cwd。files 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥编码内容，Hub 在自己的机器暂存，支持跨 Windows/Linux 附件传送。cwd 则是 Hub 主机的目录。先查询能力；不支持的选项在执行前拒绝。禁止发送凭据文件。
 
@@ -40,7 +41,11 @@ stream=true 请求流式生成。客户端提供 MCP `_meta.progressToken` 才�
 
 需要 Node.js 20+、已运行的 Hub，以及插件主机与 Hub 的网络连通。无需另装外部 subagent MCP 服务。
 
-0.7.0 的独立 `plugins` 安装包不启动本地 Hub，可连接 Windows 或 Linux 服务器。外部连接设置统一放在 Windows `%LOCALAPPDATA%/AgentHub/client.json` 或 Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME），字段为 `url` 和可选 `token`；自定义位置使用 `AGENTHUB_CONFIG`。见[安装说明](../../packaging/README.md)。
+0.8.0 的独立 `plugins` 安装包不启动本地 Hub，可连接 Windows 或 Linux 服务器。外部连接设置统一放在 Windows `%LOCALAPPDATA%/AgentHub/client.json` 或 Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME），字段为 `url` 和可选 `token`；自定义位置使用 `AGENTHUB_CONFIG`。安装器设置 `AGENTHUB_CONNECTION_MODE=file` 固定使用该文件，忽略宿主继承的旧 URL/token。见[安装说明](../../packaging/README.md)。
+
+首次连接或 Hub 连接失败时，调用 `hub_discover {}` 或 `/hub-discover`，展示候选地址让用户选择。扫描使用 UDP 18766 和无凭据 `/health` 确认，不自动切换、不保存连接。用安装目录的 `connect.cmd` 或 `./connect.sh` 完成所选目标的配对；未发现目标时手动填写地址。保存后重启宿主或 MCP 连接。连接文件缺失或损坏时仍可发现，固定文件模式的派发返回 `SETUP_REQUIRED`。已有 ref 仍属于原 Hub，不能因连接故障重派任务。
+
+ZCode 安装插件不会自动执行 slash 命令或技能；安装包向导负责首次连接，`hub_discover` 是会话中的只读入口。
 
 可在 ZCode 设置的插件发现页安装仓库 https://github.com/Johhny-Xu/multi-agent-hub.git，或在独立测试项目 zcode.json 中使用官方本地目录配置：
 

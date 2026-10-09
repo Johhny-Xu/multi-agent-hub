@@ -1,7 +1,7 @@
 {
   "name": "agenthub-workers",
-  "version": "0.7.0",
-  "description": "Codex workflows and an MCP bridge to eight self-hosted AgentHub workers.",
+  "version": "0.8.0",
+  "description": "Codex workflows, read-only Hub discovery and an MCP bridge to eight AgentHub workers.",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {

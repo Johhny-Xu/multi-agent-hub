@@ -53,6 +53,7 @@ export async function loadConnection(env = process.env, { platform = process.pla
       try { settings = JSON.parse(raw.replace(/^\uFEFF/, '')); }
       catch { throw new Error('AgentHub client configuration is not valid JSON'); }
       if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('AgentHub client configuration must be an object');
+      if (typeof settings.url !== 'string' || !settings.url.trim()) throw new Error('AgentHub client configuration requires an explicit Hub URL');
       source = path;
       break;
     }

@@ -1,0 +1,291 @@
+{
+  "kind": "real-linux-hub-discovery-from-windows-and-linux",
+  "version": "0.8.0",
+  "generated_at_utc": "2026-10-08 13:09:45 UTC",
+  "protocol": {
+    "transport": "UDP IPv4",
+    "port": 18766,
+    "reply_credentials": false,
+    "health_credentials_sent": false,
+    "proxy_used": false,
+    "redirects_followed": false
+  },
+  "topology": {
+    "server": "real Linux, temporary source deployment, HTTP wildcard bind",
+    "http_port": 34121,
+    "private_addresses": "omitted",
+    "windows_to_linux": "existing LAN, no SSH forwarding",
+    "firewall_changes": false
+  },
+  "model_calls": 0,
+  "native_host_registrations": 0,
+  "existing_services_or_configuration_modified": false,
+  "regressions": {
+    "windows": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0
+    },
+    "linux": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "exit_code": 0
+    }
+  },
+  "baseline": {
+    "windows_python": {
+      "client": "python",
+      "platform": "win32",
+      "source_sha256": "5374a770f8723f2e5b152d5728ceb509376f6ac679bb59aecaba74306e2993b9",
+      "source_unchanged": true,
+      "findings": {
+        "default": {
+          "target_found": false,
+          "candidates_seen": 0,
+          "auth_required": null,
+          "elapsed_ms": 344,
+          "errors": [
+            "discovery_unavailable",
+            "health_validation_failed"
+          ],
+          "manual_required": true
+        },
+        "explicit_ipv4": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 406,
+          "errors": [],
+          "manual_required": false
+        }
+      }
+    },
+    "windows_node": {
+      "client": "node",
+      "platform": "win32",
+      "default_target_count": 3,
+      "source_sha256": "ebb1ab925aad81fdbaa7770d0fba4c2948b146eeb9c3a87716d530c4eb2864dd",
+      "source_unchanged": true,
+      "findings": {
+        "default": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 1532,
+          "errors": [],
+          "manual_required": false
+        },
+        "explicit_ipv4": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 1501,
+          "errors": [],
+          "manual_required": false
+        }
+      }
+    }
+  },
+  "root_cause": {
+    "code": "windows_udp_icmp_connection_reset",
+    "native_evidence": {
+      "kind": "native-windows-udp-closed-loopback-port",
+      "exception_type": "ConnectionResetError",
+      "errno": 10054,
+      "winerror": 10054
+    },
+    "change": "Ignore UDP ConnectionResetError for one unreachable destination; continue receiving other responses until the original deadline."
+  },
+  "final_clients": {
+    "windows_python": {
+      "client": "python",
+      "platform": "win32",
+      "source_sha256": "7657615168b46469062dab0560e05a09bb15f4ab3d7a838179e5fabd1b74e9c3",
+      "source_unchanged": true,
+      "findings": {
+        "default": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 765,
+          "errors": [
+            "health_validation_failed"
+          ],
+          "manual_required": false
+        },
+        "explicit_ipv4": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 406,
+          "errors": [],
+          "manual_required": false
+        }
+      }
+    },
+    "windows_node": {
+      "client": "node",
+      "platform": "win32",
+      "default_target_count": 3,
+      "source_sha256": "fa5dd6e4e9946480062184225501fe0db3adc7dff5dd6137ddca079715e07ee9",
+      "source_unchanged": true,
+      "findings": {
+        "default": {
+          "target_found": true,
+          "candidates_seen": 2,
+          "auth_required": true,
+          "elapsed_ms": 1575,
+          "errors": [],
+          "manual_required": false
+        },
+        "explicit_ipv4": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 1500,
+          "errors": [],
+          "manual_required": false
+        }
+      }
+    },
+    "linux_python": {
+      "client": "python",
+      "platform": "linux",
+      "source_sha256": "7657615168b46469062dab0560e05a09bb15f4ab3d7a838179e5fabd1b74e9c3",
+      "source_unchanged": true,
+      "findings": {
+        "default": {
+          "target_found": true,
+          "candidates_seen": 2,
+          "auth_required": true,
+          "elapsed_ms": 421,
+          "errors": [
+            "health_validation_failed"
+          ],
+          "manual_required": false
+        },
+        "explicit_ipv4": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 406,
+          "errors": [],
+          "manual_required": false
+        }
+      }
+    },
+    "linux_node": {
+      "client": "node",
+      "platform": "linux",
+      "default_target_count": 5,
+      "source_sha256": "fa5dd6e4e9946480062184225501fe0db3adc7dff5dd6137ddca079715e07ee9",
+      "source_unchanged": true,
+      "findings": {
+        "default": {
+          "target_found": true,
+          "candidates_seen": 2,
+          "auth_required": true,
+          "elapsed_ms": 1536,
+          "errors": [],
+          "manual_required": false
+        },
+        "explicit_ipv4": {
+          "target_found": true,
+          "candidates_seen": 1,
+          "auth_required": true,
+          "elapsed_ms": 1501,
+          "errors": [],
+          "manual_required": false
+        }
+      }
+    }
+  },
+  "source_sha256": {
+    "hub/discovery.py": "1c824b02324a8bd709bbd39f7842a55ebc0b125c2ce12e3701b8bb86054ffbe0",
+    "hub/agent_hub.py": "53bf56b8b3ee6c6387b47b548e60dcd8241f8ee9031814cd354ad2dd3d6a9dd9",
+    "packaging/discovery.py": "7657615168b46469062dab0560e05a09bb15f4ab3d7a838179e5fabd1b74e9c3",
+    "tests/discovery_regressions.py": "3d7440cb7c13688c43561c16be65ecb897fd708faa10c950c24a34d033b07b7e",
+    "mcp/discovery.mjs": "fa5dd6e4e9946480062184225501fe0db3adc7dff5dd6137ddca079715e07ee9",
+    "mcp/config.mjs": "9318c807ebd6bb9bec4257109e4dcf0f1fb1eff60e3222b012996553006d3479"
+  },
+  "deployed_source_sha256": {
+    "hub/discovery.py": "1c824b02324a8bd709bbd39f7842a55ebc0b125c2ce12e3701b8bb86054ffbe0",
+    "hub/agent_hub.py": "53bf56b8b3ee6c6387b47b548e60dcd8241f8ee9031814cd354ad2dd3d6a9dd9",
+    "packaging/discovery.py": "7657615168b46469062dab0560e05a09bb15f4ab3d7a838179e5fabd1b74e9c3",
+    "tests/discovery_regressions.py": "3d7440cb7c13688c43561c16be65ecb897fd708faa10c950c24a34d033b07b7e",
+    "mcp/discovery.mjs": "fa5dd6e4e9946480062184225501fe0db3adc7dff5dd6137ddca079715e07ee9",
+    "mcp/config.mjs": "9318c807ebd6bb9bec4257109e4dcf0f1fb1eff60e3222b012996553006d3479"
+  },
+  "deployed_hashes_match": {
+    "hub/discovery.py": true,
+    "hub/agent_hub.py": true,
+    "packaging/discovery.py": true,
+    "tests/discovery_regressions.py": true,
+    "mcp/discovery.mjs": true,
+    "mcp/config.mjs": true
+  },
+  "cleanup": {
+    "initial_stop_exit": 1,
+    "initial_verification": "post-stop UDP bind temporarily reported address in use",
+    "ownership_guard": "Exact recorded PID + process birth identity + owned entry before signaling its new process group",
+    "owned_processes_remaining": [],
+    "udp_18766_bound_socket_count": 0,
+    "udp_owner_summary": [],
+    "owned_http_port_released": true,
+    "udp_port_released": true,
+    "foreign_processes_stopped": false,
+    "private_temporary_evidence_retained": true
+  },
+  "final_network_checks": [
+    {
+      "platform": "win32",
+      "client": "python",
+      "mode": "default",
+      "passed": true
+    },
+    {
+      "platform": "win32",
+      "client": "python",
+      "mode": "explicit_ipv4",
+      "passed": true
+    },
+    {
+      "platform": "win32",
+      "client": "node",
+      "mode": "default",
+      "passed": true
+    },
+    {
+      "platform": "win32",
+      "client": "node",
+      "mode": "explicit_ipv4",
+      "passed": true
+    },
+    {
+      "platform": "linux",
+      "client": "python",
+      "mode": "default",
+      "passed": true
+    },
+    {
+      "platform": "linux",
+      "client": "python",
+      "mode": "explicit_ipv4",
+      "passed": true
+    },
+    {
+      "platform": "linux",
+      "client": "node",
+      "mode": "default",
+      "passed": true
+    },
+    {
+      "platform": "linux",
+      "client": "node",
+      "mode": "explicit_ipv4",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

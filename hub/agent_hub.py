@@ -31,7 +31,7 @@ from availability_store import local_availability, record_outcome, refresh as re
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "0.7.0"
+SERVER_VERSION = "0.8.0"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -1093,7 +1093,8 @@ class _HTTPHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if urllib.parse.urlparse(self.path).path == "/health":
-            body = json.dumps({"service": SERVER_NAME, "status": "ok"}).encode("utf-8")
+            body = json.dumps({"service": SERVER_NAME, "status": "ok", "version": SERVER_VERSION,
+                               "auth_required": bool(self.access_token())}).encode("utf-8")
             self.send_response(200)
             self._cors()
             self.send_header("Content-Type", "application/json")
@@ -1201,14 +1202,18 @@ def run_http(port: int, host: str = "127.0.0.1"):
     if host not in ("127.0.0.1", "localhost", "::1") and not HUB_TOKEN:
         raise SystemExit("拒绝启动: 非回环监听必须设置 HUB_TOKEN 环境变量 (防裸奔)")
     server = HubHTTPServer((host, port), _HTTPHandler)
+    from discovery import start_discovery
+    discovery = start_discovery(host, server.server_address[1], bool(HUB_TOKEN))
     auth = "已启用 token 鉴权" if HUB_TOKEN else "未鉴权 (仅限本机回环!)"
-    sys.stderr.write("[agent-hub] HTTP MCP 端点: http://%s:%d/mcp (%s)\n" % (host, port, auth))
+    sys.stderr.write("[agent-hub] HTTP MCP 端点: http://%s:%d/mcp (%s)\n" % (host, server.server_address[1], auth))
     sys.stderr.write("[agent-hub] 状态目录: %s\n" % STATE)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if discovery is not None:
+            discovery.close()
         from login_manager import MANAGER
         MANAGER.close()
         server.server_close()

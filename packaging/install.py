@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 from runtime import SetupError, atomic_json, atomic_text, defaults, is_loopback, read_json, replace_file, run, runtime
 import native
 import service
+import connect
 
 
 def endpoint(value):
@@ -169,7 +170,7 @@ def install(args):
         raise SetupError('Node.js 20+ is required for plugins/optional console: https://nodejs.org/en/download')
     client_path = config_dir / 'client.json'
     hub_path = config_dir / 'hub.json'
-    client = read_json(client_path) if client_path.exists() else None
+    client = connect.existing_client(client_path)
     hub = read_json(hub_path) if hub_path.exists() else None
     if hub and (not isinstance(hub.get('token'), str) or len(hub['token']) < 32 or '\n' in hub['token'] or '\r' in hub['token']):
         raise SetupError('Existing Hub token must be a single line with at least 32 characters; configuration was preserved')
@@ -203,22 +204,29 @@ def install(args):
             service.managed_unit({'systemd': systemd}, prefix)
         if not shutil.which('systemctl'):
             raise SetupError('User systemd is unavailable; no service was installed')
-    url = endpoint(args.url) if args.url else (client or {}).get('url') or (service.local_url(hub['bind'], hub['port'], '/mcp') if hub else 'http://127.0.0.1:8765/mcp')
-    url = endpoint(url)
-    token = None
-    if args.token_file:
-        token = Path(args.token_file).expanduser().read_text(encoding='utf-8').strip()
-        if len(token) < 32 or '\n' in token or '\r' in token:
-            raise SetupError('Hub token file must contain a single line with at least 32 characters')
-    elif client and endpoint(client.get('url', '')) == url and client.get('token'):
-        token = client.get('token', '')
-    elif hub and url == service.local_url(hub['bind'], hub['port'], '/mcp'):
-        token = hub['token']
-    elif client and endpoint(client.get('url', '')) == url:
-        token = client.get('token', '')
-    elif not is_loopback(urlsplit(url).hostname):
-        raise SetupError('Remote/LAN client requires --token-file; an old endpoint token is never reused')
-    new_client = {'url': url, 'token': token or ''}
+    if component == 'plugins' and not args.url and client is None:
+        new_client, connection = connect.prepare(token_path=args.token_file,
+            timeout=getattr(args, 'discovery_timeout', 1.5), port=getattr(args, 'discovery_port', 18766))
+        url = new_client['url'] if new_client else None
+        token = new_client['token'] if new_client else None
+    else:
+        url = endpoint(args.url) if args.url else (client or {}).get('url') or service.local_url(hub['bind'], hub['port'], '/mcp')
+        url = endpoint(url)
+        token = None
+        if args.token_file:
+            token = connect.token_file(args.token_file)
+        elif client and endpoint(client.get('url', '')) == url and client.get('token'):
+            token = client.get('token', '')
+        elif hub and url == service.local_url(hub['bind'], hub['port'], '/mcp'):
+            token = hub['token']
+        elif client and endpoint(client.get('url', '')) == url:
+            token = client.get('token', '')
+        elif not is_loopback(urlsplit(url).hostname):
+            raise SetupError('Remote/LAN client requires --token-file; an old endpoint token is never reused')
+        new_client = {'url': url, 'token': token or ''}
+        connection = {'status': 'configured_unverified', 'setup_required': False, 'verified': False, 'url': url}
+        if getattr(args, 'verify_connection', False):
+            connection = connect.validate_connection(url, new_client['token'])
     pair_local_client = bool(client and not client.get('token') and hub and component in ('hub', 'both') and
                              url == service.local_url(hub['bind'], hub['port'], '/mcp') and token == hub['token'])
     # Validate dependencies/configuration before changing payload or stopping owned services.
@@ -278,7 +286,7 @@ def install(args):
                 previous.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(target, previous)
             replace_file(bundle / name, target)
-        if client is None or args.url or args.token_file or pair_local_client:
+        if new_client is not None and (client is None or args.url or args.token_file or pair_local_client):
             if client_path.exists():
                 backup_dir.mkdir(parents=True, exist_ok=True); shutil.copy2(client_path, backup_dir / 'client.json'); os.chmod(backup_dir / 'client.json', 0o600)
             atomic_json(client_path, new_client)
@@ -316,8 +324,11 @@ def install(args):
             service.systemctl('enable', systemd['name'])
     if component in ('hub', 'both') and not args.no_start:
         started = service.start(prefix)
+        if new_client and endpoint(new_client['url']) == endpoint(started['hub_url']) and new_client['token'] == hub['token']:
+            connection = connect.validate_connection(new_client['url'], new_client['token'])
     result = {'ok': not any(item['status'] == 'failed' for item in registrations), 'version': manifest['version'], 'component': component,
-              'prefix': str(prefix), 'config_dir': str(config_dir), 'client_url': new_client['url'], 'token_values_printed': False,
+              'prefix': str(prefix), 'config_dir': str(config_dir), 'client_url': new_client['url'] if new_client else None, 'token_values_printed': False,
+              'connection': connection, 'setup_required': connection['setup_required'],
               'native_hosts': registrations, 'started': started, 'backup_created': backup_dir.exists()}
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result['ok'] else 1
@@ -336,6 +347,9 @@ def main():
     parser.add_argument('--with-console', action='store_true')
     parser.add_argument('--systemd-user', action='store_true')
     parser.add_argument('--no-start', action='store_true')
+    parser.add_argument('--verify-connection', action='store_true', help='Verify health and authenticated MCP ping before saving an explicit connection')
+    parser.add_argument('--discovery-timeout', type=float, default=1.5)
+    parser.add_argument('--discovery-port', type=int, default=18766)
     parser.add_argument('--native-hosts', default='auto')
     parser.add_argument('--profile', default='agenthub-client')
     args = parser.parse_args()

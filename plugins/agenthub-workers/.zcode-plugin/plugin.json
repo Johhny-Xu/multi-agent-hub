@@ -1,9 +1,9 @@
 {
   "name": "agenthub-workers",
-  "version": "0.7.0",
-  "description": "Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.",
+  "version": "0.8.0",
+  "description": "Bridge eight AgentHub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
   "description_i18n": {
-    "en": "Bridge 8 Multi-Agent Hub workers as native ZCode subagents, with task dispatch/result MCP tools, official worker login links and status (hub_login), concurrent dispatch skills, /hub-status and /hub-login.",
+    "en": "Bridge eight AgentHub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
     "zh-CN": "把 Multi-Agent Hub 全部 8 个 worker 桥接为 ZCode 原生子智能体；提供派发/回收 MCP、官方登录链接与状态（hub_login）、并发调度技能、/hub-status 与 /hub-login。"
   },
   "author": {

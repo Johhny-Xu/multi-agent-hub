@@ -2,7 +2,9 @@
 
 本目录提供独立 MCP 桥、8 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
-DSH 包版本为 1.1.0，随 AgentHub 0.7.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
+DSH 包版本为 1.2.0，随 AgentHub 0.8.0 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
+
+首次连接或 Hub 连接失败时，调用 `mcp__agenthub__hub_discover {}` 只读扫描。扫描通过 UDP 18766 查找候选，并用无凭据 `/health` 确认；不发送 token、不写配置、不静默切换。展示候选地址供用户选择，再用安装目录的 `connect.cmd` 或 `./connect.sh` 完成配对；跨网段或防火墙阻止扫描时，在向导中手动填写地址。保存后重启该 profile 或 MCP 连接。连接文件损坏不会阻止发现，但派发会返回 `SETUP_REQUIRED`，固定文件模式也不会回退到旧环境连接。
 
 回归使用模拟 Hub、工作流 VM 与临时 profile。另在 Windows `0.2.0-rc.2` 的真实 DSH 宿主中安装本包、读取原生注册服务，并复用官方登录运行主模型；未修改用户的个人 DSH 配置。子代理/工作流实际模型派发受官方账户 `402 ACCOUNT_QUOTA` 余额不足阻塞，不能据此认定插件不可用或标记端到端通过，详见 [原生验证报告](../../docs/native-plugins-windows.md)。
 
@@ -44,7 +46,7 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 
 ## MCP 与预设
 
-桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。
+桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。
 
 派发后保留原始 ok、status、ref：
 
@@ -55,11 +57,13 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 
 同一个 worker 的别名在扇出前去重；桥不会因空输出或未知状态自动重做任务。
 
-桥提供 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login` 六个工具。派发和三份工作流脚本/Node runner 都接受 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files`（DSH 插件机器绝对路径数组）与 `cwd`（Hub 主机目录）。最多 8 个附件、合计 1 MiB，由桥编码内容并在 Hub 暂存，支持跨系统传送。先用 `hub_capabilities` 确认可用能力，未支持的选项在派发前拒绝。模型对提示中的选项与派发次数仍可能不遵守；runner 直接传递选项并确保单次派发。
+桥提供 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover` 七个工具。派发和三份工作流脚本/Node runner 都接受 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files`（DSH 插件机器绝对路径数组）与 `cwd`（Hub 主机目录）。最多 8 个附件、合计 1 MiB，由桥编码内容并在 Hub 暂存，支持跨系统传送。先用 `hub_capabilities` 确认可用能力，未支持的选项在派发前拒绝。模型对提示中的选项与派发次数仍可能不遵守；runner 直接传递选项并确保单次派发。
 
 `stream=true` 请求流式生成；客户端有 MCP progressToken 才能获得进度通知，无 token 时 `delivery=buffered_no_progress_token`。本次未验证 DSH UI 的实时流式展示。
 
 ## 原生工作流
+
+运行工作流或 runner 前先完成目标 Hub 的选择与配对。发现工具只列候选，不会替工作流改连接；已有 ref 只能在原 Hub 续查。
 
 DSH 的 workflow 工具接收 meta、script 和可选 args；script 是带顶层 await、以 return JSON 结束的 JavaScript 脚本体。请将下面文件的完整内容作为 script 提交，不能只提供文件名。官方目前没有保存工作流名称注册机制。[官方工作流 API](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/workflow/workflow/README.md)
 

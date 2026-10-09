@@ -41,6 +41,10 @@ test('external config, Codex plugin data and explicit environment have isolated 
     assert.equal((await loadConnection({ ...defaults, PLUGIN_DATA: join(dir, 'plugin'), AGENTHUB_CONFIG_FILE: explicit }, options)).token, 'SYNTHETIC_EXPLICIT_TOKEN');
     await writeFile(explicit, '{"token":"SYNTHETIC_PRIVATE_VALUE",');
     await assert.rejects(loadConnection({ AGENTHUB_CONFIG: explicit }, options), error => !error.message.includes('SYNTHETIC_PRIVATE_VALUE'));
+    for (const incomplete of [{}, { token: 'SYNTHETIC_TOKEN_WITHOUT_ENDPOINT' }]) {
+      await writeFile(explicit, JSON.stringify(incomplete));
+      await assert.rejects(loadConnection({ AGENTHUB_CONFIG: explicit, AGENTHUB_CONNECTION_MODE: 'file' }, options), /explicit Hub URL/);
+    }
     assert.equal((await loadConnection({ AGENTHUB_CONFIG: explicit, AGENTHUB_URL: 'env.example:8765', HUB_TOKEN: '' }, options)).token, '');
     await assert.rejects(loadConnection({ AGENTHUB_CONFIG: join(dir, 'missing.json') }, options), /cannot be read/);
   } finally { await rm(dir, { recursive: true, force: true }); }

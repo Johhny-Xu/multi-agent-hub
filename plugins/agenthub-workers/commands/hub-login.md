@@ -5,7 +5,9 @@ argument-hint: <worker 名或简称> [start|status|cancel]
 
 # /hub-login
 
-使用 `hub_login`（完整工具名为 `mcp__plugin_agenthub-workers_hub-bridge__hub_login`），`worker` 取用户指定的 worker 名或简称。
+使用当前工具目录中的插件 `hub_login`，工具名可能带宿主生成的命名空间；`worker` 取用户指定的 worker 名或简称。
+
+首次连接或 Hub 连接失败时，先调用 `hub_discover {}` 只读扫描并展示候选，让用户选择后通过安装目录的 `connect.cmd` 或 `./connect.sh` 配对；查不到时手动填写地址。扫描不发送凭据、不改配置、不静默切换。连接确认后才在该 Hub 上启动 worker 登录。
 
 - 用户要求登录或获取链接时，传 `action: "start"`。如同一 worker 已有等待中的流程，展示已有链接，避免重复启动。
 - 将返回的 `login_url` 显示为可点击链接，同时展示 `user_code`（如有）、有效时间及操作指引。链接来自运行 worker 的枢纽宿主机。

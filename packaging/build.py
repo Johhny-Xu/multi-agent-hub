@@ -8,10 +8,10 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = '0.7.0'
-COMMON = ['README.md', 'install.cmd', 'install.sh', 'start.cmd', 'start.sh', 'stop.cmd', 'stop.sh', 'status.cmd', 'status.sh',
+VERSION = '0.8.0'
+COMMON = ['README.md', 'install.cmd', 'install.sh', 'start.cmd', 'start.sh', 'stop.cmd', 'stop.sh', 'status.cmd', 'status.sh', 'connect.cmd', 'connect.sh',
           'packaging/install.py', 'packaging/runtime.py', 'packaging/service.py', 'packaging/native.py',
-          'packaging/bootstrap.ps1', 'packaging/launch.sh', 'packaging/README.md']
+          'packaging/bootstrap.ps1', 'packaging/launch.sh', 'packaging/README.md', 'packaging/connect.py', 'packaging/discovery.py']
 DENIED = {'agents.json', '.env', 'auth.json', 'credentials.json', 'client.json', 'hub.json', 'install.json'}
 
 

@@ -1,0 +1,88 @@
+{
+  "tested_at": "2026-10-08T21:14:04+08:00",
+  "version": "0.8.0",
+  "artifacts": [
+    {
+      "file": "agenthub-0.8.0-hub.zip",
+      "sha256": "12be1bbd1a9b066b895494b45bf24c91583ecb8680735ffb3b83bc2761df1eb9",
+      "bytes": 281653,
+      "component": "hub",
+      "members": 46,
+      "text_members_scanned": 43,
+      "checks": {
+        "zip_crc_valid": true,
+        "unique_members": true,
+        "safe_relative_paths": true,
+        "manifest_identity": true,
+        "manifest_complete": true,
+        "manifest_hashes": true,
+        "internal_sums_complete": true,
+        "internal_sums_valid": true,
+        "external_sum_valid": true,
+        "matches_frozen_source": true,
+        "shell_scripts_unix_executable": true,
+        "no_private_runtime_files": true,
+        "component_separation": true,
+        "secret_pattern_scan": true
+      },
+      "findings": [],
+      "passed": true
+    },
+    {
+      "file": "agenthub-0.8.0-plugins.zip",
+      "sha256": "2b860a73f7fcb81598d014d5625fb19d5670aaf9897a31593e8d9d595e7ef2dd",
+      "bytes": 405014,
+      "component": "plugins",
+      "members": 95,
+      "text_members_scanned": 92,
+      "checks": {
+        "zip_crc_valid": true,
+        "unique_members": true,
+        "safe_relative_paths": true,
+        "manifest_identity": true,
+        "manifest_complete": true,
+        "manifest_hashes": true,
+        "internal_sums_complete": true,
+        "internal_sums_valid": true,
+        "external_sum_valid": true,
+        "matches_frozen_source": true,
+        "shell_scripts_unix_executable": true,
+        "no_private_runtime_files": true,
+        "component_separation": true,
+        "secret_pattern_scan": true
+      },
+      "findings": [],
+      "passed": true
+    },
+    {
+      "file": "agenthub-0.8.0-both.zip",
+      "sha256": "f2de47f24bfd85cc16e11cc7957b762a4292980fca15f26ecc00cad3c202d285",
+      "bytes": 646147,
+      "component": "both",
+      "members": 118,
+      "text_members_scanned": 112,
+      "checks": {
+        "zip_crc_valid": true,
+        "unique_members": true,
+        "safe_relative_paths": true,
+        "manifest_identity": true,
+        "manifest_complete": true,
+        "manifest_hashes": true,
+        "internal_sums_complete": true,
+        "internal_sums_valid": true,
+        "external_sum_valid": true,
+        "matches_frozen_source": true,
+        "shell_scripts_unix_executable": true,
+        "no_private_runtime_files": true,
+        "component_separation": true,
+        "secret_pattern_scan": true
+      },
+      "findings": [],
+      "passed": true
+    }
+  ],
+  "credential_values_recorded": false,
+  "passed": true,
+  "source_changed_since_final_windows_regression": [],
+  "source_changed_since_final_linux_regression": []
+}
