@@ -10,7 +10,7 @@ import tomllib
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parent
-MCP_FILES = ("server.mjs", "hub.mjs", "ask.mjs", "login.mjs", "config.mjs")
+MCP_FILES = ("server.mjs", "hub.mjs", "ask.mjs", "login.mjs", "config.mjs", "discovery.mjs")
 FORWARDED_ENV = ("AGENTHUB_URL", "HUB_MCP_URL", "HUB_TOKEN", "AGENTHUB_CONFIG", "AGENTHUB_CONFIG_FILE", "AGENTHUB_CONNECTION_MODE")
 
 

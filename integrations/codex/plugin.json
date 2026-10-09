@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "agenthub-workers",
-  "version": "0.7.0",
-  "description": "Codex workflows and an MCP bridge to eight self-hosted AgentHub workers.",
+  "version": "0.8.0",
+  "description": "Codex workflows, read-only Hub discovery and an MCP bridge to eight AgentHub workers.",
   "author": {
     "name": "Multi-Agent Hub Contributors"
   },

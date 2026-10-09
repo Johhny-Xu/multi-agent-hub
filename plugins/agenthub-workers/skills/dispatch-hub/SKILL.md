@@ -11,7 +11,9 @@ description: 使用 AgentHub 的八个 worker 进行独立任务分派、并行�
 
 ## 自包含工具与任务选项 原生 Agent 的登记 ID 也可能带插件前缀；以当前 Agent 工具实际列出的类型为准。已实测的 profileId 为 agenthub-workers:mimocode 和 codebuddy-cn，其定义路径均来自本插件 agents/；不要硬编码旧的 agenthub: 前缀或绕到其他代理。
 
-使用当前工具目录中的 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login` 六个插件工具，名称可能带宿主生成的前缀。不依赖额外 SSH、外部 MCP 服务或固定服务器路径。
+首次连接或 Hub 连接失败时，先调用当前工具目录中的 hub_discover 只读扫描，展示候选地址供用户选择；扫描不发送凭据、不写连接配置、不静默切换。用安装目录的 connect.cmd 或 ./connect.sh 完成所选目标的配对；未发现目标时引导手动填写地址。已有 ref 仍属于原 Hub，连接故障不能触发重新派发。
+
+使用当前工具目录中的 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover` 七个插件工具，名称可能带宿主生成的前缀。不依赖额外 SSH、外部 MCP 服务或固定服务器路径。
 
 `hub_ask` 接受 `{worker,task,timeout_s,model,thinking,stream,files,cwd}`，派发一次并在总等待预算内回收。需要独立控制等待时，对每个任务调用一次 `hub_dispatch`，保存 ref，然后只对该 ref 使用 `hub_fetch`。timeout_s 默认 300 秒，必须是大于 0 且不超过 86400 的有限数字。
 

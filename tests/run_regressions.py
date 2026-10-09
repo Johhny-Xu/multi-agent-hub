@@ -60,8 +60,10 @@ def main():
         ("dsh_installer", "dsh_installer_smoke.py"),
         ("packaging", "packaging_smoke.py"),
         ("packaging_audit", "packaging_audit_regressions.py"),
+        ("discovery", "discovery_regressions.py"),
+        ("packaging_discovery", "packaging_discovery.py"),
     )]
-    groups += [("mcp_bridge", [node, "--test", "tests/mcp_bridge.test.mjs", "tests/task_bridge.test.mjs", "plugins/agenthub-workers/scripts/test-login.mjs"]),
+    groups += [("mcp_bridge", [node, "--test", "tests/mcp_bridge.test.mjs", "tests/task_bridge.test.mjs", "plugins/agenthub-workers/scripts/test-login.mjs", "tests/discovery.test.mjs"]),
                ("zcode_rpc", [node, "--test", "tests/zcode_rpc.test.mjs"]),
                ("native_plugin_config", [node, "--test", "tests/native_plugins_config.mjs", "tests/native_plugins_contract.mjs", "tests/client_config.test.mjs"]),
                ("console", [node, "--test", "tests/console_smoke.mjs", "tests/console_capabilities_dom.mjs", "tests/console_capabilities_core.mjs"]),
@@ -81,7 +83,7 @@ def main():
             proc = spawn_owned(command, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                env=suite_env)
-            output, _ = proc.communicate(timeout=180 if name in {"packaging", "packaging_audit"} else 90)
+            output, _ = proc.communicate(timeout=180 if name in {"packaging", "packaging_audit", "packaging_discovery"} else 90)
             code = proc.returncode
         except (OSError, subprocess.TimeoutExpired) as exc:
             output, code = str(exc), 1

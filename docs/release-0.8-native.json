@@ -1,0 +1,119 @@
+{
+  "generated_at_utc": "2026-10-08T13:06:21.208678+00:00",
+  "release": "0.8.0",
+  "dsh_package_version": "1.2.0",
+  "platform": "windows",
+  "scope": "Native plugin versions/docs, standalone copied discovery module, Codex safe startup with missing or malformed connection",
+  "tests": [
+    {
+      "command": "node --test tests/mcp_bridge.test.mjs tests/native_plugins_contract.mjs tests/native_plugins_config.mjs tests/dsh_connection.test.mjs",
+      "passed": 71,
+      "failed": 0,
+      "kind": "mock transport/VM and real isolated Node stdio subprocesses"
+    },
+    {
+      "command": "CODEX_TEST_BINARY=<installed official Codex CLI>; python tests/codex_adapter_smoke.py",
+      "passed": 12,
+      "failed": 0,
+      "kind": "isolated copy/install/mock transport plus actual official Codex config parser, plugin loading and stdio initialization",
+      "actual_cli_tests": 2,
+      "actual_cli_version": "0.162.0-alpha.2"
+    },
+    {
+      "command": "python <skill-creator>/scripts/quick_validate.py <skill-directory>",
+      "passed": 4,
+      "failed": 0,
+      "kind": "official skill validator",
+      "directories": [
+        "integrations/codex/skills/hub-consult",
+        "integrations/codex/skills/hub-implement-review",
+        "integrations/codex/skills/hub-parallel-research",
+        "plugins/agenthub-workers/skills/dispatch-hub"
+      ],
+      "dependency": "PyYAML 6.0.2 installed only in owned temporary directory; directory removed after validation"
+    },
+    {
+      "kind": "safe manifest/version/TOML instruction assertions",
+      "manifests": 7,
+      "routing_agents": 16,
+      "skills": 4,
+      "passed": true
+    },
+    {
+      "command": "python tests/dsh_installer_smoke.py",
+      "passed": 9,
+      "failed": 0,
+      "kind": "isolated temporary DSH profile/YAML installer preservation contracts; no native host activation"
+    }
+  ],
+  "launcher_regression": {
+    "missing_and_malformed_explicit_client_file": true,
+    "tool_count": 7,
+    "hub_discover_listed": true,
+    "dispatch_status": "failed",
+    "dispatch_ref": "",
+    "dispatch_diagnostic": "SETUP_REQUIRED",
+    "configuration_preserved": true,
+    "stale_url_token_not_used": true,
+    "private_settings_not_echoed": true,
+    "invalid_cases": [
+      "missing",
+      "malformed JSON",
+      "empty object",
+      "token-only object"
+    ]
+  },
+  "native_host_boundary": {
+    "codex": "actual CLI config/plugin/stdio loading tested in isolated CODEX_HOME/project; no model execution",
+    "zcode": "new command/tool docs and manifest contract checked; no new native ZCode launch in this record",
+    "dsh": "new tool/preset docs and Node bridge/workflow contracts checked; no new native DSH launch in this record"
+  },
+  "inference_calls": 0,
+  "personal_profiles_modified": false,
+  "authentication_flows_started": false,
+  "credentials_copied": false,
+  "owned_processes_cleaned": true,
+  "source_sha256": {
+    "integrations/codex/scripts/config.mjs": "a0e83cf8d1672e9b5451c9a16f2f2cc2bf870a79fdf29ccfabcd29b57ae97a37",
+    "integrations/codex/install.py": "cdcbb55c9b3768b370bf5ea1cefd73b2f2524d7a5d7efc5ffdf2ad2806a5b4a4",
+    "tests/native_plugins_config.mjs": "a48f928ce113851790fe2220ca2eceac052934ac2a43018901f6f644fcdb1575",
+    "tests/codex_adapter_smoke.py": "3d73d04985a33b81134434875deafe4f923e5ae2ae8ef7a4bbbe934214083091",
+    "tests/mcp_bridge.test.mjs": "942a4afb853b1df2c7662f0709d7f896b741b3f50040308426140ca55f3ed186",
+    "integrations/codex/README.md": "0c1ea3ca8492b457fd5515f1f4ba0669d1bc8097a314d0b2b31be29036439641",
+    "integrations/dsh/README.md": "0a949d833928e44ede4dea5de7c419560dac0e450cc2e56a5a1c059977c3bd1b",
+    "plugins/agenthub-workers/README.md": "bb666c3b173d9e310e080bcfd76bd839996f5536afeab9f0527e6cbd2f2cc905",
+    "plugins/agenthub-workers/commands/hub-discover.md": "5c87499a139b62094b3d7fc40719e1afdf0759f3971805b97e47684f9cb5facf",
+    "plugins/agenthub-workers/commands/hub-status.md": "b308604a86b376cbeb097f6250e7b3d5d3a28195eb5a7800cc7d92ef536b4685",
+    "integrations/dsh/cordis.patch.yml": "74344e4a01e25e5e85ea17ae678897010e3231202ff6295b2283683b51aa5ad9",
+    "integrations/codex/skills/hub-consult/SKILL.md": "335c7171de00f5aeef6c276612678b081487cfb0c3529fd6d846f6dbbcc9612e",
+    "integrations/codex/skills/hub-implement-review/SKILL.md": "d70043be1d5104e424411f388036dc2e899696c6ea082f5f7dd16b8c9183721c",
+    "integrations/codex/skills/hub-parallel-research/SKILL.md": "20f498b33321395f8c1078c2de99f67cc494a203a3b53a79b76ddf6b8da41e95",
+    "plugins/agenthub-workers/skills/dispatch-hub/SKILL.md": "0d51c8a988ff578093ce8386c61a50eb7708b925fb25d90f58a3ab985bd0fbb5",
+    "marketplace.json": "90a5591bba4177b40563295cf62fa8da183c8bfd9d1ff5bc2b45845af1bde5d2",
+    ".zcode-plugin/marketplace.json": "90a5591bba4177b40563295cf62fa8da183c8bfd9d1ff5bc2b45845af1bde5d2",
+    "plugins/agenthub-workers/.zcode-plugin/plugin.json": "ea7ac9e2cc2152e93674bed431e127876ffafe63efd0d820dbb5abdf075609c4",
+    "integrations/codex/plugin.json": "ba234d7cfdc42b629b5745c283aa7c8befb83a18789ba23b7aeabeb9ebcf8b1e",
+    "integrations/codex/.codex-plugin/plugin.json": "29aeb0a3e758594b8e35b3f178391f02b6dc0a6472c53fc48e3cadb1ff2573e9",
+    "integrations/codex/package.json": "ae17fa87dfe79e56b86b20aa3e11d4586adef062a36230c35a38b6bc1dc392cb",
+    "integrations/dsh/package.json": "79d5b134d5134cbdfe3f6cafd32b1a1fd11eb80dbfe63aa714e8895734145702",
+    "mcp/config.mjs": "9318c807ebd6bb9bec4257109e4dcf0f1fb1eff60e3222b012996553006d3479",
+    "mcp/discovery.mjs": "fa5dd6e4e9946480062184225501fe0db3adc7dff5dd6137ddca079715e07ee9",
+    "mcp/hub.mjs": "4ae2c868e0ba85f408135da9ab12ef341430e143366d891d19064ff10ea1cec8",
+    "mcp/server.mjs": "3b6b648731f2d83cce679258370f6476189b07f50d56e09d05fa8446a34068e5",
+    "integrations/codex/mcp/config.mjs": "9318c807ebd6bb9bec4257109e4dcf0f1fb1eff60e3222b012996553006d3479",
+    "integrations/codex/mcp/discovery.mjs": "fa5dd6e4e9946480062184225501fe0db3adc7dff5dd6137ddca079715e07ee9"
+  },
+  "notes": [
+    "Read-only discovery neither sends credentials nor changes selected connection. User selects a Hub and pairs using connect.cmd/connect.sh.",
+    "Previously accepted refs remain bound to their original Hub; connection failures never cause repeat dispatch.",
+    "Historical 0.7 native/model evidence is preserved separately and is not reclassified as 0.8 end-to-end validation."
+  ],
+  "audited_fixes": [
+    {
+      "problem": "Present private configuration without URL silently selected localhost and could apply its token",
+      "fix_owner": "root",
+      "resolution": "Every loaded private configuration requires an explicit URL; missing/malformed/empty/token-only files preserve discovery but refuse dispatch",
+      "regression": "Actual Codex launcher tested all four invalid cases"
+    }
+  ]
+}

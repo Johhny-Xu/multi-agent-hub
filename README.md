@@ -6,13 +6,13 @@
 
 ## 选择安装包
 
-0.7.0 提供三种独立 ZIP；源码构建方法见下方。这是本地构建版本，发布附件是否上传请以实际仓库 release 为准。
+0.8.0 提供三种独立 ZIP，新增本机与局域网 Hub 自动发现；源码构建方法见下方。源码已按 v0.5.0 → v0.6.0 → v0.7.0 → v0.8.0 分别提交与打标签；ZIP 安装包仍为本机构建，尚未上传 GitHub Release 附件。
 
 | 包 | 装在哪里 | 包含什么 |
 | --- | --- | --- |
-| agenthub-0.7.0-plugins.zip | 使用 Codex / ZCode / DSH 的机器 | 三种原生插件、MCP 桥、子代理与工作流 |
-| agenthub-0.7.0-hub.zip | 运行 worker 的 Windows / Linux 机器 | Python Hub、worker 适配器、可选网页控制台 |
-| agenthub-0.7.0-both.zip | 插件和 worker 都在本机 | 上述两部分 |
+| agenthub-0.8.0-plugins.zip | 使用 Codex / ZCode / DSH 的机器 | 三种原生插件、MCP 桥、子代理与工作流 |
+| agenthub-0.8.0-hub.zip | 运行 worker 的 Windows / Linux 机器 | Python Hub、worker 适配器、可选网页控制台 |
+| agenthub-0.8.0-both.zip | 插件和 worker 都在本机 | 上述两部分 |
 
 解压后，Windows 双击 **install.cmd**，Linux 执行 **bash install.sh**。安装器识别系统、已有 Python/Node 和官方 CLI，使用稳定安装目录，配置与运行数据放在源码包之外。重复安装会备份旧应用文件，保留连接和 worker 配置。完整参数、原生宿主注册及启动方式见[安装说明](packaging/README.md)。
 
@@ -33,6 +33,12 @@ bash install.sh --component both --with-console
 安装器只为检测到的官方 CLI 建立 worker 配置。未安装、未登录或没有对应模型的 worker 不会因为插件存在就自动可用。可在宿主中查询 hub_capabilities，用 hub_login 获取支持的官方授权链接并查询登录状态。
 
 ## Windows 与 Linux 分开安装
+
+首次安装 plugins 包且没有连接配置时，会先扫描本机与局域网 Hub。终端列出可达候选，由你选择本机或服务器；没有发现时提示手动填写地址。配对时使用对应 Hub 的 token 文件或终端隐藏输入，验证成功后才保存。已有连接不会因扫描被覆盖；非交互安装返回待配置提示，不会停在那里等待输入。
+
+以后双击安装目录的 **connect.cmd**（Linux：`./connect.sh`）即可重新扫描并切换。ZCode 内可用 **/hub-discover**，Codex/DSH 可调用 **hub_discover**，只读列出候选及下一步说明；宿主不会因为工具注册就自动执行它。切换连接前先收回原 Hub 的未完成任务，保存后重启宿主 MCP 进程。
+
+局域网自动发现需要服务器 Hub 升级到 0.8.0，并监听局域网地址。扫描使用 UDP 18766 与无凭据 HTTP 健康检查，不会广播 token。跨子网、VPN、广播被拦截、旧版本或发现端口被占用时可能找不到，仍可手动连接；不会自动修改防火墙。设置 `AGENTHUB_DISCOVERY=0` 可关闭服务端发现响应。发现到服务器只表示可达，配对还需要鉴权。
 
 以 Linux 运行 Hub、Windows 运行插件为例：
 
@@ -61,7 +67,7 @@ ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 SERVER_SSH_ALIAS
 
 ## 使用与能力限制
 
-插件提供六个工具：hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login。Codex 的项目子代理与三个工作流技能、ZCode 的八个原生代理、DSH 的预设与工作流都通过同一个任务契约派发。
+插件提供七个工具：hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。Codex 的项目子代理与三个工作流技能、ZCode 的八个原生代理、DSH 的预设与工作流都通过同一个任务契约派发。
 
 先用 hub_capabilities(worker, model) 查看目标 Hub 的能力和最近失败状态。前端按 **Hub 所在系统、worker、实际配置模型** 约束思考、流式、图片和文件选项；不支持的选项会禁用并解释原因，服务端也会拒绝。自动选择 worker 时使用相同限制。
 
@@ -101,7 +107,8 @@ python packaging/build.py --output /path/outside/repository/agenthub-releases
 
 离线回归使用隔离配置与模拟服务；真实模型和网络测试为显式运行项，不包含在普通回归中。各验证层分别记录，未通过项不会被安装成功或工具注册成功覆盖。
 
-- [本轮修复、安装与验收](docs/release-0.7.md)
+- [自动发现与配对验收](docs/release-0.8.md)
+- [上一轮修复、安装与验收](docs/release-0.7.md)
 - [更新日志](CHANGELOG.md)
 - [此前完整兼容性矩阵](docs/compatibility-2026-10-08.md)
 - [Codex 插件与子代理](integrations/codex/README.md)

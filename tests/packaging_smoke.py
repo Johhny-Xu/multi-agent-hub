@@ -50,7 +50,7 @@ class DistributionTests(unittest.TestCase):
                 for info in archive.infolist():
                     if info.filename.endswith('.sh'):
                         (cls.lab / 'unpacked' / info.filename).chmod(0o755)
-            cls.bundles[component] = cls.lab / 'unpacked' / ('agenthub-0.7.0-' + component)
+            cls.bundles[component] = cls.lab / 'unpacked' / ('agenthub-' + build.VERSION + '-' + component)
 
     @classmethod
     def tearDownClass(cls):
@@ -62,6 +62,10 @@ class DistributionTests(unittest.TestCase):
         self.config = self.case / 'private-config'
 
     def installer(self, component, *args, env=None):
+        # Legacy packaging/lifecycle cases exercise explicit offline setup;
+        # discovery and pending first installs are covered in packaging_discovery.
+        if component == 'plugins' and '--url' not in args and not (self.config / 'client.json').exists():
+            args = ('--url', '127.0.0.1:8765', *args)
         return call([sys.executable, self.bundles[component] / 'packaging/install.py', '--prefix', self.prefix,
                      '--config-dir', self.config, '--native-hosts', 'none', *args], env)
 
@@ -101,8 +105,8 @@ class DistributionTests(unittest.TestCase):
             self.assertTrue((bundle / 'README.md').is_file())
             self.assertEqual((bundle / 'start.sh').read_bytes(), (ROOT / 'packaging/start.sh').read_bytes())
             self.assertNotEqual((bundle / 'start.sh').read_bytes(), (ROOT / 'start.sh').read_bytes())
-            with zipfile.ZipFile(self.lab / 'releases' / ('agenthub-0.7.0-' + component + '.zip')) as archive:
-                shell = archive.getinfo('agenthub-0.7.0-' + component + '/install.sh')
+            with zipfile.ZipFile(self.lab / 'releases' / ('agenthub-' + build.VERSION + '-' + component + '.zip')) as archive:
+                shell = archive.getinfo('agenthub-' + build.VERSION + '-' + component + '/install.sh')
                 self.assertEqual(shell.create_system, 3)
                 self.assertEqual(shell.external_attr >> 16 & 0o777, 0o755)
             for relative in manifest['files']:
@@ -236,7 +240,7 @@ class DistributionTests(unittest.TestCase):
             argv = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', bundle / 'packaging/bootstrap.ps1', '-Action', 'install']
         else:
             argv = ['sh', bundle / 'install.sh']
-        response = call(argv + ['--prefix', self.prefix, '--config-dir', self.config, '--native-hosts', 'none', '--no-start'])
+        response = call(argv + ['--prefix', self.prefix, '--config-dir', self.config, '--native-hosts', 'none', '--no-start', '--url', '127.0.0.1:8765'])
         self.assertEqual(response.returncode, 0, response.stderr)
         self.assertTrue((self.prefix / 'app/integrations/codex/.mcp.json').is_file())
 

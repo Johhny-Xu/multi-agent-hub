@@ -1,0 +1,32 @@
+{
+  "action": "remove-owned-test-cli-only",
+  "target": "/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/codebuddy-version-align/cli",
+  "package_directory": "/tmp/agenthub-platform-mudkznsr-matrix-25e90dc8/codebuddy-version-align/cli/node_modules/@tencent-ai/codebuddy-code",
+  "package_name": "@tencent-ai/codebuddy-code",
+  "package_version": "2.162.0",
+  "removed_regular_file_bytes": 226881700,
+  "removed_regular_files": 9878,
+  "target_absent": true,
+  "package_absent": true,
+  "processes_using_test_cli_before": [],
+  "deployment_references_before": [],
+  "original_unchanged": {
+    "original_executables_and_config": true,
+    "original_cli_on_path": true,
+    "account_directory_metadata": true,
+    "original_deployment_process_identity": true
+  },
+  "original_cli_on_ssh_path": {
+    "codebuddy": null,
+    "codebuddy-cn": null,
+    "node": "/usr/bin/node",
+    "npm": "/usr/bin/npm"
+  },
+  "authentication_files_read": false,
+  "authentication_directories_removed": false,
+  "matrix_parent_and_evidence_retained": true,
+  "limits": [
+    "Only the owned npm test install prefix was removed; parent evidence and other temporary deployments were retained."
+  ],
+  "passed": true
+}

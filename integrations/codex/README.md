@@ -1,6 +1,6 @@
 # AgentHub for Codex
 
-此目录是独立的 Codex 插件包：3 个工作流技能、stdio MCP 桥接，以及 8 个项目级原生代理模板。包版本为 `0.7.0`。Node.js 需要 **20 或更高**；项目安装脚本需要 Python **3.11 或更高**。MCP 的五个文件直接复制仓库根 `mcp/`，无需 npm 依赖。可独立安装并连接其他机器上的 Hub，见[安装包说明](../../packaging/README.md)。
+此目录是独立的 Codex 插件包：3 个工作流技能、stdio MCP 桥接，以及 8 个项目级原生代理模板。包版本为 `0.8.0`。Node.js 需要 **20 或更高**；项目安装脚本需要 Python **3.11 或更高**。MCP 的六个文件（含 `discovery.mjs`）直接复制仓库根 `mcp/`，无需 npm 依赖。可独立安装并连接其他机器上的 Hub，见[安装包说明](../../packaging/README.md)。
 
 原生 `agenthub_*` 代理仍使用父会话的 Codex 模型和权限，通过 MCP 派发给外部 worker。外部 worker 的认证、模型与运行目录由 Hub 的 profile 决定。代理模板不指定模型，不降低 sandbox，不代替 Hub 登录。
 
@@ -21,7 +21,7 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 
 ### 原生插件的 Hub 地址
 
-0.7.0 安装包统一使用外部 `client.json`：Windows 为 `%LOCALAPPDATA%/AgentHub/client.json`，Linux 为 `$XDG_CONFIG_HOME/agenthub/client.json` 或 `~/.config/agenthub/client.json`，字段为 `url` 和可选 `token`。插件读取该文件不依赖 Codex 转发自定义环境。安装器用 `AGENTHUB_CONFIG` 指定路径，并设置 `AGENTHUB_CONNECTION_MODE=file`，固定读取文件，防止宿主继承的旧 URL/token 覆盖新连接。未设置该模式的源码入口仍是显式环境优先；更换 URL 时不会把另一端点保存的 token 发过去。下面的 `PLUGIN_DATA` 配置仍兼容，并优先于标准位置。
+0.8.0 安装包统一使用外部 `client.json`：Windows 为 `%LOCALAPPDATA%/AgentHub/client.json`，Linux 为 `$XDG_CONFIG_HOME/agenthub/client.json` 或 `~/.config/agenthub/client.json`，字段为 `url` 和可选 `token`。插件读取该文件不依赖 Codex 转发自定义环境。安装器用 `AGENTHUB_CONFIG` 指定路径，并设置 `AGENTHUB_CONNECTION_MODE=file`，固定读取文件，防止宿主继承的旧 URL/token 覆盖新连接。未设置该模式的源码入口仍是显式环境优先；更换 URL 时不会把另一端点保存的 token 发过去。下面的 `PLUGIN_DATA` 配置仍兼容，并优先于标准位置。
 
 原生插件与项目 MCP fragment 的环境传递不同：实测 Codex `0.162.0-alpha.2` 会过滤插件子进程环境，直接给 Codex 设置 `AGENTHUB_URL` 不会传给插件；便携 `mcp.json` 里的 `${env.AGENTHUB_URL}` 也不会展开。插件启动器因此支持宿主提供的 `PLUGIN_DATA/agenthub.json`。在 `codex mcp list --json` 的 agenthub transport.env.PLUGIN_DATA 中找到本次安装的数据目录，在该目录写入：
 
@@ -29,7 +29,9 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 {"url":"http://127.0.0.1:8765/mcp"}
 ```
 
-远程 Hub 的 token 可作为可选字符串字段放在该私有数据文件中；不要写进插件包、项目或报告。通过直接 MCP fragment 显式传入的环境优先于数据文件。数据文件缺失时仍使用环境与默认地址；格式无效会阻止启动，并返回不含设置值的错误。
+远程 Hub 的 token 可作为可选字符串字段放在该私有数据文件中；不要写进插件包、项目或报告。通过直接 MCP fragment 显式传入的环境优先于数据文件。文件缺失或格式无效时，插件仍可列出工具和执行只读发现；固定文件模式的派发返回 `SETUP_REQUIRED`，不会改用旧环境或默认地址。
+
+首次连接或 Hub 连接失败时，调用 `hub_discover {}` 扫描本机及局域网。结果只列出经过无凭据 `/health` 确认的候选地址，不发送 token、不保存配置，也不自动选择目标。请展示候选让用户选择，再运行安装目录的 `connect.cmd` 或 `./connect.sh` 完成配对；查不到时在向导中手动填写地址。网络、防火墙或跨网段可能阻止 UDP 18766 发现。连接保存后重启宿主或 MCP 连接；已有任务的 ref 仍属于原 Hub，不能因连接失败重复派发。
 
 - `$hub-parallel-research`：多路调研后整合证据。
 - `$hub-implement-review`：一个 worker 实施，另一个审查实际 diff。
@@ -38,7 +40,7 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 
 每个任务仅派发一次并保留 ref。running/unknown/空输出继续跟踪原任务，不能被当成 completed，也不能自动重派。登录链接按用户请求用 `hub_login` 获取。
 
-桥提供 6 个工具：`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`。派发支持 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files` 与 `cwd`。先查询目标 worker 的 `hub_capabilities`，未验证的能力会在执行前拒绝。`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥发送文件内容，Hub 在自己的主机暂存，因此可以跨 Windows/Linux 传附件。`cwd` 则是 Hub 主机上的目录。不要发送凭据文件。
+桥提供 7 个工具：`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover`。派发支持 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files` 与 `cwd`。先查询目标 worker 的 `hub_capabilities`，未验证的能力会在执行前拒绝。`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥发送文件内容，Hub 在自己的主机暂存，因此可以跨 Windows/Linux 传附件。`cwd` 则是 Hub 主机上的目录。不要发送凭据文件。
 
 `stream=true` 请求 worker 流式输出。MCP 客户端提供 `_meta.progressToken` 时桥可以发送进度通知；没有该 token 时 `delivery=buffered_no_progress_token`，不能据此宣称客户端已经实时显示。
 

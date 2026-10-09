@@ -5,8 +5,10 @@ import { open } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { loadConnection } from "./config.mjs";
 
-const CONNECTION = await loadConnection();
-export const HUB = CONNECTION.url;
+let CONNECTION, CONNECTION_ERROR;
+try { CONNECTION = await loadConnection(); }
+catch { CONNECTION_ERROR = 'SETUP_REQUIRED：连接配置缺失或无效。先调用 hub_discover 扫描，再运行 connect.cmd / connect.sh 配对并重启宿主 MCP。'; }
+export const HUB = CONNECTION?.url;
 
 const ALIASES = {
   agy: "antigravity", antigravity: "antigravity",
@@ -55,7 +57,7 @@ function validTimeout(value) {
 function message(error) {
   let text = String(error?.message || error).replace(/([?&]token=)[^&\s]+/gi, "$1[REDACTED]");
   if (process.env.HUB_TOKEN) text = text.replaceAll(process.env.HUB_TOKEN, "[REDACTED]");
-  if (CONNECTION.token) text = text.replaceAll(CONNECTION.token, "[REDACTED]");
+  if (CONNECTION?.token) text = text.replaceAll(CONNECTION.token, "[REDACTED]");
   return text.slice(0, 500);
 }
 
@@ -111,6 +113,7 @@ function hubError(kind, text) {
 }
 
 async function callTool(name, args, timeoutMs, allowToolError = false) {
+  if (CONNECTION_ERROR) throw hubError('rejected', CONNECTION_ERROR);
   const id = ++nextRequestId;
   const payload = JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
   const target = new URL(HUB);

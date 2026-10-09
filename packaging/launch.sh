@@ -19,4 +19,7 @@ fi
 if [ "$action" = install ]; then
   exec "$installer_python" "$package_root/packaging/install.py" --bundle "$package_root" "$@"
 fi
+if [ "$action" = connect ]; then
+  exec "$installer_python" "$package_root/packaging/connect.py" --prefix "$package_root" "$@"
+fi
 exec "$installer_python" "$package_root/packaging/service.py" "$action" --prefix "$package_root" "$@"

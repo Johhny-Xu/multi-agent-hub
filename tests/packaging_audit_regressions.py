@@ -18,6 +18,7 @@ import build
 import install
 import native
 import runtime
+import connect
 
 
 def load(name, path):
@@ -39,7 +40,7 @@ class PackagingAuditTests(unittest.TestCase):
         artifact = build.build(cls.lab / 'release', 'both')
         with zipfile.ZipFile(cls.lab / 'release' / artifact['file']) as archive:
             archive.extractall(cls.lab / 'bundle')
-        cls.bundle = cls.lab / 'bundle/agenthub-0.7.0-both'
+        cls.bundle = cls.lab / ('bundle/agenthub-' + build.VERSION + '-both')
 
     @classmethod
     def tearDownClass(cls):
@@ -57,7 +58,8 @@ class PackagingAuditTests(unittest.TestCase):
                     codex_home=None, zcode_home=None, dsh_home=None, codex_cli=None, zcode_cli=None, dsh_cli=None,
                     no_start=True, systemd_user=False)
         args.update(overrides)
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()), patch.object(connect, 'scan', return_value={'candidates': [], 'errors': [], 'manual_required': True}), \
+             patch.object(sys, 'stdin', SimpleNamespace(isatty=lambda: False)):
             return install.install(SimpleNamespace(**args))
 
     def test_invalid_explicit_runtime_never_falls_back(self):
@@ -67,7 +69,7 @@ class PackagingAuditTests(unittest.TestCase):
 
     def test_plugins_then_hub_pairs_existing_empty_local_client(self):
         self.invoke('plugins')
-        self.assertEqual(json.loads((self.config / 'client.json').read_text())['token'], '')
+        self.assertFalse((self.config / 'client.json').exists())
         self.invoke('hub')
         client = json.loads((self.config / 'client.json').read_text())
         hub = json.loads((self.config / 'hub.json').read_text())
