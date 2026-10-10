@@ -612,6 +612,110 @@
     background: rgba(59, 130, 246, 0.1);
     border-color: rgba(59, 130, 246, 0.35);
   }
+  .platform-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 2px;
+  }
+  .platform-chevron {
+    font-size: 10px;
+    color: var(--mcode-text-subtle);
+    margin-left: auto;
+    transition: transform .18s ease;
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .platform-chevron:hover {
+    background: var(--mcode-surface-hover);
+    color: var(--mcode-text);
+  }
+  .platform-chevron.expanded {
+    transform: rotate(90deg);
+  }
+  .platform-session-tree {
+    display: flex;
+    flex-direction: column;
+    padding-left: 28px;
+    margin: 2px 0 6px 0;
+    position: relative;
+    gap: 2px;
+  }
+  .platform-session-tree::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 2px;
+    bottom: 6px;
+    width: 1.5px;
+    background: var(--mcode-border);
+    border-radius: 1px;
+  }
+  .session-tree-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--mcode-text-muted);
+    cursor: pointer;
+    transition: all .12s ease;
+    border: 1px solid transparent;
+    user-select: none;
+    position: relative;
+  }
+  .session-tree-item:hover {
+    background: var(--mcode-surface-hover);
+    color: var(--mcode-text);
+  }
+  .session-tree-item.active {
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--mcode-accent);
+    font-weight: 500;
+    border-color: rgba(59, 130, 246, 0.25);
+  }
+  .session-tree-item.active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 5px;
+    height: 1.5px;
+    background: var(--mcode-accent);
+  }
+  .session-tree-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 130px;
+  }
+  .session-tree-meta {
+    font-size: 10px;
+    color: var(--mcode-text-subtle);
+    font-variant-numeric: tabular-nums;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+  .session-tree-new-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: var(--mcode-accent);
+    cursor: pointer;
+    transition: all .12s ease;
+    user-select: none;
+    border: 1px dashed var(--mcode-border);
+    margin-top: 2px;
+  }
+  .session-tree-new-btn:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: var(--mcode-accent);
+  }
   .platform-item.active::before {
     content: '';
     position: absolute;
@@ -3493,6 +3597,7 @@
       var t = chat.threads.find(function (x) { return x.agent === name; });
       var vis = getAgentVisual(name);
       var isActive = (chat.activeAgent === name);
+      var group = el('div', 'platform-group');
       var item = el('div', 'platform-item' + (isActive ? ' active' : ''));
       item.setAttribute('data-agent', name);
 
@@ -3518,9 +3623,9 @@
       previewLine.appendChild(el('span', 'platform-msg-preview', previewText));
 
       var metaTags = el('div', 'platform-meta-tags');
-      if (t && (t.sessionCount > 1 || (t.sessions && t.sessions.length > 1))) {
-        var cnt = t.sessionCount || (t.sessions ? t.sessions.length : 1);
-        metaTags.appendChild(el('span', 'platform-sess-pill', cnt + '会话'));
+      var sessions = (t && Array.isArray(t.sessions) && t.sessions.length) ? t.sessions : (isActive && chat.sessions && chat.sessions.length ? chat.sessions : []);
+      if (sessions.length > 1) {
+        metaTags.appendChild(el('span', 'platform-sess-pill', sessions.length + '会话'));
       }
       if (t && (t.unread || t.totalUnread)) {
         metaTags.appendChild(el('span', 'platform-badge-pill', t.unread || t.totalUnread));
@@ -3529,10 +3634,64 @@
       info.appendChild(previewLine);
       item.appendChild(info);
 
+      // 折叠/展开指示器
+      var isExpanded = chat.expandedAgents ? !!chat.expandedAgents[name] : (isActive);
+      var chevron = el('span', 'platform-chevron' + (isExpanded ? ' expanded' : ''), '▶');
+      chevron.title = isExpanded ? '收起会话列表' : '展开会话列表';
+      chevron.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!chat.expandedAgents) chat.expandedAgents = {};
+        chat.expandedAgents[name] = !isExpanded;
+        renderPlatformList();
+      });
+      item.appendChild(chevron);
+
       item.addEventListener('click', function () {
+        if (!chat.expandedAgents) chat.expandedAgents = {};
+        chat.expandedAgents[name] = true;
         selectPlatform(name);
       });
-      host.appendChild(item);
+      group.appendChild(item);
+
+      // 展开的会话子树
+      if (isExpanded && sessions.length) {
+        var tree = el('div', 'platform-session-tree');
+        sessions.slice(0, 5).forEach(function (s) {
+          var isSessActive = isActive && (chat.activeSessionId === s.id);
+          var sItem = el('div', 'session-tree-item' + (isSessActive ? ' active' : ''));
+          var titleEl = el('span', 'session-tree-title', s.title || '会话');
+          sItem.appendChild(titleEl);
+          if (s.msgCount !== undefined) {
+            sItem.appendChild(el('span', 'session-tree-meta', s.msgCount + '条'));
+          }
+          sItem.addEventListener('click', function (e) {
+            e.stopPropagation();
+            selectPlatform(name, s.id);
+          });
+          tree.appendChild(sItem);
+        });
+        
+        // 快速新建会话按钮
+        var newBtn = el('div', 'session-tree-new-btn');
+        newBtn.innerHTML = '<span>+</span><span>新建会话</span>';
+        newBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          api('/api/chat/new-session', { agent: name, title: '新会话' }).then(function (r) {
+            chat.activeAgent = name;
+            chat.full[name] = r.thread;
+            chat.activeSessionId = r.activeSessionId;
+            chat.sessions = r.sessions || [];
+            if (!chat.expandedAgents) chat.expandedAgents = {};
+            chat.expandedAgents[name] = true;
+            loadThreads();
+          }).catch(function (err) { toast(err.message, true); });
+        });
+        tree.appendChild(newBtn);
+
+        group.appendChild(tree);
+      }
+
+      host.appendChild(group);
     });
 
     var total = chat.threads.reduce(function (s, t) { return s + (t.unread || t.totalUnread || 0); }, 0);
