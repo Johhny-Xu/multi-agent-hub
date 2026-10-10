@@ -6116,23 +6116,145 @@
   });
 
   function openArchivesViewer() {
-    var curAgent = chat.activeAgent || '';
-    api('/api/chat/archives' + (curAgent ? '?agent=' + encodeURIComponent(curAgent) : '')).then(function (res) {
-      var list = (res && res.archives) || [];
-      var body = el('div', 'archive-modal-content');
-      body.style.maxHeight = '420px';
-      body.style.overflowY = 'auto';
-      body.style.display = 'flex';
-      body.style.flexDirection = 'column';
-      body.style.gap = '8px';
-      body.style.padding = '4px 0';
+    api('/api/chat/archives').then(function (res) {
+      var allArchives = (res && res.archives) || [];
+      var filterAgent = '';
+      var searchQuery = '';
+      var sortOrder = 'updated_desc'; // 'updated_desc' | 'updated_asc' | 'msgs_desc'
 
-      if (!list.length) {
-        var empty = el('div', 'empty', curAgent ? ('平台 ' + curAgent + ' 暂无归档会话') : '暂无任何归档会话');
-        empty.style.padding = '24px 0';
-        body.appendChild(empty);
-      } else {
-        list.forEach(function (arch) {
+      // 获取所有有归档记录的代理列表
+      var agentSet = {};
+      allArchives.forEach(function (a) { if (a.agent) agentSet[a.agent] = true; });
+      var agentList = Object.keys(agentSet).sort();
+
+      var wrapper = el('div', 'archive-modal-wrapper');
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.gap = '10px';
+
+      // 顶部工具栏（筛选、搜索、排序）
+      var toolbar = el('div', 'archive-toolbar');
+      toolbar.style.display = 'flex';
+      toolbar.style.alignItems = 'center';
+      toolbar.style.justifyContent = 'space-between';
+      toolbar.style.gap = '8px';
+      toolbar.style.flexWrap = 'wrap';
+      toolbar.style.padding = '4px 0 8px 0';
+      toolbar.style.borderBottom = '1px solid var(--mcode-border)';
+
+      // 搜索框
+      var searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.placeholder = '搜索标题或文件名...';
+      searchInput.style.flex = '1';
+      searchInput.style.minWidth = '140px';
+      searchInput.style.height = '28px';
+      searchInput.style.padding = '0 8px';
+      searchInput.style.fontSize = '12px';
+      searchInput.style.borderRadius = '6px';
+      searchInput.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
+      searchInput.style.border = '1px solid var(--mcode-border)';
+      searchInput.style.color = 'var(--mcode-text)';
+      searchInput.addEventListener('input', function (e) {
+        searchQuery = e.target.value.trim().toLowerCase();
+        renderList();
+      });
+
+      // 平台筛选
+      var agentSelect = document.createElement('select');
+      agentSelect.style.height = '28px';
+      agentSelect.style.padding = '0 6px';
+      agentSelect.style.fontSize = '12px';
+      agentSelect.style.borderRadius = '6px';
+      agentSelect.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
+      agentSelect.style.border = '1px solid var(--mcode-border)';
+      agentSelect.style.color = 'var(--mcode-text)';
+      var allOp = el('option', null, '全部平台 (' + allArchives.length + ')');
+      allOp.value = '';
+      agentSelect.appendChild(allOp);
+      agentList.forEach(function (ag) {
+        var count = allArchives.filter(function (x) { return x.agent === ag; }).length;
+        var op = el('option', null, ag + ' (' + count + ')');
+        op.value = ag;
+        agentSelect.appendChild(op);
+      });
+      agentSelect.addEventListener('change', function (e) {
+        filterAgent = e.target.value;
+        renderList();
+      });
+
+      // 排序选择
+      var sortSelect = document.createElement('select');
+      sortSelect.style.height = '28px';
+      sortSelect.style.padding = '0 6px';
+      sortSelect.style.fontSize = '12px';
+      sortSelect.style.borderRadius = '6px';
+      sortSelect.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
+      sortSelect.style.border = '1px solid var(--mcode-border)';
+      sortSelect.style.color = 'var(--mcode-text)';
+      [
+        { id: 'updated_desc', label: '按时间倒序' },
+        { id: 'updated_asc', label: '按时间正序' },
+        { id: 'msgs_desc', label: '按消息数最多' }
+      ].forEach(function (opt) {
+        var op = el('option', null, opt.label);
+        op.value = opt.id;
+        sortSelect.appendChild(op);
+      });
+      sortSelect.addEventListener('change', function (e) {
+        sortOrder = e.target.value;
+        renderList();
+      });
+
+      var controlsGroup = el('div');
+      controlsGroup.style.display = 'flex';
+      controlsGroup.style.gap = '6px';
+      controlsGroup.appendChild(agentSelect);
+      controlsGroup.appendChild(sortSelect);
+
+      toolbar.appendChild(searchInput);
+      toolbar.appendChild(controlsGroup);
+      wrapper.appendChild(toolbar);
+
+      // 列表容器
+      var listContainer = el('div', 'archive-modal-content');
+      listContainer.style.maxHeight = '380px';
+      listContainer.style.overflowY = 'auto';
+      listContainer.style.display = 'flex';
+      listContainer.style.flexDirection = 'column';
+      listContainer.style.gap = '8px';
+      listContainer.style.padding = '4px 0';
+      wrapper.appendChild(listContainer);
+
+      function renderList() {
+        listContainer.textContent = '';
+        var filtered = allArchives.filter(function (a) {
+          if (filterAgent && a.agent !== filterAgent) return false;
+          if (searchQuery) {
+            var matchTitle = String(a.title || '').toLowerCase().indexOf(searchQuery) >= 0;
+            var matchAgent = String(a.agent || '').toLowerCase().indexOf(searchQuery) >= 0;
+            var matchFile = String(a.file || '').toLowerCase().indexOf(searchQuery) >= 0;
+            if (!matchTitle && !matchAgent && !matchFile) return false;
+          }
+          return true;
+        });
+
+        if (sortOrder === 'updated_desc') {
+          filtered.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
+        } else if (sortOrder === 'updated_asc') {
+          filtered.sort(function (a, b) { return (a.updated || 0) - (b.updated || 0); });
+        } else if (sortOrder === 'msgs_desc') {
+          filtered.sort(function (a, b) { return (b.msgCount || 0) - (a.msgCount || 0); });
+        }
+
+        if (!filtered.length) {
+          var empty = el('div', 'empty', '无匹配的归档会话记录');
+          empty.style.padding = '32px 0';
+          listContainer.appendChild(empty);
+          return;
+        }
+
+        filtered.forEach(function (arch) {
           var row = el('div', 'archive-item-row');
           row.style.display = 'flex';
           row.style.alignItems = 'center';
@@ -6174,14 +6296,16 @@
             }).catch(function (err) { toast(err.message, true); });
           });
           row.appendChild(viewBtn);
-          body.appendChild(row);
+          listContainer.appendChild(row);
         });
       }
 
-      $('#modal-title').textContent = '📦 归档会话记录' + (curAgent ? ' (' + curAgent + ')' : '');
+      renderList();
+
+      $('#modal-title').textContent = '📦 全部归档会话 (' + allArchives.length + ')';
       var form = $('#modal-form');
       form.textContent = '';
-      form.appendChild(body);
+      form.appendChild(wrapper);
       $('#modal-err').style.display = 'none';
       $('#modal-ok').textContent = '关闭';
       modalResolver = { resolve: function () {}, inputs: {}, form: form };
