@@ -2512,6 +2512,38 @@ export async function start(context) {
         send(200, data);
         return;
       }
+      if (request.method === 'GET' && p === '/api/chat/archives') {
+        const agent = url.searchParams.get('agent') ? safeName(url.searchParams.get('agent'), 'agent') : null;
+        let files = [];
+        try {
+          files = await readdir(archivesDir);
+        } catch {
+          files = [];
+        }
+        const archives = [];
+        for (const f of files) {
+          if (!f.endsWith('.json')) continue;
+          if (agent && !f.startsWith(`${agent}-`)) continue;
+          try {
+            const content = await readFile(join(archivesDir, f), 'utf-8');
+            const data = JSON.parse(content);
+            archives.push({
+              id: data.id,
+              agent: data.agent,
+              title: data.title || '归档会话',
+              created: data.created,
+              updated: data.updated,
+              msgCount: (data.messages || []).length,
+              file: f,
+            });
+          } catch {
+            // ignore broken file
+          }
+        }
+        archives.sort((a, b) => (b.updated || 0) - (a.updated || 0));
+        send(200, { archives });
+        return;
+      }
       if (request.method === 'GET' && p === '/api/avatars') {
         send(200, await loadAvatars());
         return;
@@ -2678,6 +2710,37 @@ export async function start(context) {
             ok: true,
             thread: target,
             activeSessionId: sessionId,
+            sessions,
+          });
+          return;
+        }
+        if (p === '/api/chat/archive-session') {
+          const agent = safeName(body.agent, 'agent');
+          const sessionId = safeName(body.sessionId, 'sessionId');
+          const entry = getAgentEntry(agent, false);
+          if (!entry) throw badReq('平台不存在');
+          const idx = (entry.sessions || []).findIndex((s) => s.id === sessionId);
+          if (idx === -1) throw badReq('会话不存在');
+          const [removed] = entry.sessions.splice(idx, 1);
+          await archiveSession(removed);
+          if (entry.activeSessionId === sessionId) {
+            entry.activeSessionId = entry.sessions[0]?.id || null;
+          }
+          saveConv();
+          const activeThread = getThread(agent, false, entry.activeSessionId);
+          const sessions = (entry.sessions || []).map((s) => ({
+            id: s.id,
+            title: s.title || '会话',
+            created: s.created,
+            updated: s.updated,
+            unread: s.unread || 0,
+            msgCount: (s.messages || []).length,
+            cliSessionId: s.cliSessionId || null,
+          }));
+          send(200, {
+            ok: true,
+            thread: activeThread,
+            activeSessionId: entry.activeSessionId,
             sessions,
           });
           return;
