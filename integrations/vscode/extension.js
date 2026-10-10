@@ -120,15 +120,17 @@ function postJsonRpc(urlStr, token, method = 'ping', params = {}, timeoutMs = 30
       const u = new URL(urlStr);
       const isHttps = u.protocol === 'https:';
       const client = isHttps ? https : http;
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 'check-' + Date.now(), method, params });
+      const bodyBuf = Buffer.from(body, 'utf-8');
       const headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'multi-agent-hub-vscode/0.9.9'
+        'User-Agent': 'multi-agent-hub-vscode/0.9.9',
+        'Content-Length': String(bodyBuf.length)
       };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      const body = JSON.stringify({ jsonrpc: '2.0', id: 'check-' + Date.now(), method, params });
       const req = client.request(u, { method: 'POST', headers, timeout: timeoutMs }, (res) => {
         let resBody = '';
         res.on('data', (chunk) => { resBody += chunk; });

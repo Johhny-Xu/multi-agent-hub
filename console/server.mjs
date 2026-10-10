@@ -82,7 +82,9 @@ const DISPATCH_OVERRIDES = { traecode: { tool: 'trae_delegate', asyncFlag: { wai
  */
 const MODEL_CATALOG = {
   codearts: [
-    { id: '', name: '默认（继承 CodeArts 已配置模型）', default: true },
+    { id: '', name: '默认（继承 CodeArts 配置）', default: true },
+    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2 (HuaweiCloud MaaS)', tag: '已验证' },
+    { id: 'huaweicloud-maas/GLM-5.2-SFT', name: 'GLM-5.2-SFT', tag: '已验证' },
   ],
   'github-copilot': [
     { id: 'auto', name: 'Auto (Copilot 自动选型)', default: true },
