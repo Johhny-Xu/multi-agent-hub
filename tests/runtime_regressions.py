@@ -327,6 +327,14 @@ class RuntimeRegressions(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "请勿重新派发"):
                 worker.trae_run("synthetic", "", "", timeout=2)
 
+    def test_gateway_accepts_completed_and_ok_status(self):
+        for result_status in ("ok", "success", "completed", "done"):
+            with self.subTest(result_status=result_status), self.gateway({"data": {"session": {"status": "completed", "sessionId": "sid-123"}, "result": {"status": result_status, "text": "generated answer"}}}):
+                text, sid = worker.trae_run("synthetic", "", "", timeout=2)
+                self.assertEqual(text, "generated answer")
+                self.assertEqual(sid, "sid-123")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

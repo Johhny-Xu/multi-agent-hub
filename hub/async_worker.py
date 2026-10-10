@@ -228,7 +228,7 @@ def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT, *, gat
             raise RuntimeError("Trae 网关返回了无效回答格式")
         # Legacy blocking /v1/chat returned a final nonempty result.text with no
         # status. Explicit running/unknown states can never override that rule.
-        if (statuses and any(status not in {"completed", "done", "finished"} for status in statuses)) or (not statuses and not text.strip()):
+        if (statuses and any(status not in {"completed", "done", "finished", "ok", "success"} for status in statuses)) or (not statuses and not text.strip()):
             raise RuntimeError("Trae 网关状态不确定，继续查询原任务；请勿重新派发: " + ",".join(statuses or ["missing"]))
         sid = sess.get("sessionId") or session_id or ""
         if not text.strip() and os.path.exists(dom_read):

@@ -11,6 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### TraeCode 网关状态与能力识别修复 (`traecode` / `hub`)
+
+- **修复 Trae 网关终态校验误报**：解决 Trae 网关返回 `session.status="completed"` 与 `result.status="ok"` 时，因白名单缺少 `ok` / `success` 被误判定为“网关状态不确定”并抛出 `RuntimeError: Trae 网关状态不确定，继续查询原任务；请勿重新派发: completed,ok` 的根本问题。将 `ok` 和 `success` 纳入正常完成终态集合，确保任务结果顺利落盘并标记为 `completed`。
+- **TraeCode 网关通道能力识别加固**：
+  - `availability_store.py` 识别 `traecode`（及声明了 `gateway` 的 Worker）为专用网关/桌面通道，不再将其误判为 `cli_not_configured`（“此 worker 未配置无头 CLI”），正确置为 `enabled: true, code: "ready"`。
+  - `agent_hub.py` 中 `hub_capabilities` 将 TraeCode 的 `configured` 字段正确置为 `true`。
+  - `hub_status`（`hub_list_agents`）输出明确显示 `| 调度通道: TraeClaw 网关`，彻底消除模型在推理前误判该 Worker 无法使用的歧义。
+- **回归测试覆盖**：在 `tests/runtime_regressions.py` 中新增 `test_gateway_accepts_completed_and_ok_status` 测试用例，在 `tests/capability_availability_regressions.py` 中增加 TraeCode 网关免 CLI 就绪断言。
+- **远程服务热重载验证**：修改已同步并部署至远程服务器 `127.0.0.1`，经 `ask.mjs trae` 真实调用验证顺利通过。
+
+
 ### 子代理模型目录精简与去重 (Model Catalog Optimization)
 
 - **不可用生图模型清理**：移除 `codebuddy-cn` 中无法用于代码/文本生成的非文本生图/图生图模型（`hunyuan-image-alpha`、`hunyuan-image-alpha-edit`）。

@@ -116,7 +116,12 @@ def local_availability(worker, profile, model, directory=None):
     cli = profile.get("cli")
     code, reason = None, None
     if not isinstance(cli, list) or not cli:
-        code, reason = "cli_not_configured", "此 worker 未配置无头 CLI。"
+        if worker in ("traecode", "trae"):
+            result["reason"] = "已配置 TraeClaw 网关；此查询不验证登录或执行推理。"
+        elif profile.get("gateway"):
+            result["reason"] = "已配置专用网关通道；此查询不验证登录或执行推理。"
+        else:
+            code, reason = "cli_not_configured", "此 worker 未配置无头 CLI。"
     elif profile.get("disabled") is True:
         code, reason = "profile_disabled", "本机配置已禁用此 worker。"
     else:
