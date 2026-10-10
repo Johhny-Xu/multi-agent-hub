@@ -12,6 +12,7 @@ MAX_ATTACHMENT_BYTES = 1024 * 1024
 MAX_ATTACHMENTS = 8
 OPTIONS_SCHEMA = {
     "thinking": {"type": "string", "enum": ["default", "on", "off"], "default": "default"},
+    "effort": {"type": "string", "enum": ["low", "medium", "high", "max"]},
     "stream": {"type": "boolean", "default": False},
     "attachments": {"type": "array", "maxItems": MAX_ATTACHMENTS, "items": {
         "type": "object", "properties": {"name": {"type": "string"}, "mime_type": {"type": "string"}, "data_base64": {"type": "string"}},
@@ -174,8 +175,8 @@ def prepare_task(agent, profile, args, directory):
     declared = set((profile.get("models") or {}).values())
     if model and declared and model not in declared and profile.get("allow_unlisted_models") is not True:
         raise UnsupportedCapability("UNSUPPORTED: 所选模型未在本机 worker 配置中声明")
-    if any(args.get(key) is not None for key in ("effort", "contextTier", "autoTier")):
-        raise UnsupportedCapability("UNSUPPORTED: effort/contextTier/autoTier 不是已验证的 CLI 控制；请使用 thinking")
+    if any(args.get(key) is not None for key in ("contextTier", "autoTier")):
+        raise UnsupportedCapability("UNSUPPORTED: contextTier/autoTier 不是已验证的 CLI 控制")
     if args.get("extra_args") is not None:
         values = args["extra_args"]
         if not isinstance(values, list) or any(not isinstance(item, str) for item in values):

@@ -1,7 +1,7 @@
 {
   "name": "multi-agent-hub",
   "displayName": "multi-agent-hub",
-  "version": "0.9.9",
+  "version": "0.9.9.1",
   "description": "Connect Antigravity to a selected local or remote Hub with native worker subagents and task workflows.",
   "logo": "assets/icon.svg",
   "suggestedPrompts": [
