@@ -111,6 +111,7 @@ const MODEL_CATALOG = {
     { id: 'kimi-k3', name: 'Kimi-K3' },
     { id: 'kimi-k2.6', name: 'Kimi-K2.6' },
     { id: 'kimi-k2.8-preview', name: 'Kimi-K2.8-Preview' },
+    { id: 'grok-4.7', name: 'Grok-4.7' },
     { id: 'custom-local:trae', name: 'Trae (9router)' },
   ],
   'codebuddy-cn': [
@@ -149,9 +150,13 @@ const MODEL_CATALOG = {
   ],
   antigravity: [
     { id: 'gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash Medium', default: true },
+    { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High' },
+    { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
     { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', tag: '即将下线' },
+    { id: 'gemini-3.7-flash-medium', name: 'Gemini 3.7 Flash Medium' },
     { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', tag: '即将下线' },
     { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro' },
+    { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro High' },
     { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)' },
     { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
     { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' },
@@ -173,6 +178,7 @@ const MODEL_CATALOG = {
     { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K/1M', default: true },
     { id: 'MiniMax-M2.7', name: 'MiniMax-M2.7', tag: '204.8K' },
     { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax-M2.7-highspeed', tag: '204.8K · 高速' },
+    { id: 'MiniMax-M2.5', name: 'MiniMax-M2.5', tag: '245K' },
   ],
   zcode: [
     { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },
@@ -764,12 +770,63 @@ export async function start(context) {
     return check;
   }
   function capabilityCatalog(document) {
-    return Object.fromEntries(Object.entries(document?.workers || {}).map(([agent, worker]) => [agent, worker.models.map((model) => {
-      const label = (MODEL_CATALOG[agent] || []).find((entry) => entry.id === model.id);
-      return { id: model.id, name: label?.name || model.id, default: worker.default_model === model.id || (!worker.default_model && label?.default === true),
-        available: worker.availability.enabled && model.availability.enabled,
-        reason: model.availability.reason || worker.availability.reason, capability: model };
-    })]));
+    if (!document?.workers) return {};
+    return Object.fromEntries(Object.entries(document.workers).map(([agent, worker]) => {
+      const catalogList = MODEL_CATALOG[agent] || [];
+      const workerModels = worker.models || [];
+      const defaultModelId = worker.default_model || catalogList.find((m) => m.default)?.id || (workerModels.find((m) => m.default)?.id) || null;
+
+      // 1. 以 MODEL_CATALOG 为基准（若该 worker 存在预设目录），完整保留所有模型及 credits、tag、default 属性
+      const models = catalogList.map((cat) => {
+        const matched = workerModels.find((wm) => wm.id === cat.id || (wm.aliases && wm.aliases.includes(cat.id)));
+        const isDefault = (cat.id === defaultModelId) || (!defaultModelId && cat.default === true);
+        const isAvailable = matched
+          ? (worker.availability.enabled && matched.availability.enabled)
+          : (worker.availability.enabled);
+        const reason = matched
+          ? (matched.availability.reason || worker.availability.reason || '')
+          : (worker.availability.enabled ? '' : (worker.availability.reason || 'Worker 离线或不可用'));
+        const capability = matched || {
+          id: cat.id,
+          aliases: [],
+          availability: { enabled: isAvailable, reason },
+          thinking: { allowed: ['default', 'on', 'off'], reasons: {} },
+          stream: { supported: true },
+          attachments: { image: { supported: true }, file: { supported: true } },
+        };
+        return {
+          id: cat.id,
+          name: cat.name || cat.id,
+          tag: cat.tag,
+          credits: cat.credits,
+          default: isDefault,
+          available: isAvailable,
+          reason,
+          capability,
+        };
+      });
+
+      // 2. 将 worker.models 中用户自定义或远端特有但未在 MODEL_CATALOG 声明的模型追加进去
+      for (const wm of workerModels) {
+        if (!wm.id) continue;
+        if (!models.some((m) => m.id === wm.id || (wm.aliases && wm.aliases.includes(m.id)))) {
+          const isDefault = (wm.id === defaultModelId);
+          const label = catalogList.find((entry) => entry.id === wm.id);
+          models.push({
+            id: wm.id,
+            name: label?.name || wm.id,
+            tag: label?.tag,
+            credits: label?.credits,
+            default: isDefault,
+            available: worker.availability.enabled && wm.availability.enabled,
+            reason: wm.availability.reason || worker.availability.reason || '',
+            capability: wm,
+          });
+        }
+      }
+
+      return [agent, models];
+    }));
   }
 
   // ---------------- 单一域服务: 所有变更都经这里, 成功(远端已提交)后广播

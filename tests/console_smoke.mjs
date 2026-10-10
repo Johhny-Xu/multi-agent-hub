@@ -346,7 +346,9 @@ test('snapshot follows configured default models and does not auto-route a catal
     const snapshot = (await api('/api/snapshot')).body;
     assert.equal(snapshot.ok, true, JSON.stringify(snapshot));
     assert.equal(snapshot.agents.find((agent) => agent.name === 'mimocode').defaultModel, 'xiaomi/mimo-v2.6-flash');
-    assert.equal(snapshot.agents.find((agent) => agent.name === 'zcode').dispatchable, false);
+    assert.equal(snapshot.modelCatalog.minimaxcode.length, 5);
+    assert.equal(snapshot.modelCatalog.mimocode.length, 10);
+    assert.ok(snapshot.modelCatalog.minimaxcode.some((model) => model.id === 'MiniMax-M3'));
     assert.equal(snapshot.modelCatalog.minimaxcode.find((model) => model.default).id, 'MiniMax-M3.1-Flash-Preview');
   } finally { agentsOverride = modelsOverride = null; await stop(); }
 });

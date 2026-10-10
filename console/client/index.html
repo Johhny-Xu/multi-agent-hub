@@ -3771,7 +3771,7 @@
       var ag = state.snap.agents.find(function (a) { return a.name === agent; });
       if (ag && ag.models && ag.models.length) {
         return ag.models.map(function (m) {
-          return { id: m.id || '', name: m.alias || m.name || m.id || '默认', default: !!m.default, available: true };
+          return { id: m.id || '', name: m.alias || m.name || m.id || '默认', default: !!m.default, available: true, credits: m.credits, tag: m.tag, capability: m.capability };
         });
       }
     }
@@ -3780,10 +3780,29 @@
 
   function getModelCapability(agent, model) {
     var worker = state.snap && state.snap.capabilities && state.snap.capabilities.workers[agent];
-    var selected = worker && worker.models.find(function (entry) { return entry.id === model || entry.aliases.indexOf(model) >= 0; });
-    if (!worker || !selected) return { available: false, reason: state.snap && state.snap.capabilitiesError || '尚未取得当前 Hub 的模型能力信息', thinking: { allowed: ['default'], reasons: {} }, stream: { supported: false }, attachments: {} };
-    return Object.assign({}, selected, { available: worker.configured && worker.availability.enabled && selected.availability.enabled,
-      reason: selected.availability.reason || worker.availability.reason || '' });
+    var selected = worker && worker.models.find(function (entry) { return entry.id === model || (entry.aliases && entry.aliases.indexOf(model) >= 0); });
+    if (selected) {
+      return Object.assign({}, selected, {
+        available: worker.configured && worker.availability.enabled && selected.availability.enabled,
+        reason: selected.availability.reason || worker.availability.reason || ''
+      });
+    }
+    var catList = getModelCatalog(agent);
+    var catEntry = catList.find(function (m) { return m.id === model; });
+    if (catEntry && catEntry.capability) {
+      return Object.assign({}, catEntry.capability, {
+        available: catEntry.available !== false,
+        reason: catEntry.reason || ''
+      });
+    }
+    if (!worker) return { available: false, reason: state.snap && state.snap.capabilitiesError || '尚未取得当前 Hub 的模型能力信息', thinking: { allowed: ['default'], reasons: {} }, stream: { supported: false }, attachments: {} };
+    return {
+      available: worker.configured && worker.availability.enabled,
+      reason: worker.availability.reason || '',
+      thinking: { allowed: ['default', 'on', 'off'], reasons: {} },
+      stream: { supported: true },
+      attachments: { image: { supported: true }, file: { supported: true } }
+    };
   }
 
   function getAgentPrefs(agent) {
