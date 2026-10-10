@@ -531,14 +531,38 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 4px;
   }
-  .platform-header-title {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--mcode-text);
+  .platform-header-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    min-width: 0;
+  }
+  .platform-header-title-btn {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mcode-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 3px 6px;
+    cursor: pointer;
+    transition: all .15s ease;
+    user-select: none;
+  }
+  .platform-header-title-btn:hover {
+    background: var(--mcode-surface-hover);
+    border-color: var(--mcode-border);
+    color: var(--mcode-accent);
+  }
+  .platform-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
   .icon-toggle-btn {
     width: 26px;
@@ -664,6 +688,7 @@
     border: 1px solid transparent;
     user-select: none;
     position: relative;
+    gap: 6px;
   }
   .session-tree-item:hover {
     background: var(--mcode-surface-hover);
@@ -689,14 +714,42 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 130px;
+    flex: 1;
+    min-width: 0;
+  }
+  .session-tree-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
   }
   .session-tree-meta {
     font-size: 10px;
     color: var(--mcode-text-subtle);
     font-variant-numeric: tabular-nums;
-    margin-left: 6px;
     white-space: nowrap;
+  }
+  .session-archive-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--mcode-text-subtle);
+    opacity: 0.7;
+    transition: all .15s ease;
+  }
+  .session-tree-item:hover .session-archive-icon {
+    opacity: 1;
+    color: var(--mcode-text);
+  }
+  .session-archive-icon:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444 !important;
+    transform: scale(1.1);
   }
   .session-tree-new-btn {
     display: flex;
@@ -2899,13 +2952,23 @@
           <aside class="chat-threads cb-platforms-sidebar" id="chat-threads">
             <div class="platform-sidebar-header">
               <div class="platform-header-top">
-                <span class="platform-header-title">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4h2v4zm0-6h-2V7h2v4z"/></svg>
-                  子代理平台
-                </span>
-                <button id="btn-collapse-sidebar" class="icon-toggle-btn" type="button" title="折叠列表">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-                </button>
+                <div class="platform-header-left">
+                  <button id="btn-toggle-sidebar-collapse" class="platform-header-title-btn" type="button" title="点击展开/收起左侧边栏">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4h2v4zm0-6h-2V7h2v4z"/></svg>
+                    <span>子代理平台</span>
+                  </button>
+                  <button id="btn-expand-all-tree" class="icon-toggle-btn" type="button" title="一键展开所有平台会话">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg>
+                  </button>
+                  <button id="btn-collapse-all-tree" class="icon-toggle-btn" type="button" title="一键收起所有平台会话">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+                  </button>
+                </div>
+                <div class="platform-header-actions">
+                  <button id="btn-view-archives" class="icon-toggle-btn" type="button" title="查看归档会话">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/></svg>
+                  </button>
+                </div>
               </div>
               <div class="platform-search-wrap">
                 <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -3648,7 +3711,8 @@
 
       item.addEventListener('click', function () {
         if (!chat.expandedAgents) chat.expandedAgents = {};
-        chat.expandedAgents[name] = true;
+        // 点击卡片任意区域：切换折叠状态
+        chat.expandedAgents[name] = !isExpanded;
         selectPlatform(name);
       });
       group.appendChild(item);
@@ -3661,11 +3725,35 @@
           var sItem = el('div', 'session-tree-item' + (isSessActive ? ' active' : ''));
           var titleEl = el('span', 'session-tree-title', s.title || '会话');
           sItem.appendChild(titleEl);
+
+          var rightBox = el('div', 'session-tree-right');
           if (s.msgCount !== undefined) {
-            sItem.appendChild(el('span', 'session-tree-meta', s.msgCount + '条'));
+            rightBox.appendChild(el('span', 'session-tree-meta', s.msgCount + '条'));
           }
+          var archiveBtn = el('span', 'session-archive-icon', '📦');
+          archiveBtn.title = '双击归档此会话';
+          archiveBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+          });
+          archiveBtn.addEventListener('dblclick', function (e) {
+            e.stopPropagation();
+            if (!confirm('确定将该会话归档吗？')) return;
+            api('/api/chat/archive-session', { agent: name, sessionId: s.id }).then(function (r) {
+              chat.sessions = r.sessions || [];
+              chat.activeSessionId = r.activeSessionId;
+              chat.full[name] = r.thread;
+              toast('会话已归档');
+              loadThreads();
+            }).catch(function (err) { toast(err.message, true); });
+          });
+          rightBox.appendChild(archiveBtn);
+          sItem.appendChild(rightBox);
+
           sItem.addEventListener('click', function (e) {
             e.stopPropagation();
+            chat.activeAgent = name;
+            chat.activeSessionId = s.id;
+            renderPlatformList();
             selectPlatform(name, s.id);
           });
           tree.appendChild(sItem);
@@ -3842,6 +3930,7 @@
       var bigAv = el('div', 'empty-avatar');
       bigAv.style.background = vis.bg;
       bigAv.textContent = vis.code;
+      applyAvatar(bigAv, agentName);
       emptyBox.appendChild(bigAv);
 
       var title = el('h2', 'empty-title', agentName);
@@ -5923,10 +6012,105 @@
   }
 
   // 侧栏折叠/展开与返回
-  var collapseBtn = $('#btn-collapse-sidebar');
-  if (collapseBtn) collapseBtn.addEventListener('click', function () {
-    togglePlatformsSidebar(false);
+  var toggleSidebarBtn = $('#btn-toggle-sidebar-collapse');
+  if (toggleSidebarBtn) toggleSidebarBtn.addEventListener('click', function () {
+    togglePlatformsSidebar();
   });
+  var expandAllBtn = $('#btn-expand-all-tree');
+  if (expandAllBtn) expandAllBtn.addEventListener('click', function () {
+    if (!chat.expandedAgents) chat.expandedAgents = {};
+    getPlatformList().forEach(function (a) { chat.expandedAgents[a.name] = true; });
+    renderPlatformList();
+    toast('已展开所有平台会话');
+  });
+  var collapseAllBtn = $('#btn-collapse-all-tree');
+  if (collapseAllBtn) collapseAllBtn.addEventListener('click', function () {
+    if (!chat.expandedAgents) chat.expandedAgents = {};
+    getPlatformList().forEach(function (a) { chat.expandedAgents[a.name] = false; });
+    renderPlatformList();
+    toast('已收起所有平台会话');
+  });
+  var viewArchivesBtn = $('#btn-view-archives');
+  if (viewArchivesBtn) viewArchivesBtn.addEventListener('click', function () {
+    openArchivesViewer();
+  });
+
+  function openArchivesViewer() {
+    var curAgent = chat.activeAgent || '';
+    api('/api/chat/archives' + (curAgent ? '?agent=' + encodeURIComponent(curAgent) : '')).then(function (res) {
+      var list = (res && res.archives) || [];
+      var body = el('div', 'archive-modal-content');
+      body.style.maxHeight = '420px';
+      body.style.overflowY = 'auto';
+      body.style.display = 'flex';
+      body.style.flexDirection = 'column';
+      body.style.gap = '8px';
+      body.style.padding = '4px 0';
+
+      if (!list.length) {
+        var empty = el('div', 'empty', curAgent ? ('平台 ' + curAgent + ' 暂无归档会话') : '暂无任何归档会话');
+        empty.style.padding = '24px 0';
+        body.appendChild(empty);
+      } else {
+        list.forEach(function (arch) {
+          var row = el('div', 'archive-item-row');
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.justifyContent = 'space-between';
+          row.style.padding = '8px 12px';
+          row.style.borderRadius = '8px';
+          row.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
+          row.style.border = '1px solid var(--mcode-border)';
+          row.style.gap = '10px';
+
+          var info = el('div');
+          info.style.minWidth = '0';
+          info.style.flex = '1';
+          var titleLine = el('div');
+          titleLine.style.fontWeight = '500';
+          titleLine.style.fontSize = '13px';
+          titleLine.style.color = 'var(--mcode-text)';
+          titleLine.textContent = '[' + (arch.agent || '未知') + '] ' + (arch.title || '归档会话');
+          var metaLine = el('div');
+          metaLine.style.fontSize = '11px';
+          metaLine.style.color = 'var(--mcode-text-subtle)';
+          metaLine.style.marginTop = '2px';
+          metaLine.textContent = (arch.msgCount || 0) + '条消息 · 归档时间: ' + (arch.updated ? new Date(arch.updated).toLocaleString() : '未知');
+          info.appendChild(titleLine);
+          info.appendChild(metaLine);
+          row.appendChild(info);
+
+          var viewBtn = btn('查看内容', 'small', function () {
+            api('/api/artifact?path=' + encodeURIComponent('data/archives/' + arch.file)).then(function (art) {
+              try {
+                var sessObj = JSON.parse(art.text);
+                var msgsText = (sessObj.messages || []).map(function (m) {
+                  return '[' + (m.role === 'me' ? '我' : (m.role === 'sys' ? '系统' : arch.agent)) + '] ' + (m.text || '');
+                }).join('\n\n---\n\n');
+                showSyncResult(arch.agent + ' · ' + (arch.title || '归档会话'), msgsText || '该会话无消息记录');
+              } catch (e) {
+                showSyncResult(arch.agent, art.text);
+              }
+            }).catch(function (err) { toast(err.message, true); });
+          });
+          row.appendChild(viewBtn);
+          body.appendChild(row);
+        });
+      }
+
+      $('#modal-title').textContent = '📦 归档会话记录' + (curAgent ? ' (' + curAgent + ')' : '');
+      var form = $('#modal-form');
+      form.textContent = '';
+      form.appendChild(body);
+      $('#modal-err').style.display = 'none';
+      $('#modal-ok').textContent = '关闭';
+      modalResolver = { resolve: function () {}, inputs: {}, form: form };
+      $('#modal').showModal();
+    }).catch(function (err) {
+      toast('获取归档列表失败: ' + err.message, true);
+    });
+  }
+
   var expandBtn = $('#btn-expand-sidebar');
   if (expandBtn) expandBtn.addEventListener('click', function () {
     togglePlatformsSidebar(true);
