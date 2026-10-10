@@ -311,7 +311,7 @@
     from { opacity: 0; transform: scale(0.96) translateY(-8px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
   }
-  dialog .dlg-head { padding: 18px 24px; border-bottom: 1px solid var(--mcode-border); }
+  dialog .dlg-head { padding: 18px 24px; border-bottom: 1px solid var(--mcode-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   dialog .dlg-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
   dialog form { padding: 20px 24px; display: grid; gap: 14px; max-height: 70vh; overflow-y: auto; }
   dialog .dlg-foot {
@@ -3413,7 +3413,10 @@
 </main>
 
 <dialog id="modal" aria-labelledby="modal-title">
-  <div class="dlg-head"><h2 id="modal-title"></h2></div>
+  <div class="dlg-head">
+    <h2 id="modal-title"></h2>
+    <div id="modal-head-actions" style="margin-left:auto;display:flex;align-items:center;gap:8px"></div>
+  </div>
   <form id="modal-form" method="dialog"></form>
   <div class="dlg-foot">
     <span class="err-note" id="modal-err" role="alert"></span>
@@ -3509,6 +3512,8 @@
   var modalExtraAction = null;
   function openModal(title, fields, submitLabel, extraBtn) {
     $('#modal-title').textContent = title;
+    var headActions = $('#modal-head-actions');
+    if (headActions) headActions.textContent = '';
     var form = $('#modal-form');
     form.textContent = '';
     var inputs = {};
@@ -3564,6 +3569,8 @@
   }
   function closeModal(result) {
     modalExtraAction = null;
+    var headActions = $('#modal-head-actions');
+    if (headActions) headActions.textContent = '';
     if (modalResolver) { var r = modalResolver; modalResolver = null; $('#modal').close(); r.resolve(result); }
   }
   $('#modal-cancel').addEventListener('click', function () { closeModal(null); });
@@ -3724,6 +3731,8 @@
       });
       // 直接借用模态: 内容区替换
       $('#modal-title').textContent = '收件箱 · ' + agent.name;
+      var headActions = $('#modal-head-actions');
+      if (headActions) headActions.textContent = '';
       var form = $('#modal-form');
       form.textContent = '';
       form.appendChild(body);
@@ -6625,6 +6634,7 @@
                 allArchives = allArchives.filter(function (x) { return x.file !== arch.file; });
                 $('#modal-title').textContent = '📦 全部归档会话 (' + allArchives.length + ')';
                 renderList();
+                renderHeadActions();
                 chat.activeAgent = arch.agent;
                 chat.activeSessionId = arch.id;
                 loadThreads();
@@ -6643,6 +6653,7 @@
                 allArchives = allArchives.filter(function (x) { return x.file !== arch.file; });
                 $('#modal-title').textContent = '📦 全部归档会话 (' + allArchives.length + ')';
                 renderList();
+                renderHeadActions();
               }).catch(function (err) {
                 toast('删除失败: ' + err.message, true);
               });
@@ -6657,7 +6668,48 @@
         });
       }
 
+      function renderHeadActions() {
+        var headActions = $('#modal-head-actions');
+        if (!headActions) return;
+        headActions.textContent = '';
+        if (!allArchives.length) return;
+
+        var delAllBtn = btn('一键删除', 'danger small', function () {
+          headActions.textContent = '';
+          var confirmPrompt = el('span', null, '确定全删？');
+          confirmPrompt.style.fontSize = '12px';
+          confirmPrompt.style.color = 'var(--mcode-danger, #f85149)';
+          confirmPrompt.style.fontWeight = '500';
+
+          var confirmBtn = btn('确认删除', 'danger small', function () {
+            withBusy(confirmBtn, function () {
+              return api('/api/chat/delete-all-archives', {}).then(function () {
+                allArchives = [];
+                $('#modal-title').textContent = '📦 全部归档会话 (0)';
+                renderList();
+                renderHeadActions();
+                toast('已清空全部归档会话');
+              }).catch(function (err) {
+                toast('删除失败: ' + err.message, true);
+                renderHeadActions();
+              });
+            });
+          });
+
+          var cancelBtn = btn('取消', 'small', function () {
+            renderHeadActions();
+          });
+
+          headActions.appendChild(confirmPrompt);
+          headActions.appendChild(confirmBtn);
+          headActions.appendChild(cancelBtn);
+        });
+
+        headActions.appendChild(delAllBtn);
+      }
+
       renderList();
+      renderHeadActions();
 
       $('#modal-title').textContent = '📦 全部归档会话 (' + allArchives.length + ')';
       var form = $('#modal-form');
