@@ -11,6 +11,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.9.9.1] - 2026-10-10
+
+### 华为 CodeArts 官方模型目录与限时福利 (`codearts`)
+
+- **全量模型目录补全**：对照华为 CodeArts 官方客户端下拉列表，完整补齐“限时福利”与“内置”两类模型。
+  - **限时福利**：新增 `deepseek-v4-flash-0731`、`glm-5.3-flash`、`deepseek-v4-pro-0813`、`deepseek-v4.1-flash`，标记免积分 `[免费]` 及专属紫色 `[限时福利]` 胶囊。
+  - **内置模型**：同步标定官方实测积分倍率 `GLM-5.2`（`0.70x`，默认）、`GLM-5.2-ArkTS-SPARK`（`0.70x`）、`OpenPangu-2.0-Pro`（`0.70x`）、`OpenPangu-2.0-Flash`（`0.35x`）。
+- 服务端 `agents.json` 别名表与 `server.mjs` 自动映射短 ID 与 `huaweicloud-maas/*` 全称，支持一键切换。
+
+### TraeCode 模型倍率与营销折扣对齐 (`traecode`)
+
+- **官方倍率精准对齐**：根据 TraeCode 桌面版官方模型清单，全量更新 27 个可用模型的倍率与营销标签：
+  - `GLM-5.3-FlashX`（`0.31x`，默认）、`GLM-5.3-Flash`（`0.06x`）。
+  - GLM 智谱系列（`GLM-5.3` / `GLM-5.2` / `GLM-5.1` / `GLM-5`）：`0.78x`，带有浅绿 `[会员 5 折]` 标识。
+  - 豆包 Seed 系列：`Seed-Evolving` / `Seed-2.1-Pro`（`0.08x`，`[限时 1 折]`）；`Seed-2.1-Turbo`（`0.20x`，`[专属补贴]`）；`Seed-Code` / `Seed-2.0-Code`（`0.06x`，`[专属补贴]`）。
+  - MiMo 系列：新增 `MiMo-V2.6-Flash`（`0.06x`）、`MiMo-V2.6-Pro`（`0.15x`）内置选型。
+  - DeepSeek 系列：`DeepSeek-V4-Flash` / `Flash-Official` / `deepseek-v4.1-flash`（`0.20x`，`[限时折扣]`）；`DeepSeek-V4-Pro` / `Pro-Official`（`0.72x`，`[限时折扣]`）。
+  - 通义千问系列：`Qwen3.8-Flash`（`0.08x`）、`Qwen-3.7-Plus`（`0.25x`）、`Qwen3.8-Max`（`1.50x`）。
+
+### Web 控制台 (Console & WebUI) 交互与样式优化
+
+- **指标自定义勾选与记忆**：底部状态栏新增自定义指标开关面板，可实时勾选/取消勾选具体监控项（子代理、模型、速度、TPS、会话Token、平台配额等），并自动适配 `·` 分隔符，配置保存在本地存储。
+- **状态栏与抽屉联动**：修复点击状态栏模型标签时误触发外部点击关闭面板的事件冲突，点击模型即可平滑呼出参数面板。
+- **专属标签样式**：新增 `.mp-tag-promo`（紫色福利标）和 `.mp-tag-discount`（浅绿折扣标），与官方 UI 视觉无缝融合。
+- **思考控制优化**：将子代理运行参数由单一开关优化为平滑的思考强度（`low / medium / high / max`）选项，取消阻断式校验，保证各 worker 下对话流程通畅。
+- **MiniMax 积分配额展示**：支持解析 9router 通道返回的 MiniMax 剩余积分并统一渲染到额度条与悬浮提示。
+
+### CodeArts / VS Code 扩展规范与安装包修复
+
+- **SemVer 2.0.0 规范兼容**：修正 IDE 扩展 `package.json` 中的版本号为标准的语义化版本 `0.9.9`，解决 CodeArts IDE 核心扩展扫描器在遇到四段版本号（`0.9.9.1`）时抛出 `ScanningExtension: 无法从 ... 读取扩展` 的崩溃报错。
+- **本地扩展热更新**：直接就地更新本地已安装的扩展脚本，并重新打包发布 `multi-agent-hub-0.9.9.carts`、`.vsix` 和 `.cloudide`。
+- **回归测试验证**：全量 31 项回归测试组（包含控制台 DOM 测试、CodeArts 驱动、打包检查与 Windows/Linux 契约）全部 100% 通过。
+
 ### CodeArts IDE & VS Code 扩展包 (.carts / .vsix)
 
 - 新增 CodeArts IDE 与 Visual Studio Code 通用桌面扩展 (`integrations/vscode`)，支持通过 IDE 图形界面“从 VSIX/CARTS 安装...”一键导入，免除命令行脚本配置。
