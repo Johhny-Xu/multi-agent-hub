@@ -1750,6 +1750,11 @@
     color: #c084fc;
     border: 1px solid rgba(192, 132, 252, 0.35);
   }
+  .mp-tag-discount {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.3);
+  }
   .mp-tag-default {
     background: rgba(148, 163, 184, 0.12);
     color: #94a3b8;
@@ -2499,6 +2504,7 @@
   .mp-tag-free { background: rgba(16,185,129,.16); color: var(--mcode-success); border: 1px solid rgba(16,185,129,.3); }
   .mp-tag-depr { background: rgba(245,158,11,.14); color: var(--mcode-warning); border: 1px solid rgba(245,158,11,.3); }
   .mp-tag-promo { background: rgba(168,85,247,.16); color: #c084fc; border: 1px solid rgba(168,85,247,.35); }
+  .mp-tag-discount { background: rgba(16,185,129,.16); color: var(--mcode-success); border: 1px solid rgba(16,185,129,.3); }
 
   /* — 数字与字距统一 — */
   .kpi .mono, .tok-chip, .cb-pop-agent-tok, .cb-pop-sess-row .mono {
@@ -4176,8 +4182,10 @@
           if (m.tag && m.tag !== '免费') {
             if (m.tag === '即将下线') {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-depr', '即将下线'));
-            } else if (m.tag.indexOf('福利') !== -1 || m.tag.indexOf('限时') !== -1) {
+            } else if (m.tag.indexOf('福利') !== -1) {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-promo', m.tag));
+            } else if (m.tag.indexOf('折') !== -1 || m.tag.indexOf('补贴') !== -1 || m.tag.indexOf('限时') !== -1) {
+              tagsDiv.appendChild(el('span', 'mp-tag mp-tag-discount', m.tag));
             } else if (m.tag === '默认' || m.default) {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-default', m.tag || '默认'));
             } else {
