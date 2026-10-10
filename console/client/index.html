@@ -142,6 +142,7 @@
   button.danger { color: var(--mcode-danger); border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); }
   button.danger:hover { background: rgba(239, 68, 68, 0.16); border-color: var(--mcode-danger); }
   button:disabled { opacity: 0.45; border-color: var(--mcode-border); background: var(--mcode-surface-muted); cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+  button.small { min-height: 24px; padding: 2px 8px; font-size: 11.5px; border-radius: 6px; }
 
   select, input[type="text"], input[type="number"], textarea {
     font: inherit; color: var(--mcode-text); background: var(--mcode-surface-muted);
@@ -4005,13 +4006,9 @@
             rightBox.appendChild(el('span', 'session-tree-meta', s.msgCount + '条'));
           }
           var archiveBtn = el('span', 'session-archive-icon', '📦');
-          archiveBtn.title = '双击归档此会话';
-          archiveBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-          });
-          archiveBtn.addEventListener('dblclick', function (e) {
-            e.stopPropagation();
-            if (!confirm('确定将该会话归档吗？')) return;
+          archiveBtn.title = '单击弹窗确认归档，双击直接归档';
+          var archiveClickTimer = null;
+          function doArchive() {
             api('/api/chat/archive-session', { agent: name, sessionId: s.id }).then(function (r) {
               chat.sessions = r.sessions || [];
               chat.activeSessionId = r.activeSessionId;
@@ -4019,6 +4016,27 @@
               toast('会话已归档');
               loadThreads();
             }).catch(function (err) { toast(err.message, true); });
+          }
+          archiveBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (archiveClickTimer) {
+              clearTimeout(archiveClickTimer);
+              archiveClickTimer = null;
+            }
+            archiveClickTimer = setTimeout(function () {
+              archiveClickTimer = null;
+              if (confirm('确定将会话“' + (s.title || '会话') + '”归档吗？')) {
+                doArchive();
+              }
+            }, 260);
+          });
+          archiveBtn.addEventListener('dblclick', function (e) {
+            e.stopPropagation();
+            if (archiveClickTimer) {
+              clearTimeout(archiveClickTimer);
+              archiveClickTimer = null;
+            }
+            doArchive();
           });
           rightBox.appendChild(archiveBtn);
           sItem.appendChild(rightBox);
@@ -6580,7 +6598,13 @@
           info.appendChild(metaLine);
           row.appendChild(info);
 
-          var viewBtn = btn('查看内容', 'small', function () {
+          var actions = el('div', 'archive-item-actions');
+          actions.style.display = 'flex';
+          actions.style.alignItems = 'center';
+          actions.style.gap = '6px';
+          actions.style.flexShrink = '0';
+
+          var viewBtn = btn('查看', 'small', function () {
             api('/api/artifact?path=' + encodeURIComponent('data/archives/' + arch.file)).then(function (art) {
               try {
                 var sessObj = JSON.parse(art.text);
@@ -6593,7 +6617,42 @@
               }
             }).catch(function (err) { toast(err.message, true); });
           });
-          row.appendChild(viewBtn);
+
+          var restoreBtn = btn('复原', 'small primary', function () {
+            withBusy(restoreBtn, function () {
+              return api('/api/chat/restore-archive', { file: arch.file }).then(function (res) {
+                toast('会话已复原');
+                allArchives = allArchives.filter(function (x) { return x.file !== arch.file; });
+                $('#modal-title').textContent = '📦 全部归档会话 (' + allArchives.length + ')';
+                renderList();
+                chat.activeAgent = arch.agent;
+                chat.activeSessionId = arch.id;
+                loadThreads();
+                selectPlatform(arch.agent, arch.id);
+              }).catch(function (err) {
+                toast('复原失败: ' + err.message, true);
+              });
+            });
+          });
+
+          var deleteBtn = btn('删除', 'small danger', function () {
+            if (!confirm('确定彻底删除该归档会话吗？\n[' + (arch.title || '归档会话') + ']\n删除后将不可找回。')) return;
+            withBusy(deleteBtn, function () {
+              return api('/api/chat/delete-archive', { file: arch.file }).then(function () {
+                toast('归档已删除');
+                allArchives = allArchives.filter(function (x) { return x.file !== arch.file; });
+                $('#modal-title').textContent = '📦 全部归档会话 (' + allArchives.length + ')';
+                renderList();
+              }).catch(function (err) {
+                toast('删除失败: ' + err.message, true);
+              });
+            });
+          });
+
+          actions.appendChild(viewBtn);
+          actions.appendChild(restoreBtn);
+          actions.appendChild(deleteBtn);
+          row.appendChild(actions);
           listContainer.appendChild(row);
         });
       }
