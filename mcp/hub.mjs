@@ -188,7 +188,7 @@ function receipt(text, worker, expectedRef = null) {
   if (!header) return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
   const tag = header[1];
   const ref = tag.split("/").at(-1);
-  const validRef = expectedRef ? ref === expectedRef : refRegex(worker).test(ref);
+  const validRef = expectedRef ? ref === expectedRef : (refRegex(worker).test(ref) || /^[a-z0-9_-]+-[0-9a-f]{6,32}$/i.test(ref));
   const status = /(?:^|\s)status=([a-z]+)\b/i.exec(header[2])?.[1]?.toLowerCase();
   const headerExit = /(?:^|\s)exit=(-?\d+)\b/.exec(header[2]);
   const footerExit = /\n\(exit=(-?\d+)\)\s*$/.exec(cleaned);
@@ -211,6 +211,9 @@ function receipt(text, worker, expectedRef = null) {
       return { status: "failed", ref: "", answer: ans.slice(0, 500) };
     }
     return { status: isOk ? "completed" : "failed", ref: "", answer: ans };
+  }
+  if (status === "running" && ref && /^[a-z0-9_-]+-[0-9a-f]{6,32}$/i.test(ref)) {
+    return { status: "running", ref, answer: "" };
   }
   return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
 }
