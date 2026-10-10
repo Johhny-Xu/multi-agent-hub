@@ -2341,8 +2341,9 @@ export async function start(context) {
     const safeName = (v, name) => { const s = str(v, 64, name); if (!nameRe.test(s)) throw badReq(`${name} 含非法字符`); return s; };
 
     const route = async () => {
-      if (request.method === 'GET' && (p === '/dashboard' || p === '/')) {
+      if ((request.method === 'GET' || request.method === 'HEAD') && (p === '/dashboard' || p === '/')) {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        if (request.method === 'HEAD') { response.end(); return; }
         response.end(clientEntry);
         return;
       }
@@ -2863,7 +2864,7 @@ if (__isMain) {
   const kill = () => ctrl.abort();
   process.on('SIGINT', kill);
   process.on('SIGTERM', kill);
-  const sHost = process.env.HUBCONSOLE_HOST || '127.0.0.1';
+  const sHost = process.env.HUBCONSOLE_HOST || '0.0.0.0';
   const sPort = Number(process.env.HUBCONSOLE_PORT || 8890);
   const sData = process.env.HUBCONSOLE_DATA_DIR || join(os.homedir(), '.agent-hub-console');
   await start({
