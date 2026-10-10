@@ -90,73 +90,116 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 
 ---
 
-## 安装包选择
+## 🚀 快速上手与一键安装 (Quick Start)
 
-项目提供三种独立的预打包 ZIP，均内置本机与局域网 Hub 自动发现机制，各组件可在同一台或不同机器按需组合部署：
+为满足不同开发者的使用习惯，项目提供极简的场景化接入方案：
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        按需选择最适合你的安装方式                       │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. 最省心 · 本机一键安装   → 双击 install.cmd / bash install.sh (开箱即用)│
+│ 2. 任意 AI 客户端直连     → 填入 http://127.0.0.1:8790/mcp (10 秒接入)   │
+│ 3. 跨机部署 (服务器+个人端) → 服务端跑 Hub，客户端连过来 (局域网/SSH 均可)  │
+│ 4. IDE 图形扩展一键导入   → 导入 CodeArts / VS Code .carts / .vsix 扩展 │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 方案一：最省心 · 本机一键安装（开箱即用，推荐 ⭐⭐⭐⭐⭐）
+
+> **适合场景**：在单台电脑（Windows 或 Linux）上进行开发，希望一键配齐 Hub 服务、WebUI 控制台及已有的 IDE 插件。
+
+#### 步骤 1：获取项目代码
+- **方式 A（Git 克隆，推荐）**：
+  ```bash
+  git clone https://github.com/Johhny-Xu/multi-agent-hub.git
+  cd multi-agent-hub
+  ```
+- **方式 B（下载 Release 打包）**：
+  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-0.9.4-both.zip` 并解压。
+
+#### 步骤 2：一键执行安装并启动
+- **Windows**：直接双击根目录 **`install.cmd`**（或在终端运行 `.\install.cmd`）；
+- **Linux**：在终端执行 **`bash install.sh`**。
+
+> 💡 **全自动诊断与注册**：安装器会自动检查环境、安装 Hub 服务与 Web 控制台，并自动探测注册当前机器上的 Codex、ZCode、DSH、CodeArts、Antigravity 原生插件与专属子代理。
+
+#### 步骤 3：立即开始使用
+- 浏览器访问 **`http://localhost:8890`**，即可直接进入三栏式 Web 控制大盘；
+- 或在您已安装的 IDE 中，直接呼出子代理开始对话派发；
+- **日常启停控制**：日常使用可直接双击或运行 `start.bat`（Linux：`bash start.sh`），停止运行 `stop.bat`（Linux：`bash stop.sh`）。
+
+---
+
+### 方案二：免装插件 · 任意 AI 客户端 10 秒接入（MCP 直连 ⭐⭐⭐⭐⭐）
+
+> **适合场景**：使用 Cursor、Claude Desktop、Windsurf、VS Code (Cline / Roo Code / Continue) 等任意支持 MCP 的宿主，无需安装任何扩展或插件。
+
+只需在本机启动 Hub 服务后，将标准 HTTP MCP 端点提供给客户端：
+
+- **MCP 端点**：`http://127.0.0.1:8790/mcp`
+- **更舒服的方式**：打开 Web 控制台（`http://localhost:8890`），在“子代理接入端点”卡片直接点击 **【复制本文（发给Agent配置）】**，把复制出的提示词直接发给 AI 助手，Agent 将自动帮你写入客户端的 MCP 配置文件！
+- **手动 JSON 配置参考**：
+  ```json
+  {
+    "mcpServers": {
+      "multi-agent-hub": {
+        "url": "http://127.0.0.1:8790/mcp"
+      }
+    }
+  }
+  ```
+
+---
+
+### 方案三：跨机器部署（服务端与客户端分离）
+
+> **适合场景**：在家庭服务器、NAS 或云服务器（Linux / Windows）上集中运行 Hub 和 9 种 CLI Worker，在另一台个人电脑上编写代码。
+
+#### 步骤 A：服务端安装并启动 Hub
+```bash
+# 在服务端执行，监听局域网地址并开启 Web 控制台
+bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
+```
+*注：安装器会自动生成外部强随机连接安全令牌文件 `hub-token.txt`。*
+
+#### 步骤 B：客户端安装原生插件并配对连接
+```powershell
+# Windows 客户端指定目标服务器与 Token 完成配对
+.\install.cmd --component plugins --url http://SERVER_IP:8765/mcp --token-file C:\private\hub-token.txt
+```
+- **自动广播发现**：客户端初次安装若未指定 `--url`，会自动通过 UDP 广播扫描局域网内的候选 Hub，交互式选择即可完成配对；
+- **随时重选 / 切换 Hub**：后续在客户端运行 `connect.cmd`（Linux: `./connect.sh`），即可重新发现或切换目标 Hub；
+- **SSH 反向通道**：两台机器不在同一局域网时，可通过 SSH 反向映射端口（例如 `ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 user@SERVER`）穿透内网。
+- **Linux 常驻守护**：Linux Hub 服务可加 `--systemd-user` 参数注册为标准用户级 systemd 后台服务。
+
+---
+
+### 方案四：华为 CodeArts / VS Code 图形扩展一键导入
+
+> **适合场景**：习惯使用 IDE 图形化扩展管理器的开发者。
+
+1. 获取扩展安装包：`multi-agent-hub-0.9.4.carts`（CodeArts IDE 专属）或 `.vsix`（VS Code 及兼容编辑器）；
+2. 在编辑器的“扩展”管理面板选择“从 VSIX/CARTS 安装...”导入；
+3. 安装完成后自动注入侧边栏状态大盘面板、指示灯以及工作区 MCP 规则。
+
+---
+
+### 📦 预打包文件与运行依赖
 
 | 安装包 | 适用环境 | 包含内容 |
 | --- | --- | --- |
-| **agenthub-0.9.4-plugins.zip** | 编写代码的客户端机器（运行 Codex / ZCode / DSH / CodeArts / Antigravity） | 5 种客户端原生插件、MCP 桥接器、子代理与工作流（不启动本地 Hub） |
-| **agenthub-0.9.4-hub.zip** | 运行各模型 CLI / worker 的服务端机器（Windows / Linux） | Python Hub 服务、9 种 Worker 适配驱动、可选网页控制台 |
-| **agenthub-0.9.4-both.zip** | 客户端与 Worker 均在同一台机器运行 | 包含 plugins 与 hub 的完整组件集合 |
-| **multi-agent-hub-0.9.4.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯及工作区 MCP 自动注入 |
+| **agenthub-0.9.4-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
+| **agenthub-0.9.4-plugins.zip** | 仅用于编写代码的客户端电脑 | 5 种客户端原生插件、MCP 桥接器、子代理与工作流 |
+| **agenthub-0.9.4-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
+| **multi-agent-hub-0.9.4.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
 
-- **运行依赖**：
-  - 安装器与 Hub 服务需要 **Python 3.8+**；Codex 项目代理安装需要 **Python 3.11+**，可选 Antigravity SDK 需要 **Python 3.10+**。
-  - 插件 MCP 桥及可选网页控制台需要 **Node.js 20+**（桌面 WebSocket 驱动建议 Node.js 22+）。
-  - 各 Worker 依赖官方对应 CLI 及其官方登录凭据（安装器仅做环境诊断，不包含账号注册与自动登录）。
-
-解压后，Windows 双击 **install.cmd**，Linux 执行 **bash install.sh**。安装器自动识别环境、官方 CLI 并安装到稳定目录，配置与数据隔离在源码包外部，重复安装会自动备份并保留配置。安装包目前为本地构建，尚未上传 GitHub Release 附件。完整参数说明见[安装说明](packaging/README.md)。
-
----
-
-## 快速上手与部署
-
-### 1. 本机单机部署（Both）
-
-使用 `both` 包解压后，一键完成插件安装并立即启动本地 Hub：
-
-```powershell
-# Windows（包含网页控制台）
-.\install.cmd --component both --with-console
-```
-
-```bash
-# Linux（包含网页控制台）
-bash install.sh --component both --with-console
-```
-
-- **服务控制**：后续可在安装目录中通过 `start.cmd / start.sh`、`stop.cmd / stop.sh`、`status.cmd / status.sh` 管理后台服务；若仅安装不自启可加 `--no-start`。
-- **能力检查**：在各宿主中调用 `hub_capabilities` 可查看各 Worker 可用性，调用 `hub_login` 可获取官方授权指引与登录状态。
-
----
-
-### 2. Windows 与 Linux 分离部署
-
-当 Hub 运行在 Linux 服务器、客户端运行在 Windows（或反之）时：
-
-#### 步骤 A：服务端启动 Hub（以 Linux 为例）
-
-```bash
-# 解压 hub 包，指定监听局域网地址与端口
-bash install.sh --component hub --bind 0.0.0.0 --port 8765
-```
-*注：非回环地址监听必须鉴权。安装器会在外部配置目录生成 `hub-token.txt`。*
-
-#### 步骤 B：客户端安装插件并连接（以 Windows 为例）
-
-首次安装 plugins 包且未配置连接时，安装器会自动扫描局域网与本机 Hub 并列出候选列表：
-
-```powershell
-# 解压 plugins 包，指定目标 Hub 地址与 Token 文件
-.\install.cmd --component plugins --url http://SERVER_LAN_IP:8765/mcp --token-file C:\private\hub-token.txt
-```
-
-- **重新连接 / 切换 Hub**：后续可直接运行安装目录中的 `connect.cmd`（Linux：`./connect.sh`）重新发现并切换目标 Hub，或在客户端中输入 `/hub-discover` 查看候选（五种宿主均可调用 `hub_discover` 工具）。
-- **局域网发现机制**：基于 UDP 18766 广播与无凭据 HTTP 健康检查，安全不泄露 token；设置 `AGENTHUB_DISCOVERY=0` 可关闭服务端响应。
-- **客户端连接配置**：统一保存在外部 `client.json`（Windows: `%LOCALAPPDATA%\AgentHub\client.json`，Linux: `~/.config/agenthub/client.json`），支持通过环境变量 `AGENTHUB_CONFIG` 自定义。
-- **SSH 反向通道**：若两台机器无法直连局域网，可通过 SSH 建立反向端口映射（例如 Windows 执行 `ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 SERVER_SSH`），实现跨网安全通信。
-- **Linux 常驻服务**：Linux Hub 可指定 `--systemd-user` 注册为用户级 systemd 服务。
+- **运行依赖要求**：
+  - **基础运行环境**：Python 3.8+（Codex 代理安装需 Python 3.11+）；Node.js 20+（用于 MCP 桥接与 Web 控制台）；
+  - **Worker 模型环境**：依赖各对应服务商的官方 CLI（如 `agy`、`cb`、`trae`、`codearts` 等）及其官方登录态，安装器仅负责环境探针与指令调用，不包含账号注册与自动登录。
+- 更多详细高级参数见 [安装包构建与完整参数说明](packaging/README.md)。
 
 ---
 
