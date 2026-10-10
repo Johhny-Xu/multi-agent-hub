@@ -203,10 +203,10 @@ function extractDelta(beforeText, afterText, prompt) {
           if (s.busy) { stable = 0; continue; }
           const delta = extractDelta(beforeText, afterText, PROMPT);
           if (delta !== last) { last = delta; stable = 0; continue; }
-          // 必须"曾出现过生成中"且当前已停止, 才认为这一轮真的结束
-          if (delta && sawBusy && i > 3) {
+          // 增量文本已生成且停止变动（若曾观测到 busy 则只需 2 次稳定，未观测到 busy 则需 3 次稳定）
+          if (delta) {
             stable++;
-            if (stable >= 3) { clearTimeout(timer); resolve(delta); return; }
+            if (stable >= (sawBusy ? 2 : 3)) { clearTimeout(timer); resolve(delta); return; }
           }
         }
         clearTimeout(timer);
