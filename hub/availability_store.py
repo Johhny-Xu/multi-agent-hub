@@ -53,7 +53,7 @@ def classify_failure(status, text):
         return "authentication_required"
     if "failed_precondition" in diagnostic and "region" in diagnostic or any(t in diagnostic for t in ("region restricted", "not supported in your country", "unsupported region", "user location is not supported")):
         return "region_restricted"
-    if any(t in diagnostic for t in ("quota exceeded", "quota_exceeded", "insufficient credits", "credit balance is too low", "quota exhausted")):
+    if any(t in diagnostic for t in ("quota exceeded", "quota_exceeded", "insufficient credits", "credit balance is too low", "quota exhausted", "额度已用完", "可用额度已用完", "体验套餐可用额度已用完", "套餐查询失败", "积分不足", "无可用额度")):
         return "quota_exhausted"
     if any(t in diagnostic for t in ("排队提醒", "当前模型请求量较高", "升级权益等待中", "rate limit", "rate_limited", "too many requests", "429")):
         return "rate_limited"

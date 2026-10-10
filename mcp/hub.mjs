@@ -53,7 +53,7 @@ export function resolveWorker(raw) {
 }
 
 function refRegex(worker) {
-  const prefix = worker === "traecode" ? "trae" : worker;
+  const prefix = worker === "traecode" ? "(?:traecode|trae)" : worker;
   return new RegExp("^" + prefix + "-[0-9a-f]+$", "i");
 }
 
@@ -198,7 +198,7 @@ function receipt(text, worker, expectedRef = null) {
     }
     if (status === "completed") {
       const ans = extractAnswer(cleaned);
-      if (/排队提醒|当前模型请求量较高|升级权益等待中/.test(ans)) {
+      if (/排队提醒|当前模型请求量较高|升级权益等待中|体验套餐可用额度已用完|套餐查询失败|额度已用完|可用额度已用完|积分不足|无可用额度/.test(ans)) {
         return { status: "failed", ref, answer: ans.slice(0, 500) };
       }
       return { status, ref, answer: ans };
@@ -207,7 +207,7 @@ function receipt(text, worker, expectedRef = null) {
   } else if (!expectedRef && headerExit && (tag === worker || tag.startsWith(worker + "/"))) {
     const isOk = Number(headerExit[1]) === 0;
     const ans = isOk ? extractAnswer(cleaned) : cleaned.slice(0, 500);
-    if (isOk && /排队提醒|当前模型请求量较高|升级权益等待中/.test(ans)) {
+    if (isOk && /排队提醒|当前模型请求量较高|升级权益等待中|体验套餐可用额度已用完|套餐查询失败|额度已用完|可用额度已用完|积分不足|无可用额度/.test(ans)) {
       return { status: "failed", ref: "", answer: ans.slice(0, 500) };
     }
     return { status: isOk ? "completed" : "failed", ref: "", answer: ans };

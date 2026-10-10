@@ -254,7 +254,12 @@ def zcode_run(task, session_id, ref, timeout=ZCODE_TIMEOUT):
     stop = threading.Event()
     poller = start_progress_poller(ref, reader, stop)
     try:
-        return subprocess_run([NODE, driver, task], timeout=timeout).strip()
+        text = subprocess_run([NODE, driver, task], timeout=timeout).strip()
+        if any(p in text for p in ("体验套餐可用额度已用完", "可用额度已用完", "额度已用完", "套餐查询失败", "积分不足", "无可用额度")):
+            raise RuntimeError(f"QUOTA_EXHAUSTED: {text}")
+        if any(p in text for p in ("排队提醒", "当前模型请求量较高", "升级权益等待中")):
+            raise RuntimeError(f"RATE_LIMITED: {text}")
+        return text
     finally:
         stop.set()
         if poller:
