@@ -4005,22 +4005,68 @@
       emptyBox.appendChild(title);
 
       var hour = new Date().getHours();
-      var timeGreeting = '随时在线，剩下的交给我';
-      if (hour >= 5 && hour < 9) {
-        timeGreeting = '早上好，新的一天交给我吧';
-      } else if (hour >= 9 && hour < 12) {
-        timeGreeting = '上午好，今天有什么任务交给我？';
-      } else if (hour >= 12 && hour < 14) {
-        timeGreeting = '中午好，先休息一下，我随时待命';
-      } else if (hour >= 14 && hour < 17) {
-        timeGreeting = '下午好，喝杯水，复杂的任务交给我';
-      } else if (hour >= 17 && hour < 20) {
-        timeGreeting = '快收工了，剩下的我帮你收尾';
-      } else if (hour >= 20 && hour < 23) {
-        timeGreeting = '晚上好，今天辛苦了，还有活就交给我';
-      } else {
-        timeGreeting = '夜深了，注意休息，剩下的我来搞定';
-      }
+      var timeQuotes = {
+        dawn: [
+          '早上好，新的一天交给我吧',
+          '早安！迎着晨光，今天我们一起高效推进',
+          '早上好，喝杯温水，今天的大活交给我帮您梳理',
+          '早安！电量已满格，今天有什么想法随时交待',
+          '新的一天开始啦，代码和任务我都已准备就绪'
+        ],
+        morning: [
+          '上午好，今天有什么任务交给我？',
+          '上午好！专注力正值黄金期，复杂的逻辑放马过来',
+          '上午好，今天需要编写或重构哪些模块？',
+          '状态正佳，有需要查证、调试或编写的尽管派活',
+          '灵感满满的上午，让我们把重要的需求先拿下'
+        ],
+        noon: [
+          '中午好，先休息一下，我随时待命',
+          '中午好！吃顿好的补充能量，任务先放着我看着',
+          '午休时间到了，好好小憩一下，醒来再战',
+          '中午好，劳逸结合效率更高，下午需要我随时叫我',
+          '午间时光，喝杯咖啡歇歇眼睛，中枢一直在守护'
+        ],
+        afternoon: [
+          '下午好，喝杯水，复杂的任务交给我',
+          '下午茶时间！伸个懒腰，最硬的骨头我来啃',
+          '下午好，感到疲倦就休息片刻，剩下的繁琐活我搞定',
+          '下午好，思路卡壳了？让我来提供几个解题视角',
+          '下午好，保持好节奏，今天的目标马上就能达成'
+        ],
+        dusk: [
+          '快收工了，剩下的我帮你收尾',
+          '傍晚好，今天进度很棒，剩下的边角料我来清理',
+          '快到下班时间啦，整理好的工作交给我打包归档',
+          '落日很美，辛苦一整天，最后的收尾工作我承包了',
+          '暮色温柔，剩下的测试和验证放着让我跑'
+        ],
+        evening: [
+          '晚上好，今天辛苦了，还有活就交给我',
+          '晚间好！有夜间需要跑的长任务尽管交给我挂机',
+          '晚上好，一天忙碌辛苦啦，有收尾代码交给我来写',
+          '晚上的时光静谧高效，想攻克什么难题我陪你',
+          '晚上好，累了就早点放松，琐碎的任务随时派给我'
+        ],
+        night: [
+          '夜深了，注意休息，剩下的我来搞定',
+          '夜深人静，赶工辛苦啦，别熬太晚，我来顶着',
+          '夜深了，早点睡个好觉，任务交给我通宵跑完',
+          '深夜的星星亮了，身体最重要，剩下的交给我吧',
+          '夜深了，随时派发挂机任务，明天醒来直接看结果'
+        ]
+      };
+
+      var quotePool = timeQuotes.evening;
+      if (hour >= 5 && hour < 9) quotePool = timeQuotes.dawn;
+      else if (hour >= 9 && hour < 12) quotePool = timeQuotes.morning;
+      else if (hour >= 12 && hour < 14) quotePool = timeQuotes.noon;
+      else if (hour >= 14 && hour < 17) quotePool = timeQuotes.afternoon;
+      else if (hour >= 17 && hour < 20) quotePool = timeQuotes.dusk;
+      else if (hour >= 20 && hour < 23) quotePool = timeQuotes.evening;
+      else quotePool = timeQuotes.night;
+
+      var timeGreeting = quotePool[Math.floor(Math.random() * quotePool.length)] || '随时在线，剩下的交给我';
 
       var slogan = el('div', 'empty-slogan', timeGreeting);
       emptyBox.appendChild(slogan);
