@@ -1,8 +1,11 @@
 # multi-agent-hub
 
-![multi-agent-hub 0.9.4 结构图：五种原生客户端经 MCP 连接 Windows 或 Linux Hub，调度九种 worker；重点攻坚 MiniMaxCode 适配与 WebUI 前端优化](docs/architecture.svg)
+![multi-agent-hub 0.9.4 结构图：任意 MCP 客户端接入、5 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
 
-**multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，让开发者能够在 **Codex**、**ZCode**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 等客户端之间，跨平台、跨机器无缝调度各端 worker（官方 CLI 与内核）。
+**multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，具备三层灵活接入形态：
+1. **任意 MCP 客户端直连即用**：任何支持标准 MCP 协议的客户端（如 Cursor、Claude Desktop、Windsurf、VS Code Cline/Roo Code、Continue 等），仅需配置 Hub 的 MCP URL（或使用内置一键复制的 Prompt 指令），即可直接调度多端 Worker；
+2. **5 款原生宿主深度适配（体验更顺畅、更舒服）**：针对 **Codex**、**ZCode**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 提供了深度定制的原生插件、专用子代理体系（`hub-*.md`）、专属技能与斜杠命令，上下文自动隔离，免去手动配置参数的繁琐；
+3. **零客户端独立使用**：即使没有外部 IDE 或 AI 客户端，Hub 内置的 **CodeBuddy 风格三栏式 WebUI 管理大盘** 也能独立完成平台多会话树管理、沉浸式对话、任务派发与监控、全量会话归档复原与彻底清理。
 
 当前源码版本为 **0.9.4**，本阶段重点在于**MiniMaxCode 深度攻坚与 WebUI 全面交互优化**：引入 CodeBuddy 风格三栏式交互大盘、精细时段问候语与跨平台全局头像定制、全量会话聚合归档与一键复原/二次确认批量删除、原生 HTTP MCP 子代理直连端点与全自动 Agent 配置提示词复制、无缝剪贴板兼容、并发深度探活替代独立心跳、Worker 启停权威同步与模型目录精炼。
 
@@ -269,6 +272,14 @@ python packaging/build.py --output ../agenthub-releases
 - [DSH 预设与工作流集成](integrations/dsh/README.md)
 - [CodeArts 原生插件与命令集成](integrations/codearts/README.md)
 - [CodeArts IDE & VS Code 桌面扩展 (CARTS / VSIX)](integrations/vscode/README.md)
+
+---
+
+## 致谢与鸣谢
+
+- 🎨 **品牌矢量图标与头像规范**：特别感谢 [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) 开源项目提供的精致高品质科技与 AI 品牌 SVG 图标，为本项目 Web 控制台及各子代理的头像视觉体系提供了美观、规范的原生矢量支持；
+- 🤖 **各平台官方内核与开发者生态**：感谢 Huawei CodeArts、Google Antigravity、Tencent CodeBuddy、GitHub Copilot、Xiaomi MiMo、MiniMax、ByteDance Trae、Z.ai 等官方提供的 CLI 内核与开放生态；
+- 💖 **开源社区支持**：感谢所有在多模型融合调度、跨平台原生接入与 Web 控制台优化中提供反馈与建议的开发者们！
 
 ---
 
