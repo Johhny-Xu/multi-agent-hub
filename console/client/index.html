@@ -3482,6 +3482,51 @@
     b.addEventListener('click', fn);
     return b;
   }
+  function copyText(text, successMsg) {
+    var str = String(text != null ? text : '');
+    function fallback() {
+      try {
+        var tmp = document.createElement('textarea');
+        tmp.value = str;
+        tmp.setAttribute('readonly', '');
+        tmp.style.position = 'fixed';
+        tmp.style.top = '0';
+        tmp.style.left = '0';
+        tmp.style.width = '2em';
+        tmp.style.height = '2em';
+        tmp.style.padding = '0';
+        tmp.style.border = 'none';
+        tmp.style.outline = 'none';
+        tmp.style.boxShadow = 'none';
+        tmp.style.background = 'transparent';
+        tmp.style.opacity = '0';
+        tmp.style.zIndex = '-9999';
+        document.body.appendChild(tmp);
+        tmp.focus();
+        tmp.select();
+        tmp.setSelectionRange(0, str.length);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(tmp);
+        if (ok) {
+          toast(successMsg || '已复制');
+        } else {
+          toast('复制失败，请手动选择复制', true);
+        }
+      } catch (e) {
+        toast('复制失败，请手动选择复制', true);
+      }
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(str).then(function () {
+        toast(successMsg || '已复制');
+      }).catch(function () {
+        fallback();
+      });
+    } else {
+      fallback();
+    }
+  }
 
   function loadSnapshot() {
     return api('/api/snapshot').then(function (snap) {
@@ -4385,10 +4430,7 @@
     copyBtn.style.fontSize = '11px';
     var displayText = (role === 'agent') ? stripExitSuffix(m.text) : m.text;
     copyBtn.addEventListener('click', function () {
-      var tmp = el('textarea', null, displayText);
-      document.body.appendChild(tmp); tmp.select();
-      try { document.execCommand('copy'); toast('已复制'); } catch (e) { toast('复制失败', true); }
-      document.body.removeChild(tmp);
+      copyText(displayText, '已复制');
     });
     bh.appendChild(copyBtn);
     b.appendChild(bh);
@@ -5854,8 +5896,7 @@
 
     line.appendChild(el('span', 'mono', sa.mcp));
     line.appendChild(btn('复制 MCP URL', '', function () {
-      if (navigator.clipboard) navigator.clipboard.writeText(sa.mcp).then(function () { toast('已复制：' + sa.mcp); }, function () { toast('复制失败，请手动复制', true); });
-      else toast('浏览器不支持剪贴板', true);
+      copyText(sa.mcp, '已复制：' + sa.mcp);
     }));
 
     var copyPromptBtn = btn('复制本文（发给Agent配置）', '', function () {
@@ -5875,15 +5916,7 @@
         '',
         '请根据我当前使用的环境（如 Claude Desktop、Cursor、Windsurf、VS Code 或 Antigravity），帮我检查或写入相应的 MCP 配置文件并启用。'
       ].join('\n');
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(agentPrompt).then(function () {
-          toast('已复制配置文本，直接发给 Agent 即可帮你配置');
-        }, function () {
-          toast('复制失败，请手动复制', true);
-        });
-      } else {
-        toast('浏览器不支持剪贴板', true);
-      }
+      copyText(agentPrompt, '已复制配置文本，直接发给 Agent 即可帮你配置');
     });
     copyPromptBtn.title = '复制完整配置指令，直接发给 AI Agent 即可帮你自动配置接入';
     line.appendChild(copyPromptBtn);
