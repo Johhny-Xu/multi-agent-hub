@@ -24,7 +24,7 @@ const TOOLS = [
   {
     name: "hub_ask",
     description:
-      "把任务派发给 multi-agent-hub 的一个 worker 并阻塞到出最终结果。worker 支持简称：agy/cb/cbcnintl/mimo/gcp/mmx/trae，或规范名 " +
+      "把任务派发给 multi-agent-hub 的一个 worker 并阻塞到出最终结果。【调用约束】仅输出单个 tool_call 结构化调用，严禁同时在正文内嵌 XML 标签（如 <multi-agent-hub_hub_ask>），避免宿主重复执行。worker 支持简称：agy/cb/cbcnintl/mimo/gcp/mmx/trae，或规范名 " +
       CANONICAL.join("/") +
       "。task 需自包含（worker 无本会话历史；minimaxcode 是纯聊天型无文件操作）。返回 JSON 文本：{ok,status,worker,ref,answer}。仅派发一次；running/unknown 时任务可能仍执行，使用原 ref 续查，避免重复派发。",
     inputSchema: {
@@ -41,7 +41,7 @@ const TOOLS = [
   },
   {
     name: "hub_status",
-    description: "列出 multi-agent-hub 注册代理与在线状态（原文文本）。",
+    description: "列出 multi-agent-hub 注册代理与在线状态（原文文本）。调用时仅输出单个 tool_call，严禁同时在正文内嵌 XML 标签。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -68,7 +68,7 @@ const TOOLS = [
   {
     name: "hub_dispatch",
     description:
-      "异步 worker 秒回 ref，再用 hub_fetch 轮询；同步配置直接返回 status=completed/failed 及 answer。HTTP 受理等待最多 25s。worker 支持简称 agy/cb/cbcnintl/mimo/gcp/mmx/trae 或规范名。网络超时可能已受理，严禁仅因没拿到 ref 重复派发同一任务。",
+      "异步 worker 秒回 ref，再用 hub_fetch 轮询；同步配置直接返回 status=completed/failed 及 answer。【调用约束】仅输出单个 tool_call 结构化调用，严禁同时在正文内嵌 XML 标签，避免宿主重复执行。HTTP 受理等待最多 25s。worker 支持简称 agy/cb/cbcnintl/mimo/gcp/mmx/trae 或规范名。网络超时可能已受理，严禁仅因没拿到 ref 重复派发同一任务。",
     inputSchema: {
       type: "object",
       properties: {

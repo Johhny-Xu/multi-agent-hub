@@ -6,6 +6,9 @@ Use the registered multi-agent-hub MCP tools and native hub-* agents. The nine w
 
 Use directly registered MCP tools directly when the host exposes them. If the CodeArts IDE exposes MCP tools through its lazy tool registry, first use tool_search to discover the tool, then tool_describe(id=...) to load its schema, and tool_call(id=..., args=...) to execute it using that schema. A discovered MCP name is not automatically a directly callable tool; do not repeat direct calls after the host says it is not directly callable.
 
+**Calling Constraint (Avoid Duplicate Calls)**: When invoking MCP tools in CodeArts, emit only a single structured `tool_call`. Never simultaneously output raw XML tool tags (e.g., `<multi-agent-hub_hub_ask ...>`) in the markdown prose, as the host will parse and execute both, causing duplicate task submission.
+调用约束：调用 MCP 工具时仅输出单个 tool_call，严禁在正文同时内嵌 XML 标签（如 `<multi-agent-hub_hub_ask>`），避免宿主解析两次导致重复执行。
+
 If permission for an action is denied or rejected, stop that action immediately and report blocked_permission with the original ref (if available). Do not retry it under another tool name, through another transport, or from the parent agent; resume only after explicit authorization. Never change permission settings or add automatic approval.
 
 Divide parallel work into non-overlapping ownership boundaries. Each worker receives the goal, necessary context, allowed changes, acceptance criteria and output requirements. Query hub_capabilities before choosing options; omit unspecified thinking, stream and model settings. Assign implementation and review in separate phases.
