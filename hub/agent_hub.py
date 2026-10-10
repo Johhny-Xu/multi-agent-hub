@@ -216,7 +216,14 @@ def tool_hub_list_agents(args):
         cli = cfg.get("cli")
         online = _now() - e.get("last_seen", 0) < ONLINE_WINDOW_SEC if e else False
         is_ready = bool(cli or name in ("traecode", "trae") or cfg.get("gateway") or cfg) and cfg.get("disabled") is not True
-        status_label = "在线" if online else ("就绪" if is_ready else "离线")
+        if cfg.get("disabled") is True:
+            status_label = "已禁用"
+        elif online:
+            status_label = "在线"
+        elif is_ready:
+            status_label = "就绪"
+        else:
+            status_label = "离线"
         lines.append(
             f"- {name} [{status_label}] "
             f"角色: {e.get('role') or cfg.get('role') or '未知'}"
@@ -783,14 +790,18 @@ def _start_async(agent, mode, task, metadata, session_id="", env=None):
 
 
 def _check_gui_options(args, agent):
+    prof = _load_agents().get(agent) or {}
+    model = resolve_model(prof, args.get("model"))
+    available = local_availability(agent, prof, model, STATE)
+    if not available["enabled"]:
+        raise ValueError("UNAVAILABLE: " + available["code"] + ": " + available["reason"])
     if args.get("thinking", "default") != "default" or args.get("attachments"):
         raise ValueError("UNSUPPORTED: GUI 通道尚未验证思考开关或附件输入；请使用对应官方 CLI")
     if "stream" in args and not isinstance(args["stream"], bool):
         raise ValueError("stream 必须是布尔值")
     if args.get("cwd"):
         raise ValueError("UNSUPPORTED: GUI 通道无法保证指定工作目录")
-    model = args.get("model")
-    default = ((_load_agents().get(agent) or {}).get("models") or {}).get("default")
+    default = ((prof.get("models") or {}).get("default"))
     if model and model not in ("default", "默认", default):
         raise ValueError("UNSUPPORTED: GUI 通道无法切换请求的模型")
 
@@ -935,6 +946,49 @@ def tool_hub_reap(args):
     return "\n".join(lines)
 
 
+def tool_hub_set_agent_status(args):
+    agent = _resolve_agent(str(args.get("agent") or args.get("worker") or ""))
+    if not agent:
+        raise ValueError("缺少 agent 或 worker 参数")
+    enabled = args.get("enabled")
+    if enabled is None and "disabled" in args:
+        enabled = not _as_bool(args.get("disabled"), False)
+    elif enabled is not None:
+        enabled = _as_bool(enabled, True)
+    else:
+        raise ValueError("缺少 enabled 或 disabled 参数")
+
+    with _LockCtx("agents_config"):
+        data = _read_json(AGENTS_JSON, {})
+        if not isinstance(data, dict):
+            data = {"agents": {}}
+        agents = data.setdefault("agents", {})
+        if agent not in agents:
+            reg = _read_json(_state_path("registry.json"), {})
+            if agent in reg:
+                agents[agent] = {"role": reg[agent].get("role", "worker")}
+            else:
+                raise ValueError(f"未知 agent: {agent}")
+        if enabled:
+            agents[agent].pop("disabled", None)
+        else:
+            agents[agent]["disabled"] = True
+        _write_json_atomic(AGENTS_JSON, data)
+
+    try:
+        refresh_availability(STATE, agent)
+    except Exception:
+        pass
+
+    state_str = "已激活" if enabled else "已禁用"
+    return json.dumps({
+        "ok": True,
+        "agent": agent,
+        "enabled": enabled,
+        "message": f"子代理 {agent} {state_str}，全端（WebUI 及各插件）已同步生效。"
+    }, ensure_ascii=False)
+
+
 TOOL_DEFS = [
     ("hub_heartbeat", "代理上线时登记心跳, 声明自己的角色和能力。定期调用可保持'在线'状态。",
      {"agent": {"type": "string", "description": "代理名, 如 workbuddy/zcode/trae/qwen-work"},
@@ -1008,6 +1062,10 @@ TOOL_DEFS = [
      ["task"]),
     ("zcode_result", "查询异步 ZCode 任务的结果 (配合 zcode_delegate wait=false)。",
      {"ref": {"type": "string"}}, ["ref"]),
+    ("hub_set_agent_status", "设置指定子代理的激活/禁用状态（写入 agents.json 并全端同步）。",
+     {"agent": {"type": "string", "description": "子代理名称 (如 zcode, codebuddy, antigravity 等)"},
+      "enabled": {"type": "boolean", "description": "是否激活 (true 为激活，false 为禁用)"}},
+     ["agent", "enabled"]),
 ]
 
 TOOLS_JSON = [{"name": n, "description": d, "inputSchema":
@@ -1023,6 +1081,7 @@ HANDLERS = {n: (f, ) for n, f in [
     ("hub_note_set", tool_hub_note_set), ("hub_note_get", tool_hub_note_get),
     ("hub_dispatch_cli", tool_hub_dispatch_cli), ("hub_list_models", tool_hub_list_models),
     ("hub_login", tool_hub_login), ("hub_capabilities", tool_hub_capabilities),
+    ("hub_set_agent_status", tool_hub_set_agent_status),
     ("trae_status", tool_trae_status), ("trae_delegate", tool_trae_delegate),
     ("trae_result", tool_trae_result),
     ("trae_new_chat", tool_trae_new_chat),
