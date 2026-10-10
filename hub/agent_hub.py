@@ -217,7 +217,7 @@ def tool_hub_list_agents(args):
         lines.append(
             f"- {name} [{'在线' if online else '离线'}] "
             f"角色: {e.get('role') or (known.get(name) or {}).get('role') or '未知'}"
-            + (f" | CLI: {' '.join(cli)}" if cli else " | CLI: 未配置")
+            + (f" | 调度通道: TraeClaw 网关" if name in ("traecode", "trae") and not cli else (f" | CLI: {' '.join(cli)}" if cli else " | CLI: 未配置"))
         )
     return "已注册代理:\n" + ("\n".join(lines) if lines else "(暂无, 各端调用 hub_heartbeat 注册)")
 
@@ -624,7 +624,8 @@ def tool_hub_capabilities(args):
                 item["availability"] = {"enabled": False, "code": "model_not_configured", "reason": "所选模型未在本机 worker 配置中声明。", "refreshable": False}
             models.append(item)
         defaults = public_model_capabilities(agent, profile, default_model or "")
-        workers[agent] = {"configured": bool(profile.get("cli")), "default_model": default_model,
+        is_configured = bool(profile.get("cli")) or agent in ("traecode", "trae") or bool(profile.get("gateway"))
+        workers[agent] = {"configured": is_configured, "default_model": default_model,
                           "model_selection": bool(profile.get("model_arg")),
                           "availability": local_availability(agent, profile, None), "models": models,
                           "thinking": defaults["thinking"]["allowed"],

@@ -76,6 +76,8 @@ class CapabilityTests(unittest.TestCase):
     def test_missing_cli_or_unselected_zcode_model_is_clear(self):
         self.assertEqual(local_availability("fixture", {}, None)["code"], "cli_not_configured")
         self.assertEqual(local_availability("fixture", {"cli": [str(self.base / "missing")]}, None)["code"], "cli_missing")
+        self.assertEqual(local_availability("traecode", {}, None)["code"], "ready")
+        self.assertTrue(local_availability("traecode", {}, None)["enabled"])
         self.assertEqual(local_availability("zcode", {"cli": [sys.executable]}, "GLM-5.3-Flash")["code"], "model_selection_unverified")
         self.assertTrue(local_availability("zcode", dict(self.profile), "first")["enabled"])
 
