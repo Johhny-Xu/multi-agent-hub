@@ -4377,16 +4377,32 @@
         });
         majorQuotas = sortedCopilot.slice(0, 2);
       } else if (plat === 'minimaxcode') {
-        majorQuotas = qList.slice().sort(function (a, b) {
-          if (a.name === 'general') return -1;
-          if (b.name === 'general') return 1;
-          return 0;
-        });
+        var cred = qList.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
+        if (cred) {
+          majorQuotas = [cred];
+        } else {
+          majorQuotas = qList.slice().sort(function (a, b) {
+            if (a.name === 'general') return -1;
+            if (b.name === 'general') return 1;
+            return 0;
+          });
+        }
       } else {
         majorQuotas = qList.slice(0, 2);
       }
 
       var itemsHtml = majorQuotas.map(function (q) {
+        if (q.isCreditBalance || q.name === 'Credits') {
+          var rem = q.remaining != null ? q.remaining : q.total;
+          var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
+          return '<div class="cb-quota-item">' +
+            '<div class="cb-quota-item-top">' +
+              '<span class="cb-quota-item-name">' + esc(q.displayName || '剩余积分') + '</span>' +
+              '<span class="cb-quota-item-stat"><b>' + remStr + '</b> 积分</span>' +
+            '</div>' +
+            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:100%;background:var(--mcode-accent, #38bdf8)"></div></div>' +
+          '</div>';
+        }
         var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
         var barColor = remPct > 30 ? 'var(--mcode-accent, #38bdf8)' : (remPct > 10 ? '#f59e0b' : '#ef4444');
         var resetText = formatResetTime(q.resetAt);
@@ -4593,6 +4609,17 @@
       } else if (plat === 'minimaxcode') {
         var mmData = quotasData.minimaxcode;
         var mmQuotas = Array.isArray(mmData && mmData.quotas) ? mmData.quotas : [];
+        var cred = mmQuotas.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
+        if (cred) {
+          var userStr = mmData.user ? ' (' + mmData.user + ')' : '';
+          var planStr = mmData.plan ? ' · ' + mmData.plan : '';
+          var lines = ['平台配额（minimaxcode' + userStr + planStr + '）'];
+          var rem = cred.remaining != null ? cred.remaining : cred.total;
+          var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
+          lines.push('剩余积分：' + remStr + ' 积分');
+          if (cred.used) lines.push('已用积分：' + cred.used);
+          return lines.join('\n');
+        }
         var lines = ['平台配额（minimaxcode · MiniMax Token Plan）'];
         mmQuotas.forEach(function (q) {
           var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 0;
@@ -4706,11 +4733,18 @@
         } else if (plat === 'minimaxcode') {
           var mmData = quotasData.minimaxcode;
           var mmQuotas = Array.isArray(mmData && mmData.quotas) ? mmData.quotas : [];
-          var gen = mmQuotas.filter(function (q) { return q.name === 'general'; })[0] || mmQuotas[0];
-          if (gen) {
-            var pct = typeof gen.remainingPercentage === 'number' ? gen.remainingPercentage : 0;
-            quotaText = '配额 通用 ' + pct + '%';
+          var cred = mmQuotas.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
+          if (cred) {
+            var rem = cred.remaining != null ? cred.remaining : cred.total;
+            quotaText = '配额 ' + fmtTok(Math.round(rem || 0)) + ' 积分';
             quotaShow = true;
+          } else {
+            var gen = mmQuotas.filter(function (q) { return q.name === 'general'; })[0] || mmQuotas[0];
+            if (gen) {
+              var pct = typeof gen.remainingPercentage === 'number' ? gen.remainingPercentage : 0;
+              quotaText = '配额 通用 ' + pct + '%';
+              quotaShow = true;
+            }
           }
         }
       }
