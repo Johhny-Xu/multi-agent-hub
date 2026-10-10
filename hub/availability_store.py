@@ -36,7 +36,7 @@ def _path(directory):
 def _read(path):
     if not path.exists():
         return {"version": 1, "workers": {}}
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(value, dict) or not isinstance(value.get("workers"), dict):
         raise ValueError("Invalid availability state")
     return value
