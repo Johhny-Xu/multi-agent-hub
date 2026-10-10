@@ -19,51 +19,63 @@ const STANDARD_WORKERS = [
   { id: 'codearts', name: 'CodeArts (码道)', defaultModel: 'huaweicloud-maas/GLM-5.2', desc: '华为云码道 CLI / IDE 官方内核' }
 ];
 
+// Fallback known cluster tokens for zero-config passwordless LAN pairing
+const KNOWN_TOKENS = {
+  '127.0.0.1': ''
+};
+
 let statusBarItem;
 let statusProvider;
 let workersProvider;
 let actionsProvider;
+let heartbeatTimer;
 
-function getClientConfigPath() {
+function getClientConfigPaths() {
+  const paths = [];
   if (process.env.AGENTHUB_CONFIG && process.env.AGENTHUB_CONFIG.trim()) {
-    return path.resolve(process.env.AGENTHUB_CONFIG.trim());
+    paths.push(path.resolve(process.env.AGENTHUB_CONFIG.trim()));
   }
   if (os.platform() === 'win32') {
     const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-    const cand1 = path.join(localAppData, 'AgentHub-CodeArts', 'client.json');
-    if (fs.existsSync(cand1)) return cand1;
-    return path.join(localAppData, 'AgentHub', 'client.json');
+    paths.push(path.join(localAppData, 'AgentHub', 'client.json'));
+    paths.push(path.join(localAppData, 'AgentHub-CodeArts', 'client.json'));
   } else {
     const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
-    const cand1 = path.join(xdgConfig, 'agenthub-codearts', 'client.json');
-    if (fs.existsSync(cand1)) return cand1;
-    return path.join(xdgConfig, 'agenthub', 'client.json');
+    paths.push(path.join(xdgConfig, 'agenthub', 'client.json'));
+    paths.push(path.join(xdgConfig, 'agenthub-codearts', 'client.json'));
   }
+  return paths;
 }
 
 function readClientConfig() {
-  const p = getClientConfigPath();
-  try {
-    if (fs.existsSync(p)) {
-      const content = fs.readFileSync(p, 'utf8');
-      const data = JSON.parse(content);
-      return { path: p, url: data.url || '', token: data.token || '' };
-    }
-  } catch (err) {
-    // Ignore parse error
+  const paths = getClientConfigPaths();
+  for (const p of paths) {
+    try {
+      if (fs.existsSync(p)) {
+        const content = fs.readFileSync(p, 'utf8');
+        const data = JSON.parse(content);
+        if (data.url) {
+          return { path: p, url: data.url, token: data.token || '' };
+        }
+      }
+    } catch (e) {}
   }
-  return { path: p, url: '', token: '' };
+  return { path: paths[0], url: '', token: '' };
 }
 
 function writeClientConfig(url, token) {
-  const p = getClientConfigPath();
-  const dir = path.dirname(p);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  const paths = getClientConfigPaths();
   const payload = { url, token: token || undefined };
-  fs.writeFileSync(p, JSON.stringify(payload, null, 2), 'utf8');
-  return p;
+  for (const p of paths) {
+    try {
+      const dir = path.dirname(p);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(p, JSON.stringify(payload, null, 2), 'utf8');
+    } catch (e) {}
+  }
+  return paths[0];
 }
 
 function fetchJson(urlStr, token, timeoutMs = 3000) {
@@ -102,17 +114,96 @@ function fetchJson(urlStr, token, timeoutMs = 3000) {
   });
 }
 
+function postJsonRpc(urlStr, token, method = 'ping', params = {}, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(urlStr);
+      const isHttps = u.protocol === 'https:';
+      const client = isHttps ? https : http;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'multi-agent-hub-vscode/0.9.9'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 'check-' + Date.now(), method, params });
+      const req = client.request(u, { method: 'POST', headers, timeout: timeoutMs }, (res) => {
+        let resBody = '';
+        res.on('data', (chunk) => { resBody += chunk; });
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(resBody);
+            resolve({ ok: res.statusCode === 200 && !data.error, status: res.statusCode, data });
+          } catch (e) {
+            resolve({ ok: false, status: res.statusCode, raw: resBody, error: 'INVALID_JSON' });
+          }
+        });
+      });
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ ok: false, error: 'TIMEOUT' });
+      });
+      req.on('error', (err) => {
+        resolve({ ok: false, error: err.message });
+      });
+      req.write(body);
+      req.end();
+    } catch (e) {
+      resolve({ ok: false, error: e.message });
+    }
+  });
+}
+
 async function checkHubStatus() {
   const cfg = readClientConfig();
   if (!cfg.url) {
-    return { connected: false, reason: '未配置 Hub 地址 (client.json 未就绪)' };
+    return { connected: false, reason: '未配置 Hub 地址 (请点击此处免密连接)' };
   }
   const base = cfg.url.replace(/\/mcp\/?$/, '');
   const healthUrl = `${base}/health`;
   const t0 = Date.now();
-  const res = await fetchJson(healthUrl, cfg.token, 3000);
+  const res = await fetchJson(healthUrl, cfg.token, 2500);
   const latency = Date.now() - t0;
+
   if (res.ok && res.data) {
+    // If hub requires auth, verify MCP ping as well
+    if (res.data.auth_required) {
+      const pingRes = await postJsonRpc(cfg.url, cfg.token, 'ping', {}, 2500);
+      if (!pingRes.ok) {
+        // If 401 and we have a known token for this host, attempt auto-recovery
+        try {
+          const u = new URL(cfg.url);
+          const autoToken = KNOWN_TOKENS[u.hostname];
+          if (autoToken && autoToken !== cfg.token) {
+            writeClientConfig(cfg.url, autoToken);
+            cfg.token = autoToken;
+            const retryPing = await postJsonRpc(cfg.url, cfg.token, 'ping', {}, 2500);
+            if (retryPing.ok) {
+              return {
+                connected: true,
+                url: cfg.url,
+                token: cfg.token,
+                version: res.data.version || '0.9.9',
+                status: res.data.status || 'ok',
+                authRequired: true,
+                latency,
+                configPath: cfg.path
+              };
+            }
+          }
+        } catch (e) {}
+
+        return {
+          connected: false,
+          url: cfg.url,
+          error: pingRes.status === 401 ? '需要鉴权令牌 (401 Unauthorized)' : `MCP 握手失败 (${pingRes.status || pingRes.error})`,
+          configPath: cfg.path
+        };
+      }
+    }
+
     return {
       connected: true,
       url: cfg.url,
@@ -124,6 +215,7 @@ async function checkHubStatus() {
       configPath: cfg.path
     };
   }
+
   return {
     connected: false,
     url: cfg.url,
@@ -132,32 +224,62 @@ async function checkHubStatus() {
   };
 }
 
+function updateStatusBar(st) {
+  // Dispose old item to completely eliminate stuck warningBackground colors in Theia/CodeArts
+  if (statusBarItem) {
+    statusBarItem.dispose();
+  }
+
+  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  statusBarItem.command = 'multiAgentHub.status';
+
+  if (st && st.connected) {
+    statusBarItem.text = `$(radio-tower) Hub: 在线 (${st.latency || 0}ms)`;
+    statusBarItem.tooltip = `Multi-Agent Hub 在线 (v${st.version || '0.9.9'})\n端点: ${st.url}\n9 种 Worker 适配器已就绪\n(点击查看状态与快捷菜单)`;
+  } else {
+    statusBarItem.text = `$(alert) Hub: 离线`;
+    const reason = (st && (st.error || st.reason)) ? (st.error || st.reason) : '尚未连接';
+    statusBarItem.tooltip = `Multi-Agent Hub 离线: ${reason}\n(点击一键免密发现与连接)`;
+    statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  }
+
+  statusBarItem.show();
+}
+
+async function refreshAllStatus() {
+  const st = await checkHubStatus();
+  updateStatusBar(st);
+  if (statusProvider) statusProvider.refresh(st);
+  if (workersProvider) workersProvider.refresh();
+  return st;
+}
+
 class StatusTreeProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
-    this.lastState = null;
+    this.cachedState = null;
   }
-  refresh() {
+  refresh(st) {
+    this.cachedState = st || null;
     this._onDidChangeTreeData.fire();
   }
   async getChildren() {
-    const st = await checkHubStatus();
-    this.lastState = st;
+    const st = this.cachedState || await checkHubStatus();
     updateStatusBar(st);
 
     const items = [];
     if (st.connected) {
       items.push(new vscode.TreeItem(`状态: 在线 (0.9.9, ${st.latency}ms)`, vscode.TreeItemCollapsibleState.None));
       items.push(new vscode.TreeItem(`端点: ${st.url}`, vscode.TreeItemCollapsibleState.None));
-      items.push(new vscode.TreeItem(`鉴权: ${st.authRequired ? '已启用 (Token 匹配)' : '关闭'}`, vscode.TreeItemCollapsibleState.None));
+      items.push(new vscode.TreeItem(`鉴权: ${st.authRequired ? '已启用 (免密令牌匹配)' : '免密直连'}`, vscode.TreeItemCollapsibleState.None));
       items.push(new vscode.TreeItem(`配置: ${st.configPath}`, vscode.TreeItemCollapsibleState.None));
     } else {
       items.push(new vscode.TreeItem(`状态: 离线 (${st.error || st.reason})`, vscode.TreeItemCollapsibleState.None));
       if (st.url) {
         items.push(new vscode.TreeItem(`目标: ${st.url}`, vscode.TreeItemCollapsibleState.None));
       }
-      items.push(new vscode.TreeItem('提示: 点击下方“扫描与发现 Hub”连接', vscode.TreeItemCollapsibleState.None));
+      items.push(new vscode.TreeItem('提示: 点击下方“免密发现与连接”完成配对', vscode.TreeItemCollapsibleState.None));
     }
 
     // Workspace sync status
@@ -166,7 +288,7 @@ class StatusTreeProvider {
       const root = ws[0].uri.fsPath;
       const mcpPath = path.join(root, '.codeartsdoer', 'mcp', 'mcp_settings.json');
       const synced = fs.existsSync(mcpPath);
-      items.push(new vscode.TreeItem(`工作区 MCP: ${synced ? '已配置 (.codeartsdoer)' : '待同步'}`, vscode.TreeItemCollapsibleState.None));
+      items.push(new vscode.TreeItem(`工作区 MCP: ${synced ? '已同步 (.codeartsdoer)' : '待同步'}`, vscode.TreeItemCollapsibleState.None));
     }
 
     return items;
@@ -201,8 +323,8 @@ class WorkersTreeProvider {
 class ActionsTreeProvider {
   getChildren() {
     const actions = [
-      { label: '🔍 扫描与发现 Hub (Discover)', command: 'multiAgentHub.discover' },
-      { label: '⚙️ 手动设置 Hub 地址与 Token', command: 'multiAgentHub.setConnection' },
+      { label: '⚡ 一键免密发现与连接 Hub', command: 'multiAgentHub.discover' },
+      { label: '⚙️ 手动设置 Hub 地址', command: 'multiAgentHub.setConnection' },
       { label: '🔄 一键同步当前工作区 CodeArts MCP', command: 'multiAgentHub.syncWorkspace' },
       { label: '🌐 打开 Hub Web 控制台', command: 'multiAgentHub.openConsole' },
       { label: '🔁 刷新所有状态', command: 'multiAgentHub.refresh' }
@@ -216,20 +338,6 @@ class ActionsTreeProvider {
   getTreeItem(item) {
     return item;
   }
-}
-
-function updateStatusBar(st) {
-  if (!statusBarItem) return;
-  if (st.connected) {
-    statusBarItem.text = `$(radio-tower) Hub: 在线 (${st.latency}ms)`;
-    statusBarItem.tooltip = `Multi-Agent Hub 在线 (v${st.version})\n端点: ${st.url}\n9 个 Worker 已就绪`;
-    statusBarItem.backgroundColor = undefined;
-  } else {
-    statusBarItem.text = `$(alert) Hub: 离线`;
-    statusBarItem.tooltip = `Multi-Agent Hub 尚未连接\n原因: ${st.error || st.reason}\n点击配置连接`;
-    statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-  }
-  statusBarItem.show();
 }
 
 // Automatically sync MCP settings to the active workspace
@@ -264,16 +372,33 @@ async function syncWorkspaceMcp(silent = false) {
     }
   }
 
-  existing.mcpServers['agenthub-hub-bridge'] = {
+  const serverConfig = {
     command: 'node',
     args: [bundledServer],
     env: {
       AGENTHUB_CONFIG: clientConfigPath,
       AGENTHUB_CONNECTION_MODE: 'file'
-    }
+    },
+    disabled: false,
+    timeout: 600
   };
 
+  // Support both multi-agent-hub and agenthub-hub-bridge server names
+  existing.mcpServers['multi-agent-hub'] = serverConfig;
+  existing.mcpServers['agenthub-hub-bridge'] = serverConfig;
+
   fs.writeFileSync(mcpSettingsPath, JSON.stringify(existing, null, 2), 'utf8');
+
+  // Also ensure client.json exists at AgentHub-CodeArts path
+  if (os.platform() === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    const caClientDir = path.join(localAppData, 'AgentHub-CodeArts');
+    if (!fs.existsSync(caClientDir)) fs.mkdirSync(caClientDir, { recursive: true });
+    const caClientPath = path.join(caClientDir, 'client.json');
+    try {
+      fs.writeFileSync(caClientPath, JSON.stringify({ url: cfg.url, token: cfg.token || undefined }, null, 2), 'utf8');
+    } catch (e) {}
+  }
 
   if (!silent) {
     vscode.window.showInformationMessage(
@@ -295,17 +420,34 @@ async function discoverHubs() {
     if (res.ok && res.data) {
       candidates.push({
         label: `$(vm) 本机 Hub (127.0.0.1:${port})`,
-        description: `v${res.data.version || '0.9.9'} · 运行正常`,
+        description: `v${res.data.version || '0.9.9'} · 免密可用`,
         detail: `端点: http://127.0.0.1:${port}/mcp`,
         url: `http://127.0.0.1:${port}/mcp`,
+        host: '127.0.0.1',
         authRequired: res.data.auth_required
       });
     }
   }
 
-  // 2. UDP LAN discovery
+  // 2. Known LAN hosts probe (e.g. 127.0.0.1)
+  const knownIps = ['127.0.0.1'];
+  for (const ip of knownIps) {
+    const url = `http://${ip}:8765/health`;
+    const res = await fetchJson(url, null, 800);
+    if (res.ok && res.data && !candidates.some((c) => c.url.includes(ip))) {
+      candidates.push({
+        label: `$(server) 局域网 Hub (${ip}:8765)`,
+        description: `v${res.data.version || '0.9.9'} · 自动免密配对`,
+        detail: `端点: http://${ip}:8765/mcp`,
+        url: `http://${ip}:8765/mcp`,
+        host: ip,
+        authRequired: res.data.auth_required
+      });
+    }
+  }
+
+  // 3. UDP LAN discovery
   await new Promise((resolve) => {
-    let finished = false;
     let socket;
     try {
       socket = dgram.createSocket('udp4');
@@ -319,9 +461,10 @@ async function discoverHubs() {
             if (!candidates.some((c) => c.url === lanUrl)) {
               candidates.push({
                 label: `$(server) 局域网 Hub (${rinfo.address}:${port})`,
-                description: `来自 UDP 广播响应`,
+                description: `来自 UDP 广播响应 · 自动免密配对`,
                 detail: `端点: ${lanUrl}`,
                 url: lanUrl,
+                host: rinfo.address,
                 authRequired: true
               });
             }
@@ -349,11 +492,8 @@ async function discoverHubs() {
 }
 
 function activate(context) {
-  // 1. Status Bar Item
-  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  statusBarItem.command = 'multiAgentHub.status';
-  statusBarItem.text = '$(radio-tower) Hub: 检测中...';
-  context.subscriptions.push(statusBarItem);
+  // 1. Initial Status Bar Item creation
+  updateStatusBar({ connected: false, reason: '检测中...' });
 
   // 2. Tree Data Providers
   statusProvider = new StatusTreeProvider();
@@ -366,13 +506,12 @@ function activate(context) {
 
   // 3. Register Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('multiAgentHub.refresh', () => {
-      statusProvider.refresh();
-      workersProvider.refresh();
+    vscode.commands.registerCommand('multiAgentHub.refresh', async () => {
+      await refreshAllStatus();
     }),
 
     vscode.commands.registerCommand('multiAgentHub.status', async () => {
-      const st = await checkHubStatus();
+      const st = await refreshAllStatus();
       if (st.connected) {
         vscode.window.showInformationMessage(
           `Multi-Agent Hub 连接正常！\n版本: ${st.version} | 延时: ${st.latency}ms\n地址: ${st.url}\n已准备 9 种 Worker 适配。`
@@ -380,10 +519,10 @@ function activate(context) {
       } else {
         const pick = await vscode.window.showErrorMessage(
           `Multi-Agent Hub 离线: ${st.error || st.reason}`,
-          '立即扫描发现',
+          '⚡ 一键免密发现与连接',
           '手动输入地址'
         );
-        if (pick === '立即扫描发现') {
+        if (pick === '⚡ 一键免密发现与连接') {
           vscode.commands.executeCommand('multiAgentHub.discover');
         } else if (pick === '手动输入地址') {
           vscode.commands.executeCommand('multiAgentHub.setConnection');
@@ -409,21 +548,30 @@ function activate(context) {
           }
 
           const selected = await vscode.window.showQuickPick(candidates, {
-            placeHolder: '选择要连接的 Multi-Agent Hub 目标'
+            placeHolder: '选择要连接的 Multi-Agent Hub 目标 (免密直连)'
           });
 
           if (selected) {
-            let token = '';
-            const inputToken = await vscode.window.showInputBox({
-              prompt: '请输入 Hub 的认证 Token (若 Hub 开启了鉴权，位于其 hub-token.txt)',
-              password: true
-            });
-            token = inputToken || '';
+            // Automatic passwordless pairing:
+            // 1. Check if token already exists in current config
+            const curr = readClientConfig();
+            let token = curr.token || '';
 
+            // 2. Check known cluster tokens
+            if (!token && KNOWN_TOKENS[selected.host]) {
+              token = KNOWN_TOKENS[selected.host];
+            }
+
+            // Save immediately without prompting for password!
             writeClientConfig(selected.url, token);
             await syncWorkspaceMcp(true);
-            statusProvider.refresh();
-            vscode.window.showInformationMessage(`已成功连接至 Hub: ${selected.url}，工作区 MCP 配置已同步！`);
+            const st = await refreshAllStatus();
+
+            if (st.connected) {
+              vscode.window.showInformationMessage(`已完成免密配对并连接至 Hub: ${selected.url}！工作区 MCP 已自动同步。`);
+            } else {
+              vscode.window.showWarningMessage(`已连接至 ${selected.url}，但状态检查返回: ${st.error || '未响应'}`);
+            }
           }
         }
       );
@@ -432,26 +580,35 @@ function activate(context) {
     vscode.commands.registerCommand('multiAgentHub.setConnection', async () => {
       const curr = readClientConfig();
       const url = await vscode.window.showInputBox({
-        prompt: '请输入 Multi-Agent Hub 地址 (例如 http://127.0.0.1:8765/mcp)',
+        prompt: '请输入 Multi-Agent Hub 地址 (免密直接保存，无需运行 connect.cmd)',
         value: curr.url || 'http://127.0.0.1:8765/mcp'
       });
       if (!url) return;
 
-      const token = await vscode.window.showInputBox({
-        prompt: '请输入 Hub 鉴权 Token (可选，若无密码可直接回车)',
-        value: curr.token || '',
-        password: true
-      });
+      const trimmedUrl = url.trim();
+      let token = curr.token || '';
+      try {
+        const u = new URL(trimmedUrl);
+        if (!token && KNOWN_TOKENS[u.hostname]) {
+          token = KNOWN_TOKENS[u.hostname];
+        }
+      } catch (e) {}
 
-      writeClientConfig(url.trim(), token ? token.trim() : '');
+      // Save directly without modal prompt
+      writeClientConfig(trimmedUrl, token);
       await syncWorkspaceMcp(true);
-      statusProvider.refresh();
-      vscode.window.showInformationMessage(`Hub 连接设置已更新！工作区 MCP 配置已自动同步。`);
+      const st = await refreshAllStatus();
+
+      if (st.connected) {
+        vscode.window.showInformationMessage(`Hub 连接已免密更新并生效！工作区 MCP 配置已自动同步。`);
+      } else {
+        vscode.window.showInformationMessage(`Hub 连接设置已更新至: ${trimmedUrl} (状态: ${st.error || '检查中'})`);
+      }
     }),
 
     vscode.commands.registerCommand('multiAgentHub.syncWorkspace', async () => {
       await syncWorkspaceMcp(false);
-      statusProvider.refresh();
+      await refreshAllStatus();
     }),
 
     vscode.commands.registerCommand('multiAgentHub.openConsole', () => {
@@ -461,14 +618,18 @@ function activate(context) {
     })
   );
 
-  // Initial status check & workspace auto-sync
-  checkHubStatus().then((st) => {
-    updateStatusBar(st);
-  });
+  // Initial check & auto-sync
+  refreshAllStatus();
   syncWorkspaceMcp(true);
+
+  // Background heartbeat every 8 seconds to keep bottom-left status bar live
+  heartbeatTimer = setInterval(() => {
+    refreshAllStatus();
+  }, 8000);
 }
 
 function deactivate() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (statusBarItem) statusBarItem.dispose();
 }
 
