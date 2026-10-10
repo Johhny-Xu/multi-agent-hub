@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.9 重点优化使用体验</title>
-  <desc id="roadmap-desc">v0.9.9 当前重点为优化使用体验：五种原生客户端、九种 worker、连接选择、失败原因、ref 续查与升级备份。Windows 32 组回归通过，Linux 29 组回归通过；Linux Antigravity 与 ZCode、Windows Codex 与 ZCode 已通过原生任务。不代表所有模型和功能均已实测。</desc>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.4 重点攻坚 MiniMaxCode 适配与前端优化</title>
+  <desc id="roadmap-desc">v0.9.4 当前重点为攻坚 MiniMaxCode 适配与 WebUI 前端优化：全新三栏式控制台、时段问候、会话归档复原删除、MiniMax-M3.1-Flash-Preview 与 M3 旗舰深度适配。</desc>
   <defs>
     <style>
       .title { font-size:34px; font-weight:700; fill:#0f172a; }
@@ -22,17 +22,17 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-09　·　当前版本 v0.9.9　·　五种原生客户端</text>
+  <text x="64" y="108" class="meta">更新：2026-10-10　·　当前版本 v0.9.4　·　五种原生客户端</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.9 · 当前重点</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.4 · 当前重点</text>
     <rect x="938" y="151" width="246" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">原生接入 · 跨机验证</text>
-    <text x="96" y="227" class="focus">优化使用体验</text>
-    <text x="96" y="262" class="lead">五种原生客户端(含Antigravity) · 九种 worker · Windows / Linux 双向连接</text>
+    <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">版本攻坚 · 前端优化</text>
+    <text x="96" y="227" class="focus">MiniMax 适配与前端优化</text>
+    <text x="96" y="262" class="lead">MiniMaxCode 深度攻坚 · CodeBuddy 三栏式 WebUI · 会话归档复原 · 探活右移</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
@@ -45,14 +45,16 @@
     <circle cx="102" cy="442" r="5" fill="#0f766e"/>
     <text x="120" y="450" class="body">升级备份保护现有配置安全</text>
 
-    <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">接下来继续优化</text>
+    <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">当前攻坚重点成果</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">登录步骤与授权引导</text>
+    <text x="716" y="351" class="body">MiniMaxCode 旗舰适配 (M3.1/M3)</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
-    <text x="716" y="384" class="body">扫描、配对与连接状态反馈</text>
+    <text x="716" y="384" class="body">WebUI 三栏控制台与时段关怀</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">常见故障的说明与恢复指引</text>
-    <text x="692" y="456" class="note">按实际验证开放能力，持续优化使用体验。</text>
+    <text x="716" y="417" class="body">全量会话归档、复原与清理</text>
+    <circle cx="698" cy="442" r="5" fill="#2563eb"/>
+    <text x="716" y="450" class="body">刷新深度探活与子代理开关</text>
+    <text x="692" y="476" class="note">聚焦 MiniMaxCode 官方能力打通与沉浸式人机交互。</text>
   </g>
 
   <text x="64" y="541" class="section">版本演进</text>
@@ -83,9 +85,9 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="27" font-weight="700" fill="#2563eb">v0.9</text>
-    <text x="1024" y="646" font-size="21" font-weight="700" fill="#1d4ed8">使用体验优化</text>
-    <text x="1024" y="675" class="stage">多端原生适配</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v0.9.4</text>
+    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">MiniMax 适配</text>
+    <text x="1024" y="675" class="stage">WebUI 体验革命</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->
@@ -109,5 +111,5 @@
     <text x="88" y="921" font-size="22" font-weight="700" fill="#92400e">验证范围说明：现有回归通过，不声称所有模型实测通过。</text>
     <text x="88" y="949" font-size="20" fill="#92400e">通信与基础契约验证通过，不代表每个模型的思考、流式与附件能力均已全部实测完毕。</text>
   </g>
-  <text x="64" y="993" class="note">完整实测与限制见 docs/release-0.9.9.md　·　安装包附件尚未上传 GitHub Release</text>
+  <text x="64" y="993" class="note">完整演进记录见 CHANGELOG.md 与 docs/version-history.md　·　版本沿 0.8.0 至 0.9.4 平滑演进</text>
 </svg>

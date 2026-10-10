@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 0.9.9：五种客户端、九种 worker，Windows 与 Linux 双向连接</title>
-  <desc id="architecture-desc">客户端原生插件经过 MCP 桥选择并连接 Windows 或 Linux Hub。Hub 管理任务与结果，再调用九种 worker 的官方 CLI。插件与 Hub 独立安装，可以同机或跨机；Windows 到 Linux 可直接连接，Linux 到 Windows 已通过 SSH 反向转发验证。Antigravity 与 CodeArts 均具有原生客户端角色，CodeArts Linux worker 已通过 GLM-5.2 实际任务；Windows IDE 已原生派发，结果回收受宿主权限限制。当前重点是优化连接、能力提示与故障反馈体验。</desc>
+  <title id="architecture-title">multi-agent-hub 0.9.4：五种客户端、九种 worker，Windows 与 Linux 双向连接 · MiniMaxCode 适配与前端优化</title>
+  <desc id="architecture-desc">客户端原生插件经过 MCP 桥选择并连接 Windows 或 Linux Hub。Hub 管理任务与结果，再调用九种 worker 的官方 CLI。插件与 Hub 独立安装，可以同机或跨机；Windows 到 Linux 可直接连接，Linux 到 Windows 已通过 SSH 反向转发验证。当前重点攻坚 MiniMaxCode 适配与 WebUI 前端优化。</desc>
   <defs>
     <style>
       text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
@@ -19,7 +19,7 @@
   <rect width="1280" height="980" rx="24" fill="#f8fafc"/>
   <text x="32" y="58" class="title">multi-agent-hub · 一张图看懂任务怎样运行</text>
   <rect x="1112" y="26" width="136" height="40" rx="20" fill="#dbeafe"/>
-  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v0.9.9</text>
+  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v0.9.4</text>
   <text x="32" y="94" class="body muted">5 种客户端 · 9 种 worker · 插件与 Hub 独立部署 · Windows / Linux 双向连接</text>
 
   <!-- Read from left to right; each arrow carries tasks and their results. -->
@@ -75,7 +75,7 @@
     <text x="598" y="451" class="body">管理任务、状态和结果</text>
     <text x="598" y="483" class="small muted">单个 Python 常驻服务</text>
     <text x="598" y="515" class="small muted">worker 按需启动</text>
-    <text x="598" y="557" class="small green">Web 控制台可选</text>
+    <text x="598" y="557" class="small green" font-weight="700">全新 WebUI 控制台</text>
   </g>
 
   <g id="workers">
@@ -88,7 +88,8 @@
     <text x="886" y="327" class="body">CodeBuddy 国内版</text><text x="1224" y="327" text-anchor="end" class="small muted">cbcn</text>
     <text x="886" y="359" class="body">GitHub Copilot</text><text x="1224" y="359" text-anchor="end" class="small muted">gcp</text>
     <text x="886" y="391" class="body">MiMo</text><text x="1224" y="391" text-anchor="end" class="small muted">mimo</text>
-    <text x="886" y="423" class="body">MiniMax</text><text x="1224" y="423" text-anchor="end" class="small muted">mmx</text>
+    <rect x="880" y="403" width="350" height="28" rx="6" fill="#eff6ff"/>
+    <text x="886" y="423" class="body blue" font-weight="700">MiniMaxCode</text><text x="1218" y="423" text-anchor="end" class="small blue">mmx · M3.1 攻坚</text>
     <text x="886" y="455" class="body">TraeCode</text><text x="1224" y="455" text-anchor="end" class="small muted">trae</text>
     <text x="886" y="487" class="body">ZCode</text><text x="1224" y="487" text-anchor="end" class="small muted">zcode</text>
     <rect x="880" y="502" width="350" height="34" rx="8" fill="#fffbeb"/>
@@ -116,5 +117,5 @@
   <text x="56" y="866" class="heading blue">模型服务商 · 实际的数据流</text>
   <text x="56" y="898" class="body">客户端 → Hub → 官方 CLI → 模型服务商；提示词、附件和工具结果可能发送到服务商。</text>
   <text x="56" y="929" class="small muted">账号与模型需单独配置；CodeArts 原生安装通信通过不等于独立模型调用成功；Antigravity 现支持客户端角色。</text>
-  <text x="32" y="965" class="small muted">当前源码 v0.9.9 · 体验优化持续进行 · 具体型号与限制见 README / docs 目录</text>
+  <text x="32" y="965" class="small muted">当前源码 v0.9.4 · MiniMaxCode 深度攻坚与 WebUI 前端优化 · 具体型号与限制见 README / docs 目录</text>
 </svg>
