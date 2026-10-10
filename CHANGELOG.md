@@ -13,12 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.9.1] - 2026-10-10
 
-### 华为 CodeArts 官方模型目录与限时福利 (`codearts`)
+### 华为 CodeArts 官方模型与凭据自动加载修复 (`codearts`)
 
-- **全量模型目录补全**：对照华为 CodeArts 官方客户端下拉列表，完整补齐“限时福利”与“内置”两类模型。
-  - **限时福利**：新增 `deepseek-v4-flash-0731`、`glm-5.3-flash`、`deepseek-v4-pro-0813`、`deepseek-v4.1-flash`，标记免积分 `[免费]` 及专属紫色 `[限时福利]` 胶囊。
-  - **内置模型**：同步标定官方实测积分倍率 `GLM-5.2`（`0.70x`，默认）、`GLM-5.2-ArkTS-SPARK`（`0.70x`）、`OpenPangu-2.0-Pro`（`0.70x`）、`OpenPangu-2.0-Flash`（`0.35x`）。
-- 服务端 `agents.json` 别名表与 `server.mjs` 自动映射短 ID 与 `huaweicloud-maas/*` 全称，支持一键切换。
+- **凭据环境自动载入**：底层驱动 `drivers/codearts_cli.py` 新增自动加载 `~/.config/agenthub-codearts/codearts-auth.env`（或 `CODEARTS_AUTH_ENV` 指定文件）中的 `CODEARTS_CLI_AK` 与 `CODEARTS_CLI_SK`，彻底解决无头模式下因缺少凭据被判定为 `CODEARTS_AUTH_REQUIRED` 或模型列表解析为空的根因。
+- **Linux 官方 CLI 路径与 Profile 匹配**：适配 Linux 环境下名为 `codearts` 的官方可执行文件，建立与 Windows `codearts.exe` 一致的 TUI/配置隔离与目录加载规则。
+- **模型可用性与目录收敛**：深入华为 MaaS 与 IDE 网关机制，理清无头 CLI（MaaS 官方 AK/SK 鉴权）与 IDE 桌面（临时云端 IAM 网关鉴权）的能力边界；在控制台与 `agents.json` 中将 CLI 真实支持的模型收敛为 4 款已完全验证可用的官方企业级模型（`GLM-5.2` 默认/`0.70x`、`GLM-5.2-ArkTS-SPARK`/`0.70x`、`OpenPangu-2.0-Pro`/`0.70x`、`OpenPangu-2.0-Flash`/`0.35x`）；清理 `availability.json` 中的误报阻断记录，彻底修复选择模型时弹出“找不到所选模型”报错的问题。
+- **全链路异步调度验证**：实测并通过 Linux Hub 进程至 CodeArts CLI 的全链路任务派发与回答确认（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK` 均秒级返回且状态置为 `completed`）。
 
 ### TraeCode 模型倍率与营销折扣对齐 (`traecode`)
 

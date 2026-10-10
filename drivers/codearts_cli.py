@@ -195,13 +195,26 @@ def parse_events(stdout: str, stderr: str, returncode: int, model="") -> dict:
 def runtime_environment(cli: Path, runtime: Path, *, env=None, home=None) -> dict:
     result = dict(os.environ if env is None else env)
     home = Path(home or Path.home())
+    auth_env_override = result.get("CODEARTS_AUTH_ENV")
+    auth_env = Path(auth_env_override) if auth_env_override else (home / ".config" / "agenthub-codearts" / "codearts-auth.env")
+    if auth_env.is_file():
+        try:
+            for line in auth_env.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip()
+                    if k and k not in result:
+                        result[k] = v
+        except OSError:
+            pass
     if cli.name.startswith("AgentKernel_"):
         config = home / ".codeartsdoer"
         data = config / "codearts-data"
         result.update(SCENARIO="codeartsdoer", PLUGIN_ENV="hc", IS_PROD="true",
                       KERNEL_CONFIG_DIR=str(config), KERNEL_DATA_DIR=str(data),
                       OPENCODE_CONFIG=str(data / "codearts.json"), OPENCODE_CONFIG_FILE="codearts.json")
-    elif cli.name.lower() == "codearts.exe":
+    elif cli.name.lower() in ("codearts.exe", "codearts"):
         # The official Windows installer exposes a .cmd wrapper, but this
         # adapter executes only the executable with shell=False. Mirror the
         # wrapper's CLI profile selection without disabling TLS verification.

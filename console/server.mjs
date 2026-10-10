@@ -82,10 +82,6 @@ const DISPATCH_OVERRIDES = { traecode: { tool: 'trae_delegate', asyncFlag: { wai
  */
 const MODEL_CATALOG = {
   codearts: [
-    { id: 'huaweicloud-maas/deepseek-v4-flash-0731', name: 'deepseek-v4-flash-0731', tag: '限时福利', credits: '0.00x' },
-    { id: 'huaweicloud-maas/glm-5.3-flash', name: 'glm-5.3-flash', tag: '限时福利', credits: '0.00x' },
-    { id: 'huaweicloud-maas/deepseek-v4-pro-0813', name: 'deepseek-v4-pro-0813', tag: '限时福利', credits: '0.00x' },
-    { id: 'huaweicloud-maas/deepseek-v4.1-flash', name: 'deepseek-v4.1-flash', tag: '限时福利', credits: '0.00x' },
     { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x', default: true },
     { id: 'huaweicloud-maas/glm-5.2-sft-harmony', name: 'GLM-5.2-ArkTS-SPARK', credits: '0.70x' },
     { id: 'huaweicloud-maas/openpangu-2.0-pro', name: 'OpenPangu-2.0-Pro', credits: '0.70x' },
