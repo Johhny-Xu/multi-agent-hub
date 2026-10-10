@@ -1526,31 +1526,9 @@
     user-select: none;
   }
   .empty-avatar:hover {
-    transform: scale(1.08);
-    box-shadow: 0 12px 30px rgba(59, 130, 246, 0.35);
+    transform: scale(1.06);
+    box-shadow: 0 10px 28px rgba(59, 130, 246, 0.4);
     filter: brightness(1.1);
-  }
-  .empty-avatar::after {
-    content: '✎';
-    position: absolute;
-    right: -2px;
-    bottom: -2px;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--mcode-accent);
-    color: #fff;
-    font-size: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid var(--mcode-bg);
-    opacity: 0.85;
-    transition: opacity .2s ease;
-  }
-  .empty-avatar:hover::after {
-    opacity: 1;
-    transform: scale(1.1);
   }
   .empty-title {
     font-size: 13px;
