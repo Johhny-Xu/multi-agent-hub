@@ -2303,17 +2303,156 @@
 
   /* — 底部状态栏：胶囊分段 + 等宽数字 — */
   .cb-status-bar-wrap {
+    position: relative;
     border-top: 1px solid var(--mcode-border);
     background: color-mix(in srgb, var(--mcode-bg-secondary) 88%, transparent);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   }
-  .cb-status-bar { gap: 4px; font-variant-numeric: tabular-nums; }
+  .cb-status-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 4px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
   .cb-status-seg {
     border-radius: 999px; padding: 2px 9px; font-size: 12px;
     transition: background-color .16s ease, color .16s ease;
+    white-space: nowrap;
+    cursor: pointer;
   }
   .cb-status-seg:hover { background: var(--mcode-surface-hover); }
   .cb-status-model, .cb-status-sys-toggle { color: var(--mcode-accent); font-weight: 500; }
+  .cb-status-gear {
+    margin-left: auto;
+    opacity: 0.65;
+    font-size: 11px;
+    padding: 2px 7px;
+  }
+  .cb-status-gear:hover {
+    opacity: 1;
+    background: var(--mcode-surface-hover);
+  }
+
+  /* — 状态栏自定义项弹出面板 — */
+  .sb-config-panel {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 12px;
+    width: 290px;
+    max-width: min(92vw, 320px);
+    background: var(--mcode-surface-raised, #18181c);
+    border: 1px solid var(--mcode-border-strong, #3a3a46);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    z-index: 1250;
+    overflow: hidden;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    font-size: 12px;
+    color: var(--mcode-text);
+  }
+  .sb-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--mcode-border);
+    background: color-mix(in srgb, var(--mcode-surface-raised, #18181c) 90%, #fff 10%);
+  }
+  .sb-config-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mcode-text-bright, #fff);
+  }
+  .sb-config-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sb-config-btn-text {
+    background: none;
+    border: none;
+    color: var(--mcode-accent, #6366f1);
+    font-size: 11.5px;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: background-color .14s ease;
+  }
+  .sb-config-btn-text:hover {
+    background: rgba(99, 102, 241, 0.15);
+  }
+  .sb-config-close {
+    background: none;
+    border: none;
+    color: var(--mcode-text-muted, #888);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 4px;
+  }
+  .sb-config-close:hover {
+    background: var(--mcode-surface-hover);
+    color: var(--mcode-text-bright);
+  }
+  .sb-config-body {
+    padding: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .sb-config-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    user-select: none;
+    cursor: pointer;
+    transition: background-color .14s ease;
+  }
+  .sb-config-row:hover {
+    background: var(--mcode-surface-hover, rgba(255, 255, 255, 0.06));
+  }
+  .sb-config-checkbox {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--mcode-accent, #6366f1);
+  }
+  .sb-config-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+  }
+  .sb-config-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mcode-text-bright, #eee);
+  }
+  .sb-config-desc {
+    font-size: 10.5px;
+    color: var(--mcode-text-muted, #8e8e9e);
+  }
+  .sb-config-footer {
+    padding: 6px 12px;
+    font-size: 10.5px;
+    color: var(--mcode-text-muted);
+    background: color-mix(in srgb, var(--mcode-bg-secondary) 60%, transparent);
+    border-top: 1px solid var(--mcode-border);
+    text-align: center;
+  }
 
   /* — 配额卡片与配额条：渐变填充 + 明细清晰 — */
   .cb-quota-plat-card {
@@ -2721,7 +2860,7 @@
               </div>
               <!-- 紧凑状态条 -->
               <div class="cb-status-bar-wrap" id="status-bar-wrap">
-                <div class="cb-status-bar" id="status-bar">
+                <div class="cb-status-bar" id="status-bar" title="点击自定义状态栏显示项">
                   <span class="cb-status-seg cb-status-agent" id="sb-agent" data-sb="agent">⚡ …</span>
                   <span class="cb-status-sep">·</span>
                   <span class="cb-status-seg cb-status-model" id="sb-model" data-sb="model" style="cursor:pointer">…</span>
@@ -2736,6 +2875,24 @@
                   <span class="cb-status-sep">·</span>
                   <span class="cb-status-seg" id="sb-today" data-sb="today">…</span>
                   <span id="sb-quota-wrap" hidden><span class="cb-status-sep">·</span><span class="cb-status-seg" id="sb-quota" data-sb="quota"></span></span>
+                  <span class="cb-status-seg cb-status-gear" id="sb-gear" data-sb="gear" title="自定义状态栏显示项">⚙️</span>
+                </div>
+                <!-- 状态栏自定义项弹出面板 -->
+                <div class="sb-config-panel" id="status-bar-config-panel" hidden>
+                  <div class="sb-config-header">
+                    <div class="sb-config-title">
+                      <span>⚙️ 状态栏显示项</span>
+                    </div>
+                    <div class="sb-config-actions">
+                      <button type="button" class="sb-config-btn-text" id="sb-config-select-all">全选</button>
+                      <button type="button" class="sb-config-btn-text" id="sb-config-reset">重置</button>
+                      <button type="button" class="sb-config-close" id="sb-config-close" title="关闭 (Esc)">✕</button>
+                    </div>
+                  </div>
+                  <div class="sb-config-body" id="sb-config-list"></div>
+                  <div class="sb-config-footer">
+                    <span>勾选即生效，实时保存偏好</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4649,8 +4806,214 @@
         return lines.join('\n');
       }
       return header + '\n当前平台未接入配额跟踪 (9router)';
+    },
+    gear: function () {
+      return '自定义状态栏显示项\n点击自由勾选/取消显示各项指标';
     }
   };
+
+  var SB_ITEMS = [
+    { key: 'agent', label: '子代理平台', desc: '显示当前选定子代理标识 (⚡)' },
+    { key: 'model', label: '当前模型', desc: '显示当前模型名称及运行参数' },
+    { key: 'speed', label: '生成速度', desc: '实时生成吞吐速率 (t/s)' },
+    { key: 'ctx', label: '上下文占用', desc: '进度条、Token 计数与占用比例' },
+    { key: 'turn', label: '本轮消息', desc: '本轮输出 Token 及消息条数' },
+    { key: 'sess', label: '会话总计', desc: '当前会话累计消耗 Token' },
+    { key: 'today', label: '今日用量', desc: '当日 ↑输入 与 ↓输出 Token' },
+    { key: 'quota', label: '剩余配额', desc: '各平台可用积分 / 配额比例' }
+  ];
+
+  var SB_DEFAULT_PREFS = {
+    agent: true,
+    model: true,
+    speed: true,
+    ctx: true,
+    turn: true,
+    sess: true,
+    today: true,
+    quota: true
+  };
+
+  function getStatusBarPrefs() {
+    try {
+      var raw = localStorage.getItem('agent_hub_statusbar_prefs');
+      if (raw) {
+        var p = JSON.parse(raw);
+        if (p && typeof p === 'object') {
+          return Object.assign({}, SB_DEFAULT_PREFS, p);
+        }
+      }
+    } catch (e) {}
+    return Object.assign({}, SB_DEFAULT_PREFS);
+  }
+
+  function saveStatusBarPrefs(p) {
+    try {
+      localStorage.setItem('agent_hub_statusbar_prefs', JSON.stringify(p));
+    } catch (e) {}
+  }
+
+  function setStatusBarPref(key, val) {
+    var p = getStatusBarPrefs();
+    p[key] = !!val;
+    saveStatusBarPrefs(p);
+    updateStatusBar();
+    renderStatusBarConfig();
+  }
+
+  function applyStatusBarVisibility(quotaHasData) {
+    var bar = $('#status-bar');
+    if (!bar) return;
+    var prefs = getStatusBarPrefs();
+
+    var order = [
+      { key: 'agent', el: $('#sb-agent') },
+      { key: 'model', el: $('#sb-model') },
+      { key: 'speed', el: $('#sb-speed') },
+      { key: 'ctx', el: $('#sb-ctx') },
+      { key: 'turn', el: $('#sb-turn') },
+      { key: 'sess', el: $('#sb-sess') },
+      { key: 'today', el: $('#sb-today') },
+      { key: 'quota', el: $('#sb-quota'), wrap: $('#sb-quota-wrap') }
+    ];
+
+    // 先隐藏全部 .cb-status-sep 分隔符
+    bar.querySelectorAll('.cb-status-sep').forEach(function (s) { s.style.display = 'none'; });
+
+    var hasPrevVisible = false;
+    var visibleCount = 0;
+
+    order.forEach(function (item) {
+      var isPrefEnabled = (prefs[item.key] !== false);
+      var isVisible = false;
+
+      if (item.key === 'quota') {
+        if (isPrefEnabled && quotaHasData) {
+          if (item.wrap) item.wrap.hidden = false;
+          isVisible = true;
+        } else {
+          if (item.wrap) item.wrap.hidden = true;
+          isVisible = false;
+        }
+      } else if (item.el) {
+        if (isPrefEnabled) {
+          item.el.style.display = '';
+          isVisible = true;
+        } else {
+          item.el.style.display = 'none';
+          isVisible = false;
+        }
+      }
+
+      if (isVisible) {
+        visibleCount++;
+        if (hasPrevVisible) {
+          if (item.key === 'quota') {
+            var sep = item.wrap ? item.wrap.querySelector('.cb-status-sep') : null;
+            if (sep) sep.style.display = '';
+          } else if (item.el) {
+            var prevNode = item.el.previousElementSibling;
+            while (prevNode && !prevNode.classList.contains('cb-status-sep')) {
+              prevNode = prevNode.previousElementSibling;
+            }
+            if (prevNode && prevNode.classList.contains('cb-status-sep')) {
+              prevNode.style.display = '';
+            }
+          }
+        }
+        hasPrevVisible = true;
+      }
+    });
+
+    var emptyHint = $('#sb-empty-hint');
+    if (visibleCount === 0) {
+      if (!emptyHint) {
+        emptyHint = el('span', 'cb-status-seg cb-status-empty', '⚙️ 状态栏项目已全部隐藏（点击自定义）');
+        emptyHint.id = 'sb-empty-hint';
+        emptyHint.style.cursor = 'pointer';
+        emptyHint.style.opacity = '0.75';
+        bar.appendChild(emptyHint);
+      }
+      emptyHint.style.display = '';
+    } else if (emptyHint) {
+      emptyHint.style.display = 'none';
+    }
+  }
+
+  function renderStatusBarConfig() {
+    var panel = $('#status-bar-config-panel');
+    if (!panel) return;
+    var list = $('#sb-config-list');
+    if (!list) return;
+    list.innerHTML = '';
+    var prefs = getStatusBarPrefs();
+
+    SB_ITEMS.forEach(function (it) {
+      var checked = (prefs[it.key] !== false);
+      var row = el('label', 'sb-config-row');
+
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'sb-config-checkbox';
+      chk.checked = checked;
+      chk.addEventListener('change', function (e) {
+        setStatusBarPref(it.key, e.target.checked);
+      });
+
+      var info = el('div', 'sb-config-info');
+      var label = el('span', 'sb-config-label', it.label);
+      var desc = el('span', 'sb-config-desc', it.desc);
+      info.appendChild(label);
+      info.appendChild(desc);
+
+      row.appendChild(chk);
+      row.appendChild(info);
+      list.appendChild(row);
+    });
+  }
+
+  function openStatusBarConfig() {
+    var panel = $('#status-bar-config-panel');
+    if (!panel) return;
+    if (sbTipEl) sbTipEl.style.display = 'none';
+    panel.hidden = false;
+    renderStatusBarConfig();
+    document.addEventListener('click', handleSbConfigClickOutside, true);
+    document.addEventListener('keydown', handleSbConfigKeydown, true);
+  }
+
+  function closeStatusBarConfig() {
+    var panel = $('#status-bar-config-panel');
+    if (!panel) return;
+    panel.hidden = true;
+    document.removeEventListener('click', handleSbConfigClickOutside, true);
+    document.removeEventListener('keydown', handleSbConfigKeydown, true);
+  }
+
+  function toggleStatusBarConfig(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    var panel = $('#status-bar-config-panel');
+    if (panel && !panel.hidden) {
+      closeStatusBarConfig();
+    } else {
+      openStatusBarConfig();
+    }
+  }
+
+  function handleSbConfigClickOutside(e) {
+    var panel = $('#status-bar-config-panel');
+    var bar = $('#status-bar-wrap');
+    if (!panel || panel.hidden) return;
+    if (!panel.contains(e.target) && (!bar || !bar.contains(e.target))) {
+      closeStatusBarConfig();
+    }
+  }
+
+  function handleSbConfigKeydown(e) {
+    if (e.key === 'Escape') {
+      closeStatusBarConfig();
+    }
+  }
 
   function updateStatusBar() {
     var bar = $('#status-bar');
@@ -4698,6 +5061,7 @@
 
     var sbQuota = $('#sb-quota');
     var sbQuotaWrap = $('#sb-quota-wrap');
+    var quotaShow = false;
     if (sbQuota && sbQuotaWrap) {
       var plat = null;
       if (agent === 'antigravity') plat = 'antigravity';
@@ -4706,7 +5070,7 @@
       else if (agent === 'github-copilot') plat = 'github-copilot';
       else if (agent === 'minimaxcode') plat = 'minimaxcode';
 
-      var quotaText = '', quotaShow = false;
+      var quotaText = '';
       if (plat && quotasData && quotasData[plat] && !quotasData[plat].error) {
         if (plat === 'codebuddy') {
           var cbData = quotasData.codebuddy;
@@ -4771,9 +5135,10 @@
       if (quotaShow) {
         sbQuota.textContent = quotaText;
       }
-      sbQuotaWrap.hidden = !quotaShow;
       if (plat) loadQuotas();
     }
+
+    applyStatusBarVisibility(quotaShow);
   }
 
   // ---------------- 子代理接入端点展示
@@ -5227,16 +5592,41 @@
     sbBar.addEventListener('click', function (e) {
       var target = e.target;
       var seg = target && (target.closest ? target : target.parentElement) ? (target.closest ? target : target.parentElement).closest('[data-sb]') : null;
-      if (!seg || !seg.dataset || !seg.dataset.sb) return;
-      if (seg.dataset.sb === 'model') {
+      if (seg && seg.dataset && seg.dataset.sb === 'model') {
         return; // 已由 sbModel 专属监听器处理
       }
-      if (seg.dataset.sb === 'agent') {
-        togglePlatformsSidebar();
-      } else {
-        showUsageDetail();
-      }
+      toggleStatusBarConfig(e);
     });
+
+    var sbSelAllBtn = $('#sb-config-select-all');
+    if (sbSelAllBtn) {
+      sbSelAllBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = {};
+        SB_ITEMS.forEach(function (it) { p[it.key] = true; });
+        saveStatusBarPrefs(p);
+        updateStatusBar();
+        renderStatusBarConfig();
+      });
+    }
+
+    var sbResetBtn = $('#sb-config-reset');
+    if (sbResetBtn) {
+      sbResetBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        saveStatusBarPrefs(Object.assign({}, SB_DEFAULT_PREFS));
+        updateStatusBar();
+        renderStatusBarConfig();
+      });
+    }
+
+    var sbCloseBtn = $('#sb-config-close');
+    if (sbCloseBtn) {
+      sbCloseBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeStatusBarConfig();
+      });
+    }
   }
 
   // 通用侧栏展开/收起切换
