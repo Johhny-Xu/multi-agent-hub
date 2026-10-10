@@ -1745,6 +1745,11 @@
     color: #fb923c;
     border: 1px solid rgba(251, 146, 60, 0.3);
   }
+  .mp-tag-promo {
+    background: rgba(168, 85, 247, 0.16);
+    color: #c084fc;
+    border: 1px solid rgba(192, 132, 252, 0.35);
+  }
   .mp-tag-default {
     background: rgba(148, 163, 184, 0.12);
     color: #94a3b8;
@@ -2493,6 +2498,7 @@
   .mp-model-item.selected, .mp-model-item.active { border-left: 3px solid var(--mcode-accent); background: var(--mcode-surface-hover); }
   .mp-tag-free { background: rgba(16,185,129,.16); color: var(--mcode-success); border: 1px solid rgba(16,185,129,.3); }
   .mp-tag-depr { background: rgba(245,158,11,.14); color: var(--mcode-warning); border: 1px solid rgba(245,158,11,.3); }
+  .mp-tag-promo { background: rgba(168,85,247,.16); color: #c084fc; border: 1px solid rgba(168,85,247,.35); }
 
   /* — 数字与字距统一 — */
   .kpi .mono, .tok-chip, .cb-pop-agent-tok, .cb-pop-sess-row .mono {
@@ -4158,7 +4164,7 @@
           var tagsDiv = el('div', 'mp-model-tags');
           if (m.credits) {
             var cred = String(m.credits).replace(/\s*credits\b/i, '').trim();
-            if (cred === 'x0.00' || cred === 'x0' || cred === '0' || m.tag === '免费') {
+            if (cred === 'x0.00' || cred === 'x0' || cred === '0' || cred === '0.00x' || cred === '0x' || cred === '0.0x' || m.tag === '免费') {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-free', '免费'));
             } else {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-credits', cred));
@@ -4170,6 +4176,8 @@
           if (m.tag && m.tag !== '免费') {
             if (m.tag === '即将下线') {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-depr', '即将下线'));
+            } else if (m.tag.indexOf('福利') !== -1 || m.tag.indexOf('限时') !== -1) {
+              tagsDiv.appendChild(el('span', 'mp-tag mp-tag-promo', m.tag));
             } else if (m.tag === '默认' || m.default) {
               tagsDiv.appendChild(el('span', 'mp-tag mp-tag-default', m.tag || '默认'));
             } else {
@@ -4215,7 +4223,11 @@
       var badge = '';
       if (m.credits) {
         var cred = String(m.credits).replace(/\s*credits\b/i, '').trim();
-        badge = (cred === 'x0.00' || cred === 'x0' || cred === '0' || m.tag === '免费') ? ' [免费]' : ' [' + cred + ']';
+        var isFree = (cred === 'x0.00' || cred === 'x0' || cred === '0' || cred === '0.00x' || cred === '0x' || cred === '0.0x' || m.tag === '免费');
+        badge = isFree ? ' [免费]' : ' [' + cred + ']';
+        if (m.tag && m.tag !== '免费') {
+          badge = ' [' + m.tag + ']' + badge;
+        }
       } else if (m.tag) {
         badge = ' [' + m.tag + ']';
       }
