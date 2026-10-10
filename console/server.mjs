@@ -2806,6 +2806,26 @@ export async function start(context) {
           send(200, { ok: true });
           return;
         }
+        if (p === '/api/chat/delete-all-archives') {
+          let targets = [];
+          if (Array.isArray(body.files) && body.files.length) {
+            targets = body.files.map((f) => basename(String(f))).filter((f) => f.endsWith('.json'));
+          } else {
+            let files = [];
+            try { files = await readdir(archivesDir); } catch { files = []; }
+            targets = files.filter((f) => f.endsWith('.json'));
+          }
+          let count = 0;
+          for (const f of targets) {
+            try {
+              await rm(join(archivesDir, f), { force: true });
+              count++;
+            } catch { /* ignore */ }
+          }
+          context.logger.info('miniapp.chat.archives_batch_deleted', { count });
+          send(200, { ok: true, count });
+          return;
+        }
         if (p === '/api/chat/send') {
           const agent = safeName(body.agent, 'agent');
           const modeKnown = ['message', 'task', 'trae', 'dispatch', 'auto'].includes(body.mode);
