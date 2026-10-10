@@ -198,7 +198,8 @@ def parse_output(raw, stderr=""):
             except ValueError:
                 continue
     if not any(_known(record) for record in records):
-        return {"text": clean, "error": None}
+        cleaned_text = re.sub(r"^>\s*build\s*·[^\n]*\n+", "", clean).strip()
+        return {"text": cleaned_text, "error": None}
     error = None
     final = None
     last_assistant = ""

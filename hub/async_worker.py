@@ -236,6 +236,8 @@ def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT, *, gat
             if remaining <= 0:
                 raise CommandTimeout(f"trae 任务超时 (>{timeout}s)")
             text = subprocess_run([node, dom_read], timeout=min(120, remaining)).strip()
+        if any(p in text for p in ("排队提醒", "当前模型请求量较高", "升级权益等待中")):
+            raise RuntimeError(f"Trae 处于排队限流状态: {text.strip()}")
         return text, sid
     finally:
         stop.set()

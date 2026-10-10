@@ -72,6 +72,7 @@ test("bridge task and transport regressions", async (t) => {
       output = `[codebuddy-abc123] agent=codebuddy status=completed\nDONE\n(继续对话 session_id: s)\n(exit=0)`;
       if (mode === "empty") output = `[codebuddy-abc123] status=completed\n(无输出)\n(exit=0)`;
       if (mode === "workerError") output = `[codebuddy-abc123] status=error\nAuthentication failed`;
+      if (mode === "queueNotice") output = `[codebuddy-abc123] status=completed\n排队提醒当前模型请求量较高，你目前排在 51 位。\n(exit=0)`;
       if (mode === "bodyStatus") output = `[codebuddy-abc123] status=running\nThe task says status=completed`;
       if (mode === "conflictingExit") output = `[codebuddy-abc123] status=completed\nFailure\n(exit=7)`;
       if (mode === "wrongRef") output = `[codebuddy-fff999] status=completed\nOther task`;
@@ -183,6 +184,10 @@ test("bridge task and transport regressions", async (t) => {
         assert.match(error.answer, /Authentication failed/);
         mode = "conflictingExit";
         assert.equal((await bridge.fetchRef("codebuddy-abc123")).status, "failed");
+        mode = "queueNotice";
+        const queued = await bridge.fetchRef("codebuddy-abc123");
+        assert.equal(queued.status, "failed");
+        assert.match(queued.answer, /排队提醒/);
       });
       await t.test("uses receipt header and matching ref for status", async () => {
         mode = "bodyStatus";

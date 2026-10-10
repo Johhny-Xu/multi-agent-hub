@@ -24,7 +24,18 @@ function get(url) {
   });
 }
 
-const PROMPT = process.argv[2] || "只回复两个字: 收到";
+let parsedPrompt = "";
+for (let i = 2; i < process.argv.length; i++) {
+  const arg = process.argv[i];
+  if (arg === "--model" || arg === "--timeout") {
+    i++;
+  } else if (arg === "--prompt") {
+    parsedPrompt = process.argv[++i] || "";
+  } else if (!arg.startsWith("-")) {
+    parsedPrompt = arg;
+  }
+}
+const PROMPT = parsedPrompt || "只回复两个字: 收到";
 const DEBUG_DIR = process.env.ZCODE_DEBUG_DIR || "";
 // 单次回复最多返回的字符数 (可用 ZCODE_MAX_CHARS 覆盖; 长报告需要更大值)
 const MAX_REPLY_CHARS = parseInt(process.env.ZCODE_MAX_CHARS || "8000", 10);
