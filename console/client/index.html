@@ -222,8 +222,58 @@
     padding: 2px 8px; color: var(--mcode-text-muted); background: var(--mcode-surface-muted);
     transition: all .15s ease;
   }
-  .chip:hover { border-color: var(--mcode-border-strong); color: var(--mcode-text); }
   .card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--mcode-border); }
+
+  /* 子代理激活/停用 Switch */
+  .agent-toggle-wrap {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11.5px;
+  }
+  .agent-toggle-input {
+    display: none;
+  }
+  .agent-toggle-slider {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background-color: var(--mcode-border-strong, #475569);
+    border-radius: 18px;
+    transition: background-color 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .agent-toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #fff;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .agent-toggle-input:checked + .agent-toggle-slider {
+    background-color: var(--mcode-success, #10b981);
+  }
+  .agent-toggle-input:checked + .agent-toggle-slider::after {
+    transform: translateX(14px);
+  }
+  .agent-toggle-text {
+    color: var(--mcode-text-muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .card.disabled-card {
+    opacity: 0.65;
+    background: var(--mcode-surface-muted);
+    border-style: dashed;
+  }
 
   .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .toolbar h2 { font-size: 16px; font-weight: 600; margin: 0 auto 0 0; color: var(--mcode-text); }
@@ -3406,6 +3456,8 @@
     }
     chat.threads.forEach(function (t) {
       if (t.agent === SELF || set[t.agent]) return;
+      var snapAgent = state.snap && state.snap.agents && state.snap.agents.find(function (a) { return a.name === t.agent; });
+      if (snapAgent && snapAgent.disabled) return;
       set[t.agent] = true;
       list.push({ name: t.agent, activation: 'standby', dispatchable: true });
     });
@@ -3899,8 +3951,17 @@
     var list = agentOptions().filter(function (o) { return o.value !== SELF; });
     list.forEach(function (o) {
       var a = (state.snap.agents || []).filter(function (x) { return x.name === o.value; })[0];
-      var op = el('option', null, o.label + (a && a.activation === 'standby' ? ' ⚡可直通' : a && a.activation === 'queue-only' ? '（仅队列）' : ''));
+      var extra = '';
+      if (a && a.disabled) {
+        extra = ' [已禁用]';
+      } else if (a && a.activation === 'standby') {
+        extra = ' ⚡可直通';
+      } else if (a && a.activation === 'queue-only') {
+        extra = '（仅队列）';
+      }
+      var op = el('option', null, o.label + extra);
       op.value = o.value;
+      if (a && a.disabled) op.disabled = true;
       sel.appendChild(op);
     });
     if (chat.activeAgent && sel.querySelector('option[value="' + chat.activeAgent + '"]')) {
@@ -5302,10 +5363,48 @@
       head.appendChild(av);
 
       head.appendChild(el('h3', 'mono', a.name));
-      if (a.activation === 'online' || (!a.activation && a.online)) {
+      if (a.disabled) {
+        card.classList.add('disabled-card');
+        head.appendChild(el('span', 'pill err', '已禁用'));
+      } else if (a.activation === 'online' || (!a.activation && a.online)) {
         head.appendChild(el('span', 'pill ok', '在线'));
+      } else if (a.dispatchable || a.activation === 'standby' || a.ready) {
+        head.appendChild(el('span', 'pill', '就绪'));
+      } else {
+        head.appendChild(el('span', 'pill warn', '离线'));
       }
       if (a.name === SELF) head.appendChild(el('span', 'pill acc', '本控制台'));
+
+      // 激活/停用 Switch (非本控制台)
+      if (a.name !== SELF) {
+        var isEnabled = !a.disabled;
+        var toggleWrap = el('label', 'agent-toggle-wrap');
+        toggleWrap.title = isEnabled ? '点击停用此子代理（全端及各插件同步生效）' : '点击激活此子代理（全端及各插件同步生效）';
+        var toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.className = 'agent-toggle-input';
+        toggleInput.checked = isEnabled;
+        var toggleSlider = el('span', 'agent-toggle-slider');
+        var toggleText = el('span', 'agent-toggle-text mono', isEnabled ? '已启用' : '已停用');
+        toggleInput.addEventListener('change', function () {
+          var targetEnabled = toggleInput.checked;
+          toggleText.textContent = '切换中...';
+          toggleInput.disabled = true;
+          api('/api/agents/toggle', { agent: a.name, enabled: targetEnabled }).then(function (res) {
+            toast(res.message || ('子代理 ' + a.name + (targetEnabled ? ' 已激活' : ' 已停用')));
+            pollUpdates();
+          }).catch(function (e) {
+            toast((e && e.message) || '切换状态失败', true);
+            toggleInput.checked = !targetEnabled;
+            toggleText.textContent = !targetEnabled ? '已启用' : '已停用';
+            toggleInput.disabled = false;
+          });
+        });
+        toggleWrap.appendChild(toggleInput);
+        toggleWrap.appendChild(toggleSlider);
+        toggleWrap.appendChild(toggleText);
+        head.appendChild(toggleWrap);
+      }
 
       // 待机·可直派去掉，把头像设置按钮移到这里
       var avatarBtn = btn('头像', 'btn-avatar-setting', function () {

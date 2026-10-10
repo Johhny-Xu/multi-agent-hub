@@ -427,13 +427,17 @@ function parseAgents(text) {
       if (line.trim() === '' || line.startsWith('已注册代理')) continue;
       failParse('代理清单', text);
     }
-    const m = line.match(/^- (\S+) \[(在线|离线)\] 角色: (.*?) \| CLI: (.*)$/);
+    const m = line.match(/^- (\S+) \[(在线|就绪|离线|已禁用)\] 角色: (.*?)(?: \| (?:调度通道: (.*?)|CLI: (.*?)))?$/);
     if (!m) failParse('代理清单', text);
     out.push({
       name: m[1],
       online: m[2] === '在线',
+      ready: m[2] === '就绪' || m[2] === '在线',
+      disabled: m[2] === '已禁用',
+      status: m[2],
       role: m[3],
-      cli: m[4] === '未配置' ? null : m[4],
+      cli: m[4] ? null : (m[5] === '未配置' ? null : m[5] || null),
+      channel: m[4] ? '调度通道: ' + m[4] : (m[5] ? 'CLI: ' + m[5] : null),
     });
   }
   return out;
@@ -842,11 +846,15 @@ export async function start(context) {
         a.defaultModel = worker?.default_model || null;
         a.availability = worker?.availability || { enabled: false, reason: capsResult.error || 'Hub 未提供此 worker 的能力信息' };
         a.modelNote = mi ? mi.note || '' : (a.cli ? '未出现在模型别名表' : '未配置 CLI 通道');
+        const isExplicitlyDisabled = a.disabled || (worker && !worker.availability?.enabled && worker.availability?.code === 'profile_disabled');
+        a.enabled = !isExplicitlyDisabled;
+        a.disabled = !!isExplicitlyDisabled;
         // 激活判定优化: 心跳窗口过期 ≠ 不可用。有 CLI 直通/专用通道即可随时派发(服务端主动拉起 worker)
-        a.dispatchable = (!!a.cli || !!DISPATCH_OVERRIDES[a.name]) && !!worker?.configured && worker.availability.enabled;
-        a.activation = a.online ? 'online' : (a.dispatchable ? 'standby' : 'queue-only');
-        a.activationNote = a.online ? '在线 · 可即时收发消息'
-          : (a.dispatchable ? '心跳窗口过期 · CLI/专用通道仍可直通派发（首次响应较慢）' : '心跳过期且无直通通道 · 仅可入队等待其认领');
+        a.dispatchable = !isExplicitlyDisabled && (!!a.cli || !!DISPATCH_OVERRIDES[a.name]) && !!worker?.configured && worker.availability.enabled;
+        a.activation = isExplicitlyDisabled ? 'disabled' : (a.online ? 'online' : (a.dispatchable ? 'standby' : 'queue-only'));
+        a.activationNote = isExplicitlyDisabled ? '已在控制台禁用 · 不会接收任何派发或任务'
+          : (a.online ? '在线 · 可即时收发消息'
+            : (a.dispatchable ? '心跳窗口过期 · CLI/专用通道仍可直通派发（首次响应较慢）' : '心跳过期且无直通通道 · 仅可入队等待其认领'));
       }
       return {
         ok: true,
@@ -2519,6 +2527,18 @@ export async function start(context) {
           await writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
           broadcast({ type: 'changed', label: 'endpoint' });
           send(200, { ok: true });
+          return;
+        }
+        if (p === '/api/agents/toggle') {
+          const agent = canonicalAgent(safeName(body.agent, 'agent'));
+          const enabled = typeof body.enabled === 'boolean' ? body.enabled : true;
+          const resultRaw = await mutate('agent_toggle', () => hub.callTool('hub_set_agent_status', { agent, enabled }));
+          let resultObj = { ok: true, agent, enabled, message: `子代理 ${agent} 已${enabled ? '启用' : '禁用'}` };
+          try {
+            resultObj = JSON.parse(resultRaw);
+          } catch { /* keep default */ }
+          broadcast({ type: 'changed', label: 'agents' });
+          send(200, resultObj);
           return;
         }
         if (p === '/api/heartbeat-check') {

@@ -3,7 +3,7 @@
 // 工具：hub_ask / hub_dispatch / hub_fetch / hub_status / hub_login。
 // 由插件 mcpServers 注册：node ${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs
 import { createInterface } from "node:readline";
-import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef } from "./hub.mjs";
+import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef, hubSetAgentStatus } from "./hub.mjs";
 import { hubDiscover } from "./discovery.mjs";
 
 const SERVER = { name: "agenthub-hub-bridge", version: "0.9.9" };
@@ -90,6 +90,19 @@ const TOOLS = [
         ref: { type: "string", description: "派发时返回的任务 ref" },
       },
       required: ["ref"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "hub_set_status",
+    description: "设置子代理的启用/禁用开关（与 WebUI 控制台及全端双向同步）。当某 worker 额度耗尽或暂时不使用时，可将其禁用，避免无额度频繁调用。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        worker: { type: "string", description: "worker 名或简称，如 zcode, codebuddy 等" },
+        enabled: { type: "boolean", description: "是否启用 (true=启用, false=禁用)" },
+      },
+      required: ["worker", "enabled"],
       additionalProperties: false,
     },
   },
@@ -197,6 +210,10 @@ async function handleRequest(req) {
       if (name === "hub_fetch") {
         const r = await fetchRef(args.ref);
         return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: r.status === "failed" || r.status === "unknown" });
+      }
+      if (name === "hub_set_status") {
+        const r = await hubSetAgentStatus(args.worker, args.enabled);
+        return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: !r.ok });
       }
       return err(id, -32602, `Unknown tool: ${name}`);
     } catch (e) {
