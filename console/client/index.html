@@ -1520,6 +1520,37 @@
     color: #fff;
     margin-bottom: 16px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    cursor: pointer;
+    transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    user-select: none;
+  }
+  .empty-avatar:hover {
+    transform: scale(1.08);
+    box-shadow: 0 12px 30px rgba(59, 130, 246, 0.35);
+    filter: brightness(1.1);
+  }
+  .empty-avatar::after {
+    content: '✎';
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--mcode-accent);
+    color: #fff;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--mcode-bg);
+    opacity: 0.85;
+    transition: opacity .2s ease;
+  }
+  .empty-avatar:hover::after {
+    opacity: 1;
+    transform: scale(1.1);
   }
   .empty-title {
     font-size: 20px;
@@ -3598,6 +3629,40 @@
     });
   }
 
+  function promptChangeAvatar(agentName) {
+    if (!agentName) return;
+    var curAv = (chat.avatars && chat.avatars[agentName]) || {};
+    openModal('更换头像 · ' + agentName, [
+      { name: 'emoji', label: 'Emoji 头像（如 🤖🛠️📐，留空忽略）', value: curAv.emoji || '' },
+      { name: 'img', label: '图片 URL（/uploads/... 或 https://...，留空忽略）', value: curAv.img || '' }
+    ], '保存', {
+      label: '恢复默认',
+      action: function () {
+        api('/api/avatars', { agent: agentName, emoji: '', img: '' }).then(function (res) {
+          chat.avatars = res || {};
+          renderPlatformList();
+          renderThreadView();
+          if (state.snap) renderAgents(state.snap);
+          toast('已恢复默认头像');
+          closeModal(null);
+        }).catch(function (e) {
+          toast((e && e.message) || '恢复默认失败', true);
+        });
+      }
+    }).then(function (vals) {
+      if (!vals) return;
+      api('/api/avatars', { agent: agentName, emoji: vals.emoji || '', img: vals.img || '' }).then(function (res) {
+        chat.avatars = res || {};
+        renderPlatformList();
+        renderThreadView();
+        if (state.snap) renderAgents(state.snap);
+        toast('头像已更新');
+      }).catch(function (e) {
+        toast((e && e.message) || '设置头像失败', true);
+      });
+    });
+  }
+
   var chat = {
     threads: [],
     full: {},
@@ -3948,13 +4013,29 @@
       var bigAv = el('div', 'empty-avatar');
       bigAv.style.background = vis.bg;
       bigAv.textContent = vis.code;
+      bigAv.title = '点击更换头像（影响全局）';
       applyAvatar(bigAv, agentName);
+      bigAv.addEventListener('click', function () {
+        promptChangeAvatar(agentName);
+      });
       emptyBox.appendChild(bigAv);
 
       var title = el('h2', 'empty-title', agentName);
       emptyBox.appendChild(title);
 
-      var slogan = el('div', 'empty-slogan', '中枢在线 · 随时派活');
+      var hour = new Date().getHours();
+      var timeGreeting = '状态在线 · 随时准备开工';
+      if (hour >= 5 && hour < 12) {
+        timeGreeting = '早间状态在线 · 随时准备开工';
+      } else if (hour >= 12 && hour < 14) {
+        timeGreeting = '午间状态在线 · 随时准备开工';
+      } else if (hour >= 14 && hour < 18) {
+        timeGreeting = '下午状态在线 · 随时准备开工';
+      } else {
+        timeGreeting = '晚间状态在线 · 随时准备开工';
+      }
+
+      var slogan = el('div', 'empty-slogan', timeGreeting);
       emptyBox.appendChild(slogan);
 
       var tips = el('div', 'empty-tips');
@@ -5674,36 +5755,7 @@
 
       // 待机·可直派去掉，把头像设置按钮移到这里
       var avatarBtn = btn('头像', 'btn-avatar-setting', function () {
-        var curAv = (chat.avatars && chat.avatars[a.name]) || {};
-        openModal('设置头像 · ' + a.name, [
-          { name: 'emoji', label: 'Emoji 头像（如 🤖🛠️📐，留空忽略）', value: curAv.emoji || '' },
-          { name: 'img', label: '图片 URL（/uploads/... 或 https://...，留空忽略）', value: curAv.img || '' }
-        ], '保存', {
-          label: '恢复默认',
-          action: function () {
-            api('/api/avatars', { agent: a.name, emoji: '', img: '' }).then(function (res) {
-              chat.avatars = res || {};
-              renderPlatformList();
-              renderThreadView();
-              if (state.snap) renderAgents(state.snap);
-              toast('已恢复默认头像');
-              closeModal(null);
-            }).catch(function (e) {
-              toast((e && e.message) || '恢复默认失败', true);
-            });
-          }
-        }).then(function (vals) {
-          if (!vals) return;
-          api('/api/avatars', { agent: a.name, emoji: vals.emoji || '', img: vals.img || '' }).then(function (res) {
-            chat.avatars = res || {};
-            renderPlatformList();
-            renderThreadView();
-            if (state.snap) renderAgents(state.snap);
-            toast('头像已更新');
-          }).catch(function (e) {
-            toast((e && e.message) || '设置头像失败', true);
-          });
-        });
+        promptChangeAvatar(a.name);
       });
       head.appendChild(avatarBtn);
       card.appendChild(head);
