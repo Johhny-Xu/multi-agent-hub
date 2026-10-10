@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **凭据环境自动载入**：底层驱动 `drivers/codearts_cli.py` 新增自动加载 `~/.config/agenthub-codearts/codearts-auth.env`（或 `CODEARTS_AUTH_ENV` 指定文件）中的 `CODEARTS_CLI_AK` 与 `CODEARTS_CLI_SK`，彻底解决无头模式下因缺少凭据被判定为 `CODEARTS_AUTH_REQUIRED` 或模型列表解析为空的根因。
 - **Linux 官方 CLI 路径与 Profile 匹配**：适配 Linux 环境下名为 `codearts` 的官方可执行文件，建立与 Windows `codearts.exe` 一致的 TUI/配置隔离与目录加载规则。
 - **模型可用性与目录收敛**：深入华为 MaaS 与 IDE 网关机制，理清无头 CLI（MaaS 官方 AK/SK 鉴权）与 IDE 桌面（临时云端 IAM 网关鉴权）的能力边界；在控制台与 `agents.json` 中将 CLI 真实支持的模型收敛为 4 款已完全验证可用的官方企业级模型（`GLM-5.2` 默认/`0.70x`、`GLM-5.2-ArkTS-SPARK`/`0.70x`、`OpenPangu-2.0-Pro`/`0.70x`、`OpenPangu-2.0-Flash`/`0.35x`）；清理 `availability.json` 中的误报阻断记录，彻底修复选择模型时弹出“找不到所选模型”报错的问题。
+- **状态存储兼容 UTF-8 BOM**：`hub/availability_store.py` 读取 `availability.json` 改用 `utf-8-sig` 解码，彻底防止跨平台（如 PowerShell 输出）引入 BOM 字符导致 `capabilities` 接口崩溃并清空全量子代理模型目录的问题。
 - **全链路异步调度验证**：实测并通过 Linux Hub 进程至 CodeArts CLI 的全链路任务派发与回答确认（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK` 均秒级返回且状态置为 `completed`）。
 
 ### TraeCode 模型倍率与营销折扣对齐 (`traecode`)
