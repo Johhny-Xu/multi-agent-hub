@@ -1,6 +1,6 @@
 # multi-agent-hub
 
-![multi-agent-hub 0.9.9 结构图：五种原生客户端经 MCP 连接 Windows 或 Linux Hub，调度九种 worker；支持同机、跨机与双向连接](docs/architecture.svg)
+![multi-agent-hub 0.9.4 结构图：五种原生客户端经 MCP 连接 Windows 或 Linux Hub，调度九种 worker；重点攻坚 MiniMaxCode 适配与 WebUI 前端优化](docs/architecture.svg)
 
 **multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，让开发者能够在 **Codex**、**ZCode**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 等客户端之间，跨平台、跨机器无缝调度各端 worker（官方 CLI 与内核）。
 
@@ -208,9 +208,9 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 
 ## 版本演进与开发调试
 
-当前 0.9.9 体验优化版本持续推进连接引导、失败原因诊断和状态平滑恢复：
+当前 0.9.4 版本重点攻坚 MiniMaxCode 深度适配与 WebUI 前端优化，平滑演进连接引导与全量会话归档管理：
 
-![multi-agent-hub 0.9.9 进度图：当前重点优化体验，展示已有基础、后续优化、版本演进和实际验证范围](docs/roadmap.svg)
+![multi-agent-hub 0.9.4 进度图：当前重点攻坚 MiniMaxCode 适配与前端优化，展示已有基础、后续优化、版本演进和实际验证范围](docs/roadmap.svg)
 
 ### 离线回归与安全检查
 
