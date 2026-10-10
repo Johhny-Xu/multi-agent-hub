@@ -11,6 +11,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 子代理模型目录精简与去重 (Model Catalog Optimization)
+
+- **不可用生图模型清理**：移除 `codebuddy-cn` 中无法用于代码/文本生成的非文本生图/图生图模型（`hunyuan-image-alpha`、`hunyuan-image-alpha-edit`）。
+- **重复与冗余模型去重**：
+  - `codebuddy-cn`：清理 `hy4-preview-x`、`hy3-x`、`deepseek-v4-flash` 等重复档位与别名。
+  - `antigravity`：去除 `gemini-3.8-flash`、`gemini-3.1-pro` 冗余未分级项，统一保留 High/Medium 精确档位。
+  - `mimocode`：清理未命名前缀的重复项 `mimo-v2.6-flash`，统一定位为官方 `xiaomi/mimo-v2.6-flash`。
+  - `traecode`：去除大小写重复项 `glm-5.3-flashx`，剔除与平台主项重叠的 `DeepSeek-V4-Flash-Official`、`DeepSeek-V4-Pro-Official` 及 `Doubao-Seed-2.0-Code`。
+- **清理 2026 年 6 月前旧代模型**：
+  - `codebuddy-cn`：移除 `deepseek-v3-2-volc`、`minimax-m2.5/m2.7`、`glm-4.6/4.7` 全系列、`glm-5.0` 系列、`kimi-k2.5/k2.6/thinking`、`hy3`、`space-bunny`。
+  - `codebuddy`：移除旧代及下线模型 `hy3`、`gpt-5.4`、`gemini-3.5-flash`、`kimi-k2.6`。
+  - `antigravity`：移除官方标记即将下线的旧代 `gemini-3.6-flash` 与 `gemini-3.7-flash`。
+  - `mimocode`：移除 `mimo-auto` 及老旧 `mimo-v2.5` 全系列。
+  - `minimaxcode`：移除旧代 `MiniMax-M2.5`、`MiniMax-M2.7` 全系列，聚焦当季旗舰 `MiniMax-M3.1-Flash-Preview` 与 `MiniMax-M3`。
+  - `traecode`：移除旧版本 `glm-5`、`glm-5.1`、`kimi-k2.7-code`。
+- **华为 CodeArts 规则保留**：遵照用户要求保持 `codearts` 完整不变，维持 4 个已验证企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）。
+- **测试与环境同步**：同步更新 `tests/console_smoke.mjs` 中的模型目录数量断言（全量 26 项 smoke + 5 项 DOM 测试 100% 通过），并同步部署至服务器热重载生效。
+
+
 ## [0.9.9.1] - 2026-10-10
 
 ### 华为 CodeArts 官方模型与凭据自动加载修复 (`codearts`)
