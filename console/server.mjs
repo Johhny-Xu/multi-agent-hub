@@ -879,6 +879,7 @@ export async function start(context) {
         'codebuddy-cn': '275e1c1a-b25e-4b3f-848f-958af1c3132d',
         traecode: '57066f52-4027-4a2d-9fd4-756e047ad5f0',
         'github-copilot': 'c19b0e0c-5792-4dd3-aeb1-07d345f353d9',
+        minimaxcode: '27be3c86-808b-4cd2-b8f2-9a1033157fea',
       };
       const result = {
         zcode: { tracked: false },
@@ -892,7 +893,7 @@ export async function start(context) {
           const plan = data.plan || (data.subscriptionInfo && data.subscriptionInfo.currentTier && data.subscriptionInfo.currentTier.name) || '未知套餐';
           const quotas = Object.entries(data.quotas || {}).map(([name, q]) => ({
             name,
-            displayName: q.displayName || name,
+            displayName: q.displayName || (q.isCreditBalance ? '积分余额' : name),
             used: typeof q.used === 'number' ? q.used : 0,
             total: typeof q.total === 'number' ? q.total : 0,
             remaining: typeof q.remaining === 'number' ? q.remaining : (typeof q.total === 'number' && typeof q.used === 'number' ? Math.max(0, q.total - q.used) : 0),
@@ -900,36 +901,40 @@ export async function start(context) {
             resetAt: q.resetAt || null,
             unlimited: !!q.unlimited,
             recurring: !!q.recurring,
+            isCreditBalance: !!q.isCreditBalance,
+            currency: q.currency || '',
           }));
-          result[platform] = { tracked: true, plan, quotas };
+          result[platform] = { tracked: true, plan, quotas, user: data.user || null };
         } catch (err) {
           result[platform] = { error: err.message || '查询失败' };
         }
       }));
-      // minimaxcode 配额走 mmx CLI
-      try {
-        const mmxBin = process.env.MMX_BIN || join(os.homedir(), '.npm-global', 'bin', 'mmx');
-        const { stdout } = await execFile(mmxBin, ['quota', 'show', '--output', 'json'], { timeout: 10_000 });
-        const jsonIdx = stdout.indexOf('{');
-        const jsonText = jsonIdx >= 0 ? stdout.slice(jsonIdx) : stdout;
-        const mmxData = JSON.parse(jsonText);
-        const nameMap = { general: '通用', video: '视频', image: '图像', audio: '音频' };
-        const quotas = (mmxData.model_remains || []).map((element) => {
-          const model_name = element.model_name;
-          return {
-            name: model_name,
-            displayName: nameMap[model_name] || model_name,
-            used: typeof element.current_interval_usage_count === 'number' ? element.current_interval_usage_count : 0,
-            total: typeof element.current_interval_total_count === 'number' ? element.current_interval_total_count : 0,
-            remaining: 0,
-            remainingPercentage: typeof element.current_interval_remaining_percent === 'number' ? element.current_interval_remaining_percent : 0,
-            resetAt: null,
-            weeklyPercentage: typeof element.current_weekly_remaining_percent === 'number' ? element.current_weekly_remaining_percent : 0,
-          };
-        });
-        result.minimaxcode = { tracked: true, plan: 'MiniMax Token Plan', quotas };
-      } catch (err) {
-        result.minimaxcode = { tracked: false };
+      // 若 9router 未能取得 minimaxcode 配额，则回退到 mmx CLI
+      if (!result.minimaxcode || !result.minimaxcode.tracked) {
+        try {
+          const mmxBin = process.env.MMX_BIN || join(os.homedir(), '.npm-global', 'bin', 'mmx');
+          const { stdout } = await execFile(mmxBin, ['quota', 'show', '--output', 'json'], { timeout: 10_000 });
+          const jsonIdx = stdout.indexOf('{');
+          const jsonText = jsonIdx >= 0 ? stdout.slice(jsonIdx) : stdout;
+          const mmxData = JSON.parse(jsonText);
+          const nameMap = { general: '通用', video: '视频', image: '图像', audio: '音频' };
+          const quotas = (mmxData.model_remains || []).map((element) => {
+            const model_name = element.model_name;
+            return {
+              name: model_name,
+              displayName: nameMap[model_name] || model_name,
+              used: typeof element.current_interval_usage_count === 'number' ? element.current_interval_usage_count : 0,
+              total: typeof element.current_interval_total_count === 'number' ? element.current_interval_total_count : 0,
+              remaining: 0,
+              remainingPercentage: typeof element.current_interval_remaining_percent === 'number' ? element.current_interval_remaining_percent : 0,
+              resetAt: null,
+              weeklyPercentage: typeof element.current_weekly_remaining_percent === 'number' ? element.current_weekly_remaining_percent : 0,
+            };
+          });
+          result.minimaxcode = { tracked: true, plan: 'MiniMax Token Plan', quotas };
+        } catch (err) {
+          result.minimaxcode = { tracked: false };
+        }
       }
       // codebuddy 国内+国际分组: 各组分别计算总剩余与 top 5
       const round2 = (n) => Math.round(n * 100) / 100;
