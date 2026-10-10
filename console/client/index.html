@@ -3378,7 +3378,7 @@
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v1.4.0</span>
+            <span class="footer-version">v0.9.4</span>
           </div>
         </footer>
       </section>
@@ -5942,7 +5942,7 @@
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.4.0';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '0.9.4';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
