@@ -130,15 +130,6 @@ def local_availability(worker, profile, model, directory=None):
         executable = shutil.which(executable, path=process_env.get("PATH", os.defpath)) or (executable if Path(executable).is_file() else None)
         if not executable:
             code, reason = "cli_missing", "本机找不到已配置 CLI；请检查安装路径。"
-        elif worker in {"codebuddy", "codebuddy-cn"} and os.name != "nt":
-            path = Path(executable)
-            try:
-                if path.stat().st_size < 65536:
-                    content = path.read_bytes()
-                    if b"CodeBuddyExtension/Data/Public/auth" in content and b"auth.info" in content and re.search(rb"\bcp\s", content):
-                        code, reason = "shared_auth_wrapper", "已配置 wrapper 会覆盖共享认证文件；请配置官方独立 CLI 入口。"
-            except OSError:
-                pass
         if not code and len(cli) > 1 and str(cli[1]).endswith((".py", ".js", ".mjs", ".cjs")):
             path = Path(os.path.expandvars(os.path.expanduser(str(cli[1]))))
             if path.is_absolute() and not path.is_file():
