@@ -6,7 +6,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir, stat, lstat, rename, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, resolve, sep, dirname } from 'node:path';
+import { join, resolve, sep, dirname, basename } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -2743,6 +2743,67 @@ export async function start(context) {
             activeSessionId: entry.activeSessionId,
             sessions,
           });
+          return;
+        }
+        if (p === '/api/chat/restore-archive') {
+          const file = typeof body.file === 'string' ? basename(body.file) : '';
+          if (!file || !file.endsWith('.json')) throw badReq('无效的归档文件名');
+          const filePath = join(archivesDir, file);
+          let raw;
+          try {
+            raw = await readFile(filePath, 'utf-8');
+          } catch {
+            throw badReq('归档文件不存在或已被删除');
+          }
+          let session;
+          try {
+            session = JSON.parse(raw);
+          } catch {
+            throw badReq('归档文件内容损坏');
+          }
+          const agent = safeName(session.agent, 'agent');
+          const entry = getAgentEntry(agent, true);
+          if (!entry.sessions) entry.sessions = [];
+          const existIdx = entry.sessions.findIndex((s) => s.id === session.id);
+          if (existIdx >= 0) {
+            entry.sessions[existIdx] = session;
+          } else {
+            entry.sessions.unshift(session);
+          }
+          entry.activeSessionId = session.id;
+          saveConv();
+          try { await rm(filePath, { force: true }); } catch { /* ignore */ }
+          context.logger.info('miniapp.chat.session_restored', { agent, sessionId: session.id, file });
+          const activeThread = getThread(agent, false, entry.activeSessionId);
+          const sessions = (entry.sessions || []).map((s) => ({
+            id: s.id,
+            title: s.title || '会话',
+            created: s.created,
+            updated: s.updated,
+            unread: s.unread || 0,
+            msgCount: (s.messages || []).length,
+            cliSessionId: s.cliSessionId || null,
+          }));
+          send(200, {
+            ok: true,
+            agent,
+            activeSessionId: entry.activeSessionId,
+            thread: activeThread,
+            sessions,
+          });
+          return;
+        }
+        if (p === '/api/chat/delete-archive') {
+          const file = typeof body.file === 'string' ? basename(body.file) : '';
+          if (!file || !file.endsWith('.json')) throw badReq('无效的归档文件名');
+          const filePath = join(archivesDir, file);
+          try {
+            await rm(filePath, { force: true });
+          } catch (err) {
+            throw badReq('删除归档失败: ' + String(err && err.message));
+          }
+          context.logger.info('miniapp.chat.archive_deleted', { file });
+          send(200, { ok: true });
           return;
         }
         if (p === '/api/chat/send') {
