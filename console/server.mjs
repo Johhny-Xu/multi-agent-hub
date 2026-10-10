@@ -82,9 +82,10 @@ const DISPATCH_OVERRIDES = { traecode: { tool: 'trae_delegate', asyncFlag: { wai
  */
 const MODEL_CATALOG = {
   codearts: [
-    { id: '', name: '默认（继承 CodeArts 配置）', default: true },
-    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2 (HuaweiCloud MaaS)', tag: '已验证' },
-    { id: 'huaweicloud-maas/GLM-5.2-SFT', name: 'GLM-5.2-SFT', tag: '已验证' },
+    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2 (HuaweiCloud MaaS)', tag: '已验证', default: true },
+    { id: 'huaweicloud-maas/glm-5.2-sft-harmony', name: 'GLM-5.2-ArkTS-SPARK', tag: '已验证' },
+    { id: 'huaweicloud-maas/openpangu-2.0-flash', name: 'OpenPangu-2.0-Flash' },
+    { id: 'huaweicloud-maas/openpangu-2.0-pro', name: 'OpenPangu-2.0-Pro' },
   ],
   'github-copilot': [
     { id: 'auto', name: 'Auto (Copilot 自动选型)', default: true },
@@ -249,19 +250,23 @@ export function normalizeCapabilities(value) {
 export function taskCapability(document, agent, model, options = {}) {
   agent = canonicalAgent(agent);
   const fail = (reason) => ({ allowed: false, reason });
-  for (const key of ['effort', 'contextTier', 'autoTier', 'extra_args']) {
-    if (options[key] !== undefined && options[key] !== null && options[key] !== '') return fail(`${key} 不是已验证的运行控制；请使用思考开关和流式选项`);
+  for (const key of ['contextTier', 'autoTier', 'extra_args']) {
+    if (options[key] !== undefined && options[key] !== null && options[key] !== '') return fail(`${key} 不是已验证的运行控制`);
   }
   if (options.thinking !== undefined && !['default', 'on', 'off'].includes(options.thinking)) return fail('thinking 必须为 default/on/off');
   if (options.stream !== undefined && typeof options.stream !== 'boolean') return fail('stream 必须是布尔值');
   const worker = document?.workers?.[agent];
   if (!worker?.configured || !worker.availability?.enabled) return fail(worker?.availability?.reason || '该 worker 尚无可用的能力信息或运行通道');
-  const requested = !model || ['default', '默认'].includes(model) ? worker.default_model : model;
+  const requested = !model || ['default', '默认'].includes(model) ? (worker.default_model || (MODEL_CATALOG[agent] || []).find((m) => m.default)?.id) : model;
   const selected = worker.models.find((entry) => entry.id === requested || entry.aliases.includes(requested));
-  if (!selected) return fail(`当前 Hub 未配置模型 ${requested || '(默认模型未知)'}`);
+  if (!selected) {
+    const catModel = (MODEL_CATALOG[agent] || []).find((m) => m.id === requested);
+    if (!catModel) return fail(`当前 Hub 未配置模型 ${requested || '(默认模型未知)'}`);
+    return { allowed: true, model: requested, capability: { id: requested, available: true } };
+  }
   if (!selected.availability.enabled) return fail(selected.availability.reason || '选定模型当前不可用');
   const thinking = options.thinking || 'default';
-  if (!selected.thinking.allowed.includes(thinking)) return fail(selected.thinking.reasons[thinking] || `选定模型不支持 thinking=${thinking}`);
+  if (options.thinking && !selected.thinking.allowed.includes(thinking)) return fail(selected.thinking.reasons[thinking] || `选定模型不支持 thinking=${thinking}`);
   if (options.stream === true && !selected.stream.supported) return fail(selected.stream.reason || '该通道尚未验证流式正文输出');
   if (options.attachments !== undefined && !Array.isArray(options.attachments)) return fail('attachments 必须是数组');
   for (const attachment of options.attachments || []) {
@@ -272,8 +277,8 @@ export function taskCapability(document, agent, model, options = {}) {
 }
 
 function buildWorkerExtraArgs(agentName, params = {}) {
-  for (const key of ['effort', 'contextTier', 'autoTier']) {
-    if (params[key] !== undefined) { const error = new Error(`${key} 不是已验证的运行控制，请使用 thinking`); error.status = 400; throw error; }
+  for (const key of ['contextTier', 'autoTier']) {
+    if (params[key] !== undefined) { const error = new Error(`${key} 不是已验证的运行控制`); error.status = 400; throw error; }
   }
   return [];
 }
@@ -761,7 +766,7 @@ export async function start(context) {
   function capabilityCatalog(document) {
     return Object.fromEntries(Object.entries(document?.workers || {}).map(([agent, worker]) => [agent, worker.models.map((model) => {
       const label = (MODEL_CATALOG[agent] || []).find((entry) => entry.id === model.id);
-      return { id: model.id, name: label?.name || model.id, default: worker.default_model === model.id,
+      return { id: model.id, name: label?.name || model.id, default: worker.default_model === model.id || (!worker.default_model && label?.default === true),
         available: worker.availability.enabled && model.availability.enabled,
         reason: model.availability.reason || worker.availability.reason, capability: model };
     })]));
@@ -1531,6 +1536,7 @@ export async function start(context) {
     }
     const taskOptions = {
       ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
+      ...(options.effort ? { effort: options.effort } : {}),
       ...(options.stream !== undefined ? { stream: options.stream } : {}),
       ...(direct && atts.length ? { attachments: await portableAttachments(atts) } : {}),
     };
@@ -1924,6 +1930,7 @@ export async function start(context) {
     const taskOptions = {
       ...(model ? { model } : {}),
       ...(opts.thinking !== undefined ? { thinking: opts.thinking } : {}),
+      ...(opts.effort ? { effort: opts.effort } : {}),
       ...(opts.stream !== undefined ? { stream: opts.stream } : {}),
       ...(opts.attachments !== undefined ? { attachments: opts.attachments } : {}),
       ...(Number(opts.timeout_s) > 0 ? { timeout_s: Number(opts.timeout_s) } : {}),
@@ -2519,7 +2526,7 @@ export async function start(context) {
           const portable = await portableAttachments(uploadAttachments(body.attachments));
           const options = { ...body, attachments: portable };
           await requireTaskCapability(agent, model, options);
-          const taskOptions = { thinking: body.thinking || 'default', stream: body.stream === true,
+          const taskOptions = { thinking: body.thinking || 'default', ...(body.effort ? { effort: body.effort } : {}), stream: body.stream === true,
             ...(portable.length ? { attachments: portable } : {}), ...(model ? { model } : {}), ...(to ? { timeout_s: to } : {}) };
           const ov = DISPATCH_OVERRIDES[agent];
           const text = await mutate('dispatch', () => (ov

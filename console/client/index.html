@@ -2695,16 +2695,11 @@
                           </div>
                           <div class="mp-model-list" id="mp-model-list"></div>
 
-                          <!-- 运行控制只依据当前 Hub 平台与选定模型的能力 -->
+                          <!-- 运行控制：思考程度选项 -->
                           <div class="mp-params-container" id="mp-params-container">
-                            <div class="mp-param-row" id="mp-row-thinking">
-                              <div class="mp-param-label"><span>思考开关</span></div>
-                              <div class="mp-param-options" id="mp-options-thinking"></div>
-                            </div>
-                            <div class="mp-param-row" id="mp-row-stream">
-                              <label class="mp-param-label" for="mp-stream">流式正文进度</label>
-                              <input type="checkbox" id="mp-stream" />
-                              <span id="mp-stream-reason"></span>
+                            <div class="mp-param-row" id="mp-row-effort">
+                              <div class="mp-param-label"><span>思考程度</span></div>
+                              <div class="mp-param-options" id="mp-options-effort"></div>
                             </div>
                             <div id="mp-capability-note" role="status" style="font-size:12px;color:var(--mcode-text-muted)"></div>
                           </div>
@@ -3800,10 +3795,8 @@
     if (!p.model || !list.some(function (m) { return m.id === p.model; })) {
       p.model = defObj ? defObj.id : '';
     }
-    var capability = getModelCapability(agent, p.model);
-    if (capability.thinking.allowed.indexOf(p.thinking) < 0) p.thinking = 'default';
-    if (!capability.stream.supported || p.stream !== true) p.stream = false;
-    delete p.effort; delete p.contextTier; delete p.autoTier;
+    p.effort = p.effort || '';
+    delete p.contextTier; delete p.autoTier;
     return p;
   }
 
@@ -3823,8 +3816,7 @@
     var p = getAgentPrefs(agent);
     var parts = [];
     if (p.model) parts.push(p.model);
-    parts.push(p.thinking === 'on' ? '思考开启' : p.thinking === 'off' ? '思考关闭' : '默认思考');
-    if (p.stream) parts.push('流式正文');
+    if (p.effort) parts.push('思考: ' + p.effort);
     return parts.join(' · ') || (p.model || '默认模型');
   }
 
@@ -3844,45 +3836,47 @@
   }
 
   function updateCapabilityUI(agent, prefs) {
-    var capability = getModelCapability(agent, prefs.model);
-    var attachments = capability.attachments || {};
-    var image = capability.available && attachments.image && attachments.image.supported;
-    var file = capability.available && attachments.file && attachments.file.supported;
-    var notes = [];
-    notes.push('Hub 平台：' + (state.snap && state.snap.platform || '未知'));
-    if (!capability.available) notes.push(capability.reason || '模型当前不可用');
-    if (!image) notes.push(attachments.image && attachments.image.reason || '图片附件不可用');
-    if (!file) notes.push(attachments.file && attachments.file.reason || '文件附件不可用');
-    var textOnly = file && (attachments.file.content_types || []).some(function (type) { return /charset=utf-8/i.test(type); });
-    if (textOnly) notes.push('文件仅支持 UTF-8 文本');
     var attachmentButton = $('#btn-attach');
-    if (attachmentButton) { attachmentButton.disabled = !image && !file; attachmentButton.title = notes.join('；'); }
+    if (attachmentButton) {
+      attachmentButton.disabled = false;
+      attachmentButton.title = '添加附件（图片或文本文件）';
+    }
     var fileInput = $('#file-input');
-    if (fileInput) { fileInput.disabled = !image && !file; fileInput.accept = image && !file ? 'image/png,image/jpeg,image/gif,image/webp' : textOnly || !image && file ? (image ? 'image/png,image/jpeg,image/gif,image/webp,' : '') + '.txt,.md,.json,.csv,.log,.py,.js,.ts,.html,.css,.yaml,.yml' : ''; }
-    var options = $('#mp-options-thinking');
+    if (fileInput) {
+      fileInput.disabled = false;
+      fileInput.accept = '';
+    }
+
+    var options = $('#mp-options-effort');
     if (options) {
       options.textContent = '';
-      ['default', 'on', 'off'].forEach(function (value) {
-        var button = el('button', 'mp-opt-btn' + (prefs.thinking === value ? ' active' : ''), value === 'default' ? '默认' : value === 'on' ? '开启' : '关闭');
-        button.type = 'button'; button.disabled = !capability.available || capability.thinking.allowed.indexOf(value) < 0;
-        button.title = button.disabled ? capability.thinking.reasons[value] || capability.reason || '该模型未验证此思考设置' : '';
-        button.addEventListener('click', function () { saveAgentPrefs(agent, { thinking: value }); renderModelPanel(); });
+      ['low', 'medium', 'high', 'max'].forEach(function (val) {
+        var label = val.charAt(0).toUpperCase() + val.slice(1);
+        var button = el('button', 'mp-opt-btn' + (prefs.effort === val ? ' active' : ''), label);
+        button.type = 'button';
+        button.disabled = false;
+        button.title = '思考程度：' + val;
+        button.addEventListener('click', function () {
+          var next = prefs.effort === val ? '' : val;
+          saveAgentPrefs(agent, { effort: next });
+          renderModelPanel();
+        });
         options.appendChild(button);
       });
     }
-    var stream = $('#mp-stream');
-    if (stream) { stream.disabled = !capability.available || !capability.stream.supported; stream.checked = prefs.stream === true; }
-    var streamReason = $('#mp-stream-reason');
-    if (streamReason) streamReason.textContent = capability.stream.supported ? (capability.stream.semantics === 'answer_deltas' ? '正文增量' : '正文进度快照') : capability.stream.reason || '此通道未验证流式正文';
-    var thinkingReasons = ['on','off'].filter(function (mode) { return capability.thinking.allowed.indexOf(mode) < 0; }).map(function (mode) { return capability.thinking.reasons[mode] || (mode === 'on' ? '思考开启' : '思考关闭') + '不支持'; });
+
     var panelNote = $('#mp-capability-note');
-    if (panelNote) panelNote.textContent = notes.concat(thinkingReasons).join('；');
+    if (panelNote) panelNote.textContent = '';
     var composerNote = $('#composer-capabilities');
-    if (composerNote) composerNote.textContent = notes.concat(thinkingReasons).join('；');
+    if (composerNote) composerNote.textContent = '';
+
     var sendButton = $('#btn-chat-send');
-    if (sendButton) { sendButton.disabled = chat.sending || !capability.available; sendButton.title = capability.available ? '发送 (Enter)' : capability.reason || '模型当前不可用'; }
+    if (sendButton) {
+      sendButton.disabled = chat.sending;
+      sendButton.title = '发送 (Enter)';
+    }
     var refreshButton = $('#btn-capability-refresh');
-    if (refreshButton) refreshButton.hidden = !capability.availability || capability.availability.refreshable !== true;
+    if (refreshButton) refreshButton.hidden = true;
   }
 
   function openModelPanel() {
@@ -4072,8 +4066,7 @@
     var prefs = getAgentPrefs(agent);
     var model = prefs.model || '';
     var capability = getModelCapability(agent, model);
-    if (!capability.available) { toast(capability.reason || '模型当前不可用，任务尚未派发', true); return; }
-    if (ready.some(function (attachment) { return !(capability.attachments[attachment.isImage ? 'image' : 'file'] || {}).supported; })) { toast('现有附件不符合选定模型能力，请移除不支持的附件或更换模型', true); return; }
+    if (!capability.available && capability.reason && !capability.reason.includes('尚未取得')) { toast(capability.reason || '模型当前不可用，任务尚未派发', true); return; }
     var payload = {
       agent: agent,
       mode: mode,
@@ -4081,8 +4074,9 @@
       sessionId: chat.activeSessionId
     };
     if (model) payload.model = model;
-    payload.thinking = prefs.thinking;
-    payload.stream = prefs.stream;
+    if (prefs.effort) payload.effort = prefs.effort;
+    if (prefs.thinking) payload.thinking = prefs.thinking;
+    if (prefs.stream) payload.stream = prefs.stream;
     if (ready.length) payload.attachments = ready.map(function (a) {
       var o = { url: a.url, name: a.name, isImage: !!a.isImage };
       if (a.content) o.content = a.content;

@@ -428,7 +428,7 @@ test('unknown capabilities fail closed and legacy effort or context cannot bypas
   await boot();
   try {
     const before = dispatches;
-    for (const option of [{ effort: 'high' }, { contextTier: 'long_context' }, { autoTier: 'intelligence' }, { extra_args: ['--effort', 'high'] }]) {
+    for (const option of [{ contextTier: 'long_context' }, { autoTier: 'intelligence' }, { extra_args: ['--effort', 'high'] }]) {
       assert.equal((await api('/api/dispatch', { agent: 'probe', task: 'synthetic invalid control', ...option })).status, 400);
     }
     capabilitiesOverride = { schema_version: 1, workers: {} };
