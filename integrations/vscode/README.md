@@ -17,10 +17,14 @@
    - 彻底免去命令行脚本安装步骤！
    - 插件随 IDE 启动自动检测当前项目工作区，静默为当前项目写入/更新 `.codeartsdoer/mcp/mcp_settings.json`；
    - 重载窗口后，即可在云码道中直接呼出 `@hub-mimocode` 等 9 种原生子代理与 `/hub-status`、`/hub-discover` 命令。
-3. **9 种 Worker 状态监控大盘 (Workers Matrix)**
-   - 侧边栏专属面板直观展示 Antigravity、CodeBuddy、Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts 等 9 种 Worker 适配器。
+3. **9 种 Worker 矩阵与精炼模型树 (Workers Matrix & Models)**
+   - 侧边栏专属面板直观展示 Antigravity、CodeBuddy、Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts 等 9 种 Worker 适配器；
+   - 支持**展开各 Worker 节点**查看当季精选模型、官方积分倍率（如 CodeBuddy-CN `x0.06 ~ x2.00`、TraeCode `0.06x ~ 1.50x`）与官方福利标识（`[会员 5 折]`、`[限时 1 折]`、`[专属补贴]`）；
+   - 华为 CodeArts 聚焦支持 4 款企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）。
 4. **底部状态栏实时指示灯 (Status Bar)**
    - 实时检测 Hub 连通性与网络延时，点击状态栏快速调出配置与诊断面板。
+5. **快捷管理与 Web 控制台直达 (Console WebUI)**
+   - 点击“打开 Web 控制台”直达端口 8890 管理大盘，实时体验自定义监控指标面板与模型参数调节。
 
 ---
 

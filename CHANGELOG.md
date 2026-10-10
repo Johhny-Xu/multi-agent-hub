@@ -29,6 +29,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **华为 CodeArts 规则保留**：遵照用户要求保持 `codearts` 完整不变，维持 4 个已验证企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）。
 - **测试与环境同步**：同步更新 `tests/console_smoke.mjs` 中的模型目录数量断言（全量 26 项 smoke + 5 项 DOM 测试 100% 通过），并同步部署至服务器热重载生效。
 
+### CodeArts IDE & VS Code 桌面扩展升级 (`integrations/vscode`)
+
+- **Workers 侧边栏支持展开模型树**：各 Worker 节点支持展开直接查看当季精选模型、官方积分倍率（如 CodeBuddy-CN `x0.06 ~ x2.00`、TraeCode `0.06x ~ 1.50x`）与官方营销福利标签（`[会员 5 折]`、`[限时 1 折]`、`[专属补贴]`）。
+- **华为 CodeArts 官方模型对齐**：扩展内默认模型更新为 `GLM-5.2`（`0.70x`），对齐收敛后的 4 款企业级官方高可用模型。
+- **Web 控制台直达修复**：修复 `multiAgentHub.openConsole` 命令地址，精准打开端口 `8890` 的 Web 控制台大盘，避免跳转至底层的 MCP 端口 `8765`。
+- **安装包重构与本地就地更新**：重新打包生成 `.vsix`、`.carts`、`.cloudide` 三种发行格式并自动更新本地 CodeArts IDE 扩展实例。
+
 
 ## [0.9.9.1] - 2026-10-10
 
