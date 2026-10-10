@@ -59,6 +59,7 @@ const SUMMARY_CAP = 500;
 const ARTIFACT_CAP = 200_000;
 const MSGS_PER_THREAD = 200;
 const THREADS_MAX = 30;
+const SESSIONS_MAX = 5; // 单个子代理项目下最大活跃会话数，超出自动归档最旧会话
 const SUBAGENT_PORTS = [8790, 8791, 8792, 8793, 8795, 8797, 8799];
 
 /** 默认枢纽端点 (支持环境变量覆盖; token 仅存 Node 侧, 不下发 Client) */
@@ -1294,6 +1295,31 @@ export async function start(context) {
     return t;
   }
 
+    const archivesDir = join(dataDir, 'archives');
+
+  async function archiveSession(session) {
+    if (!session || !session.id) return;
+    try {
+      await mkdir(archivesDir, { recursive: true });
+      const archPath = join(archivesDir, `${session.agent || 'unknown'}-${session.id}.json`);
+      await writeFile(archPath, JSON.stringify(session, null, 2), 'utf-8');
+      context.logger.info('miniapp.chat.session_archived', { agent: session.agent, sessionId: session.id, archPath });
+    } catch (err) {
+      context.logger.warn('miniapp.chat.archive_failed', { sessionId: session.id, error: String(err && err.message) });
+    }
+  }
+
+  function enforceSessionLimit(entry) {
+    if (!entry || !Array.isArray(entry.sessions)) return;
+    if (entry.sessions.length > SESSIONS_MAX) {
+      // 保持活跃会话列表最多 SESSIONS_MAX 个，超出的最旧会话自动归档到 archives/
+      const removed = entry.sessions.splice(SESSIONS_MAX);
+      for (const oldSess of removed) {
+        void archiveSession(oldSess);
+      }
+    }
+  }
+
   function createSession(agentName, initialTitle) {
     const entry = getAgentEntry(agentName, true);
     const sessId = `sess-${agentName}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -1310,9 +1336,7 @@ export async function start(context) {
     };
     if (!Array.isArray(entry.sessions)) entry.sessions = [];
     entry.sessions.unshift(newSess);
-    if (entry.sessions.length > 30) {
-      entry.sessions = entry.sessions.slice(0, 30);
-    }
+    enforceSessionLimit(entry);
     entry.activeSessionId = sessId;
     entry.updated = tsNow();
     saveConv();
@@ -1809,6 +1833,7 @@ export async function start(context) {
       if (msgs.length) saveConv();
     } catch { /* 枢纽不可达: 静默等下一轮 */ }
     try { await pollThreadPending(); } catch { /* noop */ }
+    try { await sweepResults(); } catch { /* noop */ }
     try { await autoDispatchTick(); } catch { /* 枢纽抖动, 下轮再试 */ }
     watcherBusy = false;
   }
@@ -1890,17 +1915,25 @@ export async function start(context) {
         }
         const prefix = ref.slice(0, lastDash);
         const targetAgent = prefix === 'trae' ? 'traecode' : (AGENT_ALIASES[prefix] || prefix);
-        const thread = getThread(targetAgent, true);
-        if (!thread) {
-          seenExternalRefs.add(ref);
-          continue;
+        const taskText = extractTaskText(data) || '（外部派发任务）';
+        const taskTitle = taskText.trim().replace(/\s+/g, ' ').slice(0, 30) || '外部任务';
+        const entry = getAgentEntry(targetAgent, true);
+        if (!Array.isArray(entry.sessions)) entry.sessions = [];
+        
+        // 如果当前活跃会话是空的或未命名新会话，则直接复用；若当前会话已有消息且最后更新相差较久，则新建一个任务会话
+        let thread = entry.sessions.find((s) => s.id === entry.activeSessionId);
+        const shouldNewSession = !thread || (Array.isArray(thread.messages) && thread.messages.length >= 20);
+        if (shouldNewSession) {
+          thread = createSession(targetAgent, taskTitle);
+        } else if (thread && (!thread.messages || thread.messages.length === 0)) {
+          thread.title = taskTitle;
         }
+
         if (Array.isArray(thread.messages) && thread.messages.some((m) => m.ref === ref)) {
           seenExternalRefs.add(ref);
           continue;
         }
 
-        const taskText = extractTaskText(data) || '（外部派发任务）';
         let replyText = typeof data.text === 'string' ? data.text.trim() : '';
         if (!replyText) {
           if (data.status === 'error') replyText = '执行出错（无详细输出）';
