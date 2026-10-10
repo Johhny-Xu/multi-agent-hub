@@ -1,0 +1,105 @@
+{
+  "name": "multi-agent-hub",
+  "displayName": "Multi-Agent Hub",
+  "description": "Multi-agent orchestration and Hub bridge for CodeArts IDE & VS Code",
+  "version": "0.9.9",
+  "publisher": "agenthub",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.52.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "multi-agent",
+    "agent",
+    "codearts",
+    "mcp",
+    "antigravity",
+    "zcode",
+    "codex",
+    "carts",
+    "cloudide"
+  ],
+  "main": "./extension.js",
+  "icon": "resources/icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "multi-agent-hub-container",
+          "title": "Multi-Agent Hub",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "multi-agent-hub-container": [
+        {
+          "id": "multiAgentHub.statusView",
+          "name": "Hub 服务与连接状态"
+        },
+        {
+          "id": "multiAgentHub.workersView",
+          "name": "Workers 状态矩阵 (9 Workers)"
+        },
+        {
+          "id": "multiAgentHub.actionsView",
+          "name": "快捷管理与工作区同步"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "multiAgentHub.refresh",
+        "title": "刷新状态",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "multiAgentHub.discover",
+        "title": "扫描与发现 Hub",
+        "icon": "$(search)"
+      },
+      {
+        "command": "multiAgentHub.syncWorkspace",
+        "title": "同步当前工作区 CodeArts MCP 设置",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "multiAgentHub.setConnection",
+        "title": "配置 Hub 连接 (URL 与 Token)",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "multiAgentHub.openConsole",
+        "title": "打开 Web 控制台",
+        "icon": "$(globe)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "multiAgentHub.refresh",
+          "when": "view == multiAgentHub.statusView || view == multiAgentHub.workersView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "multiAgentHub.discover",
+          "when": "view == multiAgentHub.statusView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "multiAgentHub.syncWorkspace",
+          "when": "view == multiAgentHub.actionsView",
+          "group": "navigation@3"
+        }
+      ]
+    }
+  }
+}

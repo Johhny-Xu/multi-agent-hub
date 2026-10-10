@@ -27,3 +27,7 @@ results/
 conversations.json
 external-refs-seen.json
 .DS_Store
+dist/
+*.vsix
+*.carts
+*.cloudide

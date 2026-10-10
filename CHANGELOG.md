@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### CodeArts IDE & VS Code 扩展包 (.carts / .vsix)
+
+- 新增 CodeArts IDE 与 Visual Studio Code 通用桌面扩展 (`integrations/vscode`)，支持通过 IDE 图形界面“从 VSIX/CARTS 安装...”一键导入，免除命令行脚本配置。
+- 提供侧边栏专属视图（Hub 连接与健康状态、9 种 Worker 适配大盘、快捷发现与管理）以及底部状态栏实时指示灯（在线/延时提示）。
+- 插件随 IDE 启动自动检测当前工作区，无感为云码道（CodeArts Agent）注入/更新 `.codeartsdoer/mcp/mcp_settings.json`，彻底解决切换项目需手动登记的痛点。
+- 新增 `packaging/package_extensions.py` 打包脚本，遵循 VSIX OPC 规范，一键构建并校验 `multi-agent-hub-0.9.9.vsix`、`multi-agent-hub-0.9.9.carts` 和 `multi-agent-hub-0.9.9.cloudide`，输出至 `integrations/vscode/dist/` 与桌面发布目录。
+
 ### CodeArts IDE 接入体验
 
 - 修复 Windows 官方 CLI 的发现：驱动和一键安装器识别 `installers/bin/codearts.exe`，避免只发现 `.cmd` 后误选 IDE AgentKernel。直接运行官方 exe 时使用 CLI 专用配置及 `cli-data` 环境，保留外部认证和独立任务数据库，不关闭 TLS 校验。
