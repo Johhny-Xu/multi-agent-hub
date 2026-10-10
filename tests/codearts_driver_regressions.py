@@ -411,6 +411,25 @@ class CodeArtsDriver(unittest.TestCase):
         self.assertEqual(parsed["error"], "CODEARTS_AUTH_REQUIRED")
         self.assertEqual(parse_output(json.dumps(driver.parse_events(success(), "", 0)))["text"], "answer")
 
+    def test_official_linux_cli_uses_cli_profile_and_loads_auth_env(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home, runtime = Path(temp), Path(temp) / "isolated"
+            auth_file = home / ".config" / "agenthub-codearts" / "codearts-auth.env"
+            auth_file.parent.mkdir(parents=True)
+            auth_file.write_text("CODEARTS_CLI_AK=ak-from-file\nCODEARTS_CLI_SK=sk-from-file\n", encoding="utf-8")
+            result = driver.runtime_environment(
+                home / ".local/bin/codearts", runtime, home=home,
+                env={"NODE_TLS_REJECT_UNAUTHORIZED": "1"})
+            self.assertEqual(result["SCENARIO"], "codeartsdoer")
+            self.assertEqual(result["PLUGIN_ENV"], "hc")
+            self.assertEqual(Path(result["KERNEL_DATA_DIR"]), home / ".codeartsdoer/cli-data")
+            self.assertEqual(Path(result["KERNEL_CONFIG_DIR"]), home / ".codeartsdoer")
+            self.assertEqual(Path(result["OPENCODE_CONFIG"]), home / ".codeartsdoer/codearts_cli.json")
+            self.assertEqual(result["OPENCODE_CONFIG_FILE"], "codearts_cli.json,codearts_cli.jsonc")
+            self.assertEqual(result["OPENCODE_MODE"], "tui")
+            self.assertEqual(result["CODEARTS_CLI_AK"], "ak-from-file")
+            self.assertEqual(result["CODEARTS_CLI_SK"], "sk-from-file")
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == '--containment-fixture':
