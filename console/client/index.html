@@ -3946,7 +3946,8 @@
 
     if (listEl) listEl.hidden = false;
 
-    var searchVal = ($('#mp-search-input') ? $('#mp-search-input').value.trim().toLowerCase() : '');
+    var searchInp = $('#mp-search-input');
+    var searchVal = (searchInp && searchInp.value) ? String(searchInp.value).trim().toLowerCase() : '';
     var filtered = models.filter(function (m) {
       if (!searchVal) return true;
       return (m.name && m.name.toLowerCase().indexOf(searchVal) !== -1) ||
@@ -5130,7 +5131,8 @@
       saveAgentPrefs(chat.activeAgent, { model: ev.target.value });
     }
   });
-  $('#mp-stream').addEventListener('change', function (ev) { saveAgentPrefs(chat.activeAgent, { stream: ev.target.checked }); });
+  var mpStream = $('#mp-stream');
+  if (mpStream) mpStream.addEventListener('change', function (ev) { saveAgentPrefs(chat.activeAgent, { stream: ev.target.checked }); });
   $('#btn-capability-refresh').addEventListener('click', function () {
     var agent = chat.activeAgent;
     var model = getAgentPrefs(agent).model;
@@ -5201,6 +5203,20 @@
 
     sbBar.addEventListener('mouseleave', function () {
       sbTipEl.style.display = 'none';
+    });
+
+    sbBar.addEventListener('click', function (e) {
+      var target = e.target;
+      var seg = target && (target.closest ? target : target.parentElement) ? (target.closest ? target : target.parentElement).closest('[data-sb]') : null;
+      if (!seg || !seg.dataset || !seg.dataset.sb) return;
+      if (seg.dataset.sb === 'model') {
+        return; // 已由 sbModel 专属监听器处理
+      }
+      if (seg.dataset.sb === 'agent') {
+        togglePlatformsSidebar();
+      } else {
+        showUsageDetail();
+      }
     });
   }
 
