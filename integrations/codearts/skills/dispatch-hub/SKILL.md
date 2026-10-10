@@ -4,10 +4,11 @@ description: Delegate self-contained tasks through multi-agent-hub workers, coor
 ---
 Use the registered multi-agent-hub MCP tools and native hub-* agents. The nine worker IDs are antigravity, codebuddy, codebuddy-cn, github-copilot, mimocode, minimaxcode, traecode, zcode and codearts.
 
-Use directly registered MCP tools directly when the host exposes them. If the CodeArts IDE exposes MCP tools through its lazy tool registry, first use tool_search to discover the tool, then tool_describe(id=...) to load its schema, and tool_call(id=..., args=...) to execute it using that schema. A discovered MCP name is not automatically a directly callable tool; do not repeat direct calls after the host says it is not directly callable.
-
-**Calling Constraint (Avoid Duplicate Calls)**: When invoking MCP tools in CodeArts, emit only a single structured `tool_call`. Never simultaneously output raw XML tool tags (e.g., `<multi-agent-hub_hub_ask ...>`) in the markdown prose, as the host will parse and execute both, causing duplicate task submission.
-调用约束：调用 MCP 工具时仅输出单个 tool_call，严禁在正文同时内嵌 XML 标签（如 `<multi-agent-hub_hub_ask>`），避免宿主解析两次导致重复执行。
+**Mandatory Calling Path & Single Dispatch (强制调用准则)**:
+1. When invoking multi-agent-hub MCP tools in CodeArts, **strictly and exclusively follow the single calling path**: `tool_search → tool_describe → tool_call`.
+2. **Dispatch each task exactly once**: Never submit duplicate calls or emit multiple tool calls for the same task in a single turn.
+3. **No direct tool name or XML mixing**: Emit only a single structured `tool_call`. Never simultaneously output raw XML tool tags (e.g., `<multi-agent-hub_hub_ask ...>`) or direct tool names in markdown prose, as the CodeArts host engine will parse and execute both, causing duplicate execution.
+【强制调用准则】在 CodeArts 中调用 multi-agent-hub MCP 工具必须严格遵循「tool_search → tool_describe → tool_call」单一调用路径，每个任务严格只派发一次。严禁直接以工具名调用，绝对禁止在正文内嵌 XML 标签（如 `<multi-agent-hub_hub_ask>`），避免宿主重复执行。
 
 If permission for an action is denied or rejected, stop that action immediately and report blocked_permission with the original ref (if available). Do not retry it under another tool name, through another transport, or from the parent agent; resume only after explicit authorization. Never change permission settings or add automatic approval.
 
