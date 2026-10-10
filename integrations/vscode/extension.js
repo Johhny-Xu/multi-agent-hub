@@ -8,16 +8,96 @@ const os = require('os');
 
 // Standard worker catalog
 const STANDARD_WORKERS = [
-  { id: 'antigravity', name: 'Antigravity', defaultModel: 'gemini-3.8-flash-medium', desc: 'Google Antigravity 官方子代理与多模态' },
-  { id: 'codebuddy', name: 'CodeBuddy 国际版', defaultModel: 'deepseek-v4.1-flash', desc: 'DeepSeek 驱动的标准代码代理' },
-  { id: 'codebuddy-cn', name: 'CodeBuddy 国内版', defaultModel: 'deepseek-v4.1-flash', desc: '国内高速代码辅助' },
+  { id: 'antigravity', name: 'Antigravity', defaultModel: 'gemini-3.8-flash-medium', desc: 'Google Antigravity 官方子代理与多模态 (6 款精炼模型)' },
+  { id: 'codebuddy', name: 'CodeBuddy 国际版', defaultModel: 'deepseek-v4.1-flash', desc: 'DeepSeek 驱动的标准代码代理 (18 款高可用模型)' },
+  { id: 'codebuddy-cn', name: 'CodeBuddy 国内版', defaultModel: 'deepseek-v4.1-flash', desc: '国内高速代码辅助 (13 款模型, 标注 x0.06 ~ x2.00 积分倍率)' },
   { id: 'github-copilot', name: 'GitHub Copilot', defaultModel: 'auto', desc: 'GitHub Copilot CLI 任务适配' },
-  { id: 'mimocode', name: 'MiMo', defaultModel: 'xiaomi/mimo-v2.6-flash (26f)', desc: 'Xiaomi MiMo 高性价比推理与代码生成' },
-  { id: 'minimaxcode', name: 'MiniMax', defaultModel: 'MiniMax-M3.1-Flash-Preview', desc: 'MiniMax 图文与代码分析' },
-  { id: 'traecode', name: 'TraeCode', defaultModel: 'GLM-5.3-FlashX', desc: '字节 TraeCode 任务调度' },
+  { id: 'mimocode', name: 'MiMo', defaultModel: 'xiaomi/mimo-v2.6-flash', desc: 'Xiaomi MiMo 高性价比推理与代码生成 (4 款精选)' },
+  { id: 'minimaxcode', name: 'MiniMax', defaultModel: 'MiniMax-M3.1-Flash-Preview', desc: 'MiniMax 当季旗舰图文与代码分析 (M3.1 Flash / M3)' },
+  { id: 'traecode', name: 'TraeCode', defaultModel: 'GLM-5.3-FlashX', desc: '字节 TraeCode 任务调度 (20 款官方模型, 0.06x ~ 1.50x 折扣倍率)' },
   { id: 'zcode', name: 'ZCode', defaultModel: 'GLM-5.3-Flash', desc: '智谱 ZCode 编程代理' },
-  { id: 'codearts', name: 'CodeArts (码道)', defaultModel: 'huaweicloud-maas/GLM-5.2', desc: '华为云码道 CLI / IDE 官方内核' }
+  { id: 'codearts', name: 'CodeArts (码道)', defaultModel: 'GLM-5.2', desc: '华为云码道官方企业级模型 (4 款已验证高可用模型, 0.70x)' }
 ];
+
+// Refined model catalog per worker
+const WORKER_MODELS = {
+  antigravity: [
+    'gemini-3.8-flash-medium (默认)',
+    'gemini-3.8-flash-high',
+    'gemini-3.1-pro-high',
+    'claude-sonnet-4-6 (Thinking)',
+    'claude-opus-4-6-thinking'
+  ],
+  codebuddy: [
+    'deepseek-v4.1-flash (默认)',
+    'deepseek-v4-pro',
+    'gpt-5.5',
+    'glm-5.3',
+    'glm-5.2',
+    'kimi-k3',
+    'kimi-k2.8-preview',
+    'grok-4.7',
+    'custom-local:trae'
+  ],
+  'codebuddy-cn': [
+    'deepseek-v4.1-flash (默认 · x0.11)',
+    'deepseek-v4-pro (x0.51)',
+    'minimax-m3 (x0.25)',
+    'glm-5.3 (x0.79)',
+    'glm-5.3-flash (x0.06)',
+    'glm-5.2 (x0.79)',
+    'glm-5.1 (x0.79)',
+    'kimi-k3-1 (x1.62)',
+    'kimi-k2.8-preview (x0.77)',
+    'kimi-k2.7 (x0.57)',
+    'hy4-preview (x0.29 · 试用)',
+    'hunyuan-chat (x0.10)'
+  ],
+  'github-copilot': [
+    'auto (默认)'
+  ],
+  mimocode: [
+    'xiaomi/mimo-v2.6-flash (默认 · 26f)',
+    'mimo-v2.6-pro',
+    'mimo-v2.6-pro-ultraspeed',
+    '9router/trae (通道)'
+  ],
+  minimaxcode: [
+    'MiniMax-M3.1-Flash-Preview (默认 · 512K/1M)',
+    'MiniMax-M3 (1M 上下文)'
+  ],
+  traecode: [
+    'GLM-5.3-FlashX (默认 · 0.31x)',
+    'glm-5.3-flash (0.06x)',
+    'glm-5.3 (0.78x · 会员 5 折)',
+    'glm-5.2 (0.78x · 会员 5 折)',
+    'MiMo-V2.6-Flash (0.06x)',
+    'MiMo-V2.6-Pro (0.15x)',
+    'deepseek-v4.1-flash (0.20x · 限时折扣)',
+    'DeepSeek-V4-Flash (0.20x · 限时折扣)',
+    'DeepSeek-V4-Pro (0.72x · 限时折扣)',
+    'qwen3.8-flash (0.08x)',
+    'qwen-3.7-plus (0.25x)',
+    'qwen3.8-max (1.50x)',
+    'Doubao-Seed-Evolving (0.08x · 限时 1 折)',
+    'Doubao-Seed-2.1-Pro (0.08x · 限时 1 折)',
+    'Doubao-Seed-2.1-Turbo (0.20x · 专属补贴)',
+    'Doubao-Seed-Code (0.06x · 专属补贴)',
+    'kimi-k3 (1.50x)',
+    'kimi-k2.8-preview (0.60x)',
+    'minimax-m3 (0.25x)',
+    'step-5-preview (0.50x)'
+  ],
+  zcode: [
+    'GLM-5.3-Flash (默认)'
+  ],
+  codearts: [
+    'GLM-5.2 (默认 · 0.70x)',
+    'GLM-5.2-ArkTS-SPARK (0.70x)',
+    'OpenPangu-2.0-Pro (0.70x)',
+    'OpenPangu-2.0-Flash (0.35x)'
+  ]
+};
 
 // Fallback known cluster tokens for zero-config passwordless LAN pairing
 const KNOWN_TOKENS = {
@@ -308,12 +388,27 @@ class WorkersTreeProvider {
   refresh() {
     this._onDidChangeTreeData.fire();
   }
-  getChildren() {
-    return STANDARD_WORKERS.map((w) => {
-      const item = new vscode.TreeItem(`${w.name}`, vscode.TreeItemCollapsibleState.None);
-      item.description = `[${w.defaultModel}]`;
-      item.tooltip = `${w.name} (${w.id})\n默认模型: ${w.defaultModel}\n说明: ${w.desc}`;
-      item.iconPath = new vscode.ThemeIcon('hub');
+  getChildren(element) {
+    if (!element) {
+      return STANDARD_WORKERS.map((w) => {
+        const models = WORKER_MODELS[w.id] || [];
+        const hasChildren = models.length > 0;
+        const item = new vscode.TreeItem(
+          `${w.name}`,
+          hasChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+        );
+        item.description = `[${w.defaultModel}]`;
+        item.tooltip = `${w.name} (${w.id})\n默认模型: ${w.defaultModel}\n支持模型: ${models.length} 款\n说明: ${w.desc}`;
+        item.iconPath = new vscode.ThemeIcon('hub');
+        item.workerId = w.id;
+        return item;
+      });
+    }
+    // Child items (models)
+    const models = WORKER_MODELS[element.workerId] || [];
+    return models.map((m) => {
+      const item = new vscode.TreeItem(m, vscode.TreeItemCollapsibleState.None);
+      item.iconPath = new vscode.ThemeIcon('symbol-property');
       return item;
     });
   }
@@ -615,8 +710,14 @@ function activate(context) {
 
     vscode.commands.registerCommand('multiAgentHub.openConsole', () => {
       const cfg = readClientConfig();
-      const base = (cfg.url || 'http://127.0.0.1:8765/mcp').replace(/\/mcp\/?$/, '');
-      vscode.env.openExternal(vscode.Uri.parse(base));
+      let consoleUrl = 'http://127.0.0.1:8890';
+      if (cfg.url) {
+        try {
+          const u = new URL(cfg.url);
+          consoleUrl = `${u.protocol}//${u.hostname}:8890`;
+        } catch (e) {}
+      }
+      vscode.env.openExternal(vscode.Uri.parse(consoleUrl));
     })
   );
 
