@@ -41,7 +41,7 @@
 | Linux ZCode CLI 0.16.9 | ✅ 真实调用通过 | 原生 `agenthub-workers:mimocode` 子代理经插件派发，原 ref 续查返回 `73` |
 | Windows Codex / ZCode | ✅ 真实调用通过 | 两种原生子代理分别返回 `2117`、`2077`；初轮长标记回答不完整的记录也保留 |
 | Windows DSH | ⚠️ 账号余额受阻 | 10 个预设、7 个 MCP 工具及工作流注册通过；实际模型调用返回 `402 ACCOUNT_QUOTA` |
-| Windows Antigravity | ⚠️ 待桌面重启验证 | 0.9.9 原生资产及连接桥已验证，桌面自主调用尚未验收 |
+| Windows Antigravity | ✅ 真实调用通过 | 修复本地 client.json 缺失与 MCP 连接动态重试机制；实测通过 hub_status / hub_capabilities 实时返回 9 种 Worker 在线与能力状态 |
 | Linux Codex & DSH CLI | ❌ 未安装 (not_installed) | Linux 实机未找到 CLI 可执行文件，未执行实测，不作通过宣称 |
 | CodeArts 原生组件与通道 | ✅ 通过 | Windows 正式内核识别组件；Linux CLI 原生文件及 MCP 已安装校验通过；Windows ↔ Linux 局域网直连与 SSH 通道建立正常 |
 | Windows CodeArts IDE | ⚠️ 原生派发通过，结果回收受权限限制 | DeepSeek v4.1 Flash 真实调用 `hub-mimocode`，唯一回执 `mimocode-d5f1337f8a`；Linux 实际答案为 `45`，但 IDE 后续 `hub_fetch` 被宿主拒绝，不计为完整验收 |
