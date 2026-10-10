@@ -13,10 +13,11 @@
 
 - 🔌 **5 种原生宿主客户端**：深度适配 Codex、ZCode、DeepSeek Harness、CodeArts、Antigravity，提供原生子代理、斜杠命令与工作流。
 - 🤖 **9 种 Worker 统一适配**：标准契约调度 Antigravity、CodeBuddy（国际/国内版）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts（Antigravity 原生客户端为新增宿主角色，不作为第十种 Worker）。
-- 🎛️ **WebUI 控制台与运维大盘**：内置可选 Web 管理大盘（`--with-console`），提供多会话管理、状态栏监控指标自定义切换面板、模型选型抽屉、思考强度（low/medium/high/max）多级调节与平台配额/积分倍率可视化。
+- 🎛️ **WebUI 控制台与运维大盘**：内置可选 Web 管理大盘（`--with-console`，端口 `8890`，默认监听 `0.0.0.0` 开放局域网访问），提供 Worker 激活/禁用一键切换开关、多会话管理、状态栏监控指标自定义切换面板、模型选型抽屉、思考强度（low/medium/high/max）多级调节与平台配额/积分倍率可视化。
+- ⚡ **子代理启用开关与全端双向同步**：在 WebUI 控制台对任意 Worker（如暂时无额度或调试中的子代理）一键启停；权威状态即时同步落盘并由 Hub 调度器、WebUI 与所有客户端插件实时感知；被禁用的 Worker 在 `hub_status` 显式呈现 `[已禁用]`，派发时零延迟前置拦截（`profile_disabled`），杜绝浪费计算与配额资源。
 - 🎯 **精炼去重的生产模型目录**：为各 Worker 对齐官方真实模型与积分倍率体系，全面清理无法用于代码任务的生图模型、冗余平台别名与旧代模型，保留各服务商当季旗舰与高可用选型。
 - 🔄 **灵活多样的部署形态**：插件与 Hub 支持同机共存或分离部署；支持纯 Windows、纯 Linux 及 Windows ↔ Linux 跨机连接（局域网直连或 SSH 反向通道）。客户端连接特定 Hub 并非多 Hub 联邦，模型请求仍由官方 CLI 发送至服务商。
-- 🛡️ **严格能力预检与终态判定**：根据模型能力约束思考、流式与附件；拒绝空回答、已知异常退出及 agy 超时后的部分回答；保留原任务回执（ref），阻止 worker 向自身重复派发。
+- 🛡️ **严格能力预检与终态判定**：根据模型能力约束思考、流式与附件；CodeArts 宿主环境强制执行 `tool_search → tool_describe → tool_call` 单一调用路径与单任务单次派发；拒绝空回答、已知异常退出及 agy 超时后的部分回答；保留原任务回执（ref），阻止 worker 向自身重复派发。
 - 🔍 **智能发现与平滑切换**：局域网与本机 Hub 自动广播扫描与手动回退；连接配置与凭据独立于源码，平滑升级不丢失历史任务数据。
 
 ---
@@ -27,7 +28,7 @@
 
 - **Antigravity 原生插件**：提供 `plugin.json`、9 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及包含 7 个桥接工具的 `mcp_config.json`。可选 Python SDK 锁定 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与 Python 串并行编排能力；注意已安装 wheel 不包含 `beta.run_workflow` API，且 SDK API 鉴权独立于 IDE/CLI 登录（缺少 SDK 鉴权时 SDK 编排模型调用受阻）。
 - **CodeArts 原生插件与驱动**：包含 9 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 7 个 MCP 工具。双向支持客户端调度与 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
-  - **IDE 懒加载工具协议深度适配**：支持 CodeArts IDE 动态工具注册体系（`tool_search` 发现工具 → `tool_describe` 获取参数 Schema → `tool_call` 执行），兼顾直接注册 MCP 的环境。
+  - **IDE 懒加载工具协议深度适配与单一路径约束**：支持 CodeArts IDE 动态工具注册体系；严格确立 `tool_search` 发现工具 → `tool_describe` 获取参数 Schema → `tool_call` 执行的**单一标准路径**；严禁在 Markdown 或纯文本推理中直出 XML 标签，杜绝引擎双重派发；任务单次派发后由客户端安全轮询。
   - **权限管控与终态轮询保障**：遇宿主权限拒绝（Permission Denied / auto-rejecting）时立即终止并返回 `blocked_permission` 与原始 ref，禁止换工具名或经父代理重试；在等待预算内以原 ref 持续轮询 `hub_fetch`，严格以符合验收条件的非空真实 worker 回答判定 `completed`，绝不以会话结束或工具调用成功冒充任务完成。
   - **Windows 官方 CLI 精准识别与环境隔离**：精准识别官方 `installers/bin/codearts.exe`，采用独立 `cli-data` 隔离目录与独立会话数据库，不再与 IDE GUI AgentKernel 混淆；继承外部认证并保持 TLS 校验；将“文件夹未被信任”准确归类为 `CODEARTS_PERMISSION_REQUIRED` 脱敏提示。
   - **Linux 进程生命周期与资源回收加固**：驱动与 Hub 统一进程组管理，确保任务取消与超时时彻底回收所有后代进程，杜绝孤立进程残留。
@@ -160,6 +161,8 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765
 
 Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指定 `--with-console` 即可开启，默认运行在 Node.js 服务端口 `8890`）：
 
+- 🔘 **Worker 一键激活/禁用开关 (Subagent Toggle Switch)**：每个 Worker 卡片内置原生启用切换开关。当某个模型服务商无额度、账号欠费或处于维护调试期时，可随时一键关闭该子代理；状态即时持久化落盘至 `agents.json` 并通过 Hub 调度器向全端生效。
+- ⚡ **权威状态双向同步与免派发拦截**：禁用的 Worker 在 `hub_status` 中明确显示为 `[已禁用]`，`hub_capabilities` 返回 `enabled: false`，在派发任务（`hub_dispatch` / `hub_ask`）时触发秒级前置快速拦截（`profile_disabled`），杜绝因误调用产生无谓等待与额度报警。
 - 🎛️ **监控状态栏自定义面板**：底部状态栏新增自定义指标控制面板，支持一键呼出多选面板，按需勾选或隐藏实时监控项（包括子代理、模型、网络延时、吞吐 TPS、会话 Token、平台额度等），配置自动持久化至本地存储。
 - ⚙️ **模型选型与思考强度抽屉**：点击状态栏模型标签即可平滑呼出参数面板；子代理运行参数全面升级为平滑的思考强度（`low` / `medium` / `high` / `max`）分级控制，解除阻塞式单开关限制。
 - 🏷️ **官方积分倍率与福利标识**：深度适配 TraeCode、CodeBuddy-CN 等平台的积分倍率显示，直观呈现 `0.06x ~ 2.00x` 换算比率，以及 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 等专属视觉标签。
