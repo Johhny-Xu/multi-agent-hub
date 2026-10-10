@@ -4,15 +4,15 @@
   "timezone": "Asia/Shanghai",
   "platform": "Windows",
   "python_version": "3.14.5",
-  "duration_seconds": 6.16,
+  "duration_seconds": 5.989,
   "live_vendor_inference_performed": false,
-  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-d23d365n",
+  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-_xj3wudr",
   "active_agent_config_or_state_modified": false,
   "source_sha256": {
-    "hub/agent_hub.py": "912986334c3c98d1ad0e5538530bb020baa48cfabd952785a09d7a7efea8c8b5",
-    "hub/async_worker.py": "0fd6521ce3d7c3a7aa0d22977c58590e90c921523f7591182f9a616fca9dcf87",
+    "hub/agent_hub.py": "e2a7fd230d0725d3c48f0055ae8510c3ae5c94965cd0d3fd62c1b53a3f80b154",
+    "hub/async_worker.py": "7d6d260ff10b26ab4de20eaa2bb1ca89fda9be2bd4ed12bfb4b9155692e5c1b3",
     "hub/command_runtime.py": "8aea57229342072da67c8d8c3a3f1710e74a118a42d73c0a81b766c5fbae5d1a",
-    "plugins/agenthub-workers/mcp/hub.mjs": "e1e190a1c7c3b6e3c7b53dc6d6e0337f4f66bf9bdab7910a6c026ce55ace934d",
+    "plugins/agenthub-workers/mcp/hub.mjs": "1fc9840e3536d22d42032e8e3fdc238bb67e05d4d9bee5441be21c99067a4d19",
     "drivers/zcode_dom.js": "32f456d7e4fb4f9fc8db93e2b732dbb4604b0505dea85a9d17dd565a38d07d7d"
   },
   "checks": [
@@ -41,12 +41,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "codebuddy-969aeba8dc",
-          "updated_at": 1791605418.4041438,
+          "ref": "codebuddy-e8b8b23965",
+          "updated_at": 1791618492.362652,
           "progress": null,
           "exit_code": 0,
           "text": "{\"synthetic\": true, \"kind\": \"cwd\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--agent\", \"standard\", \"--output-format\", \"json\"]}",
-          "probe_elapsed_seconds": 0.715
+          "probe_elapsed_seconds": 0.689
         },
         "task_metadata": {
           "cmd": [
@@ -66,7 +66,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "369936728a5c81827ed7a460e5b54359361ac1a6d169c89f164623b6f095c158",
+          "profile_signature": "774c969e08008dd39e5b85d4da2af1d456086986ec4f254370ecf911521b62ac",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -94,12 +94,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "codebuddy-cn-7535c19642",
-          "updated_at": 1791605418.4416738,
+          "ref": "codebuddy-cn-e9c8086059",
+          "updated_at": 1791618492.390062,
           "progress": null,
           "exit_code": 0,
           "text": "{\"synthetic\": true, \"kind\": \"workdir\", \"cwd\": \"<isolated-temp>\\\\synthetic-auth-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--agent\", \"standard\", \"--output-format\", \"json\", \"--add-dir\", \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\"]}",
-          "probe_elapsed_seconds": 0.68
+          "probe_elapsed_seconds": 0.652
         },
         "task_metadata": {
           "cmd": [
@@ -121,7 +121,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "d3218a2c8b8d275faa9fcd8ab2149ced0e094d448be20dfc6646d0f038024309",
+          "profile_signature": "11744d029196865aa79c7d762a36b7862d0f20e1c05a142978ce1a1bec161a32",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -150,11 +150,11 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "mimocode-69a5cdb0c9",
-          "updated_at": 1791605418.4967868,
+          "ref": "mimocode-47e24f0fb1",
+          "updated_at": 1791618492.4387414,
           "text": "CLI 任务超时 (>0.1s), 已回收子进程树",
           "progress": null,
-          "probe_elapsed_seconds": 0.655
+          "probe_elapsed_seconds": 0.627
         },
         "task_metadata": {
           "cmd": [
@@ -172,7 +172,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "ea7b06faa58976381d017bc501411c48de4fb17b5e301ef01738303b42b1edc6",
+          "profile_signature": "68219cb79ae431fae58e17f1676a2ecf3cc0188efaa17c535d155a570bf53052",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -198,12 +198,12 @@
         "stream": false,
         "attachments": [],
         "model": "",
-        "ref": "minimaxcode-d2cb4a4099",
-        "updated_at": 1791605418.477976,
+        "ref": "minimaxcode-945a4eef92",
+        "updated_at": 1791618492.4372134,
         "progress": null,
         "exit_code": 7,
         "text": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}",
-        "probe_elapsed_seconds": 0.626
+        "probe_elapsed_seconds": 0.602
       },
       "source": [
         "hub/async_worker.py:432",
@@ -224,12 +224,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "github-copilot-b3aa73662e",
-          "updated_at": 1791605418.4874675,
+          "ref": "github-copilot-2bc820a75c",
+          "updated_at": 1791618492.4307323,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK",
-          "probe_elapsed_seconds": 0.595
+          "probe_elapsed_seconds": 0.572
         }
       },
       "source": [
@@ -251,8 +251,8 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "github-copilot-84ec3c9d29",
-          "updated_at": 1791605418.9363894,
+          "ref": "github-copilot-57d2f87e59",
+          "updated_at": 1791618492.8901277,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK"
@@ -271,8 +271,8 @@
         "ok": false,
         "worker": "minimaxcode",
         "status": "failed",
-        "ref": "minimaxcode-06ffb03eab",
-        "answer": "[minimaxcode-06ffb03eab] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
+        "ref": "minimaxcode-15e7aea5c9",
+        "answer": "[minimaxcode-15e7aea5c9] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
       },
       "source": [
         "plugins/agenthub-workers/mcp/hub.mjs",
@@ -292,15 +292,15 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "antigravity-b23120819d",
-          "updated_at": 1791605418.3365579,
+          "ref": "antigravity-98c3c9ff98",
+          "updated_at": 1791618492.3271222,
           "text": "执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。",
           "progress": null,
-          "probe_elapsed_seconds": 0.534
+          "probe_elapsed_seconds": 0.53
         },
         "bridge": {
           "status": "failed",
-          "answer": "[antigravity-b23120819d] agent=antigravity status=error\n执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。"
+          "answer": "[antigravity-98c3c9ff98] agent=antigravity status=error\n执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。"
         }
       },
       "source": [
@@ -315,11 +315,11 @@
         "ok": true,
         "worker": "zcode",
         "status": "running",
-        "ref": "zcode-cf65a42e63"
+        "ref": "zcode-30725d7038"
       },
       "source": [
-        "plugins/agenthub-workers/mcp/hub.mjs:156",
-        "plugins/agenthub-workers/mcp/hub.mjs:152",
+        "plugins/agenthub-workers/mcp/hub.mjs:178",
+        "plugins/agenthub-workers/mcp/hub.mjs:174",
         "hub/agent_hub.py:398"
       ]
     },
@@ -329,14 +329,14 @@
       "expected": "Actual closed-port driver failure remains an error with diagnostic text",
       "observed": {
         "direct_driver_exit": 1,
-        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:61081\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 61081\n}\n\nNode.js v24.17.0\n",
+        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:56071\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 56071\n}\n\nNode.js v24.17.0\n",
         "async_result": {
           "agent": "zcode",
           "status": "error",
           "task": "SYNTHETIC_CLOSED_CDP_TEST_ONLY",
-          "ref": "zcode-f3167629e4",
-          "updated_at": 1791605423.021612,
-          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:61081\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 61081\n}\n\nNode.js v24.17.0",
+          "ref": "zcode-083aa958ea",
+          "updated_at": 1791618496.8466825,
+          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:56071\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 56071\n}\n\nNode.js v24.17.0",
           "progress": null
         },
         "forced_cdp_target": "reserved non-listening loopback port",
@@ -360,7 +360,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa001",
-            "updated_at": 1791605423.1637805
+            "updated_at": 1791618497.030078
           }
         },
         "async_worker": {
@@ -370,7 +370,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa002",
-            "updated_at": 1791605423.3919883
+            "updated_at": 1791618497.2585485
           }
         }
       },

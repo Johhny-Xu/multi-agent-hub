@@ -11,6 +11,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Antigravity 宿主插件连接与 MCP 桥接故障动态恢复修复 (`antigravity` / `mcp`)
+
+- **MCP 桥接动态连接加载与自愈**：
+  - 彻底解决 `mcp/hub.mjs` 模块顶层静态求值 `try { CONNECTION = await loadConnection(); }` 导致在配置文件缺失或未就绪时永久锁定 `SETUP_REQUIRED` 状态的缺陷。
+  - 新增 `refreshConnection()` 与 `getConnection()` 动态重试机制：当连接配置在 MCP 进程启动后被创建或修正时，后续任意工具调用（`hub_status`、`hub_capabilities`、`hub_ask` 等）均能自动重新加载配置并与 Hub 恢复连接，无需重启 IDE 或杀死后台进程。
+  - 将修复同步至全部集成目标（`mcp/`、`plugins/agenthub-workers/mcp/`、`integrations/dsh/mcp/`、`integrations/codex/mcp/`、`integrations/codearts/mcp/`、`integrations/antigravity/mcp/`、`integrations/vscode/mcp/`）。
+- **Windows Antigravity 客户端配置就绪**：
+  - 修复 `%LOCALAPPDATA%\AgentHub-Antigravity\client.json` 配置路径缺失问题，配置标准文件模式连接至 `http://127.0.0.1:8765/mcp` 与凭据。
+  - 实时热重载 Antigravity 宿主插件进程，实测通过原生 `call_mcp_tool` 执行 `hub_status` 与 `hub_capabilities`，成功返回远程 9 家 Worker 在线状态及 TraeCode 等通道能力。
+- **单元测试与全量回归**：
+  - 在 `tests/mcp_bridge.test.mjs` 中新增 `bridge recovers dynamically when connection configuration is restored` 单元测试，并将 `integrations/vscode/mcp` 纳入跨端桥接一致性自动化检验（117 项测试全量通过）。
+  - 全量运行 `tests/run_regressions.py`，31 组回归套件全部通过（100% PASS）。
+
+
 ### TraeCode 网关状态与能力识别修复 (`traecode` / `hub`)
 
 - **修复 Trae 网关终态校验误报**：解决 Trae 网关返回 `session.status="completed"` 与 `result.status="ok"` 时，因白名单缺少 `ok` / `success` 被误判定为“网关状态不确定”并抛出 `RuntimeError: Trae 网关状态不确定，继续查询原任务；请勿重新派发: completed,ok` 的根本问题。将 `ok` 和 `success` 纳入正常完成终态集合，确保任务结果顺利落盘并标记为 `completed`。

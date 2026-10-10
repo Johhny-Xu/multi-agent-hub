@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/", "../integrations/codearts/mcp/", "../integrations/antigravity/mcp/"];
+const roots = ["../mcp/", "../plugins/agenthub-workers/mcp/", "../integrations/dsh/mcp/", "../integrations/codex/mcp/", "../integrations/codearts/mcp/", "../integrations/antigravity/mcp/", "../integrations/vscode/mcp/"];
 
 test("Hub tokens are sent in Authorization and explicit URL credentials take precedence", async (t) => {
   const received = [];
@@ -287,4 +287,38 @@ test("stdio MCP validates requests and respects notifications", async (t) => {
       await new Promise((resolve) => child.once("close", resolve));
     });
   }
+});
+
+test("bridge recovers dynamically when connection configuration is restored", async (t) => {
+  const hub = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const rpc = JSON.parse(body);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result: { content: [{ type: 'text', text: 'recovered status' }] } }));
+  });
+  await new Promise((r) => hub.listen(0, '127.0.0.1', r));
+  const original = { url: process.env.AGENTHUB_URL, mode: process.env.AGENTHUB_CONNECTION_MODE, config: process.env.AGENTHUB_CONFIG };
+  t.after(() => {
+    hub.close();
+    for (const [key, value] of [["AGENTHUB_URL", original.url], ["AGENTHUB_CONNECTION_MODE", original.mode], ["AGENTHUB_CONFIG", original.config]]) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+
+  process.env.AGENTHUB_CONNECTION_MODE = 'file';
+  process.env.AGENTHUB_CONFIG = 'C:\\non-existent-path-for-testing\\client.json';
+  delete process.env.AGENTHUB_URL;
+
+  const bridge = await import(new URL("../mcp/hub.mjs?dynamic-recovery-test", import.meta.url));
+  await assert.rejects(async () => {
+    await bridge.hubStatus();
+  }, (err) => /SETUP_REQUIRED/.test(err.message));
+
+  delete process.env.AGENTHUB_CONNECTION_MODE;
+  delete process.env.AGENTHUB_CONFIG;
+  process.env.AGENTHUB_URL = `http://127.0.0.1:${hub.address().port}/mcp`;
+
+  const status = await bridge.hubStatus();
+  assert.equal(status, 'recovered status');
 });

@@ -5,10 +5,32 @@ import { open } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { loadConnection } from "./config.mjs";
 
-let CONNECTION, CONNECTION_ERROR;
-try { CONNECTION = await loadConnection(); }
-catch { CONNECTION_ERROR = 'SETUP_REQUIRED：连接配置缺失或无效。先调用 hub_discover 扫描，再运行 connect.cmd / connect.sh 配对并重启宿主 MCP。'; }
-export const HUB = CONNECTION?.url;
+export let HUB = null;
+let CONNECTION = null, CONNECTION_ERROR = null;
+
+export async function refreshConnection() {
+  try {
+    CONNECTION = await loadConnection();
+    CONNECTION_ERROR = null;
+    HUB = CONNECTION.url;
+    return CONNECTION;
+  } catch {
+    CONNECTION = null;
+    HUB = undefined;
+    CONNECTION_ERROR = 'SETUP_REQUIRED：连接配置缺失或无效。先调用 hub_discover 扫描，再运行 connect.cmd / connect.sh 配对并重启宿主 MCP。';
+    return null;
+  }
+}
+
+await refreshConnection();
+
+async function getConnection() {
+  if (!CONNECTION || CONNECTION_ERROR) {
+    await refreshConnection();
+  }
+  if (CONNECTION_ERROR || !CONNECTION) throw hubError('rejected', CONNECTION_ERROR);
+  return CONNECTION;
+}
 
 const ALIASES = {
   agy: "antigravity", antigravity: "antigravity",
@@ -114,11 +136,11 @@ function hubError(kind, text) {
 }
 
 async function callTool(name, args, timeoutMs, allowToolError = false) {
-  if (CONNECTION_ERROR) throw hubError('rejected', CONNECTION_ERROR);
+  const conn = await getConnection();
   const id = ++nextRequestId;
   const payload = JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
-  const target = new URL(HUB);
-  const token = target.searchParams.get("token") || CONNECTION.token;
+  const target = new URL(conn.url);
+  const token = target.searchParams.get("token") || conn.token;
   target.searchParams.delete("token");
   const resp = await fetch(target, {
     method: "POST",
