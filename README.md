@@ -13,6 +13,8 @@
 
 - 🔌 **5 种原生宿主客户端**：深度适配 Codex、ZCode、DeepSeek Harness、CodeArts、Antigravity，提供原生子代理、斜杠命令与工作流。
 - 🤖 **9 种 Worker 统一适配**：标准契约调度 Antigravity、CodeBuddy（国际/国内版）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts（Antigravity 原生客户端为新增宿主角色，不作为第十种 Worker）。
+- 🎛️ **WebUI 控制台与运维大盘**：内置可选 Web 管理大盘（`--with-console`），提供多会话管理、状态栏监控指标自定义切换面板、模型选型抽屉、思考强度（low/medium/high/max）多级调节与平台配额/积分倍率可视化。
+- 🎯 **精炼去重的生产模型目录**：为各 Worker 对齐官方真实模型与积分倍率体系，全面清理无法用于代码任务的生图模型、冗余平台别名与旧代模型，保留各服务商当季旗舰与高可用选型。
 - 🔄 **灵活多样的部署形态**：插件与 Hub 支持同机共存或分离部署；支持纯 Windows、纯 Linux 及 Windows ↔ Linux 跨机连接（局域网直连或 SSH 反向通道）。客户端连接特定 Hub 并非多 Hub 联邦，模型请求仍由官方 CLI 发送至服务商。
 - 🛡️ **严格能力预检与终态判定**：根据模型能力约束思考、流式与附件；拒绝空回答、已知异常退出及 agy 超时后的部分回答；保留原任务回执（ref），阻止 worker 向自身重复派发。
 - 🔍 **智能发现与平滑切换**：局域网与本机 Hub 自动广播扫描与手动回退；连接配置与凭据独立于源码，平滑升级不丢失历史任务数据。
@@ -43,7 +45,7 @@
 | Linux Codex & DSH CLI | ❌ 未安装 (not_installed) | Linux 实机未找到 CLI 可执行文件，未执行实测，不作通过宣称 |
 | CodeArts 原生组件与通道 | ✅ 通过 | Windows 正式内核识别组件；Linux CLI 原生文件及 MCP 已安装校验通过；Windows ↔ Linux 局域网直连与 SSH 通道建立正常 |
 | Windows CodeArts IDE | ⚠️ 原生派发通过，结果回收受权限限制 | DeepSeek v4.1 Flash 真实调用 `hub-mimocode`，唯一回执 `mimocode-d5f1337f8a`；Linux 实际答案为 `45`，但 IDE 后续 `hub_fetch` 被宿主拒绝，不计为完整验收 |
-| Linux CodeArts 自身模型调用 | ✅ GLM-5.2 真实任务通过 | 显式 `huaweicloud-maas/GLM-5.2` 返回 `51`；更新服务后再次单次派发返回 `52`，回执 `codearts-715254f098`，核验 driver 与 CLI 共用进程组，完成后所属进程全部退出 |
+| Linux CodeArts 自身模型调用 | ✅ 官方模型真实任务秒级通过 | 自动加载凭据环境；显式 GLM-5.2 与 GLM-5.2-ArkTS-SPARK 派发秒级返回完成，回执真实有效，核验 driver 与 CLI 共用进程组，完成后所属进程全部安全退出 |
 | Windows 独立 CodeArts CLI | ⚠️ 尚未通过模型验收 | 已修复官方 exe 发现及 CLI 专用配置；独立目录探针受到文件夹信任限制，不替代已登录 IDE 的使用状态 |
 
 > **边界与差异说明**：
@@ -154,6 +156,17 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765
 
 ---
 
+## Web 控制台与管理大盘 (Console & WebUI)
+
+Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指定 `--with-console` 即可开启，默认运行在 Node.js 服务端口 `8890`）：
+
+- 🎛️ **监控状态栏自定义面板**：底部状态栏新增自定义指标控制面板，支持一键呼出多选面板，按需勾选或隐藏实时监控项（包括子代理、模型、网络延时、吞吐 TPS、会话 Token、平台额度等），配置自动持久化至本地存储。
+- ⚙️ **模型选型与思考强度抽屉**：点击状态栏模型标签即可平滑呼出参数面板；子代理运行参数全面升级为平滑的思考强度（`low` / `medium` / `high` / `max`）分级控制，解除阻塞式单开关限制。
+- 🏷️ **官方积分倍率与福利标识**：深度适配 TraeCode、CodeBuddy-CN 等平台的积分倍率显示，直观呈现 `0.06x ~ 2.00x` 换算比率，以及 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 等专属视觉标签。
+- 💳 **实时额度与通道余额监控**：支持自动解析并呈现 MiniMax、9router 等上游通道的剩余积分与调用配额。
+
+---
+
 ## 统一工具与能力约束
 
 宿主插件对外统一暴露 **7 个 MCP 核心工具**：
@@ -161,16 +174,17 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765
 
 所有宿主（Codex 代理/技能、ZCode 代理、DSH 预设/工作流、CodeArts 子代理、Antigravity 技能/代理）遵循同一套任务契约：
 
-| Worker | 默认配置模型 | 平台特性与约束 |
+| Worker | 默认配置模型 | 平台特性、目录收敛与倍率规则 |
 | --- | --- | --- |
-| **Antigravity** | gemini-3.8-flash-medium | 支持多模态与标准工作流（作为 Worker 角色；Antigravity 原生客户端为宿主角色） |
-| **CodeBuddy** (国际 / 国内) | deepseek-v4.1-flash | 文件工具需实际权限，使用标准代理隔离上下文 |
+| **Antigravity** | gemini-3.8-flash-medium | 精简保留 3.8 Flash (High/Medium)、3.1 Pro High、Claude 4.6 (Sonnet/Opus) 等 6 款旗舰；支持多模态与标准工作流（作为 Worker 角色；Antigravity 原生客户端为宿主角色） |
+| **CodeBuddy** (国内版) | deepseek-v4.1-flash (x0.11) | 剔除生图及老旧模型，精炼至 DeepSeek V4.1/Pro、MiniMax-M3、GLM-5.3/5.2/5.1、Kimi-K3/K2.8/K2.7、混元系列等 13 款代码模型，完整标注官方积分倍率（x0.06 ~ x2.00）与试用标 |
+| **CodeBuddy** (国际版) | deepseek-v4.1-flash | 精简收敛至 18 款主流高可用模型；文件工具需实际权限，使用标准代理隔离上下文 |
 | **GitHub Copilot** | auto | 沿用官方 CLI 选型 |
-| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 高性价比推理与代码生成 |
-| **MiniMax** | MiniMax-M3.1-Flash-Preview | 仅支持图文读取，不支持关闭思考与本地写文件 |
-| **TraeCode** | GLM-5.3-FlashX | 快速代码辅助 |
+| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 精炼收敛为 MiMo-V2.6 Flash/Pro/UltraSpeed 及 9router/trae 通道共 4 款高效选型 |
+| **MiniMax** | MiniMax-M3.1-Flash-Preview | 精简收敛为 M3.1 Flash（512K/1M）与 M3（1M 上下文）当季双旗舰；支持 9router 通道积分余额展示 |
+| **TraeCode** | GLM-5.3-FlashX (0.31x) | 精简收敛至 20 款官方模型，精准标注 `0.06x ~ 1.50x` 官方积分倍率与 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 营销标识 |
 | **ZCode** | GLM-5.3-Flash | 显式思考切换与未验证正文流式默认禁用 |
-| **CodeArts** | 沿用官方 CLI 配置 | Linux 已认证 GLM-5.2 显式任务通过；支持 IDE 懒加载工具协议与官方 Windows exe 识别；严格进程组回收与权限诊断 |
+| **CodeArts** | GLM-5.2 (0.70x) | 完整保留 4 款企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）；支持 Linux CLI 自动加载 AK/SK、IDE 动态工具协议与独立数据隔离 |
 
 上表是新安装的默认配置。已有服务器保留原模型；本轮 Linux MiMo 实测使用其既有 `9router/trae`，不代表 `26f` 已实测。
 
