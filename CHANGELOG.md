@@ -11,6 +11,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### WebUI 子代理激活开关与全端双向同步机制 (`console` / `hub` / `mcp`)
+
+- **WebUI 控制台一键启用/禁用子代理**：
+  - 在 Web 管理大盘（端口 `8890`）的 Worker 卡片增加原生 Toggle Switch 切换开关，支持按需激活或临时禁用任意 Worker（如无额度账户、调试中子代理）。
+  - 新增 REST 控制端点 `POST /api/agents/toggle`（接收 `{ agent_id, disabled: boolean }`），权威状态持久化落盘至 `agents.json` 的 `disabled` 属性，并即时触发 `availability_store` 内存缓存热刷新。
+  - 新增 Hub 管理 MCP 工具 `hub_set_agent_status`，支持客户端及脚本编排程序远程启停子代理状态。
+- **全端权威状态双向感知与前置熔断**：
+  - 调度器与客户端同步状态联动：`hub_status` / `hub_list_agents` 将被禁用的 Worker 显式标注为 `[已禁用]`（并输出原因，如 `由管理员在控制台或 API 禁用`）；`hub_capabilities` 接口返回 `enabled: false, code: "disabled"`。
+  - 任务调度零延迟保护：`hub_dispatch` 针对被禁用的 Worker 触发秒级前置拦截，直接返回 `UNAVAILABLE: profile_disabled`，绝不启动真实驱动进程，杜绝频繁调用空额度子代理造成的计算与 API 资源浪费。
+- **Web 控制台服务化与局域网访问加固**：
+  - 将控制台服务默认绑定监听地址由回环 `127.0.0.1` 调整为 `0.0.0.0:8890`，并补充 HTTP `HEAD` 预检方法处理，确保局域网多设备浏览器平滑访问。
+  - 在 Linux 服务器上创建并启用标准 systemd 用户服务 `agent-hub-console.service`，实现断线守护自愈。
+
+### CodeArts 宿主 MCP 强制调用路径规范与去重机制 (`codearts` / `mcp`)
+
+- **强制单一调用路径（Single Invocation Path）**：
+  - 针对 CodeArts 宿主在启用 MCP 工具时偶发的重复派发与标签直出问题，严格确立 `tool_search → tool_describe → tool_call` 单一规范调用路径。
+  - 严禁在 Markdown 或纯文本推理中混用、直出 `<tool_call>` 等底层 XML 标记，杜绝被宿主调用解析引擎双重触发执行。
+- **规约多层深度固化**：
+  - **MCP Server 层**：在 `mcp/server.mjs` 的 `initialize` 握手响应 `instructions` 及 `hub_dispatch` / `hub_ask` 工具的 `description` 中显式固化调用路径约束与单次派发准则。
+  - **IDE 扩展层**：在 `extension.js` 中自动为工作区注入 `.codeartsdoer/rule/multi-agent-hub.md` 强制规则；在 `SKILL.md` 与 9 个子代理 prompt（`agents/*.md`）中全面补充“单任务仅派发一次、凭 ref 安全异步轮询”规范。
+- **TraeCode 网关回执解析与回填保底**：
+  - 优化 `hub_dispatch` 对 TraeCode 异步受理结果的结构化解析，确保无论网关返回原生 ref 还是回执文本，均能精准提取并回填顶层 `ref` 与 `running` 状态，消除调用方因 ref 为空而重派任务的隐患。
+
 ### Antigravity 宿主插件连接与 MCP 桥接故障动态恢复修复 (`antigravity` / `mcp`)
 
 - **MCP 桥接动态连接加载与自愈**：
