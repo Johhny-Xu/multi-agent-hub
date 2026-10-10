@@ -212,11 +212,14 @@ def tool_hub_list_agents(args):
     lines = []
     for name in names:
         e = reg.get(name, {})
-        cli = (known.get(name) or {}).get("cli")
+        cfg = known.get(name) or {}
+        cli = cfg.get("cli")
         online = _now() - e.get("last_seen", 0) < ONLINE_WINDOW_SEC if e else False
+        is_ready = bool(cli or name in ("traecode", "trae") or cfg.get("gateway") or cfg) and cfg.get("disabled") is not True
+        status_label = "在线" if online else ("就绪" if is_ready else "离线")
         lines.append(
-            f"- {name} [{'在线' if online else '离线'}] "
-            f"角色: {e.get('role') or (known.get(name) or {}).get('role') or '未知'}"
+            f"- {name} [{status_label}] "
+            f"角色: {e.get('role') or cfg.get('role') or '未知'}"
             + (f" | 调度通道: TraeClaw 网关" if name in ("traecode", "trae") and not cli else (f" | CLI: {' '.join(cli)}" if cli else " | CLI: 未配置"))
         )
     return "已注册代理:\n" + ("\n".join(lines) if lines else "(暂无, 各端调用 hub_heartbeat 注册)")

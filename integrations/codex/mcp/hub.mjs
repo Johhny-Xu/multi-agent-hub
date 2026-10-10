@@ -65,6 +65,7 @@ function cleanText(text) {
 export function extractAnswer(text) {
   return cleanText(text)
     .replace(/^\[[^\]]*\][^\n]*(?:\n|$)/, "")
+    .replace(/^>\s*build\s*·[^\n]*(?:\n|$)/, "")
     .replace(/(?:\n?\((?:exit=-?\d+|继续对话[^)]*)\)\s*)+$/, "")
     .trim();
 }
@@ -195,10 +196,21 @@ function receipt(text, worker, expectedRef = null) {
     if ((headerExit && Number(headerExit[1]) !== 0) || (footerExit && Number(footerExit[1]) !== 0) || ["failed", "error", "timeout", "cancelled"].includes(status)) {
       return { status: "failed", ref, answer: cleaned.slice(0, 500) };
     }
-    if (status === "completed") return { status, ref, answer: extractAnswer(cleaned) };
+    if (status === "completed") {
+      const ans = extractAnswer(cleaned);
+      if (/排队提醒|当前模型请求量较高|升级权益等待中/.test(ans)) {
+        return { status: "failed", ref, answer: ans.slice(0, 500) };
+      }
+      return { status, ref, answer: ans };
+    }
     if (!expectedRef || status === "running") return { status: "running", ref, answer: "" };
   } else if (!expectedRef && headerExit && (tag === worker || tag.startsWith(worker + "/"))) {
-    return { status: Number(headerExit[1]) === 0 ? "completed" : "failed", ref: "", answer: Number(headerExit[1]) === 0 ? extractAnswer(cleaned) : cleaned.slice(0, 500) };
+    const isOk = Number(headerExit[1]) === 0;
+    const ans = isOk ? extractAnswer(cleaned) : cleaned.slice(0, 500);
+    if (isOk && /排队提醒|当前模型请求量较高|升级权益等待中/.test(ans)) {
+      return { status: "failed", ref: "", answer: ans.slice(0, 500) };
+    }
+    return { status: isOk ? "completed" : "failed", ref: "", answer: ans };
   }
   return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
 }

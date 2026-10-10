@@ -19,6 +19,7 @@ REASONS = {
     "empty_answer": "最近一次调用退出但未返回回答；未将偶发空答判为永久不支持。",
     "timeout": "最近一次调用超时；未将超时判为永久不支持。",
     "tool_protocol_unverified": "最近一次调用返回未执行的工具协议，不能视为任务成果。",
+    "rate_limited": "最近一次调用处于排队或限流状态；未将排队判为永久不支持。",
 }
 BLOCKING = {"authentication_required", "region_restricted", "quota_exhausted", "model_unavailable"}
 
@@ -54,6 +55,8 @@ def classify_failure(status, text):
         return "region_restricted"
     if any(t in diagnostic for t in ("quota exceeded", "quota_exceeded", "insufficient credits", "credit balance is too low", "quota exhausted")):
         return "quota_exhausted"
+    if any(t in diagnostic for t in ("排队提醒", "当前模型请求量较高", "升级权益等待中", "rate limit", "rate_limited", "too many requests", "429")):
+        return "rate_limited"
     if any(t in diagnostic for t in ("model_selection_not_applied", "model_catalog_unavailable", "model_ambiguous", "codearts_provider_unavailable", "no providers found")) or re.search(r"(?:model.{0,100}(?:not found|unavailable|not available|does not exist)|unknown model|model_not_found)", diagnostic):
         return "model_unavailable"
     if "tool_protocol_unverified" in diagnostic:
