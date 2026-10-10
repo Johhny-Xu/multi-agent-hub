@@ -1518,7 +1518,7 @@
     font-size: 24px;
     font-weight: 700;
     color: #fff;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     cursor: pointer;
     transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1530,19 +1530,13 @@
     box-shadow: 0 10px 28px rgba(59, 130, 246, 0.4);
     filter: brightness(1.1);
   }
-  .empty-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--mcode-text-subtle);
-    margin: 0 0 10px;
-    letter-spacing: 0.2px;
-  }
   .empty-slogan {
-    font-size: 22px;
+    font-size: 25px;
     color: var(--mcode-text);
     font-weight: 600;
+    margin-top: 2px;
     margin-bottom: 24px;
-    letter-spacing: -0.2px;
+    letter-spacing: -0.3px;
     text-align: center;
     line-height: 1.4;
   }
@@ -4000,9 +3994,6 @@
         promptChangeAvatar(agentName);
       });
       emptyBox.appendChild(bigAv);
-
-      var title = el('h2', 'empty-title', agentName);
-      emptyBox.appendChild(title);
 
       var hour = new Date().getHours();
       var timeQuotes = {
