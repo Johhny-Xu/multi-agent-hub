@@ -2906,6 +2906,208 @@
   .thinking-body p:last-child { margin-bottom: 0; }
   .thinking-body code { font-size: 12px; color: var(--mcode-accent); }
 
+  /* ---- 底部轻量 Footer ---- */
+  .console-footer {
+    margin-top: 36px;
+    padding: 16px 6px 12px;
+    border-top: 1px solid var(--mcode-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--mcode-text-muted);
+    user-select: none;
+  }
+  .console-footer .footer-left,
+  .console-footer .footer-right {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+  .console-footer .footer-center {
+    flex: 1 1 auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .footer-donate-btn {
+    background: transparent;
+    border: none;
+    color: var(--mcode-text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all .16s ease;
+    line-height: 1.2;
+    min-height: auto;
+  }
+  .footer-donate-btn:hover {
+    color: #ff6b81;
+    background: rgba(255, 107, 129, 0.08);
+  }
+  .footer-gh-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--mcode-text-muted);
+    text-decoration: none;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+    transition: all .18s ease;
+  }
+  .footer-gh-link:hover {
+    color: var(--mcode-text);
+    background: var(--mcode-surface);
+    border-color: var(--mcode-border);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  }
+  .footer-gh-link svg {
+    flex-shrink: 0;
+    transition: transform .2s ease;
+  }
+  .footer-gh-link:hover svg {
+    transform: scale(1.15);
+    color: var(--mcode-text);
+  }
+  .footer-version {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    color: var(--mcode-text-muted);
+    opacity: 0.85;
+  }
+  @media (max-width: 640px) {
+    .console-footer {
+      flex-wrap: wrap;
+      justify-content: space-between;
+      padding: 12px 4px;
+      gap: 8px;
+    }
+    .console-footer .footer-center {
+      order: 3;
+      width: 100%;
+      margin-top: 4px;
+    }
+  }
+
+  /* 捐献弹窗 */
+  .cb-donate-dialog {
+    border: 1px solid var(--mcode-border);
+    border-radius: 16px;
+    background: var(--mcode-surface);
+    color: var(--mcode-text);
+    padding: 0;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+    max-width: 320px;
+    width: 90%;
+  }
+  .cb-donate-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .cb-donate-card {
+    padding: 24px 20px 20px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .cb-donate-icon {
+    font-size: 36px;
+    line-height: 1;
+  }
+  .cb-donate-msg {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--mcode-text);
+  }
+  .cb-donate-actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .cb-donate-btn {
+    flex: 1;
+    min-height: 34px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .16s ease;
+  }
+  .cb-donate-cancel {
+    background: var(--mcode-surface-muted);
+    border: 1px solid var(--mcode-border);
+    color: var(--mcode-text);
+  }
+  .cb-donate-cancel:hover {
+    background: var(--mcode-surface-hover);
+  }
+  .cb-donate-confirm {
+    background: #ff5e7e;
+    border: none;
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(255, 94, 126, 0.35);
+  }
+  .cb-donate-confirm:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  /* 捐献彩蛋动画 */
+  .donate-egg-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transition: opacity .5s ease;
+  }
+  .donate-egg-overlay.fade-out {
+    opacity: 0;
+  }
+  .donate-egg-box {
+    background: var(--mcode-surface);
+    border: 1px solid var(--mcode-border);
+    border-radius: 20px;
+    padding: 24px 32px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    animation: eggPop .35s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  }
+  @keyframes eggPop {
+    0% { transform: scale(0.7); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .donate-egg-heart {
+    font-size: 44px;
+    margin-bottom: 8px;
+    animation: eggHeartBeat 1.2s ease infinite;
+  }
+  @keyframes eggHeartBeat {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.18); }
+  }
+  .donate-egg-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--mcode-text);
+    margin-bottom: 4px;
+  }
+  .donate-egg-sub {
+    font-size: 12px;
+    color: var(--mcode-text-muted);
+  }
+
 </style>
 </head>
 <body>
@@ -3154,7 +3356,7 @@
       <section class="tabpanel" id="panel-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
         <div class="kpi-row" id="kpis" aria-label="枢纽概览" style="display:none"></div>
         <div class="grid" id="agents"></div>
-        <div class="inflight">
+        <div class="inflight" id="inflight-box-wrap" style="display:none">
           <h2 style="font-size:16px;font-weight:500;margin:8px 0 0">异步任务（本控制台派发）</h2>
           <div id="inflight-list"></div>
         </div>
@@ -3162,6 +3364,22 @@
           <h2 style="font-size:16px;font-weight:500;margin:8px 0 0">子代理接入端点（供本机 AI 会话直连）</h2>
           <div id="subagent-box"></div>
         </div>
+        <footer class="console-footer">
+          <div class="footer-left">
+            <button type="button" class="footer-donate-btn">捐献</button>
+          </div>
+          <div class="footer-center">
+            <a href="https://github.com/Johhny-Xu/multi-agent-hub" target="_blank" rel="noopener noreferrer" class="footer-gh-link" title="前往 GitHub 仓库给作者一个 Star 支持">
+              <svg class="footer-gh-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+              </svg>
+              <span>求求了，去 GitHub 给个 Star 好评</span>
+            </a>
+          </div>
+          <div class="footer-right">
+            <span class="footer-version">v1.4.0</span>
+          </div>
+        </footer>
       </section>
 
       <!-- 任务队列面板 -->
@@ -3201,6 +3419,17 @@
     <button type="button" id="modal-extra" class="text" style="display:none;margin-right:auto">恢复默认</button>
     <button value="cancel" type="button" id="modal-cancel">取消</button>
     <button value="ok" type="button" id="modal-ok" class="primary">确认</button>
+  </div>
+</dialog>
+
+<dialog id="donate-dialog" class="cb-donate-dialog" aria-labelledby="donate-title">
+  <div class="cb-donate-card">
+    <div class="cb-donate-icon" aria-hidden="true">🍲</div>
+    <div id="donate-title" class="cb-donate-msg">好好吃饭更重要哦</div>
+    <div class="cb-donate-actions">
+      <button type="button" id="btn-donate-cancel" class="cb-donate-btn cb-donate-cancel">取消</button>
+      <button type="button" id="btn-donate-confirm" class="cb-donate-btn cb-donate-confirm">仍要捐献</button>
+    </div>
   </div>
 </dialog>
 
@@ -5695,6 +5924,9 @@
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.4.0';
+    var verText = ver.startsWith('v') ? ver : ('v' + ver);
+    document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
 
   function renderKpis(snap) {
@@ -5905,6 +6137,53 @@
     state.taskFilter = ev.currentTarget.value;
     if (state.snap && state.snap.ok) renderTasks(state.snap);
   });
+
+  // ---------------- 底部捐献与彩蛋
+  function triggerDonateEasterEgg() {
+    toast('🥰 谢谢你，心领了！');
+    var oldEgg = document.querySelector('.donate-egg-overlay');
+    if (oldEgg && oldEgg.parentNode) oldEgg.parentNode.removeChild(oldEgg);
+    var egg = el('div', 'donate-egg-overlay');
+    egg.innerHTML = '<div class="donate-egg-box"><div class="donate-egg-heart">💖</div><div class="donate-egg-text">谢谢你，心领了！</div><div class="donate-egg-sub">好好吃饭更重要，去 GitHub 点个 Star 就是最好的支持啦 ~</div></div>';
+    document.body.appendChild(egg);
+    setTimeout(function () {
+      egg.classList.add('fade-out');
+      setTimeout(function () { if (egg.parentNode) egg.parentNode.removeChild(egg); }, 500);
+    }, 2400);
+  }
+
+  document.querySelectorAll('.footer-donate-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var dlg = $('#donate-dialog');
+      if (dlg) {
+        if (typeof dlg.showModal === 'function') dlg.showModal();
+        else dlg.setAttribute('open', '');
+      }
+    });
+  });
+
+  var btnDonateCancel = $('#btn-donate-cancel');
+  if (btnDonateCancel) {
+    btnDonateCancel.addEventListener('click', function () {
+      var dlg = $('#donate-dialog');
+      if (dlg) {
+        if (typeof dlg.close === 'function') dlg.close();
+        else dlg.removeAttribute('open');
+      }
+    });
+  }
+
+  var btnDonateConfirm = $('#btn-donate-confirm');
+  if (btnDonateConfirm) {
+    btnDonateConfirm.addEventListener('click', function () {
+      var dlg = $('#donate-dialog');
+      if (dlg) {
+        if (typeof dlg.close === 'function') dlg.close();
+        else dlg.removeAttribute('open');
+      }
+      triggerDonateEasterEgg();
+    });
+  }
 
   document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
     tab.addEventListener('click', function () {
