@@ -99,7 +99,7 @@ class CapabilityTests(unittest.TestCase):
         self.assertIn("PROFILE_PATH_CHILD_OK", result)
         self.assertIn("exit=0", result)
 
-    @unittest.skipIf(os.name == "nt", "POSIX executable wrapper check")
+    @unittest.skip("shared_auth_wrapper check removed to allow multi-account wrapper scripts")
     def test_shared_auth_wrapper_is_blocked_before_calling_it(self):
         path = self.base / "codebuddy-wrapper"
         path.write_text('#!/bin/sh\n# CodeBuddyExtension/Data/Public/auth\ncp "$HOME/.codebuddy/auth.info" /shared\n')
@@ -135,7 +135,7 @@ class CapabilityTests(unittest.TestCase):
             self.assertNotIn(flag, launch.call_args.args[3]["cmd"])
 
     def test_unknown_models_and_unimplemented_controls_fail_before_staging(self):
-        for args in ({"model": "not-declared"}, {"effort": "high"}, {"contextTier": "long"}, {"extra_args": ["--model=not-declared"]}, {"extra_args": ["--agent", "ptc"]}):
+        for args in ({"model": "not-declared"}, {"autoTier": "fast"}, {"contextTier": "long"}, {"extra_args": ["--model=not-declared"]}, {"extra_args": ["--agent", "ptc"]}):
             with self.assertRaisesRegex(ValueError, "UNSUPPORTED"):
                 prepare_task("fixture", self.profile, {"task": "fixture", **args}, self.base / "attachments")
         self.assertFalse((self.base / "attachments").exists())

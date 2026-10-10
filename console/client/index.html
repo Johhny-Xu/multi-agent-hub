@@ -2719,12 +2719,12 @@
                 <div id="composer-capabilities" role="status" style="font-size:12px;padding:4px 12px;color:var(--mcode-text-muted)"></div>
                 <button id="btn-capability-refresh" type="button" hidden title="完成登录或处理供应商问题后清除近期失败提示；不会验证登录或调用模型">清除近期失败提示</button>
               </div>
-              <!-- 新增紧凑状态条 (ZCode 插件风格) -->
+              <!-- 紧凑状态条 -->
               <div class="cb-status-bar-wrap" id="status-bar-wrap">
-                <div class="cb-status-bar" id="status-bar" title="分段悬停查看用量明细与平台配额">
-                  <span class="cb-status-seg cb-status-agent" id="sb-agent">⚡ …</span>
+                <div class="cb-status-bar" id="status-bar">
+                  <span class="cb-status-seg cb-status-agent" id="sb-agent" data-sb="agent">⚡ …</span>
                   <span class="cb-status-sep">·</span>
-                  <span class="cb-status-seg cb-status-model" id="sb-model">…</span>
+                  <span class="cb-status-seg cb-status-model" id="sb-model" data-sb="model" style="cursor:pointer">…</span>
                   <span class="cb-status-sep">·</span>
                   <span class="cb-status-seg" id="sb-speed" data-sb="speed">—</span>
                   <span class="cb-status-sep">·</span>
@@ -3918,6 +3918,10 @@
 
   function handleModelClickOutside(e) {
     var container = $('#model-picker-container');
+    var sbModel = $('#sb-model');
+    if (sbModel && (sbModel === e.target || sbModel.contains(e.target))) {
+      return;
+    }
     if (container && !container.contains(e.target)) {
       closeModelPanel();
     }
@@ -3965,8 +3969,7 @@
           var isSelected = (prefs.model === m.id);
           var item = el('div', 'mp-model-item' + (isSelected ? ' selected' : ''));
           item.setAttribute('data-id', m.id);
-          item.setAttribute('aria-disabled', m.available === false ? 'true' : 'false');
-          if (m.available === false) { item.style.opacity = '0.5'; item.title = m.reason || '模型当前不可用'; }
+          item.style.cursor = 'pointer';
 
           var main = el('div', 'mp-model-main');
           var nameSpan = el('span', 'mp-model-name', m.name);
@@ -4004,7 +4007,6 @@
           item.appendChild(tagsDiv);
 
           item.addEventListener('click', function () {
-            if (m.available === false) { toast(m.reason || '模型当前不可用', true); return; }
             saveAgentPrefs(agent, { model: m.id });
             renderModelPanel();
           });
@@ -4042,7 +4044,6 @@
       }
       var op = el('option', null, m.name + badge + ' (' + m.id + ')');
       op.value = m.id;
-      op.disabled = m.available === false;
       sel.appendChild(op);
     });
     var prefs = getAgentPrefs(agentName);
@@ -4065,8 +4066,6 @@
 
     var prefs = getAgentPrefs(agent);
     var model = prefs.model || '';
-    var capability = getModelCapability(agent, model);
-    if (!capability.available && capability.reason && !capability.reason.includes('尚未取得')) { toast(capability.reason || '模型当前不可用，任务尚未派发', true); return; }
     var payload = {
       agent: agent,
       mode: mode,
@@ -4478,6 +4477,14 @@
   }
 
   var SB_TIPS = {
+    agent: function () {
+      var a = chat.activeAgent || 'codebuddy';
+      return '当前子代理：' + a + '\n可在左侧会话列表切换子代理';
+    },
+    model: function () {
+      var a = chat.activeAgent || 'codebuddy';
+      return '当前模型：' + getModelSummaryText(a) + '\n点击直接展开模型与运行参数选择面板';
+    },
     speed: function () {
       var st = sbStats();
       if (st.tps == null) {
@@ -4610,7 +4617,7 @@
     if (sbModel) {
       var summaryText = getModelSummaryText(agent);
       sbModel.textContent = summaryText;
-      sbModel.title = '当前模型与运行参数：' + summaryText + ' (点击展开模型选择面板)';
+      sbModel.removeAttribute('title');
     }
 
     var st = sbStats(agent);
@@ -5102,6 +5109,8 @@
   // 二级模型面板事件绑定
   var mpWrap = $('#model-picker-wrap');
   if (mpWrap) mpWrap.addEventListener('click', toggleModelPanel);
+  var sbModel = $('#sb-model');
+  if (sbModel) sbModel.addEventListener('click', toggleModelPanel);
   var mpClose = $('#mp-close-btn');
   if (mpClose) mpClose.addEventListener('click', closeModelPanel);
   var mpDone = $('#mp-done-btn');
