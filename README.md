@@ -24,7 +24,11 @@
 各客户端通过专属原生插件接入调度中枢：
 
 - **Antigravity 原生插件**：提供 `plugin.json`、9 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及包含 7 个桥接工具的 `mcp_config.json`。可选 Python SDK 锁定 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与 Python 串并行编排能力；注意已安装 wheel 不包含 `beta.run_workflow` API，且 SDK API 鉴权独立于 IDE/CLI 登录（缺少 SDK 鉴权时 SDK 编排模型调用受阻）。
-- **CodeArts 原生插件**：包含 9 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 7 个 MCP 工具。其他宿主向 CodeArts 派发任务时指定 `worker="codearts"`（兼容别名 `ca`、`huawei-codearts`）。
+- **CodeArts 原生插件与驱动**：包含 9 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 7 个 MCP 工具。双向支持客户端调度与 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
+  - **IDE 懒加载工具协议深度适配**：支持 CodeArts IDE 动态工具注册体系（`tool_search` 发现工具 → `tool_describe` 获取参数 Schema → `tool_call` 执行），兼顾直接注册 MCP 的环境。
+  - **权限管控与终态轮询保障**：遇宿主权限拒绝（Permission Denied / auto-rejecting）时立即终止并返回 `blocked_permission` 与原始 ref，禁止换工具名或经父代理重试；在等待预算内以原 ref 持续轮询 `hub_fetch`，严格以符合验收条件的非空真实 worker 回答判定 `completed`，绝不以会话结束或工具调用成功冒充任务完成。
+  - **Windows 官方 CLI 精准识别与环境隔离**：精准识别官方 `installers/bin/codearts.exe`，采用独立 `cli-data` 隔离目录与独立会话数据库，不再与 IDE GUI AgentKernel 混淆；继承外部认证并保持 TLS 校验；将“文件夹未被信任”准确归类为 `CODEARTS_PERMISSION_REQUIRED` 脱敏提示。
+  - **Linux 进程生命周期与资源回收加固**：驱动与 Hub 统一进程组管理，确保任务取消与超时时彻底回收所有后代进程，杜绝孤立进程残留。
 
 | 验证项目 | 实际结果 | 状态说明 |
 | --- | --- | --- |
@@ -67,6 +71,17 @@ CodeArts 的 IDE 优先适配、官方认证修复及后续测试见 [2026-10-10
 
 *注：IDE 的 `--project` 应指向实际打开的工作区，亦可用 `--codearts-ide-settings` 指定 MCP 配置文件。未指定时会自动标为待配置。安装完成后请重载 IDE 或重启 CLI。详见 [CodeArts 原生包文档](integrations/codearts/README.md)。*
 
+### CodeArts 换工作区后连接 Hub
+
+CodeArts IDE (26.9.501) 按当前工作区加载 `.codeartsdoer/mcp/mcp_settings.json`。切换新项目时，无需重新输入 Hub Token 或启动本机 Hub，直接复用外部 `client.json` 即可一键登记：
+
+```powershell
+# 针对当前新工作区登记 IDE MCP 设置
+python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/client.json" --ide-settings "C:/Work/new-project/.codeartsdoer/mcp/mcp_settings.json" --target ide --apply
+```
+
+登记后在 IDE 中执行“开发人员：重新加载窗口”，即可通过 `/hub-status` 验证连接与 Worker 可用性。详见 [CodeArts 原生包文档](integrations/codearts/README.md#换工作区后连接-hub)。
+
 ---
 
 ## 安装包选择
@@ -78,6 +93,7 @@ CodeArts 的 IDE 优先适配、官方认证修复及后续测试见 [2026-10-10
 | **agenthub-0.9.9-plugins.zip** | 编写代码的客户端机器（运行 Codex / ZCode / DSH / CodeArts / Antigravity） | 5 种客户端原生插件、MCP 桥接器、子代理与工作流（不启动本地 Hub） |
 | **agenthub-0.9.9-hub.zip** | 运行各模型 CLI / worker 的服务端机器（Windows / Linux） | Python Hub 服务、9 种 Worker 适配驱动、可选网页控制台 |
 | **agenthub-0.9.9-both.zip** | 客户端与 Worker 均在同一台机器运行 | 包含 plugins 与 hub 的完整组件集合 |
+| **multi-agent-hub-0.9.9.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯及工作区 MCP 自动注入 |
 
 - **运行依赖**：
   - 安装器与 Hub 服务需要 **Python 3.8+**；Codex 项目代理安装需要 **Python 3.11+**，可选 Antigravity SDK 需要 **Python 3.10+**。
@@ -154,7 +170,7 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765
 | **MiniMax** | MiniMax-M3.1-Flash-Preview | 仅支持图文读取，不支持关闭思考与本地写文件 |
 | **TraeCode** | GLM-5.3-FlashX | 快速代码辅助 |
 | **ZCode** | GLM-5.3-Flash | 显式思考切换与未验证正文流式默认禁用 |
-| **CodeArts** | 沿用官方 CLI 配置 | Linux 已认证 GLM-5.2 显式任务通过；IDE 与独立 CLI 的认证、模型目录及权限分别验证 |
+| **CodeArts** | 沿用官方 CLI 配置 | Linux 已认证 GLM-5.2 显式任务通过；支持 IDE 懒加载工具协议与官方 Windows exe 识别；严格进程组回收与权限诊断 |
 
 上表是新安装的默认配置。已有服务器保留原模型；本轮 Linux MiMo 实测使用其既有 `9router/trae`，不代表 `26f` 已实测。
 
@@ -202,6 +218,7 @@ python packaging/build.py --output ../agenthub-releases
 ## 关联文档与导航
 
 - [CodeArts 双向接入、任务实测与认证边界](docs/codearts-compatibility.md)
+- [CodeArts IDE 优先适配与实测跟进](docs/codearts-ide-followup.md)
 - [CodeArts 接入已有模型路由](docs/codearts-custom-provider.md)
 - [Antigravity 原生插件与可选 SDK](integrations/antigravity/README.md)
 - [网络自动发现与配对验收报告 (v0.8)](docs/release-0.8.md)
@@ -213,6 +230,7 @@ python packaging/build.py --output ../agenthub-releases
 - [ZCode 原生插件集成](plugins/agenthub-workers/README.md)
 - [DSH 预设与工作流集成](integrations/dsh/README.md)
 - [CodeArts 原生插件与命令集成](integrations/codearts/README.md)
+- [CodeArts IDE & VS Code 桌面扩展 (CARTS / VSIX)](integrations/vscode/README.md)
 
 ---
 
