@@ -804,10 +804,10 @@ def tool_trae_delegate(args):
     sid = args.get("session_id")
     timeout = _positive_seconds(args.get("timeout_s"), 240)
     if not wait:
-        ref = _start_async("trae", "trae", content,
+        ref = _start_async("traecode", "trae", content,
                            {"task": content, "new_chat": _as_bool(args.get("new_chat"), False), "timeout_s": timeout},
                            session_id=sid or "")
-        return (f"[trae/{ref}] 已异步受理, status=running。\n"
+        return (f"[traecode/{ref}] 已异步受理, status=running。\n"
                 f"查询结果: trae_result(ref=\"{ref}\")")
     from async_worker import trae_run, CommandTimeout
     try:

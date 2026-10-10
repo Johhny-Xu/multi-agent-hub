@@ -197,8 +197,14 @@ def parse_output(raw, stderr=""):
                 records.append(json.loads(line))
             except ValueError:
                 continue
+    _QUOTA_PATTERNS = ("体验套餐可用额度已用完", "可用额度已用完", "额度已用完", "套餐查询失败", "积分不足", "无可用额度", "insufficient credits", "quota exceeded", "quota_exceeded")
+    _RATE_LIMIT_PATTERNS = ("排队提醒", "当前模型请求量较高", "升级权益等待中")
     if not any(_known(record) for record in records):
         cleaned_text = re.sub(r"^>\s*build\s*·[^\n]*\n+", "", clean).strip()
+        if any(p in cleaned_text for p in _QUOTA_PATTERNS):
+            return {"text": cleaned_text, "error": f"QUOTA_EXHAUSTED: {cleaned_text}"}
+        if any(p in cleaned_text for p in _RATE_LIMIT_PATTERNS):
+            return {"text": cleaned_text, "error": f"RATE_LIMITED: {cleaned_text}"}
         return {"text": cleaned_text, "error": None}
     error = None
     final = None
@@ -290,4 +296,9 @@ def parse_output(raw, stderr=""):
     text = final if final is not None else "".join(mimo_parts.values()) if mimo_parts else last_assistant or delta
     if not error and final is not None and _unexecuted_dsml_call(text):
         error = "TOOL_PROTOCOL_UNVERIFIED: CLI final result contains an unexecuted tool call; preserve this task and do not automatically redispatch."
+    if not error:
+        if any(p in text for p in _QUOTA_PATTERNS):
+            error = f"QUOTA_EXHAUSTED: {text.strip()}"
+        elif any(p in text for p in _RATE_LIMIT_PATTERNS):
+            error = f"RATE_LIMITED: {text.strip()}"
     return {"text": text.strip(), "error": error}

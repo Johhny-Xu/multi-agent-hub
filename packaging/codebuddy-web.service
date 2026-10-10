@@ -1,0 +1,18 @@
+[Unit]
+Description=CodeBuddy Web UI Server (Domestic CN)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user
+Environment=HOME=/home/user
+Environment=CODEBUDDY_CONFIG_DIR=/home/user/.codebuddy-cn
+Environment=CODEBUDDY_INTERNET_ENVIRONMENT=internal
+Environment=CODEBUDDY_API_KEY_DISABLED=1
+Environment=PATH=/home/user/.local/bin:/home/user/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/user/.npm-global/bin/codebuddy --serve --port 7454 --host 0.0.0.0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

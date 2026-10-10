@@ -480,9 +480,9 @@ async function syncWorkspaceMcp(silent = false) {
     timeout: 600
   };
 
-  // Support both multi-agent-hub and agenthub-hub-bridge server names
+  // Register canonical multi-agent-hub MCP server and clean up legacy duplicate
   existing.mcpServers['multi-agent-hub'] = serverConfig;
-  existing.mcpServers['agenthub-hub-bridge'] = serverConfig;
+  delete existing.mcpServers['agenthub-hub-bridge'];
 
   fs.writeFileSync(mcpSettingsPath, JSON.stringify(existing, null, 2), 'utf8');
 
