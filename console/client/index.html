@@ -2201,9 +2201,7 @@
       padding: 2px 4px !important;
       font-size: 10.5px !important;
     }
-    #btn-heartbeat {
-      display: none !important; /* 手机端隐藏占用宽度的心跳按钮，保留刷新与端点选择 */
-    }
+
 
     /* 2. 工作区与活动栏：活动栏下沉为底部导航栏 */
     .cb-workspace {
@@ -2925,8 +2923,7 @@
     <span class="dot" id="conn-dot" title="连接状态"></span>
     <label class="visually-hidden" for="endpoint" style="display:none">枢纽端点</label>
     <select id="endpoint" aria-label="枢纽端点"></select>
-    <button id="btn-refresh" type="button">刷新</button>
-    <button id="btn-heartbeat" type="button" class="text" title="检测枢纽连接与各代理心跳在线状态">心跳检测</button>
+    <button id="btn-refresh" type="button" title="刷新控制台并检测各代理在线状态">刷新</button>
   </div>
 </header>
 
@@ -5869,14 +5866,36 @@
     refreshTimer = setTimeout(loadSnapshot, 400);
   }
 
-  // ---------------- 事件绑定
-  $('#btn-refresh').addEventListener('click', function () { loadSnapshot(); toast('已刷新'); });
-  $('#banner-retry').addEventListener('click', function () { loadSnapshot(); });
-  $('#btn-heartbeat').addEventListener('click', function (ev) {
+  $('#btn-refresh').addEventListener('click', function (ev) {
     withBusy(ev.currentTarget, function () {
-      return api('/api/heartbeat-check', {}).then(function (r) { toast(r.text); }).catch(function (e) { toast(e.message, true); });
+      return Promise.all([
+        loadSnapshot(),
+        api('/api/heartbeat-check', {}).catch(function () { return null; })
+      ]).then(function (results) {
+        var hb = results[1];
+        if (hb && hb.text) {
+          toast(hb.text);
+        } else {
+          var snap = state.snap;
+          if (snap && snap.agents) {
+            var online = snap.agents.filter(function (a) { return a.online; }).map(function (a) { return a.name; });
+            var offline = snap.agents.filter(function (a) { return !a.online; }).map(function (a) { return a.name; });
+            var fmt = function (arr) {
+              if (!arr.length) return '无';
+              if (arr.length <= 3) return arr.join(', ');
+              return arr.slice(0, 3).join(', ') + ' 等 ' + arr.length + ' 个';
+            };
+            toast('已刷新 · 在线: ' + fmt(online) + ' · 离线: ' + fmt(offline));
+          } else {
+            toast('已刷新');
+          }
+        }
+      }).catch(function (e) {
+        toast('刷新失败: ' + (e && e.message ? e.message : e), true);
+      });
     });
   });
+  $('#banner-retry').addEventListener('click', function () { loadSnapshot(); });
   $('#endpoint').addEventListener('change', function (ev) {
     api('/api/endpoint', { id: ev.currentTarget.value }).then(loadSnapshot).catch(function (e) { toast(e.message, true); });
   });
