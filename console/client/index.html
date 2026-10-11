@@ -481,124 +481,12 @@
     display: flex;
     flex-direction: column;
   }
-  #panel-agents, #panel-tasks, #panel-notes, #panel-tokens {
+  #panel-agents, #panel-tasks, #panel-notes {
     overflow-y: auto;
     padding: 24px;
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
-  }
-
-  /* Token Monitor 大盘样式 */
-  .tm-header {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: 12px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--mcode-border);
-  }
-  .tm-title-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .tm-title-group h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
-  .tm-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .tm-seg-group {
-    display: inline-flex; background: var(--mcode-surface-muted); border: 1px solid var(--mcode-border);
-    border-radius: 8px; padding: 2px; gap: 2px;
-  }
-  .tm-seg-btn {
-    border: none; background: transparent; color: var(--mcode-text-muted);
-    min-height: 28px; padding: 3px 10px; font-size: 12px; border-radius: 6px; cursor: pointer;
-  }
-  .tm-seg-btn.active {
-    background: var(--mcode-surface); color: var(--mcode-text); font-weight: 600;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  }
-  .tm-kpi-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 14px; margin-bottom: 18px;
-  }
-  .tm-kpi-card {
-    background: var(--mcode-surface); border: 1px solid var(--mcode-border); border-radius: 12px;
-    padding: 15px 18px; box-shadow: var(--mcode-card-shadow); position: relative; overflow: hidden;
-  }
-  .tm-kpi-card::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    background: var(--mcode-accent-gradient); opacity: 0.85;
-  }
-  .tm-kpi-label { font-size: 12px; color: var(--mcode-text-muted); font-weight: 500; }
-  .tm-kpi-val { font-size: 24px; font-weight: 700; margin: 4px 0; letter-spacing: -0.4px; }
-  .tm-kpi-sub { font-size: 11.5px; color: var(--mcode-text-subtle); }
-  .tm-charts-row {
-    display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; margin-bottom: 18px;
-  }
-  @media (max-width: 1024px) { .tm-charts-row { grid-template-columns: 1fr; } }
-  .tm-panel-card {
-    background: var(--mcode-surface); border: 1px solid var(--mcode-border); border-radius: 12px;
-    padding: 16px 18px; box-shadow: var(--mcode-card-shadow);
-  }
-  .tm-panel-head {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    margin-bottom: 12px; font-size: 13.5px; font-weight: 600;
-  }
-  .tm-heatmap-scroll { overflow-x: auto; padding-bottom: 4px; }
-  .tm-heatmap-grid {
-    display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column;
-    grid-auto-columns: 11px; gap: 3px; width: max-content;
-  }
-  .tm-hm-cell {
-    width: 11px; height: 11px; border-radius: 2.5px;
-    background: var(--mcode-surface-muted); border: 1px solid rgba(255,255,255,0.03);
-  }
-  .tm-hm-cell.l1 { background: rgba(59, 130, 246, 0.28); }
-  .tm-hm-cell.l2 { background: rgba(59, 130, 246, 0.52); }
-  .tm-hm-cell.l3 { background: rgba(59, 130, 246, 0.78); }
-  .tm-hm-cell.l4 { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.45); }
-  .tm-trend-bars {
-    display: flex; align-items: flex-end; gap: 4px; height: 96px; padding-top: 8px;
-  }
-  .tm-trend-col {
-    flex: 1; min-width: 6px; height: 100%; display: flex; flex-direction: column;
-    justify-content: flex-end; align-items: center;
-  }
-  .tm-trend-bar {
-    width: 100%; border-radius: 3px 3px 0 0;
-    background: var(--mcode-accent-gradient); min-height: 2px; transition: height .2s ease;
-  }
-  .tm-subtabs {
-    display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
-  }
-  .tm-table-wrapper {
-    overflow: auto; max-inline-size: 100%; max-block-size: min(540px, 72vh);
-    container-type: inline-size; border: 1px solid var(--mcode-border);
-    border-radius: 12px; background: var(--mcode-surface);
-  }
-  .tm-table {
-    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px;
-  }
-  .tm-table thead {
-    position: sticky; inset-block-start: 0; z-index: 2; background: var(--mcode-surface-muted);
-  }
-  .tm-table th, .tm-table td {
-    padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--mcode-border);
-    white-space: nowrap;
-  }
-  .tm-table tbody th {
-    position: sticky; inset-inline-start: 0; z-index: 1; background: var(--mcode-surface);
-    font-weight: 600;
-  }
-  .tm-table tbody tr:hover td, .tm-table tbody tr:hover th {
-    background: var(--mcode-surface-hover);
-  }
-  .tm-dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px;
-  }
-  @container (width < 600px) {
-    .tm-table, .tm-table thead, .tm-table tbody, .tm-table tr, .tm-table th, .tm-table td { display: block; }
-    .tm-table thead { display: none; }
-    .tm-table tr { margin-block-end: 10px; border-bottom: 2px solid var(--mcode-border-strong); }
-    .tm-table tbody th { position: sticky; inset-block-start: 0; z-index: 2; background: var(--mcode-surface-muted); }
-    .tm-table td::before { font-weight: 600; color: var(--mcode-text-muted); margin-right: 6px; }
-    .tm-table td:nth-child(2)::before { content: "状态: " / "状态"; }
-    .tm-table td:nth-child(3)::before { content: "总 Tokens: " / "总 Tokens"; }
-    .tm-table td:nth-child(4)::before { content: "输入 / 输出: " / "输入 / 输出"; }
-    .tm-table td:nth-child(5)::before { content: "缓存命中: " / "缓存命中"; }
-    .tm-table td:nth-child(6)::before { content: "预估费用: " / "预估费用"; }
   }
 
   /* 对话视图双栏组合 */
@@ -3260,10 +3148,6 @@
         <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 16.5 13"/></svg>
         <span class="tab-label">代理</span>
       </button>
-      <button role="tab" id="tab-tokens" aria-selected="false" aria-controls="panel-tokens" type="button" class="cb-activity-tab" title="Token 监控与全平台配额大盘 (Token Monitor)">
-        <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/></svg>
-        <span class="tab-label">监控</span>
-      </button>
       <button role="tab" id="tab-tasks" aria-selected="false" aria-controls="panel-tasks" type="button" class="cb-activity-tab" title="任务队列与认领" hidden style="display:none">
         <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
         <span class="tab-label">队列</span>
@@ -3338,6 +3222,7 @@
                 <button id="btn-new-chat" class="primary btn-sm-icon" type="button" title="在此平台新建对话">
                   <span>+ 新建对话</span>
                 </button>
+                <button id="btn-chat-auth" class="text" type="button" title="平台登录与 token-monitor 原生配额管理">🔑 登录/配额</button>
                 <button id="btn-chat-clear" class="text" type="button" title="清空当前会话">清空</button>
                 <button id="btn-chat-export" class="text" type="button" title="导出当前会话为本机文件">导出</button>
                 <button id="btn-workbench-toggle" class="text" type="button" title="展开或收起工作台">工作台</button>
@@ -3523,13 +3408,6 @@
           <button id="btn-new-note" class="primary" type="button">写笔记</button>
         </div>
         <div id="notes"></div>
-      </section>
-
-      <!-- Token 与配额监控大盘面板 (Token Monitor) -->
-      <section class="tabpanel" id="panel-tokens" role="tabpanel" aria-labelledby="tab-tokens" hidden>
-        <div id="token-monitor-root" class="tm-wrap">
-          <div class="empty">正在扫描本机 AI 编程工具会话与平台配额…</div>
-        </div>
       </section>
     </div>
   </div>
@@ -5235,14 +5113,11 @@
     }).catch(function () { /* noop */ });
   }
   function showUsageDetail() {
-    var tabTokens = $('#tab-tokens');
-    if (tabTokens) {
-      tabTokens.click();
-      return;
-    }
     if (!chat.usage) { loadUsage().then(showUsageDetail); return; }
     var u = chat.usage;
     var rows = ['agent,今日tok(in/out/条/次),累计tok(in/out/条/次)'];
+    var day = new Date().toISOString().slice(0, 10);
+    var td = u.days.filter(function (x) { return x.day === day; })[0];
     Object.keys(u.agents).forEach(function (k) {
       rows.push(k + ', -, ' + u.agents[k].in + '/' + u.agents[k].out + '/' + u.agents[k].msgs + '/' + u.agents[k].runs);
     });
@@ -5271,14 +5146,14 @@
     return String(v);
   }
 
-  function loadQuotas() {
+  function loadQuotas(force) {
     var now = Date.now();
-    if (quotasData && (now - quotasLastFetch < 60000)) {
+    if (!force && quotasData && (now - quotasLastFetch < 60000)) {
       return Promise.resolve(quotasData);
     }
-    if (quotasLoading) return Promise.resolve(quotasData);
+    if (!force && quotasLoading) return Promise.resolve(quotasData);
     quotasLoading = true;
-    return api('/api/quotas').then(function (res) {
+    return api('/api/quotas' + (force ? '?force=1' : '')).then(function (res) {
       quotasData = res;
       quotasLastFetch = Date.now();
       quotasLoading = false;
@@ -5317,16 +5192,22 @@
     }
   }
 
+  function resolveQuotaPlat(agent) {
+    if (!agent) agent = chat.activeAgent || 'antigravity';
+    if (agent === 'antigravity') return 'antigravity';
+    if (agent === 'codebuddy' || agent === 'codebuddy-cn') return 'codebuddy';
+    if (agent === 'traecode') return 'traecode';
+    if (agent === 'github-copilot') return 'github-copilot';
+    if (agent === 'minimaxcode') return 'minimaxcode';
+    if (agent === 'zcode') return 'zcode';
+    if (agent === 'mimocode') return 'mimocode';
+    if (agent === 'dsh') return 'dsh';
+    return null;
+  }
+
   function renderQuotasContent(data, err, agent) {
     if (!agent) agent = chat.activeAgent || 'antigravity';
-    var plat = null;
-    if (agent === 'antigravity') plat = 'antigravity';
-    else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
-    else if (agent === 'traecode') plat = 'traecode';
-    else if (agent === 'github-copilot') plat = 'github-copilot';
-    else if (agent === 'minimaxcode') plat = 'minimaxcode';
-    else if (agent === 'zcode') plat = 'zcode';
-    else if (agent === 'dsh') plat = 'dsh';
+    var plat = resolveQuotaPlat(agent);
 
     if (!plat) {
       return '<div class="cb-pop-quotas-list">' +
@@ -5347,18 +5228,19 @@
     }
 
     var pInfo = data[plat];
-    if (!pInfo || pInfo.error) {
-      var errMsg = (!pInfo ? '数据缺失' : pInfo.error);
+    if (!pInfo || pInfo.error || pInfo.tracked === false) {
+      var errMsg = (!pInfo ? '未配置配额凭据' : (pInfo.error || '未配置配额凭据'));
       return '<div class="cb-pop-quotas-list">' +
-        '<div class="cb-quota-plat-card">' +
-          '<div class="cb-quota-plat-header">' +
-            '<span class="cb-quota-plat-name">' + esc(plat) + '</span>' +
-            '<span class="cb-quota-err-text">查询失败 (' + esc(errMsg) + ')</span>' +
+        '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
+          '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
+            '<span class="cb-quota-plat-name" style="font-weight:600">' + esc(agent) + '</span>' +
+            '<span class="cb-quota-err-text" style="font-size:12px;color:var(--mcode-text-muted)">' + esc(errMsg) + '</span>' +
           '</div>' +
         '</div>' +
       '</div>';
     }
 
+    var srcBadge = pInfo.source === 'token-monitor' ? ' · token-monitor 原生' : (pInfo.source === 'cli' ? ' · CLI' : '');
     var html = '<div class="cb-pop-quotas-list">';
     if (plat === 'codebuddy') {
       var allGroups = Array.isArray(pInfo.groups) ? pInfo.groups : [];
@@ -5366,36 +5248,36 @@
       var groups = allGroups.filter(function (g) { return g.source === targetSource; });
       if (!groups.length && allGroups.length) groups = [allGroups[0]];
       if (!groups.length) {
-        html += '<div class="cb-quota-plat-card">' +
-          '<div class="cb-quota-plat-header">' +
+        html += '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
+          '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
             '<span class="cb-quota-plat-name">' + esc('codebuddy ' + targetSource) + '</span>' +
-            '<span class="cb-quota-plan-tag">' + esc(pInfo.plan || '已接入') + '</span>' +
+            '<span class="cb-quota-plan-tag">' + esc((pInfo.plan || '已接入') + srcBadge) + '</span>' +
           '</div>' +
           '<div class="cb-quota-reset">暂无配额数据</div>' +
         '</div>';
       } else {
         var g = groups[0];
         var tot = g.totalRemaining || 0;
-        var totalHtml = '<div class="cb-quota-total" title="总剩余 ' + tot + ' 积分"><span>总剩余积分（' + (g.packageCount || 0) + ' 个有效包）</span><b>' + fmtTok(tot) + '</b></div>';
+        var totalHtml = '<div class="cb-quota-total" style="display:flex;justify-content:space-between;margin:6px 0;font-size:12px" title="总剩余 ' + tot + ' 积分"><span>总剩余积分（' + (g.packageCount || 0) + ' 个有效包）</span><b>' + fmtTok(tot) + '</b></div>';
         var topList = Array.isArray(g.top) ? g.top : [];
         var cbItems = topList.map(function (q) {
           var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
           var barColor = remPct > 30 ? 'var(--mcode-accent, #38bdf8)' : (remPct > 10 ? '#f59e0b' : '#ef4444');
           var resetText = formatResetTime(q.resetAt);
-          return '<div class="cb-quota-item">' +
-            '<div class="cb-quota-item-top">' +
+          return '<div class="cb-quota-item" style="margin-top:6px">' +
+            '<div class="cb-quota-item-top" style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
               '<span class="cb-quota-item-name">' + esc(q.displayName || q.name) + '</span>' +
               '<span class="cb-quota-item-stat">剩 <b>' + fmtQuotaVal(q.remaining) + '</b>/' + fmtQuotaVal(q.total) + '</span>' +
             '</div>' +
-            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + '"></div></div>' +
-            (resetText ? '<div class="cb-quota-reset">' + esc(resetText) + '</div>' : '') +
+            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + ';height:100%"></div></div>' +
+            (resetText ? '<div class="cb-quota-reset" style="font-size:11px;color:var(--mcode-text-muted);margin-top:2px">' + esc(resetText) + '</div>' : '') +
           '</div>';
         }).join('');
-        if (!cbItems) cbItems = '<div class="cb-quota-reset">暂无剩余积分高于 50 的配额包</div>';
-        html += '<div class="cb-quota-plat-card">' +
-          '<div class="cb-quota-plat-header">' +
-            '<span class="cb-quota-plat-name">' + esc('codebuddy ' + (g.source || '')) + '</span>' +
-            '<span class="cb-quota-plan-tag">' + esc(g.plan || '已接入') + '</span>' +
+        if (!cbItems) cbItems = '<div class="cb-quota-reset" style="font-size:12px;color:var(--mcode-text-muted)">暂无有效配额包</div>';
+        html += '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
+          '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
+            '<span class="cb-quota-plat-name" style="font-weight:600">' + esc('codebuddy ' + (g.source || '')) + '</span>' +
+            '<span class="cb-quota-plan-tag" style="padding:2px 8px">' + esc((g.plan || '已接入') + srcBadge) + '</span>' +
           '</div>' +
           totalHtml + cbItems +
         '</div>';
@@ -5407,9 +5289,9 @@
         majorQuotas = qList.filter(function (q) {
           return q.name === 'gemini_session' || q.name === 'gemini_weekly' || q.name === 'claude_gpt_weekly';
         });
-        if (!majorQuotas.length) majorQuotas = qList.slice(0, 3);
-      } else if (plat === 'traecode' || plat === 'zcode' || plat === 'dsh') {
-        majorQuotas = qList;
+        if (!majorQuotas.length) majorQuotas = qList.slice(0, 4);
+      } else if (plat === 'traecode' || plat === 'zcode' || plat === 'mimocode' || plat === 'dsh') {
+        majorQuotas = qList.slice(0, 5);
       } else if (plat === 'github-copilot') {
         var sortedCopilot = qList.slice().sort(function (a, b) {
           var aUnlim = a.unlimited ? 1 : 0;
@@ -5429,42 +5311,38 @@
           });
         }
       } else {
-        majorQuotas = qList.slice(0, 2);
+        majorQuotas = qList.slice(0, 3);
       }
 
       var itemsHtml = majorQuotas.map(function (q) {
         if (q.isCreditBalance || q.name === 'Credits') {
           var rem = q.remaining != null ? q.remaining : q.total;
           var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
-          var unitStr = q.unit || '积分';
-          return '<div class="cb-quota-item">' +
-            '<div class="cb-quota-item-top">' +
-              '<span class="cb-quota-item-name">' + esc(q.displayName || '剩余额度') + '</span>' +
-              '<span class="cb-quota-item-stat"><b>' + remStr + '</b> ' + esc(unitStr) + '</span>' +
+          return '<div class="cb-quota-item" style="margin-top:6px">' +
+            '<div class="cb-quota-item-top" style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
+              '<span class="cb-quota-item-name">' + esc(q.displayName || '剩余积分') + '</span>' +
+              '<span class="cb-quota-item-stat"><b>' + remStr + '</b> 积分</span>' +
             '</div>' +
-            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:100%;background:var(--mcode-accent, #38bdf8)"></div></div>' +
+            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:100%;background:var(--mcode-accent, #38bdf8);height:100%"></div></div>' +
           '</div>';
         }
         var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
         var barColor = remPct > 30 ? 'var(--mcode-accent, #38bdf8)' : (remPct > 10 ? '#f59e0b' : '#ef4444');
         var resetText = formatResetTime(q.resetAt);
-        var statText = (q.used != null && q.total != null)
-          ? ('<b>' + fmtQuotaVal(q.used) + '</b>/' + fmtQuotaVal(q.total) + ' <small>(' + remPct + '% 余)</small>')
-          : ('<b>' + remPct + '%</b> 剩余');
-        return '<div class="cb-quota-item">' +
-          '<div class="cb-quota-item-top">' +
+        return '<div class="cb-quota-item" style="margin-top:6px">' +
+          '<div class="cb-quota-item-top" style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
             '<span class="cb-quota-item-name">' + esc(q.displayName || q.name) + '</span>' +
-            '<span class="cb-quota-item-stat">' + statText + '</span>' +
+            '<span class="cb-quota-item-stat"><b>' + fmtQuotaVal(q.used) + '</b>/' + fmtQuotaVal(q.total) + ' <small>(' + remPct + '% 余)</small></span>' +
           '</div>' +
-          '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + '"></div></div>' +
-          (resetText ? '<div class="cb-quota-reset">' + esc(resetText) + '</div>' : '') +
+          '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + ';height:100%"></div></div>' +
+          (resetText ? '<div class="cb-quota-reset" style="font-size:11px;color:var(--mcode-text-muted);margin-top:2px">' + esc(resetText) + '</div>' : '') +
         '</div>';
       }).join('');
 
-      html += '<div class="cb-quota-plat-card">' +
-        '<div class="cb-quota-plat-header">' +
-          '<span class="cb-quota-plat-name">' + esc(plat) + '</span>' +
-          '<span class="cb-quota-plan-tag">' + esc(pInfo.plan || '已接入') + '</span>' +
+      html += '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
+        '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
+          '<span class="cb-quota-plat-name" style="font-weight:600">' + esc(plat) + '</span>' +
+          '<span class="cb-quota-plan-tag" style="padding:2px 8px">' + esc((pInfo.plan || '已接入') + srcBadge) + '</span>' +
         '</div>' +
         itemsHtml +
       '</div>';
@@ -5571,21 +5449,14 @@
     },
     quota: function () {
       var agent = chat.activeAgent || 'antigravity';
-      var plat = null;
-      if (agent === 'antigravity') plat = 'antigravity';
-      else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
-      else if (agent === 'traecode') plat = 'traecode';
-      else if (agent === 'github-copilot') plat = 'github-copilot';
-      else if (agent === 'minimaxcode') plat = 'minimaxcode';
-      else if (agent === 'zcode') plat = 'zcode';
-      else if (agent === 'dsh') plat = 'dsh';
-
-      var header = '平台配额（' + agent + '）';
+      var plat = resolveQuotaPlat(agent);
+      var header = '平台配额（' + agent + ' · 点击打开登录/配额面板）';
       if (!plat) {
-        return header + '\n当前平台未接入配额跟踪';
+        return header + '\n点击管理平台登录与原生配额凭据';
       }
-      if (!quotasData || !quotasData[plat] || quotasData[plat].error) {
-        return header + '\n当前平台未接入配额跟踪';
+      if (!quotasData || !quotasData[plat] || quotasData[plat].error || quotasData[plat].tracked === false) {
+        var msg = (quotasData && quotasData[plat] && quotasData[plat].error) || '尚未配置原生配额凭据';
+        return header + '\n' + msg + '（点击一键登录或录入凭据）';
       }
 
       if (plat === 'codebuddy') {
@@ -5595,100 +5466,37 @@
         var group = groups.filter(function (g) { return g.source === targetSource; })[0];
         if (!group && groups.length) group = groups[0];
         if (!group) {
-          return header + '\n当前平台未接入配额跟踪';
+          return header + '\n点击配置 CodeBuddy 登录与原生配额';
         }
         var planStr = group.plan ? '（' + group.plan + '）' : '';
-        var lines = [(group.source || '') + planStr + '总剩余 ' + (group.totalRemaining != null ? group.totalRemaining : 0) + ' 积分 · ' + (group.packageCount || 0) + ' 个有效包'];
+        var lines = [header, (group.source || '') + planStr + '总剩余 ' + (group.totalRemaining != null ? group.totalRemaining : 0) + ' 积分 · ' + (group.packageCount || 0) + ' 个有效包'];
         var topList = Array.isArray(group.top) ? group.top : [];
         topList.forEach(function (pkg) {
           var rTime = formatResetTime(pkg.resetAt);
           lines.push((pkg.displayName || pkg.name) + ' 剩' + pkg.remaining + '/' + pkg.total + (rTime ? ' · ' + rTime : ''));
         });
         return lines.join('\n');
-      } else if (plat === 'antigravity') {
-        var agyData = quotasData.antigravity;
-        var qList = Array.isArray(agyData && agyData.quotas) ? agyData.quotas : [];
+      } else {
+        var pInfo = quotasData[plat];
+        var qList = Array.isArray(pInfo && pInfo.quotas) ? pInfo.quotas : [];
         if (!qList.length) {
-          return '平台配额（antigravity）\n当前平台未接入配额跟踪';
+          return header + '\n暂无配额明细（点击查看或刷新）';
         }
-        var majorNames = ['gemini_session', 'gemini_weekly', 'claude_gpt_weekly'];
-        var majorQuotas = qList.filter(function (q) {
-          return majorNames.indexOf(q.name) >= 0;
-        });
-        if (!majorQuotas.length) {
-          majorQuotas = qList.slice(0, 3);
-        }
-        if (!majorQuotas.length) {
-          var minQ = qList.reduce(function (min, cur) {
-            var minPct = typeof min.remainingPercentage === 'number' ? min.remainingPercentage : 100;
-            var curPct = typeof cur.remainingPercentage === 'number' ? cur.remainingPercentage : 100;
-            return curPct < minPct ? cur : min;
-          }, qList[0]);
-          if (minQ) majorQuotas = [minQ];
-        }
-        var lines = ['平台配额（antigravity）'];
-        majorQuotas.forEach(function (q) {
-          var pct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 0;
+        var srcStr = pInfo.source ? ' · ' + pInfo.source : '';
+        var lines = ['平台配额（' + agent + (pInfo.plan ? ' · ' + pInfo.plan : '') + srcStr + '）'];
+        qList.slice(0, 4).forEach(function (q) {
+          if (q.isCreditBalance || q.name === 'Credits') {
+            var rem = q.remaining != null ? q.remaining : q.total;
+            lines.push((q.displayName || '剩余积分') + ': ' + rem);
+            return;
+          }
+          var pct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
           var rTime = formatResetTime(q.resetAt);
           lines.push((q.displayName || q.name) + ' ' + q.used + '/' + q.total + ' · 剩' + pct + '%' + (rTime ? ' · ' + rTime : ''));
         });
-        return lines.join('\n');
-      } else if (plat === 'traecode') {
-        var traeData = quotasData.traecode;
-        var qListTrae = Array.isArray(traeData.quotas) ? traeData.quotas : [];
-        if (!qListTrae.length) {
-          return header + '\n当前平台未接入配额跟踪';
-        }
-        var q0 = qListTrae[0];
-        var rTime = formatResetTime(q0.resetAt);
-        return header + '\n剩 ' + (q0.remaining != null ? q0.remaining : 0) + '/' + (q0.total != null ? q0.total : 0) + (rTime ? ' · ' + rTime : '');
-      } else if (plat === 'github-copilot') {
-        var cpData = quotasData['github-copilot'];
-        var cpQuotas = Array.isArray(cpData && cpData.quotas) ? cpData.quotas : [];
-        var pi = cpQuotas.filter(function (q) { return q.name === 'premium_interactions'; })[0];
-        var lines = ['平台配额（github-copilot · individual）'];
-        if (pi) {
-          var rTime = formatResetTime(pi.resetAt);
-          lines.push('premium_interactions ' + pi.used + '/' + pi.total + ' · 剩' + pi.remaining + (rTime ? ' · ' + rTime : ''));
-        }
-        lines.push('chat / completions 不限量');
-        return lines.join('\n');
-      } else if (plat === 'minimaxcode') {
-        var mmData = quotasData.minimaxcode;
-        var mmQuotas = Array.isArray(mmData && mmData.quotas) ? mmData.quotas : [];
-        var cred = mmQuotas.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
-        if (cred) {
-          var userStr = mmData.user ? ' (' + mmData.user + ')' : '';
-          var planStr = mmData.plan ? ' · ' + mmData.plan : '';
-          var lines = ['平台配额（minimaxcode' + userStr + planStr + '）'];
-          var rem = cred.remaining != null ? cred.remaining : cred.total;
-          var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
-          lines.push('剩余积分：' + remStr + ' 积分');
-          if (cred.used) lines.push('已用积分：' + cred.used);
-          return lines.join('\n');
-        }
-        var lines = ['平台配额（minimaxcode · MiniMax Token Plan）'];
-        mmQuotas.forEach(function (q) {
-          var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 0;
-          var wkPct = typeof q.weeklyPercentage === 'number' ? q.weeklyPercentage : 0;
-          lines.push((q.displayName || q.name) + ' 本窗口剩' + remPct + '% · 本周剩' + wkPct + '%');
-        });
-        return lines.join('\n');
-      } else if (plat === 'zcode' || plat === 'dsh') {
-        var pData = quotasData[plat];
-        var pQuotas = Array.isArray(pData && pData.quotas) ? pData.quotas : [];
-        var lines = ['平台配额（' + plat + (pData.plan ? ' · ' + pData.plan : '') + '）'];
-        pQuotas.forEach(function (q) {
-          if (q.isCreditBalance) {
-            lines.push((q.displayName || q.name) + '：' + (q.remaining != null ? q.remaining : 0) + ' ' + (q.unit || ''));
-          } else {
-            var rTime = formatResetTime(q.resetAt);
-            lines.push((q.displayName || q.name) + ' 剩' + (q.remainingPercentage != null ? q.remainingPercentage : 100) + '%' + (rTime ? ' · ' + rTime : ''));
-          }
-        });
+        lines.push('点击打开登录与配额配置面板');
         return lines.join('\n');
       }
-      return header + '\n当前平台未接入配额跟踪';
     },
     gear: function () {
       return '自定义状态栏显示项\n点击自由勾选/取消显示各项指标';
@@ -5946,17 +5754,10 @@
     var sbQuotaWrap = $('#sb-quota-wrap');
     var quotaShow = false;
     if (sbQuota && sbQuotaWrap) {
-      var plat = null;
-      if (agent === 'antigravity') plat = 'antigravity';
-      else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
-      else if (agent === 'traecode') plat = 'traecode';
-      else if (agent === 'github-copilot') plat = 'github-copilot';
-      else if (agent === 'minimaxcode') plat = 'minimaxcode';
-      else if (agent === 'zcode') plat = 'zcode';
-      else if (agent === 'dsh') plat = 'dsh';
-
+      sbQuota.style.cursor = 'pointer';
+      var plat = resolveQuotaPlat(agent);
       var quotaText = '';
-      if (plat && quotasData && quotasData[plat] && !quotasData[plat].error) {
+      if (plat && quotasData && quotasData[plat] && !quotasData[plat].error && quotasData[plat].tracked !== false) {
         if (plat === 'codebuddy') {
           var cbData = quotasData.codebuddy;
           var groups = Array.isArray(cbData && cbData.groups) ? cbData.groups : [];
@@ -5991,10 +5792,10 @@
         } else if (plat === 'github-copilot') {
           var cpData = quotasData['github-copilot'];
           var cpQuotas = Array.isArray(cpData && cpData.quotas) ? cpData.quotas : [];
-          var pi = cpQuotas.filter(function (q) { return q.name === 'premium_interactions'; })[0];
+          var pi = cpQuotas.filter(function (q) { return q.name === 'premium_interactions' || /premium/i.test(q.displayName || ''); })[0] || cpQuotas[0];
           if (pi && !pi.unlimited) {
-            var pct = typeof pi.remainingPercentage === 'number' ? pi.remainingPercentage : 0;
-            quotaText = '配额 ' + pct + '%';
+            var pctCp = typeof pi.remainingPercentage === 'number' ? pi.remainingPercentage : 0;
+            quotaText = '配额 ' + pctCp + '%';
           } else {
             quotaText = '配额 不限';
           }
@@ -6010,24 +5811,25 @@
           } else {
             var gen = mmQuotas.filter(function (q) { return q.name === 'general'; })[0] || mmQuotas[0];
             if (gen) {
-              var pct = typeof gen.remainingPercentage === 'number' ? gen.remainingPercentage : 0;
-              quotaText = '配额 通用 ' + pct + '%';
+              var pctMm = typeof gen.remainingPercentage === 'number' ? gen.remainingPercentage : 0;
+              quotaText = '配额 剩' + pctMm + '%';
               quotaShow = true;
             }
           }
-        } else if (plat === 'zcode' || plat === 'dsh') {
-          var pData = quotasData[plat];
-          var pQuotas = Array.isArray(pData && pData.quotas) ? pData.quotas : [];
-          if (pQuotas.length) {
-            var qFirst = pQuotas[0];
-            if (qFirst.isCreditBalance) {
-              quotaText = '配额 ' + (qFirst.remaining != null ? qFirst.remaining : 0) + ' ' + (qFirst.unit || '');
-            } else {
-              quotaText = '配额 剩' + (qFirst.remainingPercentage != null ? qFirst.remainingPercentage : 100) + '%';
-            }
+        } else {
+          var otherData = quotasData[plat];
+          var oQuotas = Array.isArray(otherData && otherData.quotas) ? otherData.quotas : [];
+          if (oQuotas.length) {
+            var o0 = oQuotas[0];
+            var pctO = typeof o0.remainingPercentage === 'number' ? o0.remainingPercentage : 100;
+            quotaText = '配额 剩' + pctO + '%';
             quotaShow = true;
           }
         }
+      }
+      if (!quotaShow && plat) {
+        quotaText = '🔑 配额/登录';
+        quotaShow = true;
       }
       if (quotaShow) {
         sbQuota.textContent = quotaText;
@@ -6036,6 +5838,400 @@
     }
 
     applyStatusBarVisibility(quotaShow);
+  }
+
+  // ---------------- 平台登录与 token-monitor 原生配额集成弹窗
+  var authPollTimer = null;
+  function clearAuthPoll() {
+    if (authPollTimer) { clearInterval(authPollTimer); authPollTimer = null; }
+  }
+
+  var AUTH_PLATFORMS = [
+    { id: 'antigravity', label: 'Antigravity', cliLogin: false, credFields: [] },
+    { id: 'codebuddy-cn', label: 'CodeBuddy 国内', cliLogin: true, credFields: [
+      { key: 'codebuddyCnAccessToken', label: '国内版 AccessToken (copilot.tencent.com)', placeholder: '粘贴 Bearer Token（若本机已装客户端会自动读取）' },
+      { key: 'codebuddyCnUid', label: 'X-User-Id (可选)', placeholder: '用户 UID（可选）' }
+    ] },
+    { id: 'codebuddy', label: 'CodeBuddy 国际', cliLogin: true, credFields: [
+      { key: 'codebuddyIntlAccessToken', label: '国际版 AccessToken (codebuddy.ai)', placeholder: '粘贴 Bearer Token（若本机已装客户端会自动读取）' },
+      { key: 'codebuddyIntlUid', label: 'X-User-Id (可选)', placeholder: '用户 UID（可选）' }
+    ] },
+    { id: 'traecode', label: 'Trae', cliLogin: false, credFields: [
+      { key: 'traeAccessToken', label: 'Trae Cloud-IDE-Token (JWT)', placeholder: '粘贴 eyJ... 开头的 Token（支持自动扫描本机 Trae）' }
+    ] },
+    { id: 'github-copilot', label: 'GitHub Copilot', cliLogin: true, credFields: [
+      { key: 'copilotApiToken', label: 'GitHub OAuth / Copilot Token', placeholder: 'gho_... 或点击上方 Device Flow 一键授权自动填入' }
+    ] },
+    { id: 'minimaxcode', label: 'MiniMax', cliLogin: true, credFields: [
+      { key: 'minimaxApiKey', label: 'MiniMax Coding Plan API Key', placeholder: '粘贴 API Key（或使用本机 ~/.minimax / mmx CLI）' }
+    ] },
+    { id: 'zcode', label: 'ZCode (智谱 GLM)', cliLogin: false, credFields: [
+      { key: 'zaiApiKey', label: 'BigModel / Z.ai API Key', placeholder: '粘贴 API Key（本机 ~/.zcode/v2/credentials.json 已支持自动解密）' }
+    ] },
+    { id: 'mimocode', label: 'MiMo (小米)', cliLogin: true, credFields: [
+      { key: 'mimoCookie', label: '小米 MiMo 平台 Cookie', placeholder: '粘贴包含 serviceToken 的 Cookie（或通过上方 CLI 登录查订阅）' }
+    ] }
+  ];
+
+  function openAgentAuthModal(initialAgent) {
+    clearAuthPoll();
+    var currentAgent = initialAgent || chat.activeAgent || 'codebuddy-cn';
+    if (!AUTH_PLATFORMS.some(function (p) { return p.id === currentAgent; })) {
+      currentAgent = 'codebuddy-cn';
+    }
+
+    var wrapper = el('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.gap = '12px';
+    wrapper.style.minWidth = 'min(540px, 86vw)';
+
+    var tabsRow = el('div');
+    tabsRow.style.display = 'flex';
+    tabsRow.style.flexWrap = 'wrap';
+    tabsRow.style.gap = '6px';
+    tabsRow.style.paddingBottom = '8px';
+    tabsRow.style.borderBottom = '1px solid var(--mcode-border)';
+    wrapper.appendChild(tabsRow);
+
+    var bodyBox = el('div');
+    bodyBox.style.display = 'flex';
+    bodyBox.style.flexDirection = 'column';
+    bodyBox.style.gap = '12px';
+    bodyBox.style.maxHeight = '68vh';
+    bodyBox.style.overflowY = 'auto';
+    wrapper.appendChild(bodyBox);
+
+    function renderTabs() {
+      tabsRow.textContent = '';
+      AUTH_PLATFORMS.forEach(function (p) {
+        var b = btn(p.label, p.id === currentAgent ? 'primary small' : 'small', function () {
+          clearAuthPoll();
+          currentAgent = p.id;
+          renderTabs();
+          renderBody();
+        });
+        b.style.borderRadius = '999px';
+        b.style.fontSize = '12px';
+        b.style.padding = '3px 10px';
+        tabsRow.appendChild(b);
+      });
+    }
+
+    function renderBody() {
+      bodyBox.textContent = '';
+      var platCfg = AUTH_PLATFORMS.filter(function (p) { return p.id === currentAgent; })[0] || AUTH_PLATFORMS[0];
+
+      // 1. 原生配额展示卡片
+      var quotaSec = el('div', 'card');
+      quotaSec.style.padding = '12px';
+      var qHead = el('div');
+      qHead.style.display = 'flex';
+      qHead.style.justifyContent = 'space-between';
+      qHead.style.alignItems = 'center';
+      qHead.style.marginBottom = '8px';
+      var qTitle = el('b', null, '📊 实时配额（token-monitor 原生引擎）');
+      qTitle.style.fontSize = '13px';
+      var refreshQBtn = btn('🔄 刷新配额', 'small', function () {
+        withBusy(refreshQBtn, function () {
+          return loadQuotas(true).then(function () {
+            qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
+            toast('配额已刷新');
+          });
+        });
+      });
+      qHead.appendChild(qTitle);
+      qHead.appendChild(refreshQBtn);
+      quotaSec.appendChild(qHead);
+
+      var qContent = el('div');
+      qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
+      quotaSec.appendChild(qContent);
+      bodyBox.appendChild(quotaSec);
+
+      // 2. 官方登录 / OAuth / 设备码授权区
+      var loginSec = el('div', 'card');
+      loginSec.style.padding = '12px';
+      var lHead = el('div');
+      lHead.style.display = 'flex';
+      lHead.style.justifyContent = 'space-between';
+      lHead.style.alignItems = 'center';
+      lHead.style.marginBottom = '8px';
+      var lTitle = el('b', null, '🔑 账号一键登录与授权');
+      lTitle.style.fontSize = '13px';
+      var lBadge = el('span', 'pill', '检测中…');
+      lHead.appendChild(lTitle);
+      lHead.appendChild(lBadge);
+      loginSec.appendChild(lHead);
+
+      var lStatusBox = el('div');
+      lStatusBox.style.fontSize = '12px';
+      lStatusBox.style.color = 'var(--mcode-text-muted)';
+      lStatusBox.style.marginBottom = '8px';
+      lStatusBox.textContent = '正在读取登录与凭据状态…';
+      loginSec.appendChild(lStatusBox);
+
+      var lFlowBox = el('div');
+      lFlowBox.style.display = 'none';
+      lFlowBox.style.padding = '10px';
+      lFlowBox.style.borderRadius = '8px';
+      lFlowBox.style.background = 'var(--mcode-surface-muted)';
+      lFlowBox.style.border = '1px solid var(--mcode-border)';
+      lFlowBox.style.marginBottom = '8px';
+      loginSec.appendChild(lFlowBox);
+
+      var lBtns = el('div');
+      lBtns.style.display = 'flex';
+      lBtns.style.flexWrap = 'wrap';
+      lBtns.style.gap = '8px';
+      loginSec.appendChild(lBtns);
+      bodyBox.appendChild(loginSec);
+
+      function renderLoginResult(res) {
+        lFlowBox.textContent = '';
+        if (!res) return;
+        lFlowBox.style.display = 'block';
+        if (res.message) {
+          var msgEl = el('div', null, res.message);
+          msgEl.style.fontSize = '12px';
+          msgEl.style.marginBottom = '6px';
+          lFlowBox.appendChild(msgEl);
+        }
+        if (res.user_code || res.userCode) {
+          var codeVal = res.user_code || res.userCode;
+          var codeRow = el('div');
+          codeRow.style.display = 'flex';
+          codeRow.style.alignItems = 'center';
+          codeRow.style.gap = '8px';
+          codeRow.style.marginBottom = '6px';
+          var codeTag = el('code', 'mono', '设备码: ' + codeVal);
+          codeTag.style.fontSize = '14px';
+          codeTag.style.fontWeight = '700';
+          codeTag.style.padding = '3px 8px';
+          codeTag.style.borderRadius = '6px';
+          codeTag.style.background = 'var(--mcode-surface)';
+          var cpBtn = btn('复制设备码', 'small', function () { copyText(codeVal, '已复制设备码: ' + codeVal); });
+          codeRow.appendChild(codeTag);
+          codeRow.appendChild(cpBtn);
+          lFlowBox.appendChild(codeRow);
+        }
+        var urlVal = res.login_url || res.verificationUri || res.authUrl;
+        if (urlVal) {
+          var linkRow = el('div');
+          linkRow.style.display = 'flex';
+          linkRow.style.alignItems = 'center';
+          linkRow.style.gap = '8px';
+          var openBtn = btn('🌐 打开官方授权页面', 'primary small', function () {
+            window.open(urlVal, '_blank', 'noopener,noreferrer');
+          });
+          var copyUrlBtn = btn('复制链接', 'small', function () { copyText(urlVal, '已复制授权链接'); });
+          linkRow.appendChild(openBtn);
+          linkRow.appendChild(copyUrlBtn);
+          lFlowBox.appendChild(linkRow);
+        }
+      }
+
+      if (platCfg.cliLogin) {
+        var startCliBtn = btn('🚀 启动 CLI 官方登录', 'primary small', function () {
+          clearAuthPoll();
+          withBusy(startCliBtn, function () {
+            return api('/api/auth/cli-login', { agent: currentAgent, action: 'start' }).then(function (res) {
+              renderLoginResult(res);
+              if (res.logged_in) {
+                lBadge.className = 'pill ok';
+                lBadge.textContent = 'CLI 已登录';
+                loadQuotas(true).then(function () {
+                  qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
+                });
+              } else if (res.status === 'pending' || res.login_url) {
+                lBadge.className = 'pill warn';
+                lBadge.textContent = '等待浏览器授权…';
+                authPollTimer = setInterval(function () {
+                  api('/api/auth/cli-login', { agent: currentAgent, action: 'status' }).then(function (st) {
+                    if (st && st.logged_in) {
+                      clearAuthPoll();
+                      lBadge.className = 'pill ok';
+                      lBadge.textContent = 'CLI 已登录';
+                      lStatusBox.textContent = st.message || 'CLI 登录已完成！';
+                      toast(currentAgent + ' 登录成功');
+                      loadQuotas(true).then(function () {
+                        qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
+                      });
+                    }
+                  }).catch(function () {});
+                }, 4000);
+              }
+            }).catch(function (e) { toast(e.message, true); });
+          });
+        });
+        lBtns.appendChild(startCliBtn);
+      }
+
+      if (currentAgent === 'github-copilot') {
+        var cpDeviceBtn = btn('🔗 GitHub Device Flow 配额授权 (token-monitor)', 'small', function () {
+          clearAuthPoll();
+          withBusy(cpDeviceBtn, function () {
+            return api('/api/auth/copilot/device', { action: 'start' }).then(function (flow) {
+              renderLoginResult({
+                message: '请在 GitHub 页面输入以下设备码完成 Copilot 配额授权（授权后自动保存）：',
+                userCode: flow.userCode,
+                verificationUri: flow.verificationUri
+              });
+              authPollTimer = setInterval(function () {
+                api('/api/auth/copilot/device', { action: 'poll', deviceCode: flow.deviceCode }).then(function (p) {
+                  if (p && p.status === 'ok') {
+                    clearAuthPoll();
+                    lBadge.className = 'pill ok';
+                    lBadge.textContent = '已授权';
+                    lStatusBox.textContent = 'GitHub Copilot 原生配额 Token 已保存！';
+                    toast('GitHub Copilot 配额授权成功');
+                    loadQuotas(true).then(function () {
+                      qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
+                    });
+                  }
+                }).catch(function () {});
+              }, (flow.interval || 5) * 1000);
+            }).catch(function (e) { toast(e.message, true); });
+          });
+        });
+        lBtns.appendChild(cpDeviceBtn);
+      }
+
+      if (currentAgent === 'antigravity') {
+        var agyOAuthBtn = btn('🔗 Google OAuth 原生配额登录', 'primary small', function () {
+          withBusy(agyOAuthBtn, function () {
+            return api('/api/auth/antigravity/oauth', { action: 'start' }).then(function (info) {
+              renderLoginResult({
+                message: '1. 点击下方按钮登录 Google 账号；2. 登录跳转后复制浏览器地址栏完整 URL（或 code 参数）粘贴到下方完成绑定：',
+                authUrl: info.authUrl
+              });
+              var codeInput = document.createElement('input');
+              codeInput.type = 'text';
+              codeInput.placeholder = '粘贴回调 URL (http://localhost:51121/oauth-callback?code=...) 或授权码';
+              codeInput.style.width = '100%';
+              codeInput.style.marginTop = '8px';
+              codeInput.style.padding = '6px 8px';
+              codeInput.style.fontSize = '12px';
+              var bindBtn = btn('确认绑定 Google OAuth', 'primary small', function () {
+                withBusy(bindBtn, function () {
+                  return api('/api/auth/antigravity/oauth', { action: 'complete', code: codeInput.value, state: info.state }).then(function (r) {
+                    toast('Antigravity OAuth 绑定成功' + (r.email ? ' (' + r.email + ')' : ''));
+                    loadQuotas(true).then(function () {
+                      qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
+                    });
+                  }).catch(function (e) { toast(e.message, true); });
+                });
+              });
+              bindBtn.style.marginTop = '6px';
+              lFlowBox.appendChild(codeInput);
+              lFlowBox.appendChild(bindBtn);
+            }).catch(function (e) { toast(e.message, true); });
+          });
+        });
+        lBtns.appendChild(agyOAuthBtn);
+      }
+
+      // 3. 原生配额凭据录入区
+      if (platCfg.credFields && platCfg.credFields.length) {
+        var credSec = el('div', 'card');
+        credSec.style.padding = '12px';
+        var cTitle = el('b', null, '⚙️ token-monitor 原生配额凭据配置');
+        cTitle.style.fontSize = '13px';
+        cTitle.style.display = 'block';
+        cTitle.style.marginBottom = '8px';
+        credSec.appendChild(cTitle);
+
+        var inputsMap = {};
+        platCfg.credFields.forEach(function (f) {
+          var row = el('div');
+          row.style.marginBottom = '8px';
+          var lb = el('label', null, f.label);
+          lb.style.display = 'block';
+          lb.style.fontSize = '12px';
+          lb.style.marginBottom = '4px';
+          lb.style.color = 'var(--mcode-text-muted)';
+          var inp = document.createElement('input');
+          inp.type = 'password';
+          inp.placeholder = f.placeholder || '';
+          inp.style.width = '100%';
+          inp.style.padding = '6px 8px';
+          inp.style.fontSize = '12px';
+          inp.style.borderRadius = '6px';
+          inp.style.border = '1px solid var(--mcode-border)';
+          inp.style.background = 'var(--mcode-surface-muted)';
+          inp.style.color = 'var(--mcode-text)';
+          inputsMap[f.key] = inp;
+          row.appendChild(lb);
+          row.appendChild(inp);
+          credSec.appendChild(row);
+        });
+
+        var saveBtn = btn('💾 保存凭据并刷新原生配额', 'primary small', function () {
+          var payload = {};
+          Object.keys(inputsMap).forEach(function (k) {
+            var val = inputsMap[k].value.trim();
+            if (val) payload[k] = val;
+          });
+          if (!Object.keys(payload).length) {
+            toast('请先输入要更新的 Token 或 API Key', true);
+            return;
+          }
+          withBusy(saveBtn, function () {
+            return api('/api/auth/credentials', payload).then(function (res) {
+              if (res && res.quotas) {
+                quotasData = res.quotas;
+                quotasLastFetch = Date.now();
+                updateStatusBar();
+                qContent.innerHTML = renderQuotasContent(quotasData, null, currentAgent);
+              }
+              toast('凭据已保存并刷新原生配额');
+            }).catch(function (e) { toast(e.message, true); });
+          });
+        });
+        credSec.appendChild(saveBtn);
+        bodyBox.appendChild(credSec);
+      }
+
+      // 异步查询当前登录状态与本机凭据发现状态
+      api('/api/auth/status?agent=' + encodeURIComponent(currentAgent)).then(function (st) {
+        var credInfo = (st && st.credentials && st.credentials[currentAgent]) || {};
+        var cli = st && st.cliLogin;
+        var hasNative = credInfo.hasToken || credInfo.hasKey || credInfo.hasOAuth || credInfo.hasCookie;
+        var cliOk = cli && cli.logged_in;
+        if (cliOk || hasNative) {
+          lBadge.className = 'pill ok';
+          lBadge.textContent = cliOk && hasNative ? '已登录 · 原生配额已就绪' : (cliOk ? 'CLI 已登录' : '原生配额凭据已就绪');
+        } else {
+          lBadge.className = 'pill warn';
+          lBadge.textContent = '待配置';
+        }
+        var notes = [];
+        if (cli && cli.message) notes.push('CLI 状态: ' + cli.message);
+        if (credInfo.autoDetected) notes.push('✅ 已自动检测到本机客户端凭据（token-monitor 原生直连）');
+        else if (hasNative) notes.push('✅ 已保存原生配额凭据' + (credInfo.email ? ' (' + credInfo.email + ')' : ''));
+        lStatusBox.textContent = notes.join(' · ') || '可点击下方按钮启动官方登录或配置原生配额凭据。';
+      }).catch(function () {
+        lBadge.className = 'pill';
+        lBadge.textContent = '就绪';
+        lStatusBox.textContent = '可点击下方按钮启动官方登录或配置原生配额凭据。';
+      });
+    }
+
+    renderTabs();
+    renderBody();
+
+    $('#modal-title').textContent = '🔑 平台登录与原生配额管理';
+    var headActions = $('#modal-head-actions');
+    if (headActions) headActions.textContent = '';
+    var form = $('#modal-form');
+    form.textContent = '';
+    form.appendChild(wrapper);
+    var errEl = $('#modal-err');
+    if (errEl) errEl.style.display = 'none';
+    var okBtn = $('#modal-ok');
+    if (okBtn) okBtn.textContent = '关闭';
+    modalResolver = { resolve: function () { clearAuthPoll(); }, inputs: {}, form: form };
+    $('#modal').showModal();
   }
 
   // ---------------- 子代理接入端点展示
@@ -6251,10 +6447,20 @@
         head.appendChild(toggleWrap);
       }
 
-      // 待机·可直派去掉，把头像设置按钮移到这里
+      // 待机·可直派去掉，把登录/配额与头像设置按钮移到这里
+      if (a.name !== SELF && resolveQuotaPlat(a.name)) {
+        var authBtn = btn('🔑 登录/配额', 'btn-avatar-setting', function () {
+          openAgentAuthModal(a.name);
+        });
+        authBtn.style.marginLeft = 'auto';
+        head.appendChild(authBtn);
+      }
       var avatarBtn = btn('头像', 'btn-avatar-setting', function () {
         promptChangeAvatar(a.name);
       });
+      if (a.name !== SELF && resolveQuotaPlat(a.name)) {
+        avatarBtn.style.marginLeft = '0';
+      }
       head.appendChild(avatarBtn);
       card.appendChild(head);
       card.appendChild(el('div', 'role', a.role || '未声明角色'));
@@ -6598,6 +6804,13 @@
       var seg = target && (target.closest ? target : target.parentElement) ? (target.closest ? target : target.parentElement).closest('[data-sb]') : null;
       if (seg && seg.dataset && seg.dataset.sb === 'model') {
         return; // 已由 sbModel 专属监听器处理
+      }
+      if (seg && seg.dataset && seg.dataset.sb === 'quota') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (sbTipEl) sbTipEl.style.display = 'none';
+        openAgentAuthModal(chat.activeAgent);
+        return;
       }
       toggleStatusBarConfig(e);
     });
@@ -6991,6 +7204,10 @@
     }).catch(function (e) { toast(e.message, true); });
   }
   $('#btn-new-chat').addEventListener('click', createNewChatSession);
+  var authHeadBtn = $('#btn-chat-auth');
+  if (authHeadBtn) authHeadBtn.addEventListener('click', function () {
+    openAgentAuthModal(chat.activeAgent);
+  });
 
   // 清空当前对话
   var clearBtn = $('#btn-chat-clear');
@@ -7032,596 +7249,8 @@
     renderWorkbench();
   });
 
-  // ---------------- Token Monitor (内嵌本机扫描 + 17321 桥接大盘)
-  var tmState = {
-    data: null,
-    loading: false,
-    period: (function () { try { return localStorage.getItem('agent_hub_tm_period') || 'allTime'; } catch (e) { return 'allTime'; } })(),
-    currency: (function () { try { return localStorage.getItem('agent_hub_tm_currency') || 'USD'; } catch (e) { return 'USD'; } })(),
-    subtab: (function () { try { return localStorage.getItem('agent_hub_tm_subtab') || 'tools'; } catch (e) { return 'tools'; } })()
-  };
-
-  function fmtCost(usd, rate, currency) {
-    var val = Number(usd) || 0;
-    var r = Number(rate) || 7.25;
-    if (currency === 'CNY') {
-      var cny = val * r;
-      return '¥' + (cny >= 100 ? cny.toFixed(1) : cny.toFixed(2));
-    }
-    return '$' + (val >= 100 ? val.toFixed(1) : val.toFixed(2));
-  }
-
-  function loadTokenMonitor(forceRefresh) {
-    var root = $('#token-monitor-root');
-    if (tmState.loading) return Promise.resolve(tmState.data);
-    tmState.loading = true;
-    if (root && !tmState.data) {
-      root.innerHTML = '<div class="empty">正在扫描本机 AI 编程工具会话与平台配额…</div>';
-    }
-    var url = '/api/token-monitor' + (forceRefresh ? '?refresh=1' : '');
-    return Promise.all([
-      api(url),
-      loadQuotas()
-    ]).then(function (results) {
-      tmState.loading = false;
-      tmState.data = results[0];
-      if (results[0] && results[0].config && results[0].config.currency && !localStorage.getItem('agent_hub_tm_currency')) {
-        tmState.currency = results[0].config.currency;
-      }
-      renderTokenMonitor();
-      return tmState.data;
-    }).catch(function (err) {
-      tmState.loading = false;
-      if (root) {
-        root.innerHTML = '<div class="empty">Token 监控加载失败：' + esc(err && err.message ? err.message : String(err)) + '</div>';
-      }
-      return null;
-    });
-  }
-
-  function openTokenMonitorConfigModal() {
-    var cfg = (tmState.data && tmState.data.config) || {};
-    var wrapper = el('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.gap = '10px';
-    wrapper.style.minWidth = '340px';
-
-    function makeField(labelTxt, val, placeholder, type) {
-      var box = el('label');
-      box.style.display = 'flex';
-      box.style.flexDirection = 'column';
-      box.style.gap = '4px';
-      box.style.fontSize = '12px';
-      var title = el('span', null, labelTxt);
-      title.style.fontWeight = '600';
-      title.style.color = 'var(--mcode-text)';
-      var inp = document.createElement('input');
-      inp.type = type || 'text';
-      inp.value = val || '';
-      inp.placeholder = placeholder || '';
-      inp.style.padding = '6px 10px';
-      inp.style.borderRadius = '6px';
-      inp.style.border = '1px solid var(--mcode-border)';
-      inp.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
-      inp.style.color = 'var(--mcode-text)';
-      inp.style.fontSize = '12px';
-      box.appendChild(title);
-      box.appendChild(inp);
-      wrapper.appendChild(box);
-      return inp;
-    }
-
-    var chkRow = el('label');
-    chkRow.style.display = 'flex';
-    chkRow.style.alignItems = 'center';
-    chkRow.style.gap = '8px';
-    chkRow.style.fontSize = '12px';
-    chkRow.style.cursor = 'pointer';
-    var chkBridge = document.createElement('input');
-    chkBridge.type = 'checkbox';
-    chkBridge.checked = cfg.externalHubEnabled !== false;
-    chkRow.appendChild(chkBridge);
-    chkRow.appendChild(el('span', null, '启用外部 Token Monitor Hub (17321) 自动探测与多设备聚合'));
-    wrapper.appendChild(chkRow);
-
-    var inpHubUrl = makeField('外部 Token Monitor Hub 地址（可选，用于多设备同步）', cfg.externalHubUrl || 'http://127.0.0.1:17321', 'http://127.0.0.1:17321');
-    var inpHubToken = makeField('外部 Hub 访问令牌 Auth Token（可选）', '', cfg.hasExternalToken ? '已配置（留空保持不变）' : '若外部 Hub 设置了访问密码可填入', 'password');
-    var inpExportPath = makeField('外部导出文件路径 token-monitor-export.json（可选）', cfg.externalExportPath || '', '例如 /path/to/token-monitor-export.json');
-    var inpRate = makeField('美元兑人民币汇率 (USD → CNY)', String(cfg.usdToCny || 7.25), '7.25');
-    var inpMmKey = makeField('MiniMax API Key（可选，用于直查 MiniMax Coding Plan 实时配额）', '', cfg.hasMinimaxKey ? '已配置（留空保持不变）' : '留空则自动从本机 ~/.minimax 读取', 'password');
-    var inpDsKey = makeField('DeepSeek API Key（可选，用于直查 DeepSeek 账户余额）', '', cfg.hasDeepseekKey ? '已配置（留空保持不变）' : '留空则自动从本机 ~/.dsh 读取', 'password');
-
-    var note = el('div');
-    note.style.fontSize = '11px';
-    note.style.color = 'var(--mcode-text-subtle)';
-    note.style.lineHeight = '1.5';
-    note.textContent = '💡 提示：Multi-Agent Hub 已内置本机 14+ 款 AI 编程工具日志扫描与 ZCode/GLM、MiniMax、DeepSeek、Copilot、CodeBuddy 等配额直查，无需安装外部软件即可开箱使用；也可随时桥接 Javis603/token-monitor (17321) 汇总多台设备数据。';
-    wrapper.appendChild(note);
-
-    $('#modal-title').textContent = '🔗 Token Monitor 桥接与直查设置';
-    var headActions = $('#modal-head-actions');
-    if (headActions) headActions.textContent = '';
-    var form = $('#modal-form');
-    form.textContent = '';
-    form.appendChild(wrapper);
-    $('#modal-err').style.display = 'none';
-    $('#modal-ok').textContent = '保存并刷新';
-    modalResolver = {
-      resolve: function (ok) {
-        if (!ok) return;
-        var payload = {
-          externalHubEnabled: chkBridge.checked,
-          externalHubUrl: inpHubUrl.value.trim() || 'http://127.0.0.1:17321',
-          externalExportPath: inpExportPath.value.trim(),
-          usdToCny: Number(inpRate.value) || 7.25,
-          currency: tmState.currency
-        };
-        if (inpHubToken.value.trim()) payload.externalHubToken = inpHubToken.value.trim();
-        if (inpMmKey.value.trim()) payload.minimaxApiKey = inpMmKey.value.trim();
-        if (inpDsKey.value.trim()) payload.deepseekApiKey = inpDsKey.value.trim();
-        api('/api/token-monitor/config', payload).then(function () {
-          toast('Token Monitor 配置已保存');
-          quotasLastFetch = 0;
-          loadTokenMonitor(true);
-        }).catch(function (e) {
-          toast('保存失败: ' + e.message, true);
-        });
-      },
-      inputs: {},
-      form: form
-    };
-    $('#modal').showModal();
-  }
-
-  function renderTokenMonitor() {
-    var root = $('#token-monitor-root');
-    if (!root) return;
-    var d = tmState.data;
-    if (!d) {
-      root.innerHTML = '<div class="empty">暂无监控数据，请点击刷新重试。</div>';
-      return;
-    }
-
-    var periodKey = tmState.period || 'allTime';
-    var pData = (d.periods && d.periods[periodKey]) || (d.periods && d.periods.allTime) || {
-      totalTokens: 0, inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheWrite: 0,
-      costUsd: 0, costCny: 0, messages: 0, sessionsCount: 0, toolsCount: 0, cacheHitRate: 0,
-      tools: [], models: []
-    };
-    var rate = (d.config && d.config.usdToCny) || 7.25;
-    var cur = tmState.currency || 'USD';
-    var ext = d.externalBridge || {};
-
-    root.textContent = '';
-
-    // 1. 顶部工具栏
-    var head = el('div', 'tm-head');
-    var titleWrap = el('div', 'tm-title-wrap');
-    var h2 = el('h2', null, '📊 Token 与配额全景监控');
-    var bridgeBadge = el('span', 'tm-badge ' + (ext.connected ? 'ok' : ''));
-    bridgeBadge.textContent = ext.connected
-      ? ('🟢 本机引擎 + 已桥接 ' + (ext.source === '17321-hub' ? '17321 Hub' : '外部导出文件'))
-      : ('⚡ 本机原生扫描 (' + (d.scannedFiles || 0) + ' 个会话文件)');
-    h2.appendChild(bridgeBadge);
-    titleWrap.appendChild(h2);
-    var subText = el('div', 'tm-sub', '自动解析本机 Antigravity / Claude / Codex / ZCode / MiniMax / DSH / CodeBuddy / Copilot 等真实会话 Token、缓存命中率、折算费用与官方实时配额');
-    titleWrap.appendChild(subText);
-    head.appendChild(titleWrap);
-
-    var controls = el('div', 'tm-controls');
-
-    // 时间周期切换
-    var segPeriod = el('div', 'tm-seg');
-    [
-      { id: 'today', label: '今日' },
-      { id: 'week', label: '本周' },
-      { id: 'month', label: '本月' },
-      { id: 'allTime', label: '全部累计' }
-    ].forEach(function (p) {
-      var b = el('button', periodKey === p.id ? 'active' : '', p.label);
-      b.type = 'button';
-      b.addEventListener('click', function () {
-        tmState.period = p.id;
-        try { localStorage.setItem('agent_hub_tm_period', p.id); } catch (e) {}
-        renderTokenMonitor();
-      });
-      segPeriod.appendChild(b);
-    });
-    controls.appendChild(segPeriod);
-
-    // 币种切换
-    var segCur = el('div', 'tm-seg');
-    ['USD', 'CNY'].forEach(function (c) {
-      var b = el('button', cur === c ? 'active' : '', c === 'CNY' ? '¥ CNY' : '$ USD');
-      b.type = 'button';
-      b.addEventListener('click', function () {
-        tmState.currency = c;
-        try { localStorage.setItem('agent_hub_tm_currency', c); } catch (e) {}
-        renderTokenMonitor();
-      });
-      segCur.appendChild(b);
-    });
-    controls.appendChild(segCur);
-
-    // 操作按钮
-    var btnRefresh = btn('🔄 刷新', 'small', function () {
-      quotasLastFetch = 0;
-      loadTokenMonitor(true).then(function () { toast('Token 与配额数据已更新'); });
-    });
-    var btnConfig = btn('🔗 桥接/API 设置', 'small', openTokenMonitorConfigModal);
-    var btnExportJson = btn('📥 导出 JSON', 'small', function () {
-      window.open('/api/token-monitor/export?format=json', '_blank');
-    });
-    var btnExportCsv = btn('📥 导出 CSV', 'small', function () {
-      window.open('/api/token-monitor/export?format=csv', '_blank');
-    });
-
-    controls.appendChild(btnRefresh);
-    controls.appendChild(btnConfig);
-    controls.appendChild(btnExportJson);
-    controls.appendChild(btnExportCsv);
-    head.appendChild(controls);
-    root.appendChild(head);
-
-    // 2. KPI 指标卡片
-    var kpiGrid = el('div', 'tm-kpi-grid');
-    var topTool = (pData.tools && pData.tools[0]) ? pData.tools[0].displayName : '暂无';
-    var kpis = [
-      {
-        label: '总 Token 消耗 (' + (pData.label || '累计') + ')',
-        val: fmtTok(pData.totalTokens || 0),
-        meta: '↑ 输入 ' + fmtTok(pData.inputTokens || 0) + ' · ↓ 输出 ' + fmtTok(pData.outputTokens || 0)
-      },
-      {
-        label: '预估 API 折算成本',
-        val: fmtCost(pData.costUsd || 0, rate, cur),
-        meta: '按官方 API 公开单价折算 (汇率 ' + rate + ')'
-      },
-      {
-        label: 'Prompt 缓存命中',
-        val: fmtTok(pData.cacheRead || 0),
-        meta: '缓存命中率 ' + (pData.cacheHitRate || 0) + '% · 写入 ' + fmtTok(pData.cacheWrite || 0)
-      },
-      {
-        label: '交互消息 & 会话',
-        val: fmtTok(pData.messages || 0) + ' 条',
-        meta: '跨越 ' + (pData.sessionsCount || 0) + ' 个独立编程会话'
-      },
-      {
-        label: '活跃 AI 工具 & 模型',
-        val: (pData.toolsCount || 0) + ' 款工具',
-        meta: '主力: ' + topTool + ' · ' + ((pData.models && pData.models.length) || 0) + ' 个模型'
-      },
-      {
-        label: '多设备同步 / 17321 桥接',
-        val: ext.connected ? ((ext.devices && ext.devices.length) || 1) + ' 台设备' : '本机独立模式',
-        meta: ext.connected ? ('已连接 ' + ext.hubUrl) : '点击右上「桥接/API 设置」可连 17321'
-      }
-    ];
-    kpis.forEach(function (k) {
-      var c = el('div', 'tm-kpi');
-      c.appendChild(el('div', 'tm-kpi-label', k.label));
-      c.appendChild(el('div', 'tm-kpi-val', k.val));
-      c.appendChild(el('div', 'tm-kpi-meta', k.meta));
-      kpiGrid.appendChild(c);
-    });
-    root.appendChild(kpiGrid);
-
-    // 3. 趋势柱状图 + 365天活跃热力图
-    var chartGrid = el('div', 'tm-grid-2');
-
-    // 3.1 近 30 天趋势柱状图
-    var trendCard = el('div', 'tm-card');
-    var trendHeader = el('div', 'tm-card-title');
-    trendHeader.appendChild(el('span', null, '📈 近 30 天每日 Token 趋势'));
-    var dailyHistory = Array.isArray(d.dailyHistory) ? d.dailyHistory.slice(-30) : [];
-    var maxDayTok = dailyHistory.reduce(function (m, x) { return Math.max(m, x.totalTokens || 0); }, 0) || 1;
-    trendHeader.appendChild(el('span', 'tm-sub', '峰值: ' + fmtTok(maxDayTok) + ' / 日'));
-    trendCard.appendChild(trendHeader);
-
-    if (!dailyHistory.length) {
-      trendCard.appendChild(el('div', 'empty', '暂无近期按日趋势记录'));
-    } else {
-      var barChart = el('div', 'tm-bar-chart');
-      dailyHistory.forEach(function (dayItem) {
-        var col = el('div', 'tm-bar-col');
-        var pct = Math.max(3, Math.round(((dayItem.totalTokens || 0) / maxDayTok) * 100));
-        col.style.height = pct + '%';
-        col.title = dayItem.date + '\n总计: ' + fmtTok(dayItem.totalTokens || 0) + ' tok\n输入: ' + fmtTok(dayItem.inputTokens || 0) + ' / 输出: ' + fmtTok(dayItem.outputTokens || 0) + '\n折算: ' + fmtCost(dayItem.costUsd || 0, rate, cur);
-        barChart.appendChild(col);
-      });
-      trendCard.appendChild(barChart);
-      var axisRow = el('div');
-      axisRow.style.display = 'flex';
-      axisRow.style.justifyContent = 'space-between';
-      axisRow.style.fontSize = '10px';
-      axisRow.style.color = 'var(--mcode-text-subtle)';
-      axisRow.style.marginTop = '6px';
-      axisRow.appendChild(el('span', null, dailyHistory[0].date));
-      axisRow.appendChild(el('span', null, dailyHistory[dailyHistory.length - 1].date));
-      trendCard.appendChild(axisRow);
-    }
-    chartGrid.appendChild(trendCard);
-
-    // 3.2 365 天活跃热力图
-    var heatCard = el('div', 'tm-card');
-    var heatHeader = el('div', 'tm-card-title');
-    heatHeader.appendChild(el('span', null, '🔥 365 天 AI 编程活跃热力图'));
-    var heatmap = Array.isArray(d.heatmap) ? d.heatmap : [];
-    var activeDays = heatmap.filter(function (x) { return (x.tokens || 0) > 0; }).length;
-    heatHeader.appendChild(el('span', 'tm-sub', '累计活跃 ' + activeDays + ' 天'));
-    heatCard.appendChild(heatHeader);
-
-    var heatWrap = el('div', 'tm-heatmap');
-    heatmap.forEach(function (cell) {
-      var lv = cell.level ? (' lv' + cell.level) : '';
-      var div = el('div', 'tm-heat-cell' + lv);
-      div.title = cell.date + ': ' + fmtTok(cell.tokens || 0) + ' tokens (' + (cell.messages || 0) + ' 条消息)';
-      heatWrap.appendChild(div);
-    });
-    heatCard.appendChild(heatWrap);
-    chartGrid.appendChild(heatCard);
-    root.appendChild(chartGrid);
-
-    // 4. 子视图切换导航 (按工具 / 按模型 / 官方平台配额 / 多设备与最近会话)
-    var subtabsBar = el('div', 'tm-subtabs');
-    var subtabDefs = [
-      { id: 'tools', label: '🛠️ 按编程工具 (' + ((pData.tools && pData.tools.length) || 0) + ')' },
-      { id: 'models', label: '🧠 按 AI 模型 (' + ((pData.models && pData.models.length) || 0) + ')' },
-      { id: 'quotas', label: '⚡ 官方平台实时配额' },
-      { id: 'sessions', label: '💻 多设备与最近会话 (' + ((d.recentSessions && d.recentSessions.length) || 0) + ')' }
-    ];
-    subtabDefs.forEach(function (st) {
-      var b = el('button', 'tm-subtab' + (tmState.subtab === st.id ? ' active' : ''), st.label);
-      b.type = 'button';
-      b.addEventListener('click', function () {
-        tmState.subtab = st.id;
-        try { localStorage.setItem('agent_hub_tm_subtab', st.id); } catch (e) {}
-        renderTokenMonitor();
-      });
-      subtabsBar.appendChild(b);
-    });
-    root.appendChild(subtabsBar);
-
-    // 5. 子视图主体内容
-    var detailCard = el('div', 'tm-card');
-    if (tmState.subtab === 'tools') {
-      var toolsList = Array.isArray(pData.tools) ? pData.tools : [];
-      if (!toolsList.length) {
-        detailCard.appendChild(el('div', 'empty', '当前时间周期内暂无工具 Token 消耗记录'));
-      } else {
-        var tableWrap = el('div', 'tm-table-wrapper');
-        var tbl = el('table', 'tm-table');
-        tbl.innerHTML = '<thead><tr>' +
-          '<th scope="col">编程工具</th>' +
-          '<th scope="col" class="num">总 Token</th>' +
-          '<th scope="col" class="num">输入 Token</th>' +
-          '<th scope="col" class="num">输出 Token</th>' +
-          '<th scope="col" class="num">缓存读取 (命中率)</th>' +
-          '<th scope="col" class="num">消息数</th>' +
-          '<th scope="col">用量占比</th>' +
-          '<th scope="col" class="num">预估费用</th>' +
-          '</tr></thead>';
-        var tbody = el('tbody');
-        toolsList.forEach(function (t) {
-          var tr = el('tr');
-          var th = el('th');
-          th.setAttribute('scope', 'row');
-          var dot = el('span', 'tm-dot');
-          dot.style.background = t.color || '#38bdf8';
-          th.appendChild(dot);
-          th.appendChild(el('span', null, t.displayName || t.tool));
-          tr.appendChild(th);
-
-          var tdTot = el('td', 'num', fmtTok(t.totalTokens));
-          tdTot.setAttribute('data-label', '总 Token');
-          tr.appendChild(tdTot);
-
-          var tdIn = el('td', 'num', fmtTok(t.inputTokens));
-          tdIn.setAttribute('data-label', '输入 Token');
-          tr.appendChild(tdIn);
-
-          var tdOut = el('td', 'num', fmtTok(t.outputTokens));
-          tdOut.setAttribute('data-label', '输出 Token');
-          tr.appendChild(tdOut);
-
-          var tdCache = el('td', 'num', fmtTok(t.cacheRead) + ' (' + (t.cacheHitRate || 0) + '%)');
-          tdCache.setAttribute('data-label', '缓存读取');
-          tr.appendChild(tdCache);
-
-          var tdMsgs = el('td', 'num', String(t.messages || 0));
-          tdMsgs.setAttribute('data-label', '消息数');
-          tr.appendChild(tdMsgs);
-
-          var tdShare = el('td');
-          tdShare.setAttribute('data-label', '用量占比');
-          tdShare.innerHTML = '<div style="display:flex;align-items:center;gap:6px"><div class="tm-prog" style="width:72px"><div class="tm-prog-fill" style="width:' + Math.min(100, t.sharePercentage || 0) + '%;background:' + (t.color || '#38bdf8') + '"></div></div><span>' + (t.sharePercentage || 0) + '%</span></div>';
-          tr.appendChild(tdShare);
-
-          var tdCost = el('td', 'num', fmtCost(t.costUsd, rate, cur));
-          tdCost.setAttribute('data-label', '预估费用');
-          tr.appendChild(tdCost);
-
-          tbody.appendChild(tr);
-        });
-        tbl.appendChild(tbody);
-        tableWrap.appendChild(tbl);
-        detailCard.appendChild(tableWrap);
-      }
-    } else if (tmState.subtab === 'models') {
-      var modelsList = Array.isArray(pData.models) ? pData.models : [];
-      if (!modelsList.length) {
-        detailCard.appendChild(el('div', 'empty', '当前时间周期内暂无模型 Token 消耗记录'));
-      } else {
-        var mWrap = el('div', 'tm-table-wrapper');
-        var mTbl = el('table', 'tm-table');
-        mTbl.innerHTML = '<thead><tr>' +
-          '<th scope="col">AI 模型名称</th>' +
-          '<th scope="col">所属工具</th>' +
-          '<th scope="col" class="num">总 Token</th>' +
-          '<th scope="col" class="num">输入 Token</th>' +
-          '<th scope="col" class="num">输出 Token</th>' +
-          '<th scope="col" class="num">缓存读取</th>' +
-          '<th scope="col" class="num">消息数</th>' +
-          '<th scope="col">占比</th>' +
-          '<th scope="col" class="num">预估费用</th>' +
-          '</tr></thead>';
-        var mBody = el('tbody');
-        modelsList.forEach(function (m) {
-          var tr = el('tr');
-          var th = el('th', 'mono', m.model);
-          th.setAttribute('scope', 'row');
-          tr.appendChild(th);
-
-          var tdTools = el('td', null, (m.tools || []).join(', ') || '—');
-          tdTools.setAttribute('data-label', '所属工具');
-          tr.appendChild(tdTools);
-
-          var tdTot = el('td', 'num', fmtTok(m.totalTokens));
-          tdTot.setAttribute('data-label', '总 Token');
-          tr.appendChild(tdTot);
-
-          var tdIn = el('td', 'num', fmtTok(m.inputTokens));
-          tdIn.setAttribute('data-label', '输入 Token');
-          tr.appendChild(tdIn);
-
-          var tdOut = el('td', 'num', fmtTok(m.outputTokens));
-          tdOut.setAttribute('data-label', '输出 Token');
-          tr.appendChild(tdOut);
-
-          var tdCache = el('td', 'num', fmtTok(m.cacheRead));
-          tdCache.setAttribute('data-label', '缓存读取');
-          tr.appendChild(tdCache);
-
-          var tdMsgs = el('td', 'num', String(m.messages || 0));
-          tdMsgs.setAttribute('data-label', '消息数');
-          tr.appendChild(tdMsgs);
-
-          var tdShare = el('td', null, (m.sharePercentage || 0) + '%');
-          tdShare.setAttribute('data-label', '占比');
-          tr.appendChild(tdShare);
-
-          var tdCost = el('td', 'num', fmtCost(m.costUsd, rate, cur));
-          tdCost.setAttribute('data-label', '预估费用');
-          tr.appendChild(tdCost);
-
-          mBody.appendChild(tr);
-        });
-        mTbl.appendChild(mBody);
-        mWrap.appendChild(mTbl);
-        detailCard.appendChild(mWrap);
-      }
-    } else if (tmState.subtab === 'quotas') {
-      var qHeader = el('div', 'tm-card-title');
-      qHeader.appendChild(el('span', null, '⚡ 全平台官方套餐与 API 实时配额'));
-      qHeader.appendChild(btn('🔑 配置 MiniMax / DeepSeek Key', 'small', openTokenMonitorConfigModal));
-      detailCard.appendChild(qHeader);
-
-      var qGrid = el('div');
-      qGrid.style.display = 'grid';
-      qGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(280px, 1fr))';
-      qGrid.style.gap = '12px';
-
-      var allAgents = ['antigravity', 'zcode', 'minimaxcode', 'dsh', 'github-copilot', 'codebuddy', 'codebuddy-cn', 'traecode'];
-      allAgents.forEach(function (ag) {
-        var box = el('div');
-        box.innerHTML = renderQuotasContent(quotasData, quotasError, ag);
-        qGrid.appendChild(box);
-      });
-      detailCard.appendChild(qGrid);
-    } else if (tmState.subtab === 'sessions') {
-      if (ext.connected && Array.isArray(ext.devices) && ext.devices.length) {
-        var devTitle = el('div', 'tm-card-title');
-        devTitle.appendChild(el('span', null, '🖧 已同步多设备列表 (' + ext.devices.length + ' 台)'));
-        detailCard.appendChild(devTitle);
-        var devWrap = el('div', 'tm-table-wrapper');
-        devWrap.style.marginBottom = '16px';
-        var devTbl = el('table', 'tm-table');
-        devTbl.innerHTML = '<thead><tr><th scope="col">设备名称</th><th scope="col">平台/架构</th><th scope="col" class="num">总 Token</th><th scope="col">最后同步时间</th></tr></thead>';
-        var devBody = el('tbody');
-        ext.devices.forEach(function (dv) {
-          var tr = el('tr');
-          var th = el('th', null, dv.hostname || dv.name || dv.deviceId || '设备');
-          th.setAttribute('scope', 'row');
-          tr.appendChild(th);
-          tr.appendChild(el('td', null, (dv.platform || '') + ' ' + (dv.arch || '')));
-          tr.appendChild(el('td', 'num', fmtTok(dv.totalTokens || 0)));
-          tr.appendChild(el('td', null, dv.lastSync || dv.updatedAt || '刚刚'));
-          devBody.appendChild(tr);
-        });
-        devTbl.appendChild(devBody);
-        devWrap.appendChild(devTbl);
-        detailCard.appendChild(devWrap);
-      }
-
-      var sessTitle = el('div', 'tm-card-title');
-      sessTitle.appendChild(el('span', null, '🕒 本机最近活跃 AI 编程会话'));
-      detailCard.appendChild(sessTitle);
-
-      var rSessions = Array.isArray(d.recentSessions) ? d.recentSessions : [];
-      if (!rSessions.length) {
-        detailCard.appendChild(el('div', 'empty', '暂无本机最近会话记录'));
-      } else {
-        var sWrap = el('div', 'tm-table-wrapper');
-        var sTbl = el('table', 'tm-table');
-        sTbl.innerHTML = '<thead><tr>' +
-          '<th scope="col">工具</th>' +
-          '<th scope="col">会话标识</th>' +
-          '<th scope="col">主力模型</th>' +
-          '<th scope="col" class="num">总 Token</th>' +
-          '<th scope="col" class="num">消息数</th>' +
-          '<th scope="col" class="num">预估费用</th>' +
-          '<th scope="col">最后活跃日期</th>' +
-          '</tr></thead>';
-        var sBody = el('tbody');
-        rSessions.slice(0, 40).forEach(function (s) {
-          var tr = el('tr');
-          var th = el('th');
-          th.setAttribute('scope', 'row');
-          var dot = el('span', 'tm-dot');
-          dot.style.background = s.color || '#38bdf8';
-          th.appendChild(dot);
-          th.appendChild(el('span', null, s.toolDisplay || s.tool));
-          tr.appendChild(th);
-
-          var tdId = el('td', 'mono', String(s.sessionId || '').slice(0, 26));
-          tdId.setAttribute('data-label', '会话标识');
-          tr.appendChild(tdId);
-
-          var tdModel = el('td', 'mono', s.primaryModel || 'unknown');
-          tdModel.setAttribute('data-label', '主力模型');
-          tr.appendChild(tdModel);
-
-          var tdTok = el('td', 'num', fmtTok(s.totalTokens));
-          tdTok.setAttribute('data-label', '总 Token');
-          tr.appendChild(tdTok);
-
-          var tdMsg = el('td', 'num', String(s.messages || 0));
-          tdMsg.setAttribute('data-label', '消息数');
-          tr.appendChild(tdMsg);
-
-          var tdCost = el('td', 'num', fmtCost(s.costUsd, rate, cur));
-          tdCost.setAttribute('data-label', '预估费用');
-          tr.appendChild(tdCost);
-
-          var tdDate = el('td', null, s.date || '—');
-          tdDate.setAttribute('data-label', '最后活跃日期');
-          tr.appendChild(tdDate);
-
-          sBody.appendChild(tr);
-        });
-        sTbl.appendChild(sBody);
-        sWrap.appendChild(sTbl);
-        detailCard.appendChild(sWrap);
-      }
-    }
-    root.appendChild(detailCard);
-  }
-
   document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
     if (tab.id === 'tab-chat') tab.addEventListener('click', function () { loadThreads(); loadUsage(); updateStatusBar(); });
-    if (tab.id === 'tab-tokens') tab.addEventListener('click', function () { loadTokenMonitor(false); });
   });
 
   loadSnapshot().then(function () { renderInflight(); loadThreads(); updateStatusBar(); updateModelSummaryUI(); });
