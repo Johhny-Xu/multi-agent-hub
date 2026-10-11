@@ -921,7 +921,7 @@ export async function start(context) {
   // ---------------- 上传 (图片输入/文件上传): 存 dataDir/uploads, /uploads/ 回读
   const IMG_RE = /\.(png|jpe?g|gif|webp|bmp)$/i;
   const TEXT_EXT_RE = /\.(md|txt|log|markdown|json|ya?ml|csv|tsv|js|mjs|cjs|ts|tsx|jsx|py|go|rs|java|c|h|cpp|hpp|cs|php|rb|sh|ps1|bat|cmd|sql|ini|conf|cfg|toml|html|htm|css|xml|vue|svelte|swift|kt|lua|r|tex|srt|vtt|diff|patch)$/i;
-  const UPLOAD_MAX_BYTES = 8_000_000;
+  const UPLOAD_MAX_BYTES = 1024 * 1024;
   const INLINE_TEXT_MAX = 30_000;
   function badReqSoft(msg) { const e = new Error(msg); /** @ts-ignore */ e.status = 400; return e; }
   function safeFileName(name) {
@@ -930,12 +930,12 @@ export async function start(context) {
   }
   async function saveUpload(name, b64) {
     const base = safeFileName(name);
-    if (/^(?:\.env(?:\..*)?|\.?auth\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))$/i.test(base) || /\.(?:key|pem)$/i.test(base)) throw badReqSoft('凭据文件不能作为任务附件上传');
+    if (/^(?:\.env(?:\..*)?|\.?auth\.json|\.?client\.json|\.?agents\.json|\.?accounts\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))$/i.test(base) || /\.(?:key|pem)$/i.test(base)) throw badReqSoft('凭据文件不能作为任务附件上传');
     const encoded = String(b64 || '').replace(/^data:[^;]+;base64,/, '');
     if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) throw badReqSoft('base64 不合法');
     const buf = Buffer.from(encoded, 'base64');
     if (!buf.length) throw badReqSoft('文件内容为空或 base64 不合法');
-    if (buf.length > UPLOAD_MAX_BYTES) throw badReqSoft(`文件超过 ${UPLOAD_MAX_BYTES / 1e6}MB 上限`);
+    if (buf.length > UPLOAD_MAX_BYTES) throw badReqSoft('文件超过 1 MiB 上限');
     const fname = `${randomUUID()}-${base}`;
     await writeFile(join(uploadsDir, fname), buf, { flag: 'wx' });
     let content = null;

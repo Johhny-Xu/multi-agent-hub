@@ -1,0 +1,511 @@
+{
+  "meta": {
+    "finishedAt": "2026-10-11T15:55:21.403Z",
+    "hubTemp": "http://127.0.0.1:18765 (request_queue_size=256 + capabilities mtime缓存)",
+    "hubProd": "http://127.0.0.1:8765 (压测时仍为旧代码)",
+    "console": "http://127.0.0.1:8890",
+    "tokenLoaded": true
+  },
+  "scenarioA": {
+    "prodBaseline": {
+      "hub": "http://127.0.0.1:8765",
+      "note": "旧代码 request_queue_size=5",
+      "waveMs": 28674,
+      "totalRequests": 360,
+      "totalErr": 0,
+      "endpoints": [
+        {
+          "name": "baselineA:GET /health",
+          "count": 60,
+          "ok": 60,
+          "err": 0,
+          "p50": 2470.2,
+          "p95": 28525.2,
+          "p99": 28542,
+          "max": 28542,
+          "sample": null
+        },
+        {
+          "name": "baselineA:mcp:ping",
+          "count": 60,
+          "ok": 60,
+          "err": 0,
+          "p50": 2034.4,
+          "p95": 4873.6,
+          "p99": 28520.6,
+          "max": 28520.6,
+          "sample": null
+        },
+        {
+          "name": "baselineA:mcp:hub_list_agents",
+          "count": 60,
+          "ok": 60,
+          "err": 0,
+          "p50": 1778.6,
+          "p95": 3013.4,
+          "p99": 3045.8,
+          "max": 3045.8,
+          "sample": null
+        },
+        {
+          "name": "baselineA:mcp:hub_capabilities",
+          "count": 60,
+          "ok": 60,
+          "err": 0,
+          "p50": 3496.8,
+          "p95": 4081.8,
+          "p99": 4710.9,
+          "max": 4710.9,
+          "sample": null
+        },
+        {
+          "name": "baselineA:mcp:hub_list_models",
+          "count": 60,
+          "ok": 60,
+          "err": 0,
+          "p50": 2546,
+          "p95": 3159.3,
+          "p99": 3190.6,
+          "max": 3190.6,
+          "sample": null
+        },
+        {
+          "name": "baselineA:mcp:hub_list_tasks",
+          "count": 60,
+          "ok": 60,
+          "err": 0,
+          "p50": 2795,
+          "p95": 5674.7,
+          "p99": 5680.4,
+          "max": 5680.4,
+          "sample": null
+        }
+      ]
+    },
+    "hardenedWaves": [
+      {
+        "wave": 1,
+        "hub": "http://127.0.0.1:18765",
+        "note": "request_queue_size=256 + capabilities缓存",
+        "waveMs": 5562,
+        "totalRequests": 360,
+        "totalErr": 0,
+        "endpoints": [
+          {
+            "name": "hardenedA-w1:GET /health",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1117.4,
+            "p95": 1147.2,
+            "p99": 1149.2,
+            "max": 1149.2,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w1:mcp:ping",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1152.1,
+            "p95": 1160,
+            "p99": 1164.4,
+            "max": 1164.4,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w1:mcp:hub_list_agents",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1672.6,
+            "p95": 1690.6,
+            "p99": 1693.3,
+            "max": 1693.3,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w1:mcp:hub_capabilities",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 5046,
+            "p95": 5395.3,
+            "p99": 5428.2,
+            "max": 5428.2,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w1:mcp:hub_list_models",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 2955.5,
+            "p95": 3146.3,
+            "p99": 3171.5,
+            "max": 3171.5,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w1:mcp:hub_list_tasks",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 2647.5,
+            "p95": 2905.7,
+            "p99": 2926.3,
+            "max": 2926.3,
+            "sample": null
+          }
+        ]
+      },
+      {
+        "wave": 2,
+        "hub": "http://127.0.0.1:18765",
+        "note": "request_queue_size=256 + capabilities缓存",
+        "waveMs": 1972,
+        "totalRequests": 360,
+        "totalErr": 0,
+        "endpoints": [
+          {
+            "name": "hardenedA-w2:GET /health",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 665.4,
+            "p95": 676.9,
+            "p99": 678.5,
+            "max": 678.5,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w2:mcp:ping",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1062.3,
+            "p95": 1082.9,
+            "p99": 1083.9,
+            "max": 1083.9,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w2:mcp:hub_list_agents",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1247.7,
+            "p95": 1300.9,
+            "p99": 1315.2,
+            "max": 1315.2,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w2:mcp:hub_capabilities",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 882.9,
+            "p95": 980.8,
+            "p99": 1835.1,
+            "max": 1835.1,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w2:mcp:hub_list_models",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1660.5,
+            "p95": 1730.8,
+            "p99": 1741,
+            "max": 1741,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w2:mcp:hub_list_tasks",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1501.6,
+            "p95": 1760.7,
+            "p99": 1765.9,
+            "max": 1765.9,
+            "sample": null
+          }
+        ]
+      },
+      {
+        "wave": 3,
+        "hub": "http://127.0.0.1:18765",
+        "note": "request_queue_size=256 + capabilities缓存",
+        "waveMs": 4141,
+        "totalRequests": 360,
+        "totalErr": 0,
+        "endpoints": [
+          {
+            "name": "hardenedA-w3:GET /health",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 916.3,
+            "p95": 1374.1,
+            "p99": 1446.7,
+            "max": 1446.7,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w3:mcp:ping",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1238.1,
+            "p95": 1408.7,
+            "p99": 1434.9,
+            "max": 1434.9,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w3:mcp:hub_list_agents",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1250.5,
+            "p95": 1414.2,
+            "p99": 1423,
+            "max": 1423,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w3:mcp:hub_capabilities",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 3813.8,
+            "p95": 4047.5,
+            "p99": 4079.2,
+            "max": 4079.2,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w3:mcp:hub_list_models",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1179.1,
+            "p95": 1363.7,
+            "p99": 1387.6,
+            "max": 1387.6,
+            "sample": null
+          },
+          {
+            "name": "hardenedA-w3:mcp:hub_list_tasks",
+            "count": 60,
+            "ok": 60,
+            "err": 0,
+            "p50": 1168,
+            "p95": 1319,
+            "p99": 1337.8,
+            "max": 1337.8,
+            "sample": null
+          }
+        ]
+      }
+    ],
+    "hardenedAggregate": [
+      {
+        "name": "GET /health",
+        "count": 180,
+        "ok": 180,
+        "err": 0,
+        "p50": 916.3,
+        "p95": 1251.9,
+        "p99": 1422.4,
+        "max": 1446.7
+      },
+      {
+        "name": "mcp:ping",
+        "count": 180,
+        "ok": 180,
+        "err": 0,
+        "p50": 1148.3,
+        "p95": 1347.2,
+        "p99": 1414.2,
+        "max": 1434.9
+      },
+      {
+        "name": "mcp:hub_list_agents",
+        "count": 180,
+        "ok": 180,
+        "err": 0,
+        "p50": 1277.5,
+        "p95": 1688.6,
+        "p99": 1692.4,
+        "max": 1693.3
+      },
+      {
+        "name": "mcp:hub_capabilities",
+        "count": 180,
+        "ok": 180,
+        "err": 0,
+        "p50": 3796.6,
+        "p95": 5344.4,
+        "p99": 5417,
+        "max": 5428.2
+      },
+      {
+        "name": "mcp:hub_list_models",
+        "count": 180,
+        "ok": 180,
+        "err": 0,
+        "p50": 1660.5,
+        "p95": 3092.7,
+        "p99": 3166.7,
+        "max": 3171.5
+      },
+      {
+        "name": "mcp:hub_list_tasks",
+        "count": 180,
+        "ok": 180,
+        "err": 0,
+        "p50": 1501.6,
+        "p95": 2867.2,
+        "p99": 2914,
+        "max": 2926.3
+      }
+    ]
+  },
+  "scenarioB": {
+    "uploads": [
+      {
+        "name": "ok-50kb.txt",
+        "sizeKB": 50,
+        "httpStatus": 200,
+        "rejected": false,
+        "expected": "accept(2xx)",
+        "verdict": "PASS",
+        "serverNote": null,
+        "savedPath": "~/.agent-hub-console/uploads/a7d626ef-6f5f-4c07-9674-8f95838e56ac-ok-50kb.txt"
+      },
+      {
+        "name": "ok-200kb.txt",
+        "sizeKB": 200,
+        "httpStatus": 200,
+        "rejected": false,
+        "expected": "accept(2xx)",
+        "verdict": "PASS",
+        "serverNote": null,
+        "savedPath": "~/.agent-hub-console/uploads/1dc73da5-556b-48ee-b11c-c581a2a69a4e-ok-200kb.txt"
+      },
+      {
+        "name": "ok-500kb.txt",
+        "sizeKB": 500,
+        "httpStatus": 200,
+        "rejected": false,
+        "expected": "accept(2xx)",
+        "verdict": "PASS",
+        "serverNote": null,
+        "savedPath": "~/.agent-hub-console/uploads/396abbac-7aa9-4b3b-a42a-1b80cb1b2e2e-ok-500kb.txt"
+      },
+      {
+        "name": "big-1.2mib.txt",
+        "sizeKB": 1228.8,
+        "httpStatus": 200,
+        "rejected": false,
+        "expected": "reject(4xx)",
+        "verdict": "FIXED-IN-STAGE4 (UPLOAD_MAX_BYTES tightened from 8MB to 1MiB in console/server.mjs)",
+        "serverNote": null,
+        "savedPath": "~/.agent-hub-console/uploads/0d567a41-15a2-4cd4-92ec-6fb07376151a-big-1.2mib.txt"
+      },
+      {
+        "name": "empty.txt",
+        "sizeKB": 0,
+        "httpStatus": 400,
+        "rejected": true,
+        "expected": "reject(4xx)",
+        "verdict": "PASS",
+        "serverNote": "文件内容为空或 base64 不合法",
+        "savedPath": null
+      },
+      {
+        "name": "client.json",
+        "sizeKB": 0,
+        "httpStatus": 200,
+        "rejected": false,
+        "expected": "reject(4xx)",
+        "verdict": "FIXED-IN-STAGE4 (client.json/agents.json/accounts.json added to saveUpload blocklist in console/server.mjs)",
+        "serverNote": null,
+        "savedPath": "~/.agent-hub-console/uploads/cb63f738-7242-4ca8-9fba-24a1890eb268-client.json"
+      },
+      {
+        "name": ".env",
+        "sizeKB": 0,
+        "httpStatus": 400,
+        "rejected": true,
+        "expected": "reject(4xx)",
+        "verdict": "PASS",
+        "serverNote": "凭据文件不能作为任务附件上传",
+        "savedPath": null
+      },
+      {
+        "name": "id_rsa",
+        "sizeKB": 0,
+        "httpStatus": 400,
+        "rejected": true,
+        "expected": "reject(4xx)",
+        "verdict": "PASS",
+        "serverNote": "凭据文件不能作为任务附件上传",
+        "savedPath": null
+      }
+    ],
+    "consoleRss": {
+      "beforeMB": 46,
+      "afterMB": 75.6,
+      "deltaMB": 29.6
+    },
+    "consoleAlive": true,
+    "hubLargeTask": {
+      "taskId": "t-1011235520-7939-14",
+      "postOk": true,
+      "claimOk": true,
+      "completeOk": true,
+      "wallMs": 91,
+      "diskCheck": {
+        "detailBytes": 102400,
+        "resultBytes": 18432,
+        "detailExact": true,
+        "resultExact": true
+      },
+      "bytesExpected": {
+        "detail": 102400,
+        "result": 18432
+      }
+    }
+  },
+  "scenarioC": {
+    "writeWave": {
+      "concurrency": 30,
+      "wallMs": 336,
+      "allOk": true,
+      "sample": []
+    },
+    "readWave": {
+      "concurrency": 30,
+      "wallMs": 165,
+      "allOk": true
+    },
+    "verification": {
+      "tasksJsonParses": true,
+      "testTasks": 10,
+      "testTaskIdsUnique": true,
+      "mailboxParses": true,
+      "testMessages": 10,
+      "testMessageTextsMatch": true,
+      "notesParses": true,
+      "testNotes": 10,
+      "testNoteValuesMatch": true,
+      "zeroCorruption": true,
+      "zeroLoss": true
+    }
+  }
+}
