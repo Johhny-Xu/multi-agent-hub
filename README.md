@@ -332,4 +332,5 @@ python packaging/build.py --output ../agenthub-releases
 
 ## 开源协议
 
-本项目遵循 [MIT License](LICENSE)。
+本项目遵循 [Apache License 2.0](LICENSE) 开源协议（允许使用、修改与分发，衍生作品须保留原作者版权声明、许可证文本及修改说明，并包含专利授权与商标保护条款）。
+

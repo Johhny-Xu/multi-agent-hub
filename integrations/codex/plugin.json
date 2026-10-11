@@ -6,7 +6,7 @@
   "author": {
     "name": "multi-agent-hub Contributors"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "extensions": {
     "com.openai": {
       "interface": {
