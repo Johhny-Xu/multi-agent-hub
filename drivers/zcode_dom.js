@@ -272,9 +272,9 @@ function extractDelta(beforeText, afterText, prompt) {
       let last = "";
       let stable = 0;
       let submitted = false;
-      const timer = setTimeout(() => resolve(last), 900000);
+      const timer = setTimeout(() => resolve(last), 1800000);
       (async () => {
-        for (let i = 0; i < 300; i++) {
+        for (let i = 0; i < 600; i++) {
           await new Promise((r) => setTimeout(r, 3000));
           // AUTO_DISMISS_DIALOG: 代理弹出的选择框会阻塞回复, 自动点「忽略」放行
           try {

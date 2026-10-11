@@ -6,13 +6,33 @@
 
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { readFile, writeFile, mkdir, rename, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const HOME = homedir();
 const AGENTS_JSON = join(HOME, '.config', 'agenthub-codearts', 'agents.json');
 const CODEARTS_ENV = join(HOME, '.config', 'agenthub-codearts', 'codearts-auth.env');
+
+const _writeLocks = new Map();
+/** 进程内异步互斥锁：同一 key 的临界区严格串行，消除并发读-改-写覆盖丢失（RMW lost update） */
+async function withLock(key, fn) {
+  const prev = _writeLocks.get(key) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  _writeLocks.set(key, gate);
+  try { await prev; } catch { /* 前序临界区失败不阻塞后续 */ }
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (_writeLocks.get(key) === gate) _writeLocks.delete(key);
+  }
+}
+/** agents.json / codearts 凭据写操作共用一把互斥锁（低频管理操作，串行无性能影响） */
+const AUTH_WRITE_LOCK = 'auth-write';
+const BAK_MODEL_KEEP = 5;
+let bakSeq = 0;
 
 // ---------------------------------------------------------------- 登录命令表
 export const LOGIN_COMMANDS = {
@@ -141,7 +161,7 @@ export async function logout(worker) {
 }
 
 // ---------------------------------------------------------------- CodeArts AK/SK
-export async function saveCodeArts(ak, sk) {
+async function _saveCodeArts(ak, sk) {
   if (!/^[\w-]{8,128}$/.test(ak) || !/^[\w-]{8,128}$/.test(sk)) {
     return { ok: false, error: 'AK/SK 格式不合法（仅限字母数字-_，长度 8~128）' };
   }
@@ -156,10 +176,22 @@ async function loadAgents() {
   try { return JSON.parse(await readFile(AGENTS_JSON, 'utf-8')); } catch { return { agents: {} }; }
 }
 
+/** 生成新备份后清理 .bak-model-*，仅保留最新 BAK_MODEL_KEEP 份 */
+async function pruneModelBackups() {
+  try {
+    const dir = join(AGENTS_JSON, '..');
+    const files = (await readdir(dir)).filter((f) => f.startsWith('agents.json.bak-model-')).sort();
+    for (const f of files.slice(0, Math.max(0, files.length - BAK_MODEL_KEEP))) {
+      try { await rm(join(dir, f)); } catch { /* 单个删除失败忽略 */ }
+    }
+  } catch { /* 目录不存在等 */ }
+}
+
 async function saveAgents(data) {
   await mkdir(join(AGENTS_JSON, '..'), { recursive: true });
-  await writeFile(`${AGENTS_JSON}.bak-model-${Date.now()}`, await readFile(AGENTS_JSON, 'utf-8').catch(() => '[]'));
+  await writeFile(`${AGENTS_JSON}.bak-model-${Date.now()}-${++bakSeq}`, await readFile(AGENTS_JSON, 'utf-8').catch(() => '[]'));
   await writeFile(AGENTS_JSON, JSON.stringify(data, null, 2));
+  await pruneModelBackups();
 }
 
 export async function listModels() {
@@ -175,7 +207,7 @@ export async function listModels() {
   return { file: AGENTS_JSON, workers };
 }
 
-export async function setDefaultModel(worker, alias) {
+async function _setDefaultModel(worker, alias) {
   const d = await loadAgents();
   const prof = d.agents?.[worker];
   if (!prof) return { ok: false, error: `agents.json 中不存在 worker: ${worker}` };
@@ -191,7 +223,7 @@ export async function setDefaultModel(worker, alias) {
   return { ok: true, worker, prev, now: models.default, note: 'hub 每次派发实时读取，无需重启' };
 }
 
-export async function addCustomModel(worker, alias, id) {
+async function _addCustomModel(worker, alias, id) {
   if (!/^[\w.-]{1,32}$/.test(alias)) return { ok: false, error: '别名不合法（字母数字._-，≤32）' };
   if (typeof id !== 'string' || id.length < 1 || id.length > 96) return { ok: false, error: '模型 id 不合法（1~96 字符）' };
   const d = await loadAgents();
@@ -204,7 +236,7 @@ export async function addCustomModel(worker, alias, id) {
   return { ok: true, worker, alias, id };
 }
 
-export async function removeCustomModel(worker, alias) {
+async function _removeCustomModel(worker, alias) {
   if (alias === 'default') return { ok: false, error: 'default 别名不可删除' };
   const d = await loadAgents();
   const prof = d.agents?.[worker];
@@ -213,3 +245,9 @@ export async function removeCustomModel(worker, alias) {
   await saveAgents(d);
   return { ok: true, worker, alias };
 }
+
+// ---- 并发加固：以下导出为串行互斥包装（内部实现为 _<name>） ----
+export function saveCodeArts(ak, sk) { return withLock(AUTH_WRITE_LOCK, () => _saveCodeArts(ak, sk)); }
+export function setDefaultModel(worker, alias) { return withLock(AUTH_WRITE_LOCK, () => _setDefaultModel(worker, alias)); }
+export function addCustomModel(worker, alias, id) { return withLock(AUTH_WRITE_LOCK, () => _addCustomModel(worker, alias, id)); }
+export function removeCustomModel(worker, alias) { return withLock(AUTH_WRITE_LOCK, () => _removeCustomModel(worker, alias)); }
