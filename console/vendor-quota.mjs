@@ -8,7 +8,8 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import tls from 'node:tls';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const HOME = homedir();
 const CACHE_TTL_MS = 60_000;
@@ -19,7 +20,7 @@ const cache = new Map();
 const PROXY_URL = process.env.AGENTHUB_QUOTA_PROXY || 'http://127.0.0.1:7890';
 
 /** 支持原生配额读取的 worker 清单（github-copilot 令牌在系统 keyring，暂不直读） */
-export const QUOTA_WORKERS = ['codebuddy-cn', 'minimaxcode', 'antigravity', 'github-copilot'];
+export const QUOTA_WORKERS = ['codebuddy', 'codebuddy-cn', 'github-copilot', 'minimaxcode', 'mimocode', 'antigravity', 'traecode', 'zcode', 'codearts'];
 
 // ---------------------------------------------------------------- utils
 /** @returns {Promise<object|null>} */
@@ -126,14 +127,22 @@ function decodeChunked(body) {
 export async function fetchJsonSmart(url, options = {}, timeoutMs = 15_000) {
   try {
     return await fetchJson(url, options, timeoutMs);
-  } catch (e) {
-    return await fetchViaProxy(url, options, timeoutMs);
+  } catch {
+    try {
+      return await fetchViaProxy(url, options, timeoutMs);
+    } catch (pe) {
+      throw new Error(`直连与代理(${PROXY_URL})均不可达: ${pe.message}`);
+    }
   }
 }
 
 // ---------------------------------------------------------------- token readers
 /** 令牌读取器：CLI OAuth 凭据文件是唯一事实来源 */
 const TOKEN_READERS = {
+  'codebuddy': async () => {
+    const d = await readJsonSafe(join(HOME, '.codebuddy', 'auth.info'));
+    return d?.auth?.accessToken || null;
+  },
   'codebuddy-cn': async () => {
     const d = await readJsonSafe(join(HOME, '.codebuddy-cn', 'auth.info'));
     return d?.auth?.accessToken || null;
@@ -146,7 +155,29 @@ const TOKEN_READERS = {
     const d = await readJsonSafe(join(HOME, '.gemini', 'antigravity-cli', 'antigravity-oauth-token'));
     return d?.token?.access_token || null;
   },
-  'github-copilot': async () => null, // 令牌在系统 keyring，v1 不直读
+  'github-copilot': async () => {
+    // 令牌在 gnome-keyring（Secret Service），经 python 助手读取
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const pExec = promisify(execFile);
+    const helper = join(dirname(fileURLToPath(import.meta.url)), 'secret-get.py');
+    const { stdout } = await pExec('python3', [helper, 'copilot-cli', 'https://github.com'], { timeout: 8000 });
+    const token = String(stdout || '').trim();
+    return token || null;
+  },
+  'traecode': async () => {
+    try { return (await readFile(join(HOME, '.trae-cn', 'trae-jwt-token'), 'utf-8')).trim() || null; }
+    catch { return null; }
+  },
+  'zcode': async () => {
+    const d = await readJsonSafe(join(HOME, '.zcode', 'v2', 'credentials.json'));
+    if (!d) return null;
+    // 优先当前激活 provider 的 coding-plan key，其次任意 key
+    const active = String(d['oauth:active_provider'] || '');
+    const keys = Object.keys(d).filter((k) => typeof d[k] === 'string' && k.endsWith(':api-key'));
+    const hit = keys.find((k) => active && k.includes(active)) || keys.find((k) => k.includes('zai')) || keys[0];
+    return hit ? d[hit] : (d['oauth:bigmodel:access_token'] || null);
+  },
 };
 
 async function readToken(worker) {
@@ -175,26 +206,26 @@ function refillCadence(acc) {
   return 'Monthly';
 }
 
-async function fetchCodeBuddyCnQuota(token) {
-  if (!token) return { message: 'CodeBuddy CN 凭据不可用（未登录或 auth.info 缺失）。' };
+async function fetchCodeBuddyQuota(token, base, label) {
+  if (!token) return { message: `${label} 凭据不可用（未登录或 auth.info 缺失）。` };
   let res;
   try {
-    res = await fetchJson('https://copilot.tencent.com/v2/billing/meter/get-user-resource', {
+    res = await fetchJson(base + '/v2/billing/meter/get-user-resource', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: '{}',
     });
   } catch (e) {
-    return { message: `CodeBuddy CN 请求异常: ${e.message}` };
+    return { message: `${label} 请求异常: ${e.message}` };
   }
-  if (res.status === 401 || res.status === 403) return { message: 'CodeBuddy CN 凭据无效或已过期。' };
-  if (!res.ok) return { message: `CodeBuddy CN 配额接口错误 (${res.status})。` };
+  if (res.status === 401 || res.status === 403) return { message: `${label} 凭据无效或已过期。` };
+  if (!res.ok) return { message: `${label} 配额接口错误 (${res.status})。` };
   const json = res.json;
-  if (json?.code !== 0) return { message: `CodeBuddy CN 配额错误: ${json?.msg || 'unknown'}` };
+  if (json?.code !== 0) return { message: `${label} 配额错误: ${json?.msg || 'unknown'}` };
 
   const data = json?.data?.Response?.Data || {};
   const accounts = Array.isArray(data.Accounts) ? data.Accounts : [];
-  if (accounts.length === 0) return { message: 'CodeBuddy CN 已连接，未发现积分套餐。' };
+  if (accounts.length === 0) return { message: `${label} 已连接，未发现积分套餐。` };
 
   const cycleEndMs = (acc) => {
     const r = parseResetTime(acc.CycleEndTime);
@@ -241,7 +272,7 @@ async function fetchCodeBuddyCnQuota(token) {
   });
 
   const basePkg = refills[0] || accounts[0] || {};
-  return { plan: basePkg.PackageName || basePkg.SubProductName || 'CodeBuddy CN', quotas };
+  return { plan: basePkg.PackageName || basePkg.SubProductName || label, quotas };
 }
 
 // ---------------------------------------------------------------- minimax
@@ -497,16 +528,111 @@ async function fetchAntigravityQuota(token) {
 }
 
 // ---------------------------------------------------------------- github-copilot
-async function fetchCopilotQuota() {
-  return { message: 'Copilot 令牌存于系统 keyring，原生直读将在后续版本提供。' };
+async function fetchCopilotQuota(token) {
+  if (!token) return { message: 'Copilot 令牌不可读（keyring 未解锁或未登录 copilot CLI）。' };
+  let res;
+  try {
+    res = await fetchJson('https://api.github.com/copilot_internal/user', {
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/json',
+        'X-GitHub-Api-Version': '2025-04-01',
+        'User-Agent': 'GitHub Copilot CLI',
+        'Editor-Version': 'vscode/1.100.0',
+        'Editor-Plugin-Version': 'copilot-chat/0.26.7',
+      },
+    });
+  } catch (e) {
+    return { message: `GitHub API 请求异常: ${e.message}` };
+  }
+  if (!res.ok) return { message: `GitHub API 错误 (${res.status})。` };
+  const data = res.json || {};
+  const fmtSnap = (q) => q ? { used: (q.entitlement || 0) - (q.remaining || 0), total: q.entitlement || 0, remaining: q.remaining || 0, unlimited: !!q.unlimited } : { used: 0, total: 0, unlimited: true };
+
+  if (data.quota_snapshots) {
+    const resetAt = parseResetTime(data.quota_reset_date);
+    const s = data.quota_snapshots;
+    return {
+      plan: data.copilot_plan || data.access_type_sku || 'Copilot',
+      quotas: {
+        chat: { ...fmtSnap(s.chat), resetAt },
+        completions: { ...fmtSnap(s.completions), resetAt },
+        premium_interactions: { ...fmtSnap(s.premium_interactions), resetAt },
+      },
+    };
+  }
+  if (data.monthly_quotas || data.limited_user_quotas) {
+    const monthly = data.monthly_quotas || {};
+    const used = data.limited_user_quotas || {};
+    const resetAt = parseResetTime(data.limited_user_reset_date);
+    return {
+      plan: data.copilot_plan || data.access_type_sku || 'Copilot',
+      quotas: {
+        chat: { used: used.chat || 0, total: monthly.chat || 0, unlimited: false, resetAt },
+        completions: { used: used.completions || 0, total: monthly.completions || 0, unlimited: false, resetAt },
+      },
+    };
+  }
+  return { plan: data.copilot_plan || data.access_type_sku || null, message: 'Copilot 已连接，未返回配额结构。' };
+}
+
+// ---------------------------------------------------------------- traecode
+function jwtExp(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64').toString('utf-8'));
+    return payload.exp ? Number(payload.exp) : null;
+  } catch { return null; }
+}
+
+async function fetchTraeQuota(token) {
+  if (!token) return { message: 'Trae 凭据不可用（~/.trae-cn/trae-jwt-token 缺失）。' };
+  const exp = jwtExp(token);
+  if (!exp) return { plan: 'Trae CN', message: '凭据在线（JWT 无法解析有效期）。' };
+  const days = (exp * 1000 - Date.now()) / 86400000;
+  if (days <= 0) return { plan: 'Trae CN', message: 'JWT 已过期，请重新登录 TraeCode 桌面端。' };
+  return { plan: 'Trae CN', message: `凭据在线，有效期约 ${days < 1 ? Math.max(1, Math.round(days * 24)) + ' 小时' : Math.round(days) + ' 天'}（官方未公开分模型配额端点）。` };
+}
+
+// ---------------------------------------------------------------- zcode
+async function fetchZcodeQuota(token) {
+  if (!token) return { message: 'ZCode 凭据不可用（~/.zcode/v2/credentials.json 缺失）。' };
+  // coding-plan api-key / bigmodel oauth token 均不适用于公开 monitor 接口（实测 401）
+  const attempts = [
+    ['https://api.z.ai/api/monitor/usage/quota/limit', token],
+  ];
+  for (const [url, key] of attempts) {
+    try {
+      const res = await fetchJson(url, { headers: { Authorization: `Bearer ${key}` } });
+      if (res.ok && res.json?.success !== false && res.json?.code !== 401) {
+        const d = res.json?.data || res.json;
+        return { plan: 'GLM Coding Plan', quotas: { usage: { used: toFiniteNumber(d?.used, 0), total: toFiniteNumber(d?.total, 0), unlimited: false, resetAt: parseResetTime(d?.reset_time || d?.resetTime) } } };
+      }
+    } catch { /* 下一个 */ }
+  }
+  return { plan: 'GLM Coding Plan', message: 'coding-plan 凭据不适用于公开 monitor 接口；配额以 ZCode 桌面端显示为准。' };
+}
+
+// ---------------------------------------------------------------- mimocode
+async function fetchMimoQuota() {
+  return { plan: 'Xiaomi MiMo', message: 'serviceToken 无公开配额端点（走 9router 通道，额度以小米客户端显示为准）。' };
+}
+
+// ---------------------------------------------------------------- codearts
+async function fetchCodeArtsQuota() {
+  return { plan: 'CodeArts Doer', message: 'AK/SK 计费体系暂无轻量配额接口；模型倍率见模型目录。' };
 }
 
 // ---------------------------------------------------------------- public API
 const FETCHERS = {
-  'codebuddy-cn': fetchCodeBuddyCnQuota,
-  'minimaxcode': fetchMiniMaxQuota,
-  'antigravity': fetchAntigravityQuota,
+  'codebuddy': (t) => fetchCodeBuddyQuota(t, 'https://www.codebuddy.ai', 'CodeBuddy 国际版'),
+  'codebuddy-cn': (t) => fetchCodeBuddyQuota(t, 'https://copilot.tencent.com', 'CodeBuddy CN'),
   'github-copilot': fetchCopilotQuota,
+  'minimaxcode': fetchMiniMaxQuota,
+  'mimocode': fetchMimoQuota,
+  'antigravity': fetchAntigravityQuota,
+  'traecode': fetchTraeQuota,
+  'zcode': fetchZcodeQuota,
+  'codearts': fetchCodeArtsQuota,
 };
 
 export function clearQuotaCache(worker) {
