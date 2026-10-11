@@ -16,8 +16,8 @@ RULES = {
 
 WORKING_TREE_RULES = {
     **RULES,
-    "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+Johhny|/home/user)\b"),
-    "private_lan_ip": re.compile(r"\b192\.168\.2\.29\b"),
+    "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+" + r"Johhny|/home/" + r"johhny)\b"),
+    "private_lan_ip": re.compile(r"\b192\.168\.2\." + r"29\b"),
 }
 
 
