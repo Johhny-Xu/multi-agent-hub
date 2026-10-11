@@ -3126,7 +3126,12 @@
 .qa-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#22d3ee)}
 .qa-bar i.warn{background:linear-gradient(90deg,#f59e0b,#f97316)}
 .qa-bar i.full{background:linear-gradient(90deg,#ef4444,#dc2626)}
-.qa-acts{display:flex;gap:6px;margin-top:8px}
+.qa-acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;row-gap:6px}
+.qa-acts select{flex:1 1 120px;min-width:110px}
+.qa-quotas{max-height:158px;overflow-y:auto;padding-right:3px;margin:0 -2px}
+.qa-quotas::-webkit-scrollbar{width:5px}
+.qa-quotas::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);border-radius:3px}
+.qa-quotas .qa-row{margin:5px 0}
 .qa-acts select{flex:1;min-width:0;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:4px 6px;font-size:12px}
 .qa-btn{border:1px solid rgba(148,163,184,.3);background:transparent;color:#cbd5e1;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
 .qa-btn:hover{border-color:#60a5fa;color:#60a5fa}
@@ -7105,7 +7110,11 @@
     const plan = document.createElement('span'); plan.className = 'qa-plan'; plan.textContent = q.plan || '';
     h.append(t, plan); card.appendChild(h);
     const quotas = q.quotas && Object.keys(q.quotas).length ? q.quotas : null;
-    if (quotas) { for (const [name, qq] of Object.entries(quotas)) card.appendChild(bar(name, qq)); }
+    if (quotas) {
+      const qwrap = document.createElement('div'); qwrap.className = 'qa-quotas';
+      for (const [name, qq] of Object.entries(quotas)) qwrap.appendChild(bar(name, qq));
+      card.appendChild(qwrap);
+    }
     else { const m = document.createElement('div'); m.className = 'qa-msg'; m.textContent = q.message || '暂无配额数据'; card.appendChild(m); }
 
     const modelsWrap = modelRow(worker);
