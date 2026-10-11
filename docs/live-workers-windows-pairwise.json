@@ -1,7 +1,7 @@
 {
   "platform": "Windows",
   "real_calls": true,
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0",
   "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
   "results": [
     {
@@ -14,7 +14,7 @@
       "case": "codebuddy-cn-t0s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_693c68b960.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -35,7 +35,7 @@
         "--settings",
         "{\"alwaysThinkingEnabled\":false}"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -117,7 +117,7 @@
       "case": "codebuddy-cn-t0s1i0f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -139,7 +139,7 @@
         "{\"alwaysThinkingEnabled\":false}",
         "--include-partial-messages"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s1i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s1i0f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -468,7 +468,7 @@
       "case": "codebuddy-cn-t0s0i1f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nAdd the image sum and the input.txt sum to obtain one total.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -489,7 +489,7 @@
         "--settings",
         "{\"alwaysThinkingEnabled\":false}"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s0i1f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s0i1f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -634,7 +634,7 @@
       "case": "codebuddy-cn-t0s1i1f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nUse nonce=CHECK_53f7368384.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -656,7 +656,7 @@
         "{\"alwaysThinkingEnabled\":false}",
         "--include-partial-messages"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s1i1f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t0s1i1f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -867,7 +867,7 @@
       "case": "codebuddy-cn-t1s1i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_5c5315fc9a.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -889,7 +889,7 @@
         "{\"alwaysThinkingEnabled\":true}",
         "--include-partial-messages"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s1i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s1i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -1032,7 +1032,7 @@
       "case": "codebuddy-cn-t1s0i0f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -1053,7 +1053,7 @@
         "--settings",
         "{\"alwaysThinkingEnabled\":true}"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s0i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s0i0f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -1180,7 +1180,7 @@
       "case": "codebuddy-cn-t1s0i1f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nUse nonce=CHECK_2ddea382f7.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -1201,7 +1201,7 @@
         "--settings",
         "{\"alwaysThinkingEnabled\":true}"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s0i1f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s0i1f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -1307,7 +1307,7 @@
       "case": "mimocode-t0s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -1317,7 +1317,7 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_eac71c0aaa.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -1380,7 +1380,7 @@
       "case": "codebuddy-cn-t1s1i1f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nAdd the image sum and the input.txt sum to obtain one total.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -1402,7 +1402,7 @@
         "{\"alwaysThinkingEnabled\":true}",
         "--include-partial-messages"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s1i1f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\codebuddy-cn-t1s1i1f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -1942,7 +1942,7 @@
       "case": "mimocode-t0s1i1f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -1952,9 +1952,9 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nUse nonce=CHECK_4750eea73d.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i1f0\\image.png"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i1f0\\image.png"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i1f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i1f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -2017,7 +2017,7 @@
       "case": "mimocode-t0s1i0f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -2027,9 +2027,9 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i0f1\\input.txt"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i0f1\\input.txt"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s1i0f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -2125,7 +2125,7 @@
       "case": "mimocode-t0s0i1f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -2135,11 +2135,11 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nAdd the image sum and the input.txt sum to obtain one total.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i1f1\\image.png",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i1f1\\image.png",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i1f1\\input.txt"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i1f1\\input.txt"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i1f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t0s0i1f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -2238,7 +2238,7 @@
       "case": "mimocode-t1s0i1f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -2248,9 +2248,9 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nUse nonce=CHECK_14954be24d.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i1f0\\image.png"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i1f0\\image.png"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i1f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i1f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -2315,7 +2315,7 @@
       "case": "mimocode-t1s0i0f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -2325,9 +2325,9 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i0f1\\input.txt"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i0f1\\input.txt"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s0i0f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -2428,7 +2428,7 @@
       "case": "mimocode-t1s1i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -2438,7 +2438,7 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_eebfb6161d.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -2520,7 +2520,7 @@
       "case": "mimocode-t1s1i1f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -2530,11 +2530,11 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nAdd the image sum and the input.txt sum to obtain one total.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i1f1\\image.png",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i1f1\\image.png",
         "--file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i1f1\\input.txt"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i1f1\\input.txt"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i1f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-58biv1u0\\mimocode-t1s1i1f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,

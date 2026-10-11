@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import time
 
-exe_path = r"<USER_HOME>\.codeartsdoer\CodeArts_Agent\AgentKernel_Vscode_26_9_501_1_0_0-1151846206572736.exe"
+exe_path = os.path.expanduser(r"~\.codeartsdoer\CodeArts_Agent\AgentKernel_Vscode_26_9_501_1_0_0-1151846206572736.exe")
 bak_path = exe_path + ".bak"
 patched_path = exe_path + ".patched"
 

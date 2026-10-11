@@ -35,7 +35,7 @@
 
 ### 本地发布文件
 
-目录：<USER_HOME>/Desktop/agenthub-releases。旧 0.7.0 文件未覆盖。
+目录：C:/Users/user/Desktop/agenthub-releases。旧 0.7.0 文件未覆盖。
 
 | 文件 | 字节 | SHA256 |
 | --- | ---: | --- |

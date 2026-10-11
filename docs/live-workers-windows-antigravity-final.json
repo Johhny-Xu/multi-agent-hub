@@ -1,7 +1,7 @@
 {
   "platform": "Windows",
   "real_calls": true,
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-61nl96ty",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-61nl96ty",
   "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
   "results": [
     {
@@ -13,7 +13,7 @@
       "file": false,
       "case": "antigravity-t1s0i0f0",
       "argv": [
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-probe-antigravity-20261008\\agy.exe",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-probe-antigravity-20261008\\agy.exe",
         "--model",
         "gemini-3.8-flash-medium",
         "--mode",
@@ -23,7 +23,7 @@
         "--print-timeout",
         "50s",
         "--log-file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-61nl96ty\\antigravity-t1s0i0f0\\agy.log",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-61nl96ty\\antigravity-t1s0i0f0\\agy.log",
         "--output-format",
         "json",
         "--effort",
@@ -31,7 +31,7 @@
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_d040c25638.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-61nl96ty\\antigravity-t1s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-61nl96ty\\antigravity-t1s0i0f0",
       "status": "blocked_region",
       "exit_code": 3,
       "timed_out": false,

@@ -99,10 +99,8 @@ const WORKER_MODELS = {
   ]
 };
 
-// Fallback known cluster tokens for zero-config passwordless LAN pairing
-const KNOWN_TOKENS = {
-  '127.0.0.1': ''
-};
+// Optional known cluster tokens from external environment only (never hardcode private IPs or tokens)
+const KNOWN_TOKENS = {};
 
 let statusBarItem;
 let statusProvider;
@@ -517,7 +515,7 @@ async function discoverHubs() {
     if (res.ok && res.data) {
       candidates.push({
         label: `$(vm) 本机 Hub (127.0.0.1:${port})`,
-        description: `v${res.data.version || '0.9.9.1'} · 免密可用`,
+        description: `v${res.data.version || '0.9.4'} · 免密可用`,
         detail: `端点: http://127.0.0.1:${port}/mcp`,
         url: `http://127.0.0.1:${port}/mcp`,
         host: '127.0.0.1',
@@ -526,15 +524,15 @@ async function discoverHubs() {
     }
   }
 
-  // 2. Known LAN hosts probe (e.g. 127.0.0.1)
-  const knownIps = ['127.0.0.1'];
+  // 2. Configured LAN hosts probe (from environment if provided)
+  const knownIps = (process.env.AGENTHUB_KNOWN_IPS || '').split(',').map((s) => s.trim()).filter(Boolean);
   for (const ip of knownIps) {
     const url = `http://${ip}:8765/health`;
     const res = await fetchJson(url, null, 800);
     if (res.ok && res.data && !candidates.some((c) => c.url.includes(ip))) {
       candidates.push({
         label: `$(server) 局域网 Hub (${ip}:8765)`,
-        description: `v${res.data.version || '0.9.9.1'} · 自动免密配对`,
+        description: `v${res.data.version || '0.9.4'} · 自动免密配对`,
         detail: `端点: http://${ip}:8765/mcp`,
         url: `http://${ip}:8765/mcp`,
         host: ip,
