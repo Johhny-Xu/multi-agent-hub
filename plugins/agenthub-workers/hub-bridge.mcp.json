@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "mcpServers": {
+    "hub-bridge": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./mcp/server.mjs"
+      ],
+      "description": "Multi-Agent Hub 任务分派、结果回收、局域网只读发现与官方登录状态查询本地 MCP 桥接服务",
+      "timeout": 300000
+    }
+  }
+}

@@ -177,13 +177,16 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 ---
 
-### 方案四：华为 CodeArts / VS Code 图形扩展一键导入
+### 方案四：IDE 图形扩展 / MiniMax Plugin 一键导入
 
-> **适合场景**：习惯使用 IDE 图形化扩展管理器的开发者。
+> **适合场景**：习惯使用 IDE 图形化扩展管理器或 MiniMax 插件中心导入的开发者。
 
-1. 获取扩展安装包：`multi-agent-hub-0.9.4.carts`（CodeArts IDE 专属）或 `.vsix`（VS Code 及兼容编辑器）；
-2. 在编辑器的“扩展”管理面板选择“从 VSIX/CARTS 安装...”导入；
-3. 安装完成后自动注入侧边栏状态大盘面板、指示灯以及工作区 MCP 规则。
+- **华为 CodeArts / VS Code 桌面扩展**：
+  1. 获取扩展安装包：`multi-agent-hub-0.9.4.carts`（CodeArts IDE 专属）或 `.vsix`（VS Code 及兼容编辑器）；
+  2. 在编辑器的“扩展”管理面板选择“从 VSIX/CARTS 安装...”导入；
+  3. 安装完成后自动注入侧边栏状态大盘面板、指示灯以及工作区 MCP 规则。
+- **MiniMax Code / MiniMax Agent 官方插件包（MiniMax Plugin V1）**：
+  - 直接导入 `agenthub-workers-0.9.4-minimax-plugin.zip`（ZIP 根目录直接包含 `.minimax-plugin/plugin.json`、`hub-bridge.mcp.json` 与 `skills/dispatch-hub/SKILL.md`），或指向仓库子目录 `plugins/agenthub-workers`（同时兼容 `.claude-plugin/plugin.json`、`.zcode-plugin/plugin.json` 与 Agent Plugins 1.0）。
 
 ---
 
@@ -192,8 +195,9 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 | 安装包 | 适用环境 | 包含内容 |
 | --- | --- | --- |
 | **agenthub-0.9.4-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
-| **agenthub-0.9.4-plugins.zip** | 仅用于编写代码的客户端电脑 | 5 种客户端原生插件、MCP 桥接器、子代理与工作流 |
+| **agenthub-0.9.4-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
 | **agenthub-0.9.4-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
+| **agenthub-workers-0.9.4-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
 | **multi-agent-hub-0.9.4.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
 
 - **运行依赖要求**：

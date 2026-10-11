@@ -42,6 +42,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **全端权威状态双向感知与前置熔断**：
   - 调度器与客户端同步状态联动：`hub_status` / `hub_list_agents` 将被禁用的 Worker 显式标注为 `[已禁用]`（并输出原因，如 `由管理员在控制台或 API 禁用`）；`hub_capabilities` 接口返回 `enabled: false, code: "disabled"`。
   - 任务调度零延迟保护：`hub_dispatch` 针对被禁用的 Worker 触发秒级前置拦截，直接返回 `UNAVAILABLE: profile_disabled`，绝不启动真实驱动进程，杜绝频繁调用空额度子代理造成的计算与 API 资源浪费。
+- **MiniMax Code / MiniMax Plugin V1 与多规范插件一包四吃适配 (`plugins/agenthub-workers` / `packaging/build.py`)**：
+  - 严格对照《MiniMax Plugin 开发与上架指南（MiniMax Plugin V1）》补齐 `.minimax-plugin/plugin.json`（`schemaVersion: 1`、分类 `Code`、零外泄凭据）与独立 `hub-bridge.mcp.json`（标准 `stdio` 解释器命令 `node` + 包内相对参数 `./mcp/server.mjs`）；
+  - 同步补齐 `.claude-plugin/plugin.json`（兼容 MiniMax Code CLI `mcode 0.4.0+` 与 Claude Code）及根目录 `plugin.json`（兼容 Agent Plugins Specification v1.0.0），与原有 `.zcode-plugin/plugin.json` 零冲突共存；
+  - `packaging/build.py` 新增 `--component minimax` 构建能力，自动生成符合官方上架与导入规范、根目录直接包含 `.minimax-plugin/plugin.json`（无外层包裹目录）的独立插件包 `agenthub-workers-0.9.4-minimax-plugin.zip`。
 - **Web 控制台服务化与局域网访问加固**：
   - 将控制台服务默认绑定监听地址由回环 `127.0.0.1` 调整为 `0.0.0.0:8890`，并补充 HTTP `HEAD` 预检方法处理，确保局域网多设备浏览器平滑访问。
   - 在 Linux 服务器上创建并启用标准 systemd 用户服务 `agent-hub-console.service`，实现断线守护自愈。

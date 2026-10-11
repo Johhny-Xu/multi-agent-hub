@@ -80,12 +80,48 @@ def build(output, component):
             'bytes': target.stat().st_size, 'source_files': len(files), 'component': component}
 
 
+def build_minimax_plugin(output):
+    output = Path(output).resolve()
+    if output == ROOT or ROOT in output.parents:
+        raise ValueError('Release output must be outside the repository')
+    output.mkdir(parents=True, exist_ok=True)
+    plugin_root = ROOT / 'plugins/agenthub-workers'
+    entries = {'LICENSE': (ROOT / 'LICENSE').read_bytes()}
+    for source in plugin_root.rglob('*'):
+        if source.is_file() and not source.is_symlink():
+            rel = source.relative_to(plugin_root).as_posix()
+            if any(part in ('node_modules', '__pycache__', 'cache', 'data', 'sessions') for part in source.relative_to(plugin_root).parts):
+                continue
+            if source.name in DENIED or source.suffix in ('.log', '.jsonl'):
+                continue
+            entries[rel] = source.read_bytes()
+    if '.minimax-plugin/plugin.json' not in entries:
+        raise ValueError('MiniMax Plugin V1 requires .minimax-plugin/plugin.json at ZIP root')
+    target = output / ('agenthub-workers-' + VERSION + '-minimax-plugin.zip')
+    with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, content in sorted(entries.items()):
+            info = zipfile.ZipInfo(name, date_time=(2026, 10, 8, 0, 0, 0))
+            info.create_system = 3
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, content)
+    return {'file': target.name, 'sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
+            'bytes': target.stat().st_size, 'source_files': len(entries), 'component': 'minimax-plugin'}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--component', choices=('hub', 'plugins', 'both', 'all'), default='all')
+    parser.add_argument('--component', choices=('hub', 'plugins', 'both', 'minimax', 'all'), default='all')
     args = parser.parse_args()
-    records = [build(args.output, component) for component in (('hub', 'plugins', 'both') if args.component == 'all' else (args.component,))]
+    records = []
+    if args.component == 'minimax':
+        records.append(build_minimax_plugin(args.output))
+    else:
+        for component in (('hub', 'plugins', 'both') if args.component == 'all' else (args.component,)):
+            records.append(build(args.output, component))
+        if args.component == 'all':
+            records.append(build_minimax_plugin(args.output))
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'SHA256SUMS').write_text(''.join(item['sha256'] + '  ' + item['file'] + '\n' for item in records), encoding='utf-8')
     print(json.dumps({'version': VERSION, 'artifacts': records}, indent=2))
@@ -93,3 +129,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
