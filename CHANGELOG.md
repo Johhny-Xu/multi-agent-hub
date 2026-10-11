@@ -46,6 +46,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - 严格对照《MiniMax Plugin 开发与上架指南（MiniMax Plugin V1）》补齐 `.minimax-plugin/plugin.json`（`schemaVersion: 1`、分类 `Code`、零外泄凭据）与独立 `hub-bridge.mcp.json`（标准 `stdio` 解释器命令 `node` + 包内相对参数 `./mcp/server.mjs`）；
   - 同步补齐 `.claude-plugin/plugin.json`（兼容 MiniMax Code CLI `mcode 0.4.0+` 与 Claude Code）及根目录 `plugin.json`（兼容 Agent Plugins Specification v1.0.0），与原有 `.zcode-plugin/plugin.json` 零冲突共存；
   - `packaging/build.py` 新增 `--component minimax` 构建能力，自动生成符合官方上架与导入规范、根目录直接包含 `.minimax-plugin/plugin.json`（无外层包裹目录）的独立插件包 `agenthub-workers-0.9.4-minimax-plugin.zip`。
+- **架构图/路线图 SVG、一键安装链路与 Apache-2.0 开源协议升级 (`docs/*.svg` / `README.md` / `LICENSE`)**：
+  - 重构 `docs/architecture.svg` 与 `docs/roadmap.svg`：清晰呈现“①任意 MCP 客户端直连即用、②6 款原生深度宿主（Codex / ZCode / MiniMaxCode / DSH / CodeArts / Antigravity）、③零客户端 WebUI 独立管理”三层架构与 v0.9.4 攻坚成果；
+  - 在仓库根目录补齐 `install.cmd`、`install.sh`、`connect.cmd`、`connect.sh` 快捷入口，重构 `README.md` 四大场景化安装指南，并增加对 [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) 品牌矢量头像来源的致谢；
+  - 将项目开源协议切换为 **Apache License 2.0 (`Apache-2.0`)**，更新根目录 `LICENSE` 及各插件包清单，明确保留原作者版权声明、专利授权与修改说明要求。
 - **Web 控制台服务化与局域网访问加固**：
   - 将控制台服务默认绑定监听地址由回环 `127.0.0.1` 调整为 `0.0.0.0:8890`，并补充 HTTP `HEAD` 预检方法处理，确保局域网多设备浏览器平滑访问。
   - 在 Linux 服务器上创建并启用标准 systemd 用户服务 `agent-hub-console.service`，实现断线守护自愈。
