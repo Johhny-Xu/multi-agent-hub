@@ -25,8 +25,8 @@ export const WORKER_CRED_FILES = {
   'traecode': ['.trae-cn/trae-jwt-token'],
   'zcode': ['.zcode/v2/credentials.json'],
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
+  'mimocode': ['.local/share/mimocode/auth.json'],
   // github-copilot：令牌在 gnome-keyring，文件切换不换身份，故不纳入
-  // mimocode：serviceToken 由 CLI 内部管理，无独立凭据文件
 };
 
 const exists = async (p) => { try { await stat(p); return true; } catch { return false; } };

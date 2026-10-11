@@ -21,9 +21,9 @@ export const LOGIN_COMMANDS = {
   'codebuddy': { interactive: true, note: '终端运行 codebuddy 进入会话后输入 /login（OAuth 走 www.codebuddy.ai），凭据落盘 .codebuddy/auth.info' },
   'codebuddy-cn': { interactive: true, note: '终端运行 codebuddy-cn 进入会话后输入 /login（OAuth 走 copilot.tencent.com），凭据落盘 .codebuddy-cn/auth.info' },
   'antigravity': { interactive: true, note: '终端运行 agy（TUI）触发 Google OAuth（accounts.google.com → antigravity.google/oauth-callback），令牌落盘 .gemini/antigravity-cli/antigravity-oauth-token' },
-  'mimocode': { note: 'serviceToken 由本机续期脚本管理，WebUI 暂不支持登录' },
+  'mimocode': { interactive: true, note: '终端运行 mimo auth login（TUI 选 provider）登录；凭据落盘 .local/share/mimocode/auth.json，支持快照切换' },
   'traecode': { desktop: true, note: '请在 TraeCode 桌面端登录' },
-  'zcode': { desktop: true, note: '请在 ZCode 桌面端登录' },
+  'zcode': { desktop: true, note: '登录请走 ZCode 桌面端；多账号=对 .zcode/v2/credentials.json 做多次登录快照后切换（active_provider 为加密值，需桌面端切换）' },
   'codearts': { aksk: true, note: '填写华为云 CodeArts AK/SK' },
 };
 
@@ -36,6 +36,7 @@ const LOGOUT_FILES = {
   'traecode': ['.trae-cn/trae-jwt-token'],
   'zcode': ['.zcode/v2/credentials.json'],
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
+  'mimocode': ['.local/share/mimocode/auth.json'],
 };
 
 // ---------------------------------------------------------------- 登录会话
