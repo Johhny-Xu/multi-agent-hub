@@ -10,6 +10,13 @@ import { join, resolve, sep, dirname, basename } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
+import {
+  createTokenMonitorEngine,
+  fetchZcodeQuotas,
+  fetchMinimaxDirect,
+  fetchDeepSeekDirect,
+  fetchCopilotDirect,
+} from './token_monitor.mjs';
 
 const execFile = promisify(execFileCb);
 
@@ -933,7 +940,19 @@ export async function start(context) {
           result[platform] = { error: err.message || '查询失败' };
         }
       }));
-      // 若 9router 未能取得 minimaxcode 配额，则回退到 mmx CLI
+      // 原生直查补齐: ZCode/GLM, MiniMax, DeepSeek/DSH, GitHub Copilot (移植自 Javis603/token-monitor)
+      const [zcodeDirect, mmDirect, dsDirect, cpDirect] = await Promise.all([
+        fetchZcodeQuotas().catch(() => ({ tracked: false })),
+        (!result.minimaxcode || !result.minimaxcode.tracked) ? fetchMinimaxDirect().catch(() => null) : Promise.resolve(null),
+        fetchDeepSeekDirect().catch(() => ({ tracked: false })),
+        (!result['github-copilot'] || !result['github-copilot'].tracked) ? fetchCopilotDirect().catch(() => null) : Promise.resolve(null),
+      ]);
+      if (zcodeDirect && zcodeDirect.tracked) result.zcode = zcodeDirect;
+      if (mmDirect && mmDirect.tracked) result.minimaxcode = mmDirect;
+      if (dsDirect && dsDirect.tracked) result.dsh = dsDirect;
+      if (cpDirect && cpDirect.tracked) result['github-copilot'] = cpDirect;
+
+      // 若 9router 与原生 API 均未能取得 minimaxcode 配额，则回退到 mmx CLI
       if (!result.minimaxcode || !result.minimaxcode.tracked) {
         try {
           const mmxBin = process.env.MMX_BIN || join(os.homedir(), '.npm-global', 'bin', 'mmx');
@@ -1196,6 +1215,12 @@ export async function start(context) {
     usage.total.runs += 1; usage.days[day].runs += 1; usage.days[day].agents[agentName].runs += 1; usage.agents[agentName].runs += 1;
     scheduleUsageSave();
   }
+
+  const tokenMonitor = createTokenMonitorEngine({
+    dataDir,
+    getHubUsage: () => usage,
+    getQuotas,
+  });
 
   // ---------------- 会话线程引擎: 服务端持有对话与轮询, 本机会话零 token 消耗 (支持平台内多会话)
   /** @type {{threads: Array<any>, captured: Array<any>}} */
@@ -2512,6 +2537,25 @@ export async function start(context) {
         send(200, data);
         return;
       }
+      if (request.method === 'GET' && p === '/api/token-monitor') {
+        const force = url.searchParams.get('force') === '1' || url.searchParams.get('refresh') === '1';
+        const data = await tokenMonitor.buildDashboard({ force });
+        send(200, data);
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/token-monitor/export') {
+        const format = url.searchParams.get('format') || 'json';
+        const exported = await tokenMonitor.exportData(format);
+        const buf = Buffer.from(exported.body, 'utf-8');
+        response.writeHead(200, {
+          'content-type': exported.contentType,
+          'content-length': buf.length,
+          'content-disposition': `attachment; filename="${exported.filename}"`,
+          'cache-control': 'no-store',
+        });
+        response.end(buf);
+        return;
+      }
       if (request.method === 'GET' && p === '/api/chat/archives') {
         const agent = url.searchParams.get('agent') ? safeName(url.searchParams.get('agent'), 'agent') : null;
         let files = [];
@@ -2586,6 +2630,12 @@ export async function start(context) {
 
       if (request.method === 'POST' && p.startsWith('/api/')) {
         const body = await readJson();
+        if (p === '/api/token-monitor/config') {
+          const cfg = await tokenMonitor.saveConfig(body || {});
+          const dash = await tokenMonitor.buildDashboard({ force: true });
+          send(200, { ok: true, config: cfg, dashboard: dash });
+          return;
+        }
         if (p === '/api/endpoint') {
           const id = String(body.id || '');
           if (!id || id === 'local' || !config.endpoints.some((e) => e.id === id)) throw badReq('未知或已移除端点');

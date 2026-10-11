@@ -481,12 +481,124 @@
     display: flex;
     flex-direction: column;
   }
-  #panel-agents, #panel-tasks, #panel-notes {
+  #panel-agents, #panel-tasks, #panel-notes, #panel-tokens {
     overflow-y: auto;
     padding: 24px;
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
+  }
+
+  /* Token Monitor 大盘样式 */
+  .tm-header {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--mcode-border);
+  }
+  .tm-title-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tm-title-group h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
+  .tm-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tm-seg-group {
+    display: inline-flex; background: var(--mcode-surface-muted); border: 1px solid var(--mcode-border);
+    border-radius: 8px; padding: 2px; gap: 2px;
+  }
+  .tm-seg-btn {
+    border: none; background: transparent; color: var(--mcode-text-muted);
+    min-height: 28px; padding: 3px 10px; font-size: 12px; border-radius: 6px; cursor: pointer;
+  }
+  .tm-seg-btn.active {
+    background: var(--mcode-surface); color: var(--mcode-text); font-weight: 600;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .tm-kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px; margin-bottom: 18px;
+  }
+  .tm-kpi-card {
+    background: var(--mcode-surface); border: 1px solid var(--mcode-border); border-radius: 12px;
+    padding: 15px 18px; box-shadow: var(--mcode-card-shadow); position: relative; overflow: hidden;
+  }
+  .tm-kpi-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--mcode-accent-gradient); opacity: 0.85;
+  }
+  .tm-kpi-label { font-size: 12px; color: var(--mcode-text-muted); font-weight: 500; }
+  .tm-kpi-val { font-size: 24px; font-weight: 700; margin: 4px 0; letter-spacing: -0.4px; }
+  .tm-kpi-sub { font-size: 11.5px; color: var(--mcode-text-subtle); }
+  .tm-charts-row {
+    display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; margin-bottom: 18px;
+  }
+  @media (max-width: 1024px) { .tm-charts-row { grid-template-columns: 1fr; } }
+  .tm-panel-card {
+    background: var(--mcode-surface); border: 1px solid var(--mcode-border); border-radius: 12px;
+    padding: 16px 18px; box-shadow: var(--mcode-card-shadow);
+  }
+  .tm-panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 12px; font-size: 13.5px; font-weight: 600;
+  }
+  .tm-heatmap-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .tm-heatmap-grid {
+    display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column;
+    grid-auto-columns: 11px; gap: 3px; width: max-content;
+  }
+  .tm-hm-cell {
+    width: 11px; height: 11px; border-radius: 2.5px;
+    background: var(--mcode-surface-muted); border: 1px solid rgba(255,255,255,0.03);
+  }
+  .tm-hm-cell.l1 { background: rgba(59, 130, 246, 0.28); }
+  .tm-hm-cell.l2 { background: rgba(59, 130, 246, 0.52); }
+  .tm-hm-cell.l3 { background: rgba(59, 130, 246, 0.78); }
+  .tm-hm-cell.l4 { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.45); }
+  .tm-trend-bars {
+    display: flex; align-items: flex-end; gap: 4px; height: 96px; padding-top: 8px;
+  }
+  .tm-trend-col {
+    flex: 1; min-width: 6px; height: 100%; display: flex; flex-direction: column;
+    justify-content: flex-end; align-items: center;
+  }
+  .tm-trend-bar {
+    width: 100%; border-radius: 3px 3px 0 0;
+    background: var(--mcode-accent-gradient); min-height: 2px; transition: height .2s ease;
+  }
+  .tm-subtabs {
+    display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .tm-table-wrapper {
+    overflow: auto; max-inline-size: 100%; max-block-size: min(540px, 72vh);
+    container-type: inline-size; border: 1px solid var(--mcode-border);
+    border-radius: 12px; background: var(--mcode-surface);
+  }
+  .tm-table {
+    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px;
+  }
+  .tm-table thead {
+    position: sticky; inset-block-start: 0; z-index: 2; background: var(--mcode-surface-muted);
+  }
+  .tm-table th, .tm-table td {
+    padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--mcode-border);
+    white-space: nowrap;
+  }
+  .tm-table tbody th {
+    position: sticky; inset-inline-start: 0; z-index: 1; background: var(--mcode-surface);
+    font-weight: 600;
+  }
+  .tm-table tbody tr:hover td, .tm-table tbody tr:hover th {
+    background: var(--mcode-surface-hover);
+  }
+  .tm-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px;
+  }
+  @container (width < 600px) {
+    .tm-table, .tm-table thead, .tm-table tbody, .tm-table tr, .tm-table th, .tm-table td { display: block; }
+    .tm-table thead { display: none; }
+    .tm-table tr { margin-block-end: 10px; border-bottom: 2px solid var(--mcode-border-strong); }
+    .tm-table tbody th { position: sticky; inset-block-start: 0; z-index: 2; background: var(--mcode-surface-muted); }
+    .tm-table td::before { font-weight: 600; color: var(--mcode-text-muted); margin-right: 6px; }
+    .tm-table td:nth-child(2)::before { content: "状态: " / "状态"; }
+    .tm-table td:nth-child(3)::before { content: "总 Tokens: " / "总 Tokens"; }
+    .tm-table td:nth-child(4)::before { content: "输入 / 输出: " / "输入 / 输出"; }
+    .tm-table td:nth-child(5)::before { content: "缓存命中: " / "缓存命中"; }
+    .tm-table td:nth-child(6)::before { content: "预估费用: " / "预估费用"; }
   }
 
   /* 对话视图双栏组合 */
@@ -3148,6 +3260,10 @@
         <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 16.5 13"/></svg>
         <span class="tab-label">代理</span>
       </button>
+      <button role="tab" id="tab-tokens" aria-selected="false" aria-controls="panel-tokens" type="button" class="cb-activity-tab" title="Token 监控与全平台配额大盘 (Token Monitor)">
+        <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/></svg>
+        <span class="tab-label">监控</span>
+      </button>
       <button role="tab" id="tab-tasks" aria-selected="false" aria-controls="panel-tasks" type="button" class="cb-activity-tab" title="任务队列与认领" hidden style="display:none">
         <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
         <span class="tab-label">队列</span>
@@ -3407,6 +3523,13 @@
           <button id="btn-new-note" class="primary" type="button">写笔记</button>
         </div>
         <div id="notes"></div>
+      </section>
+
+      <!-- Token 与配额监控大盘面板 (Token Monitor) -->
+      <section class="tabpanel" id="panel-tokens" role="tabpanel" aria-labelledby="tab-tokens" hidden>
+        <div id="token-monitor-root" class="tm-wrap">
+          <div class="empty">正在扫描本机 AI 编程工具会话与平台配额…</div>
+        </div>
       </section>
     </div>
   </div>
@@ -5112,11 +5235,14 @@
     }).catch(function () { /* noop */ });
   }
   function showUsageDetail() {
+    var tabTokens = $('#tab-tokens');
+    if (tabTokens) {
+      tabTokens.click();
+      return;
+    }
     if (!chat.usage) { loadUsage().then(showUsageDetail); return; }
     var u = chat.usage;
     var rows = ['agent,今日tok(in/out/条/次),累计tok(in/out/条/次)'];
-    var day = new Date().toISOString().slice(0, 10);
-    var td = u.days.filter(function (x) { return x.day === day; })[0];
     Object.keys(u.agents).forEach(function (k) {
       rows.push(k + ', -, ' + u.agents[k].in + '/' + u.agents[k].out + '/' + u.agents[k].msgs + '/' + u.agents[k].runs);
     });
@@ -5193,13 +5319,14 @@
 
   function renderQuotasContent(data, err, agent) {
     if (!agent) agent = chat.activeAgent || 'antigravity';
-    var untrackedPlats = ['zcode', 'mimocode'];
     var plat = null;
     if (agent === 'antigravity') plat = 'antigravity';
     else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
     else if (agent === 'traecode') plat = 'traecode';
     else if (agent === 'github-copilot') plat = 'github-copilot';
     else if (agent === 'minimaxcode') plat = 'minimaxcode';
+    else if (agent === 'zcode') plat = 'zcode';
+    else if (agent === 'dsh') plat = 'dsh';
 
     if (!plat) {
       return '<div class="cb-pop-quotas-list">' +
@@ -5281,7 +5408,7 @@
           return q.name === 'gemini_session' || q.name === 'gemini_weekly' || q.name === 'claude_gpt_weekly';
         });
         if (!majorQuotas.length) majorQuotas = qList.slice(0, 3);
-      } else if (plat === 'traecode') {
+      } else if (plat === 'traecode' || plat === 'zcode' || plat === 'dsh') {
         majorQuotas = qList;
       } else if (plat === 'github-copilot') {
         var sortedCopilot = qList.slice().sort(function (a, b) {
@@ -5309,10 +5436,11 @@
         if (q.isCreditBalance || q.name === 'Credits') {
           var rem = q.remaining != null ? q.remaining : q.total;
           var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
+          var unitStr = q.unit || '积分';
           return '<div class="cb-quota-item">' +
             '<div class="cb-quota-item-top">' +
-              '<span class="cb-quota-item-name">' + esc(q.displayName || '剩余积分') + '</span>' +
-              '<span class="cb-quota-item-stat"><b>' + remStr + '</b> 积分</span>' +
+              '<span class="cb-quota-item-name">' + esc(q.displayName || '剩余额度') + '</span>' +
+              '<span class="cb-quota-item-stat"><b>' + remStr + '</b> ' + esc(unitStr) + '</span>' +
             '</div>' +
             '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:100%;background:var(--mcode-accent, #38bdf8)"></div></div>' +
           '</div>';
@@ -5320,10 +5448,13 @@
         var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
         var barColor = remPct > 30 ? 'var(--mcode-accent, #38bdf8)' : (remPct > 10 ? '#f59e0b' : '#ef4444');
         var resetText = formatResetTime(q.resetAt);
+        var statText = (q.used != null && q.total != null)
+          ? ('<b>' + fmtQuotaVal(q.used) + '</b>/' + fmtQuotaVal(q.total) + ' <small>(' + remPct + '% 余)</small>')
+          : ('<b>' + remPct + '%</b> 剩余');
         return '<div class="cb-quota-item">' +
           '<div class="cb-quota-item-top">' +
             '<span class="cb-quota-item-name">' + esc(q.displayName || q.name) + '</span>' +
-            '<span class="cb-quota-item-stat"><b>' + fmtQuotaVal(q.used) + '</b>/' + fmtQuotaVal(q.total) + ' <small>(' + remPct + '% 余)</small></span>' +
+            '<span class="cb-quota-item-stat">' + statText + '</span>' +
           '</div>' +
           '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + '"></div></div>' +
           (resetText ? '<div class="cb-quota-reset">' + esc(resetText) + '</div>' : '') +
@@ -5446,13 +5577,15 @@
       else if (agent === 'traecode') plat = 'traecode';
       else if (agent === 'github-copilot') plat = 'github-copilot';
       else if (agent === 'minimaxcode') plat = 'minimaxcode';
+      else if (agent === 'zcode') plat = 'zcode';
+      else if (agent === 'dsh') plat = 'dsh';
 
       var header = '平台配额（' + agent + '）';
       if (!plat) {
-        return header + '\n当前平台未接入配额跟踪 (9router)';
+        return header + '\n当前平台未接入配额跟踪';
       }
       if (!quotasData || !quotasData[plat] || quotasData[plat].error) {
-        return header + '\n当前平台未接入配额跟踪 (9router)';
+        return header + '\n当前平台未接入配额跟踪';
       }
 
       if (plat === 'codebuddy') {
@@ -5462,7 +5595,7 @@
         var group = groups.filter(function (g) { return g.source === targetSource; })[0];
         if (!group && groups.length) group = groups[0];
         if (!group) {
-          return header + '\n当前平台未接入配额跟踪 (9router)';
+          return header + '\n当前平台未接入配额跟踪';
         }
         var planStr = group.plan ? '（' + group.plan + '）' : '';
         var lines = [(group.source || '') + planStr + '总剩余 ' + (group.totalRemaining != null ? group.totalRemaining : 0) + ' 积分 · ' + (group.packageCount || 0) + ' 个有效包'];
@@ -5476,7 +5609,7 @@
         var agyData = quotasData.antigravity;
         var qList = Array.isArray(agyData && agyData.quotas) ? agyData.quotas : [];
         if (!qList.length) {
-          return '平台配额（antigravity）\n当前平台未接入配额跟踪 (9router)';
+          return '平台配额（antigravity）\n当前平台未接入配额跟踪';
         }
         var majorNames = ['gemini_session', 'gemini_weekly', 'claude_gpt_weekly'];
         var majorQuotas = qList.filter(function (q) {
@@ -5504,7 +5637,7 @@
         var traeData = quotasData.traecode;
         var qListTrae = Array.isArray(traeData.quotas) ? traeData.quotas : [];
         if (!qListTrae.length) {
-          return header + '\n当前平台未接入配额跟踪 (9router)';
+          return header + '\n当前平台未接入配额跟踪';
         }
         var q0 = qListTrae[0];
         var rTime = formatResetTime(q0.resetAt);
@@ -5541,8 +5674,21 @@
           lines.push((q.displayName || q.name) + ' 本窗口剩' + remPct + '% · 本周剩' + wkPct + '%');
         });
         return lines.join('\n');
+      } else if (plat === 'zcode' || plat === 'dsh') {
+        var pData = quotasData[plat];
+        var pQuotas = Array.isArray(pData && pData.quotas) ? pData.quotas : [];
+        var lines = ['平台配额（' + plat + (pData.plan ? ' · ' + pData.plan : '') + '）'];
+        pQuotas.forEach(function (q) {
+          if (q.isCreditBalance) {
+            lines.push((q.displayName || q.name) + '：' + (q.remaining != null ? q.remaining : 0) + ' ' + (q.unit || ''));
+          } else {
+            var rTime = formatResetTime(q.resetAt);
+            lines.push((q.displayName || q.name) + ' 剩' + (q.remainingPercentage != null ? q.remainingPercentage : 100) + '%' + (rTime ? ' · ' + rTime : ''));
+          }
+        });
+        return lines.join('\n');
       }
-      return header + '\n当前平台未接入配额跟踪 (9router)';
+      return header + '\n当前平台未接入配额跟踪';
     },
     gear: function () {
       return '自定义状态栏显示项\n点击自由勾选/取消显示各项指标';
@@ -5806,6 +5952,8 @@
       else if (agent === 'traecode') plat = 'traecode';
       else if (agent === 'github-copilot') plat = 'github-copilot';
       else if (agent === 'minimaxcode') plat = 'minimaxcode';
+      else if (agent === 'zcode') plat = 'zcode';
+      else if (agent === 'dsh') plat = 'dsh';
 
       var quotaText = '';
       if (plat && quotasData && quotasData[plat] && !quotasData[plat].error) {
@@ -5866,6 +6014,18 @@
               quotaText = '配额 通用 ' + pct + '%';
               quotaShow = true;
             }
+          }
+        } else if (plat === 'zcode' || plat === 'dsh') {
+          var pData = quotasData[plat];
+          var pQuotas = Array.isArray(pData && pData.quotas) ? pData.quotas : [];
+          if (pQuotas.length) {
+            var qFirst = pQuotas[0];
+            if (qFirst.isCreditBalance) {
+              quotaText = '配额 ' + (qFirst.remaining != null ? qFirst.remaining : 0) + ' ' + (qFirst.unit || '');
+            } else {
+              quotaText = '配额 剩' + (qFirst.remainingPercentage != null ? qFirst.remainingPercentage : 100) + '%';
+            }
+            quotaShow = true;
           }
         }
       }
@@ -6872,8 +7032,596 @@
     renderWorkbench();
   });
 
+  // ---------------- Token Monitor (内嵌本机扫描 + 17321 桥接大盘)
+  var tmState = {
+    data: null,
+    loading: false,
+    period: (function () { try { return localStorage.getItem('agent_hub_tm_period') || 'allTime'; } catch (e) { return 'allTime'; } })(),
+    currency: (function () { try { return localStorage.getItem('agent_hub_tm_currency') || 'USD'; } catch (e) { return 'USD'; } })(),
+    subtab: (function () { try { return localStorage.getItem('agent_hub_tm_subtab') || 'tools'; } catch (e) { return 'tools'; } })()
+  };
+
+  function fmtCost(usd, rate, currency) {
+    var val = Number(usd) || 0;
+    var r = Number(rate) || 7.25;
+    if (currency === 'CNY') {
+      var cny = val * r;
+      return '¥' + (cny >= 100 ? cny.toFixed(1) : cny.toFixed(2));
+    }
+    return '$' + (val >= 100 ? val.toFixed(1) : val.toFixed(2));
+  }
+
+  function loadTokenMonitor(forceRefresh) {
+    var root = $('#token-monitor-root');
+    if (tmState.loading) return Promise.resolve(tmState.data);
+    tmState.loading = true;
+    if (root && !tmState.data) {
+      root.innerHTML = '<div class="empty">正在扫描本机 AI 编程工具会话与平台配额…</div>';
+    }
+    var url = '/api/token-monitor' + (forceRefresh ? '?refresh=1' : '');
+    return Promise.all([
+      api(url),
+      loadQuotas()
+    ]).then(function (results) {
+      tmState.loading = false;
+      tmState.data = results[0];
+      if (results[0] && results[0].config && results[0].config.currency && !localStorage.getItem('agent_hub_tm_currency')) {
+        tmState.currency = results[0].config.currency;
+      }
+      renderTokenMonitor();
+      return tmState.data;
+    }).catch(function (err) {
+      tmState.loading = false;
+      if (root) {
+        root.innerHTML = '<div class="empty">Token 监控加载失败：' + esc(err && err.message ? err.message : String(err)) + '</div>';
+      }
+      return null;
+    });
+  }
+
+  function openTokenMonitorConfigModal() {
+    var cfg = (tmState.data && tmState.data.config) || {};
+    var wrapper = el('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.gap = '10px';
+    wrapper.style.minWidth = '340px';
+
+    function makeField(labelTxt, val, placeholder, type) {
+      var box = el('label');
+      box.style.display = 'flex';
+      box.style.flexDirection = 'column';
+      box.style.gap = '4px';
+      box.style.fontSize = '12px';
+      var title = el('span', null, labelTxt);
+      title.style.fontWeight = '600';
+      title.style.color = 'var(--mcode-text)';
+      var inp = document.createElement('input');
+      inp.type = type || 'text';
+      inp.value = val || '';
+      inp.placeholder = placeholder || '';
+      inp.style.padding = '6px 10px';
+      inp.style.borderRadius = '6px';
+      inp.style.border = '1px solid var(--mcode-border)';
+      inp.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
+      inp.style.color = 'var(--mcode-text)';
+      inp.style.fontSize = '12px';
+      box.appendChild(title);
+      box.appendChild(inp);
+      wrapper.appendChild(box);
+      return inp;
+    }
+
+    var chkRow = el('label');
+    chkRow.style.display = 'flex';
+    chkRow.style.alignItems = 'center';
+    chkRow.style.gap = '8px';
+    chkRow.style.fontSize = '12px';
+    chkRow.style.cursor = 'pointer';
+    var chkBridge = document.createElement('input');
+    chkBridge.type = 'checkbox';
+    chkBridge.checked = cfg.externalHubEnabled !== false;
+    chkRow.appendChild(chkBridge);
+    chkRow.appendChild(el('span', null, '启用外部 Token Monitor Hub (17321) 自动探测与多设备聚合'));
+    wrapper.appendChild(chkRow);
+
+    var inpHubUrl = makeField('外部 Token Monitor Hub 地址（可选，用于多设备同步）', cfg.externalHubUrl || 'http://127.0.0.1:17321', 'http://127.0.0.1:17321');
+    var inpHubToken = makeField('外部 Hub 访问令牌 Auth Token（可选）', '', cfg.hasExternalToken ? '已配置（留空保持不变）' : '若外部 Hub 设置了访问密码可填入', 'password');
+    var inpExportPath = makeField('外部导出文件路径 token-monitor-export.json（可选）', cfg.externalExportPath || '', '例如 /path/to/token-monitor-export.json');
+    var inpRate = makeField('美元兑人民币汇率 (USD → CNY)', String(cfg.usdToCny || 7.25), '7.25');
+    var inpMmKey = makeField('MiniMax API Key（可选，用于直查 MiniMax Coding Plan 实时配额）', '', cfg.hasMinimaxKey ? '已配置（留空保持不变）' : '留空则自动从本机 ~/.minimax 读取', 'password');
+    var inpDsKey = makeField('DeepSeek API Key（可选，用于直查 DeepSeek 账户余额）', '', cfg.hasDeepseekKey ? '已配置（留空保持不变）' : '留空则自动从本机 ~/.dsh 读取', 'password');
+
+    var note = el('div');
+    note.style.fontSize = '11px';
+    note.style.color = 'var(--mcode-text-subtle)';
+    note.style.lineHeight = '1.5';
+    note.textContent = '💡 提示：Multi-Agent Hub 已内置本机 14+ 款 AI 编程工具日志扫描与 ZCode/GLM、MiniMax、DeepSeek、Copilot、CodeBuddy 等配额直查，无需安装外部软件即可开箱使用；也可随时桥接 Javis603/token-monitor (17321) 汇总多台设备数据。';
+    wrapper.appendChild(note);
+
+    $('#modal-title').textContent = '🔗 Token Monitor 桥接与直查设置';
+    var headActions = $('#modal-head-actions');
+    if (headActions) headActions.textContent = '';
+    var form = $('#modal-form');
+    form.textContent = '';
+    form.appendChild(wrapper);
+    $('#modal-err').style.display = 'none';
+    $('#modal-ok').textContent = '保存并刷新';
+    modalResolver = {
+      resolve: function (ok) {
+        if (!ok) return;
+        var payload = {
+          externalHubEnabled: chkBridge.checked,
+          externalHubUrl: inpHubUrl.value.trim() || 'http://127.0.0.1:17321',
+          externalExportPath: inpExportPath.value.trim(),
+          usdToCny: Number(inpRate.value) || 7.25,
+          currency: tmState.currency
+        };
+        if (inpHubToken.value.trim()) payload.externalHubToken = inpHubToken.value.trim();
+        if (inpMmKey.value.trim()) payload.minimaxApiKey = inpMmKey.value.trim();
+        if (inpDsKey.value.trim()) payload.deepseekApiKey = inpDsKey.value.trim();
+        api('/api/token-monitor/config', payload).then(function () {
+          toast('Token Monitor 配置已保存');
+          quotasLastFetch = 0;
+          loadTokenMonitor(true);
+        }).catch(function (e) {
+          toast('保存失败: ' + e.message, true);
+        });
+      },
+      inputs: {},
+      form: form
+    };
+    $('#modal').showModal();
+  }
+
+  function renderTokenMonitor() {
+    var root = $('#token-monitor-root');
+    if (!root) return;
+    var d = tmState.data;
+    if (!d) {
+      root.innerHTML = '<div class="empty">暂无监控数据，请点击刷新重试。</div>';
+      return;
+    }
+
+    var periodKey = tmState.period || 'allTime';
+    var pData = (d.periods && d.periods[periodKey]) || (d.periods && d.periods.allTime) || {
+      totalTokens: 0, inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheWrite: 0,
+      costUsd: 0, costCny: 0, messages: 0, sessionsCount: 0, toolsCount: 0, cacheHitRate: 0,
+      tools: [], models: []
+    };
+    var rate = (d.config && d.config.usdToCny) || 7.25;
+    var cur = tmState.currency || 'USD';
+    var ext = d.externalBridge || {};
+
+    root.textContent = '';
+
+    // 1. 顶部工具栏
+    var head = el('div', 'tm-head');
+    var titleWrap = el('div', 'tm-title-wrap');
+    var h2 = el('h2', null, '📊 Token 与配额全景监控');
+    var bridgeBadge = el('span', 'tm-badge ' + (ext.connected ? 'ok' : ''));
+    bridgeBadge.textContent = ext.connected
+      ? ('🟢 本机引擎 + 已桥接 ' + (ext.source === '17321-hub' ? '17321 Hub' : '外部导出文件'))
+      : ('⚡ 本机原生扫描 (' + (d.scannedFiles || 0) + ' 个会话文件)');
+    h2.appendChild(bridgeBadge);
+    titleWrap.appendChild(h2);
+    var subText = el('div', 'tm-sub', '自动解析本机 Antigravity / Claude / Codex / ZCode / MiniMax / DSH / CodeBuddy / Copilot 等真实会话 Token、缓存命中率、折算费用与官方实时配额');
+    titleWrap.appendChild(subText);
+    head.appendChild(titleWrap);
+
+    var controls = el('div', 'tm-controls');
+
+    // 时间周期切换
+    var segPeriod = el('div', 'tm-seg');
+    [
+      { id: 'today', label: '今日' },
+      { id: 'week', label: '本周' },
+      { id: 'month', label: '本月' },
+      { id: 'allTime', label: '全部累计' }
+    ].forEach(function (p) {
+      var b = el('button', periodKey === p.id ? 'active' : '', p.label);
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        tmState.period = p.id;
+        try { localStorage.setItem('agent_hub_tm_period', p.id); } catch (e) {}
+        renderTokenMonitor();
+      });
+      segPeriod.appendChild(b);
+    });
+    controls.appendChild(segPeriod);
+
+    // 币种切换
+    var segCur = el('div', 'tm-seg');
+    ['USD', 'CNY'].forEach(function (c) {
+      var b = el('button', cur === c ? 'active' : '', c === 'CNY' ? '¥ CNY' : '$ USD');
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        tmState.currency = c;
+        try { localStorage.setItem('agent_hub_tm_currency', c); } catch (e) {}
+        renderTokenMonitor();
+      });
+      segCur.appendChild(b);
+    });
+    controls.appendChild(segCur);
+
+    // 操作按钮
+    var btnRefresh = btn('🔄 刷新', 'small', function () {
+      quotasLastFetch = 0;
+      loadTokenMonitor(true).then(function () { toast('Token 与配额数据已更新'); });
+    });
+    var btnConfig = btn('🔗 桥接/API 设置', 'small', openTokenMonitorConfigModal);
+    var btnExportJson = btn('📥 导出 JSON', 'small', function () {
+      window.open('/api/token-monitor/export?format=json', '_blank');
+    });
+    var btnExportCsv = btn('📥 导出 CSV', 'small', function () {
+      window.open('/api/token-monitor/export?format=csv', '_blank');
+    });
+
+    controls.appendChild(btnRefresh);
+    controls.appendChild(btnConfig);
+    controls.appendChild(btnExportJson);
+    controls.appendChild(btnExportCsv);
+    head.appendChild(controls);
+    root.appendChild(head);
+
+    // 2. KPI 指标卡片
+    var kpiGrid = el('div', 'tm-kpi-grid');
+    var topTool = (pData.tools && pData.tools[0]) ? pData.tools[0].displayName : '暂无';
+    var kpis = [
+      {
+        label: '总 Token 消耗 (' + (pData.label || '累计') + ')',
+        val: fmtTok(pData.totalTokens || 0),
+        meta: '↑ 输入 ' + fmtTok(pData.inputTokens || 0) + ' · ↓ 输出 ' + fmtTok(pData.outputTokens || 0)
+      },
+      {
+        label: '预估 API 折算成本',
+        val: fmtCost(pData.costUsd || 0, rate, cur),
+        meta: '按官方 API 公开单价折算 (汇率 ' + rate + ')'
+      },
+      {
+        label: 'Prompt 缓存命中',
+        val: fmtTok(pData.cacheRead || 0),
+        meta: '缓存命中率 ' + (pData.cacheHitRate || 0) + '% · 写入 ' + fmtTok(pData.cacheWrite || 0)
+      },
+      {
+        label: '交互消息 & 会话',
+        val: fmtTok(pData.messages || 0) + ' 条',
+        meta: '跨越 ' + (pData.sessionsCount || 0) + ' 个独立编程会话'
+      },
+      {
+        label: '活跃 AI 工具 & 模型',
+        val: (pData.toolsCount || 0) + ' 款工具',
+        meta: '主力: ' + topTool + ' · ' + ((pData.models && pData.models.length) || 0) + ' 个模型'
+      },
+      {
+        label: '多设备同步 / 17321 桥接',
+        val: ext.connected ? ((ext.devices && ext.devices.length) || 1) + ' 台设备' : '本机独立模式',
+        meta: ext.connected ? ('已连接 ' + ext.hubUrl) : '点击右上「桥接/API 设置」可连 17321'
+      }
+    ];
+    kpis.forEach(function (k) {
+      var c = el('div', 'tm-kpi');
+      c.appendChild(el('div', 'tm-kpi-label', k.label));
+      c.appendChild(el('div', 'tm-kpi-val', k.val));
+      c.appendChild(el('div', 'tm-kpi-meta', k.meta));
+      kpiGrid.appendChild(c);
+    });
+    root.appendChild(kpiGrid);
+
+    // 3. 趋势柱状图 + 365天活跃热力图
+    var chartGrid = el('div', 'tm-grid-2');
+
+    // 3.1 近 30 天趋势柱状图
+    var trendCard = el('div', 'tm-card');
+    var trendHeader = el('div', 'tm-card-title');
+    trendHeader.appendChild(el('span', null, '📈 近 30 天每日 Token 趋势'));
+    var dailyHistory = Array.isArray(d.dailyHistory) ? d.dailyHistory.slice(-30) : [];
+    var maxDayTok = dailyHistory.reduce(function (m, x) { return Math.max(m, x.totalTokens || 0); }, 0) || 1;
+    trendHeader.appendChild(el('span', 'tm-sub', '峰值: ' + fmtTok(maxDayTok) + ' / 日'));
+    trendCard.appendChild(trendHeader);
+
+    if (!dailyHistory.length) {
+      trendCard.appendChild(el('div', 'empty', '暂无近期按日趋势记录'));
+    } else {
+      var barChart = el('div', 'tm-bar-chart');
+      dailyHistory.forEach(function (dayItem) {
+        var col = el('div', 'tm-bar-col');
+        var pct = Math.max(3, Math.round(((dayItem.totalTokens || 0) / maxDayTok) * 100));
+        col.style.height = pct + '%';
+        col.title = dayItem.date + '\n总计: ' + fmtTok(dayItem.totalTokens || 0) + ' tok\n输入: ' + fmtTok(dayItem.inputTokens || 0) + ' / 输出: ' + fmtTok(dayItem.outputTokens || 0) + '\n折算: ' + fmtCost(dayItem.costUsd || 0, rate, cur);
+        barChart.appendChild(col);
+      });
+      trendCard.appendChild(barChart);
+      var axisRow = el('div');
+      axisRow.style.display = 'flex';
+      axisRow.style.justifyContent = 'space-between';
+      axisRow.style.fontSize = '10px';
+      axisRow.style.color = 'var(--mcode-text-subtle)';
+      axisRow.style.marginTop = '6px';
+      axisRow.appendChild(el('span', null, dailyHistory[0].date));
+      axisRow.appendChild(el('span', null, dailyHistory[dailyHistory.length - 1].date));
+      trendCard.appendChild(axisRow);
+    }
+    chartGrid.appendChild(trendCard);
+
+    // 3.2 365 天活跃热力图
+    var heatCard = el('div', 'tm-card');
+    var heatHeader = el('div', 'tm-card-title');
+    heatHeader.appendChild(el('span', null, '🔥 365 天 AI 编程活跃热力图'));
+    var heatmap = Array.isArray(d.heatmap) ? d.heatmap : [];
+    var activeDays = heatmap.filter(function (x) { return (x.tokens || 0) > 0; }).length;
+    heatHeader.appendChild(el('span', 'tm-sub', '累计活跃 ' + activeDays + ' 天'));
+    heatCard.appendChild(heatHeader);
+
+    var heatWrap = el('div', 'tm-heatmap');
+    heatmap.forEach(function (cell) {
+      var lv = cell.level ? (' lv' + cell.level) : '';
+      var div = el('div', 'tm-heat-cell' + lv);
+      div.title = cell.date + ': ' + fmtTok(cell.tokens || 0) + ' tokens (' + (cell.messages || 0) + ' 条消息)';
+      heatWrap.appendChild(div);
+    });
+    heatCard.appendChild(heatWrap);
+    chartGrid.appendChild(heatCard);
+    root.appendChild(chartGrid);
+
+    // 4. 子视图切换导航 (按工具 / 按模型 / 官方平台配额 / 多设备与最近会话)
+    var subtabsBar = el('div', 'tm-subtabs');
+    var subtabDefs = [
+      { id: 'tools', label: '🛠️ 按编程工具 (' + ((pData.tools && pData.tools.length) || 0) + ')' },
+      { id: 'models', label: '🧠 按 AI 模型 (' + ((pData.models && pData.models.length) || 0) + ')' },
+      { id: 'quotas', label: '⚡ 官方平台实时配额' },
+      { id: 'sessions', label: '💻 多设备与最近会话 (' + ((d.recentSessions && d.recentSessions.length) || 0) + ')' }
+    ];
+    subtabDefs.forEach(function (st) {
+      var b = el('button', 'tm-subtab' + (tmState.subtab === st.id ? ' active' : ''), st.label);
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        tmState.subtab = st.id;
+        try { localStorage.setItem('agent_hub_tm_subtab', st.id); } catch (e) {}
+        renderTokenMonitor();
+      });
+      subtabsBar.appendChild(b);
+    });
+    root.appendChild(subtabsBar);
+
+    // 5. 子视图主体内容
+    var detailCard = el('div', 'tm-card');
+    if (tmState.subtab === 'tools') {
+      var toolsList = Array.isArray(pData.tools) ? pData.tools : [];
+      if (!toolsList.length) {
+        detailCard.appendChild(el('div', 'empty', '当前时间周期内暂无工具 Token 消耗记录'));
+      } else {
+        var tableWrap = el('div', 'tm-table-wrapper');
+        var tbl = el('table', 'tm-table');
+        tbl.innerHTML = '<thead><tr>' +
+          '<th scope="col">编程工具</th>' +
+          '<th scope="col" class="num">总 Token</th>' +
+          '<th scope="col" class="num">输入 Token</th>' +
+          '<th scope="col" class="num">输出 Token</th>' +
+          '<th scope="col" class="num">缓存读取 (命中率)</th>' +
+          '<th scope="col" class="num">消息数</th>' +
+          '<th scope="col">用量占比</th>' +
+          '<th scope="col" class="num">预估费用</th>' +
+          '</tr></thead>';
+        var tbody = el('tbody');
+        toolsList.forEach(function (t) {
+          var tr = el('tr');
+          var th = el('th');
+          th.setAttribute('scope', 'row');
+          var dot = el('span', 'tm-dot');
+          dot.style.background = t.color || '#38bdf8';
+          th.appendChild(dot);
+          th.appendChild(el('span', null, t.displayName || t.tool));
+          tr.appendChild(th);
+
+          var tdTot = el('td', 'num', fmtTok(t.totalTokens));
+          tdTot.setAttribute('data-label', '总 Token');
+          tr.appendChild(tdTot);
+
+          var tdIn = el('td', 'num', fmtTok(t.inputTokens));
+          tdIn.setAttribute('data-label', '输入 Token');
+          tr.appendChild(tdIn);
+
+          var tdOut = el('td', 'num', fmtTok(t.outputTokens));
+          tdOut.setAttribute('data-label', '输出 Token');
+          tr.appendChild(tdOut);
+
+          var tdCache = el('td', 'num', fmtTok(t.cacheRead) + ' (' + (t.cacheHitRate || 0) + '%)');
+          tdCache.setAttribute('data-label', '缓存读取');
+          tr.appendChild(tdCache);
+
+          var tdMsgs = el('td', 'num', String(t.messages || 0));
+          tdMsgs.setAttribute('data-label', '消息数');
+          tr.appendChild(tdMsgs);
+
+          var tdShare = el('td');
+          tdShare.setAttribute('data-label', '用量占比');
+          tdShare.innerHTML = '<div style="display:flex;align-items:center;gap:6px"><div class="tm-prog" style="width:72px"><div class="tm-prog-fill" style="width:' + Math.min(100, t.sharePercentage || 0) + '%;background:' + (t.color || '#38bdf8') + '"></div></div><span>' + (t.sharePercentage || 0) + '%</span></div>';
+          tr.appendChild(tdShare);
+
+          var tdCost = el('td', 'num', fmtCost(t.costUsd, rate, cur));
+          tdCost.setAttribute('data-label', '预估费用');
+          tr.appendChild(tdCost);
+
+          tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        tableWrap.appendChild(tbl);
+        detailCard.appendChild(tableWrap);
+      }
+    } else if (tmState.subtab === 'models') {
+      var modelsList = Array.isArray(pData.models) ? pData.models : [];
+      if (!modelsList.length) {
+        detailCard.appendChild(el('div', 'empty', '当前时间周期内暂无模型 Token 消耗记录'));
+      } else {
+        var mWrap = el('div', 'tm-table-wrapper');
+        var mTbl = el('table', 'tm-table');
+        mTbl.innerHTML = '<thead><tr>' +
+          '<th scope="col">AI 模型名称</th>' +
+          '<th scope="col">所属工具</th>' +
+          '<th scope="col" class="num">总 Token</th>' +
+          '<th scope="col" class="num">输入 Token</th>' +
+          '<th scope="col" class="num">输出 Token</th>' +
+          '<th scope="col" class="num">缓存读取</th>' +
+          '<th scope="col" class="num">消息数</th>' +
+          '<th scope="col">占比</th>' +
+          '<th scope="col" class="num">预估费用</th>' +
+          '</tr></thead>';
+        var mBody = el('tbody');
+        modelsList.forEach(function (m) {
+          var tr = el('tr');
+          var th = el('th', 'mono', m.model);
+          th.setAttribute('scope', 'row');
+          tr.appendChild(th);
+
+          var tdTools = el('td', null, (m.tools || []).join(', ') || '—');
+          tdTools.setAttribute('data-label', '所属工具');
+          tr.appendChild(tdTools);
+
+          var tdTot = el('td', 'num', fmtTok(m.totalTokens));
+          tdTot.setAttribute('data-label', '总 Token');
+          tr.appendChild(tdTot);
+
+          var tdIn = el('td', 'num', fmtTok(m.inputTokens));
+          tdIn.setAttribute('data-label', '输入 Token');
+          tr.appendChild(tdIn);
+
+          var tdOut = el('td', 'num', fmtTok(m.outputTokens));
+          tdOut.setAttribute('data-label', '输出 Token');
+          tr.appendChild(tdOut);
+
+          var tdCache = el('td', 'num', fmtTok(m.cacheRead));
+          tdCache.setAttribute('data-label', '缓存读取');
+          tr.appendChild(tdCache);
+
+          var tdMsgs = el('td', 'num', String(m.messages || 0));
+          tdMsgs.setAttribute('data-label', '消息数');
+          tr.appendChild(tdMsgs);
+
+          var tdShare = el('td', null, (m.sharePercentage || 0) + '%');
+          tdShare.setAttribute('data-label', '占比');
+          tr.appendChild(tdShare);
+
+          var tdCost = el('td', 'num', fmtCost(m.costUsd, rate, cur));
+          tdCost.setAttribute('data-label', '预估费用');
+          tr.appendChild(tdCost);
+
+          mBody.appendChild(tr);
+        });
+        mTbl.appendChild(mBody);
+        mWrap.appendChild(mTbl);
+        detailCard.appendChild(mWrap);
+      }
+    } else if (tmState.subtab === 'quotas') {
+      var qHeader = el('div', 'tm-card-title');
+      qHeader.appendChild(el('span', null, '⚡ 全平台官方套餐与 API 实时配额'));
+      qHeader.appendChild(btn('🔑 配置 MiniMax / DeepSeek Key', 'small', openTokenMonitorConfigModal));
+      detailCard.appendChild(qHeader);
+
+      var qGrid = el('div');
+      qGrid.style.display = 'grid';
+      qGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(280px, 1fr))';
+      qGrid.style.gap = '12px';
+
+      var allAgents = ['antigravity', 'zcode', 'minimaxcode', 'dsh', 'github-copilot', 'codebuddy', 'codebuddy-cn', 'traecode'];
+      allAgents.forEach(function (ag) {
+        var box = el('div');
+        box.innerHTML = renderQuotasContent(quotasData, quotasError, ag);
+        qGrid.appendChild(box);
+      });
+      detailCard.appendChild(qGrid);
+    } else if (tmState.subtab === 'sessions') {
+      if (ext.connected && Array.isArray(ext.devices) && ext.devices.length) {
+        var devTitle = el('div', 'tm-card-title');
+        devTitle.appendChild(el('span', null, '🖧 已同步多设备列表 (' + ext.devices.length + ' 台)'));
+        detailCard.appendChild(devTitle);
+        var devWrap = el('div', 'tm-table-wrapper');
+        devWrap.style.marginBottom = '16px';
+        var devTbl = el('table', 'tm-table');
+        devTbl.innerHTML = '<thead><tr><th scope="col">设备名称</th><th scope="col">平台/架构</th><th scope="col" class="num">总 Token</th><th scope="col">最后同步时间</th></tr></thead>';
+        var devBody = el('tbody');
+        ext.devices.forEach(function (dv) {
+          var tr = el('tr');
+          var th = el('th', null, dv.hostname || dv.name || dv.deviceId || '设备');
+          th.setAttribute('scope', 'row');
+          tr.appendChild(th);
+          tr.appendChild(el('td', null, (dv.platform || '') + ' ' + (dv.arch || '')));
+          tr.appendChild(el('td', 'num', fmtTok(dv.totalTokens || 0)));
+          tr.appendChild(el('td', null, dv.lastSync || dv.updatedAt || '刚刚'));
+          devBody.appendChild(tr);
+        });
+        devTbl.appendChild(devBody);
+        devWrap.appendChild(devTbl);
+        detailCard.appendChild(devWrap);
+      }
+
+      var sessTitle = el('div', 'tm-card-title');
+      sessTitle.appendChild(el('span', null, '🕒 本机最近活跃 AI 编程会话'));
+      detailCard.appendChild(sessTitle);
+
+      var rSessions = Array.isArray(d.recentSessions) ? d.recentSessions : [];
+      if (!rSessions.length) {
+        detailCard.appendChild(el('div', 'empty', '暂无本机最近会话记录'));
+      } else {
+        var sWrap = el('div', 'tm-table-wrapper');
+        var sTbl = el('table', 'tm-table');
+        sTbl.innerHTML = '<thead><tr>' +
+          '<th scope="col">工具</th>' +
+          '<th scope="col">会话标识</th>' +
+          '<th scope="col">主力模型</th>' +
+          '<th scope="col" class="num">总 Token</th>' +
+          '<th scope="col" class="num">消息数</th>' +
+          '<th scope="col" class="num">预估费用</th>' +
+          '<th scope="col">最后活跃日期</th>' +
+          '</tr></thead>';
+        var sBody = el('tbody');
+        rSessions.slice(0, 40).forEach(function (s) {
+          var tr = el('tr');
+          var th = el('th');
+          th.setAttribute('scope', 'row');
+          var dot = el('span', 'tm-dot');
+          dot.style.background = s.color || '#38bdf8';
+          th.appendChild(dot);
+          th.appendChild(el('span', null, s.toolDisplay || s.tool));
+          tr.appendChild(th);
+
+          var tdId = el('td', 'mono', String(s.sessionId || '').slice(0, 26));
+          tdId.setAttribute('data-label', '会话标识');
+          tr.appendChild(tdId);
+
+          var tdModel = el('td', 'mono', s.primaryModel || 'unknown');
+          tdModel.setAttribute('data-label', '主力模型');
+          tr.appendChild(tdModel);
+
+          var tdTok = el('td', 'num', fmtTok(s.totalTokens));
+          tdTok.setAttribute('data-label', '总 Token');
+          tr.appendChild(tdTok);
+
+          var tdMsg = el('td', 'num', String(s.messages || 0));
+          tdMsg.setAttribute('data-label', '消息数');
+          tr.appendChild(tdMsg);
+
+          var tdCost = el('td', 'num', fmtCost(s.costUsd, rate, cur));
+          tdCost.setAttribute('data-label', '预估费用');
+          tr.appendChild(tdCost);
+
+          var tdDate = el('td', null, s.date || '—');
+          tdDate.setAttribute('data-label', '最后活跃日期');
+          tr.appendChild(tdDate);
+
+          sBody.appendChild(tr);
+        });
+        sTbl.appendChild(sBody);
+        sWrap.appendChild(sTbl);
+        detailCard.appendChild(sWrap);
+      }
+    }
+    root.appendChild(detailCard);
+  }
+
   document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
     if (tab.id === 'tab-chat') tab.addEventListener('click', function () { loadThreads(); loadUsage(); updateStatusBar(); });
+    if (tab.id === 'tab-tokens') tab.addEventListener('click', function () { loadTokenMonitor(false); });
   });
 
   loadSnapshot().then(function () { renderInflight(); loadThreads(); updateStatusBar(); updateModelSummaryUI(); });
