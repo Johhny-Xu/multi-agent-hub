@@ -513,16 +513,67 @@ async function walkSessionFiles(dir, maxDepth = 4, maxFiles = 250, out = []) {
   return out;
 }
 
+const DEFAULT_TOOL_MODELS = {
+  antigravity: 'gemini-3.8-flash-medium',
+  claude: 'claude-sonnet-4.6',
+  codex: 'gpt-6-astra',
+  zcode: 'GLM-5.3-Flash',
+  minimaxcode: 'MiniMax-M3.1-Flash-Preview',
+  dsh: 'deepseek-chat',
+  codebuddy: 'deepseek-v4.1-flash',
+  'codebuddy-cn': 'deepseek-v4.1-flash',
+  workbuddy: 'hy4-preview',
+  traecode: 'GLM-5.3-FlashX',
+  'github-copilot': 'auto (Copilot)',
+  mimocode: 'xiaomi/mimo-v2.6-flash',
+  codearts: 'huaweicloud-maas/GLM-5.2',
+  kimi: 'kimi-k3',
+  qwen: 'qwen3.8-flash',
+  cline: 'claude-sonnet-4.6',
+};
+
+const MODEL_DISPLAY_NORMALIZE = {
+  hy3: 'hunyuan-turbos (hy3)',
+  Hy3: 'hunyuan-turbos (hy3)',
+};
+
+function normalizeModelName(rawModel, defaultTool) {
+  const m = String(rawModel || '').trim();
+  if (!m || m.endsWith('-default') || m.endsWith('-hub') || m === 'default' || m === 'default-model') {
+    return DEFAULT_TOOL_MODELS[defaultTool] || 'unknown-model';
+  }
+  return MODEL_DISPLAY_NORMALIZE[m] || m.slice(0, 64);
+}
+
+function extractExplicitModel(obj) {
+  if (!obj || typeof obj !== 'object') return '';
+  return String(
+    obj.model
+    || obj.modelId
+    || obj.model_name
+    || obj.message?.model
+    || obj.payload?.model
+    || obj.providerData?.model
+    || obj.providerData?.requestModelId
+    || obj.providerData?.requestModelName
+    || obj.metadata?.model
+    || obj.data?.model
+    || ''
+  ).trim();
+}
+
 function parseJsonlRecord(obj, defaultTool, fallbackDay, fallbackTs, hintModel = '') {
   if (!obj || typeof obj !== 'object') return null;
   let inTok = 0;
   let outTok = 0;
   let cacheTok = 0;
-  let model = obj.model || obj.modelId || obj.model_name || obj.message?.model || obj.payload?.model || hintModel || '';
+  const rawModel = extractExplicitModel(obj) || hintModel;
 
   const u = obj.usage
     || obj.message?.usage
     || obj.response?.usage
+    || obj.providerData?.rawUsage
+    || obj.providerData?.usage
     || obj.usageMetadata
     || obj.tokenUsage
     || obj.tokens
@@ -543,6 +594,7 @@ function parseJsonlRecord(obj, defaultTool, fallbackDay, fallbackTs, hintModel =
       ?? u.cacheReadTokens
       ?? u.prompt_tokens_details?.cached_tokens
       ?? u.input_tokens_details?.cached_tokens
+      ?? (Array.isArray(u.inputTokensDetails) ? u.inputTokensDetails[0]?.cached_tokens : 0)
       ?? 0
     ) || 0;
   } else if (obj.type === 'USER_INPUT' || obj.role === 'user') {
@@ -562,21 +614,13 @@ function parseJsonlRecord(obj, defaultTool, fallbackDay, fallbackTs, hintModel =
     : Date.parse(String(rawTs || ''));
   const tsMs = Number.isFinite(parsedMs) && parsedMs > 0 ? parsedMs : fallbackTs;
   const day = localDayKey(tsMs);
-  if (!model) {
-    model = defaultTool === 'antigravity' ? 'gemini-2.5-pro'
-      : defaultTool === 'claude' ? 'claude-sonnet-4'
-      : defaultTool === 'codex' ? 'gpt-5-codex'
-      : defaultTool === 'zcode' ? 'glm-5'
-      : defaultTool === 'minimaxcode' ? 'MiniMax-M2.7'
-      : defaultTool === 'dsh' ? 'deepseek-chat'
-      : `${defaultTool}-default`;
-  }
+  const model = normalizeModelName(rawModel, defaultTool);
 
   return {
     inTok,
     outTok,
     cacheTok,
-    model: String(model).slice(0, 64),
+    model,
     day,
     tsMs,
   };
@@ -632,25 +676,40 @@ async function scanSingleSessionFile(filePath, toolId) {
   };
 
   if (filePath.endsWith('.jsonl')) {
+    const parsedObjects = [];
     const lines = raw.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed[0] !== '{') continue;
       try {
         const obj = JSON.parse(trimmed);
-        if (obj?.type === 'turn_context' && obj?.payload?.model) {
-          hintModel = String(obj.payload.model);
+        parsedObjects.push(obj);
+        if (!hintModel) {
+          const em = extractExplicitModel(obj);
+          if (em) hintModel = em;
         }
-        addRec(parseJsonlRecord(obj, toolId, fallbackDay, fallbackTs, hintModel));
       } catch {
         // skip malformed line
       }
+    }
+    for (const obj of parsedObjects) {
+      const em = extractExplicitModel(obj);
+      if (em) hintModel = em;
+      addRec(parseJsonlRecord(obj, toolId, fallbackDay, fallbackTs, hintModel));
     }
   } else if (filePath.endsWith('.json')) {
     try {
       const obj = JSON.parse(raw);
       const arr = Array.isArray(obj) ? obj : (Array.isArray(obj?.messages) ? obj.messages : [obj]);
       for (const item of arr) {
+        if (!hintModel) {
+          const em = extractExplicitModel(item);
+          if (em) hintModel = em;
+        }
+      }
+      for (const item of arr) {
+        const em = extractExplicitModel(item);
+        if (em) hintModel = em;
         addRec(parseJsonlRecord(item, toolId, fallbackDay, fallbackTs, hintModel));
       }
     } catch {
@@ -668,7 +727,7 @@ async function scanSingleSessionFile(filePath, toolId) {
     outTok,
     cacheTok,
     turns,
-    model: primaryModel || `${toolId}-default`,
+    model: normalizeModelName(primaryModel || hintModel, toolId),
     slices: [...byDayModel.values()],
   };
   fileScanCache.set(filePath, { mtimeMs: st.mtimeMs, size: st.size, summary });
@@ -852,6 +911,7 @@ export function createTokenMonitorEngine({ dataDir, getHubUsage, getQuotas }) {
           const inTok = Number(agStat.in || 0);
           const outTok = Number(agStat.out || 0);
           if (inTok <= 0 && outTok <= 0) continue;
+          const hubModel = normalizeModelName('', agName);
           detectedTools.add(agName);
           allSessionSummaries.push({
             toolId: agName,
@@ -863,8 +923,8 @@ export function createTokenMonitorEngine({ dataDir, getHubUsage, getQuotas }) {
             outTok,
             cacheTok: 0,
             turns: Number(agStat.msgs || agStat.runs || 1),
-            model: `${agName}-hub`,
-            slices: [{ day, model: `${agName}-hub`, inTok, outTok, cacheTok: 0, turns: Number(agStat.msgs || 1) }],
+            model: hubModel,
+            slices: [{ day, model: hubModel, inTok, outTok, cacheTok: 0, turns: Number(agStat.msgs || 1) }],
           });
         }
       }
