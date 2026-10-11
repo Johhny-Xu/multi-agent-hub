@@ -101,7 +101,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 │ 1. 最省心 · 本机一键安装   → 双击 install.cmd / bash install.sh (开箱即用)│
 │ 2. 任意 AI 客户端直连     → 填入 http://127.0.0.1:8790/mcp (10 秒接入)   │
 │ 3. 跨机部署 (服务器+个人端) → 服务端跑 Hub，客户端连过来 (局域网/SSH 均可)  │
-│ 4. IDE 图形扩展一键导入   → 导入 CodeArts / VS Code .carts / .vsix 扩展 │
+│ 4. 6 大原生宿主按需单装   → CodeArts/MiniMax/ZCode/Codex/DSH/Antigravity│
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -177,16 +177,18 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 ---
 
-### 方案四：IDE 图形扩展 / MiniMax Plugin 一键导入
+### 方案四：6 大原生宿主独立插件按需导入 / 单独安装
 
-> **适合场景**：习惯使用 IDE 图形化扩展管理器或 MiniMax 插件中心导入的开发者。
+> **适合场景**：只需要为某一款特定 IDE / CLI 客户端单独导入或注册原生插件（含专属子代理 `hub-*.md`、技能 `SKILL.md`、斜杠命令与工作流）。
 
-- **华为 CodeArts / VS Code 桌面扩展**：
-  1. 获取扩展安装包：`multi-agent-hub-0.9.4.carts`（CodeArts IDE 专属）或 `.vsix`（VS Code 及兼容编辑器）；
-  2. 在编辑器的“扩展”管理面板选择“从 VSIX/CARTS 安装...”导入；
-  3. 安装完成后自动注入侧边栏状态大盘面板、指示灯以及工作区 MCP 规则。
-- **MiniMax Code / MiniMax Agent 官方插件包（MiniMax Plugin V1）**：
-  - 直接导入 `agenthub-workers-0.9.4-minimax-plugin.zip`（ZIP 根目录直接包含 `.minimax-plugin/plugin.json`、`hub-bridge.mcp.json` 与 `skills/dispatch-hub/SKILL.md`），或指向仓库子目录 `plugins/agenthub-workers`（同时兼容 `.claude-plugin/plugin.json`、`.zcode-plugin/plugin.json` 与 Agent Plugins 1.0）。
+| 原生宿主客户端 | 独立导入 / 按需单装方式 | 插件目录与详细说明 |
+| --- | --- | --- |
+| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-0.9.4.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
+| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-0.9.4-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
+| **3. ZCode IDE / CLI** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts zcode`<br>• **IDE 发现页 / 本地配置**：在 ZCode 插件发现页添加本仓库，或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
+| **4. OpenAI Codex** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`<br>• 自动注册本地插件市场并将 9 个子代理与工作流写入目标工作区 `.codex/agents/` | [`integrations/codex`](integrations/codex/README.md) |
+| **5. DeepSeek Harness (DSH)** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`<br>• **手动 Bundle 挂载**：`dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [`integrations/dsh`](integrations/dsh/README.md) |
+| **6. Google Antigravity** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts antigravity`<br>• 自动将原生插件（Skills + 9 个 `hub-*` 子代理 + MCP 桥）安装至 `~/.gemini/config/plugins/multi-agent-hub`，重启 Antigravity 生效 | [`integrations/antigravity`](integrations/antigravity/README.md) |
 
 ---
 
