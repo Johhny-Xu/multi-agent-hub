@@ -1,19 +1,19 @@
 # multi-agent-hub
 
-![multi-agent-hub 0.9.4 结构图：任意 MCP 客户端接入、5 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
+![multi-agent-hub 0.9.4 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
 
 **multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，具备三层灵活接入形态：
 1. **任意 MCP 客户端直连即用**：任何支持标准 MCP 协议的客户端（如 Cursor、Claude Desktop、Windsurf、VS Code Cline/Roo Code、Continue 等），仅需配置 Hub 的 MCP URL（或使用内置一键复制的 Prompt 指令），即可直接调度多端 Worker；
-2. **5 款原生宿主深度适配（体验更顺畅、更舒服）**：针对 **Codex**、**ZCode**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 提供了深度定制的原生插件、专用子代理体系（`hub-*.md`）、专属技能与斜杠命令，上下文自动隔离，免去手动配置参数的繁琐；
+2. **6 款原生宿主深度适配（体验更顺畅、更舒服）**：针对 **Codex**、**ZCode**、**MiniMax Code（及 Claude Code / Agent Plugins 1.0）**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 提供了深度定制的原生插件、专用子代理体系（`hub-*.md`）、专属技能与斜杠命令，上下文自动隔离，免去手动配置参数的繁琐；
 3. **零客户端独立使用**：即使没有外部 IDE 或 AI 客户端，Hub 内置的 **CodeBuddy 风格三栏式 WebUI 管理大盘** 也能独立完成平台多会话树管理、沉浸式对话、任务派发与监控、全量会话归档复原与彻底清理。
 
-当前源码版本为 **0.9.4**，本阶段重点在于**MiniMaxCode 深度攻坚与 WebUI 全面交互优化**：引入 CodeBuddy 风格三栏式交互大盘、精细时段问候语与跨平台全局头像定制、全量会话聚合归档与一键复原/二次确认批量删除、原生 HTTP MCP 子代理直连端点与全自动 Agent 配置提示词复制、无缝剪贴板兼容、并发深度探活替代独立心跳、Worker 启停权威同步与模型目录精炼。
+当前源码版本为 **0.9.4**，本阶段重点在于**MiniMaxCode 双向深度攻坚（Worker + MiniMax Plugin V1）与 WebUI 全面交互优化**：引入 CodeBuddy 风格三栏式交互大盘、精细时段问候语与跨平台全局头像定制、全量会话聚合归档与一键复原/二次确认批量删除、原生 HTTP MCP 子代理直连端点与全自动 Agent 配置提示词复制、无缝剪贴板兼容、并发深度探活替代独立心跳、Worker 启停权威同步与模型目录精炼。
 
 ---
 
 ### ✨ 核心亮点
 
-- 🔌 **5 种原生宿主客户端**：深度适配 Codex、ZCode、DeepSeek Harness、CodeArts、Antigravity，提供原生子代理、斜杠命令与工作流。
+- 🔌 **6 大原生宿主客户端**：深度适配 Codex、ZCode、MiniMax Code（兼容 Claude Code / Agent Plugins 1.0）、DeepSeek Harness、CodeArts、Antigravity，提供原生子代理、斜杠命令与工作流。
 - 🤖 **9 种 Worker 统一适配**：标准契约调度 Antigravity、CodeBuddy（国际/国内版）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts（Antigravity 原生客户端为新增宿主角色，不作为第十种 Worker）。
 - 🎛️ **CodeBuddy 风格三栏式交互控制台**：内置 Web 管理大盘（`--with-console`，端口 `8890`，默认监听 `0.0.0.0` 开放局域网访问），提供 48px 极简活动栏、260px 平台会话管理树、单平台沉浸式对话与右侧可折叠扩展工作台；支持 7 大时段 35 句智能问候语、跨平台全局头像自由替换；全量会话归档支持跨平台集中筛选、搜索、排序、一键复原与**右上角一键删除（带二次确认防误触）**；刷新时自动并发检测全量子代理真实在线状态与延迟；全网络环境剪贴板支持（兼容局域网 HTTP 非安全上下文与 HTTPS）。
 - 🚀 **子代理原生 HTTP MCP 直连端点**：提供轻量内置 HTTP MCP Server（默认端点 `http://127.0.0.1:8790/mcp`），向任意 AI 客户端（Cursor / Claude Desktop / Antigravity / Windsurf / Cline 等）开放 `subagent_run`（大产物本地落盘、只回摘要不占会话上下文）、`subagent_result`、`subagent_artifact`、`subagent_agents` 调度；控制台一键复制 MCP URL 与**【复制本文（发给Agent配置）】**，直接粘贴发给 Agent 即可全自动接入。

@@ -22,7 +22,7 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-10　·　当前版本 v0.9.4　·　五种原生客户端</text>
+  <text x="64" y="108" class="meta">更新：2026-10-11　·　当前版本 v0.9.4　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
@@ -31,30 +31,30 @@
     <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.4 · 当前重点</text>
     <rect x="938" y="151" width="246" height="36" rx="18" fill="#dbeafe"/>
     <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">版本攻坚 · 前端优化</text>
-    <text x="96" y="227" class="focus">MiniMax 适配与前端优化</text>
-    <text x="96" y="262" class="lead">MiniMaxCode 深度攻坚 · CodeBuddy 三栏式 WebUI · 会话归档复原 · 探活右移</text>
+    <text x="96" y="227" class="focus">MiniMax 双向适配与前端优化</text>
+    <text x="96" y="262" class="lead">MiniMaxCode Worker &amp; Plugin V1 · 三栏式 WebUI · 归档复原/一键删除 · 复制 Agent 配置</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
     <circle cx="102" cy="343" r="5" fill="#0f766e"/>
-    <text x="120" y="351" class="body">连接选择与多节点发现配对</text>
+    <text x="120" y="351" class="body">任意 MCP 直连 + 6 大原生深度宿主</text>
     <circle cx="102" cy="376" r="5" fill="#0f766e"/>
-    <text x="120" y="384" class="body">明确的失败原因与恢复指引</text>
+    <text x="120" y="384" class="body">零客户端 WebUI 独立管理与对话</text>
     <circle cx="102" cy="409" r="5" fill="#0f766e"/>
-    <text x="120" y="417" class="body">ref 续查支持长任务追踪</text>
+    <text x="120" y="417" class="body">ref 续查支持长任务异步追踪</text>
     <circle cx="102" cy="442" r="5" fill="#0f766e"/>
-    <text x="120" y="450" class="body">升级备份保护现有配置安全</text>
+    <text x="120" y="450" class="body">一键安装脚本与配置安全隔离</text>
 
     <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">当前攻坚重点成果</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">MiniMaxCode 旗舰适配 (M3.1/M3)</text>
+    <text x="716" y="351" class="body">MiniMax 双向适配 (M3.1 + Plugin V1)</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
     <text x="716" y="384" class="body">WebUI 三栏控制台与时段关怀</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">全量会话归档、复原与清理</text>
+    <text x="716" y="417" class="body">会话归档复原与二次确认一键删除</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
-    <text x="716" y="450" class="body">刷新深度探活与子代理开关</text>
-    <text x="692" y="476" class="note">聚焦 MiniMaxCode 官方能力打通与沉浸式人机交互。</text>
+    <text x="716" y="450" class="body">复制 Agent 配置与全环境剪贴板</text>
+    <text x="692" y="476" class="note">聚焦 MiniMax 生态双向打通与沉浸式 WebUI 交互体验。</text>
   </g>
 
   <text x="64" y="541" class="section">版本演进</text>
@@ -111,5 +111,5 @@
     <text x="88" y="921" font-size="22" font-weight="700" fill="#92400e">验证范围说明：现有回归通过，不声称所有模型实测通过。</text>
     <text x="88" y="949" font-size="20" fill="#92400e">通信与基础契约验证通过，不代表每个模型的思考、流式与附件能力均已全部实测完毕。</text>
   </g>
-  <text x="64" y="993" class="note">完整演进记录见 CHANGELOG.md 与 docs/version-history.md　·　版本沿 0.8.0 至 0.9.4 平滑演进</text>
+  <text x="64" y="993" class="note">完整演进记录见 CHANGELOG.md 与 docs/version-history.md　·　遵循 Apache License 2.0 开源协议（保留原作者版权）</text>
 </svg>

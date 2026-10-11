@@ -25,4 +25,5 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 - `v0.9.1`：包含 CodeArts 双向接入与 README / SVG 更新，统一项目名称与多端规范。
 - `v0.9.2`：增加 Antigravity 原生插件及可选 SDK，完成五种原生客户端与九种 Worker 的生产发布与验收。
 - `v0.9.3`：CodeArts 官方凭据自动加载、TraeCode 网关终态校验与倍率对齐、子代理模型目录当季精简去重。
-- `v0.9.4`：WebUI 控制台全景交互架构升级为 CodeBuddy 三栏式布局，引入时段关怀问候语与全局头像定制；全量会话聚合归档支持筛选、搜索、排序与一键复原/删除；刷新深度并发探活。
+- `v0.9.4`：WebUI 控制台升级为 CodeBuddy 三栏式布局，支持时段问候语、全局头像定制、全量会话聚合归档与二次确认一键删除、一键复制 Agent 接入配置及全环境剪贴板兼容；完成 MiniMaxCode 双向适配（Worker + MiniMax Plugin V1 / Claude Code / Agent Plugins 1.0 一包四吃）；切换为 Apache License 2.0 开源协议。
+
