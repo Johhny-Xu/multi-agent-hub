@@ -13,6 +13,24 @@ import { getSandbox } from './auth.mjs';
 const HOME = homedir();
 const ROOT = join(HOME, '.agenthub', 'accounts');
 
+const _writeLocks = new Map();
+/** 进程内异步互斥锁：同一 key 的临界区严格串行，消除并发读-改-写覆盖丢失（RMW lost update） */
+async function withLock(key, fn) {
+  const prev = _writeLocks.get(key) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  _writeLocks.set(key, gate);
+  try { await prev; } catch { /* 前序临界区失败不阻塞后续 */ }
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (_writeLocks.get(key) === gate) _writeLocks.delete(key);
+  }
+}
+/** 账号档案写操作共用一把互斥锁；addFromSandbox 内部调用 _switchAccount 避免重入自锁 */
+const ACCOUNTS_WRITE_LOCK = 'accounts-write';
+
 /**
  * worker → 该账号身份对应的凭据文件（相对 HOME）。
  * 只收 OAuth 身份文件，不收会话/缓存；切换即换身份。
@@ -78,7 +96,7 @@ export async function listAccounts() {
 }
 
 /** 把当前生效凭据存为一个档案 */
-export async function saveAccount(worker, name) {
+async function _saveAccount(worker, name) {
   const relFiles = WORKER_CRED_FILES[worker];
   if (!relFiles) return { ok: false, error: `不支持的 worker: ${worker}` };
   for (const rel of relFiles) {
@@ -100,7 +118,7 @@ const SANDBOX_CRED_FILES = {
 };
 
 /** 沙箱添加账号：把沙箱 HOME 里新生成的凭据快照成档案并立即切换 */
-export async function addFromSandbox(worker, name, loginId) {
+async function _addFromSandbox(worker, name, loginId) {
   const rels = SANDBOX_CRED_FILES[worker];
   if (!rels) return { ok: false, error: `该 worker 暂不支持沙箱添加账号` };
   const sandbox = getSandbox(loginId);
@@ -118,12 +136,12 @@ export async function addFromSandbox(worker, name, loginId) {
     await copyFile(srcFile, join(dest, base));
   }
   await writeFile(join(dest, 'meta.json'), JSON.stringify({ savedAt: new Date().toISOString(), via: 'sandbox-add' }, null, 2), 'utf-8');
-  const sw = await switchAccount(worker, name);
+  const sw = await _switchAccount(worker, name);
   return { ok: true, worker, name, switched: sw.ok === true, note: '新账号已快照为档案并切换生效' };
 }
 
 /** 切换到指定档案：先把当前凭据备份到 .backup-<ts>，再复制档案文件到生效位 */
-export async function switchAccount(worker, name) {
+async function _switchAccount(worker, name) {
   const relFiles = WORKER_CRED_FILES[worker];
   if (!relFiles) return { ok: false, error: `不支持的 worker: ${worker}` };
   const src = profileDir(worker, name);
@@ -145,3 +163,8 @@ export async function switchAccount(worker, name) {
   clearQuotaCache(worker);
   return { ok: true, worker, switchedTo: name, backup: backupDir, note: '凭据已换入，配额缓存已清空；如该 CLI 有长连接进程请重启后生效。' };
 }
+
+// ---- 并发加固：以下导出为串行互斥包装（内部实现为 _<name>） ----
+export function saveAccount(worker, name) { return withLock(ACCOUNTS_WRITE_LOCK, () => _saveAccount(worker, name)); }
+export function switchAccount(worker, name) { return withLock(ACCOUNTS_WRITE_LOCK, () => _switchAccount(worker, name)); }
+export function addFromSandbox(worker, name, loginId) { return withLock(ACCOUNTS_WRITE_LOCK, () => _addFromSandbox(worker, name, loginId)); }

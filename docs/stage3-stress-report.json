@@ -1,0 +1,521 @@
+{
+  "baseline": {
+    "tag": "baseline",
+    "finishedAt": "2026-10-11T15:34:13.877Z",
+    "config": {
+      "levels": [
+        10,
+        30,
+        60
+      ],
+      "roundsPerLevel": 2,
+      "endpointCount": 15,
+      "refreshStormConcurrency": 60,
+      "writeRace": 10
+    },
+    "totals": {
+      "requests": 3080,
+      "errors": 0,
+      "errorRatePct": 0,
+      "ladderWallMs": 59443
+    },
+    "rss": {
+      "consoleBeforeMB": 101.8,
+      "consoleAfterMB": 161.2,
+      "hubBeforeMB": 28.1,
+      "hubAfterMB": 27.8
+    },
+    "endpoints": [
+      {
+        "name": "console:GET /",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1151.4,
+        "p95": 1466.5,
+        "p99": 1527,
+        "avg": 986.6,
+        "max": 1536.5,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/snapshot",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1496.1,
+        "p95": 1639.8,
+        "p99": 2263,
+        "avg": 1340.3,
+        "max": 2266.9,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/quota",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 931.7,
+        "p95": 10593.3,
+        "p99": 22866.9,
+        "avg": 2095.2,
+        "max": 22888.1,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/quotas",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1002.1,
+        "p95": 12041,
+        "p99": 22845.8,
+        "avg": 2209.9,
+        "max": 22874.7,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/accounts",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1688,
+        "p95": 1991.2,
+        "p99": 3664.5,
+        "avg": 1658.9,
+        "max": 3669.5,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/models",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1210.5,
+        "p95": 1399.9,
+        "p99": 2107.8,
+        "avg": 1141.1,
+        "max": 2108.6,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/usage",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1001.4,
+        "p95": 1109.3,
+        "p99": 1456,
+        "avg": 878.9,
+        "max": 1481.4,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/chat/list",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1053.3,
+        "p95": 1092.5,
+        "p99": 1538.7,
+        "avg": 922.1,
+        "max": 1590.2,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/chat/archives",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1446.9,
+        "p95": 1657,
+        "p99": 3577.5,
+        "avg": 1363.2,
+        "max": 3582.8,
+        "sampleError": null
+      },
+      {
+        "name": "hub:GET /health",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 658,
+        "p95": 1330.2,
+        "p99": 1520.7,
+        "avg": 648.4,
+        "max": 1545,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp ping",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 116.7,
+        "p95": 170.9,
+        "p99": 1070.8,
+        "avg": 138.3,
+        "max": 1074.1,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_list_agents",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 125.8,
+        "p95": 1070.8,
+        "p99": 1264.6,
+        "avg": 245.9,
+        "max": 1279.5,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_capabilities",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 2347.7,
+        "p95": 2888.6,
+        "p99": 2919,
+        "avg": 1994,
+        "max": 2931.4,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_list_models",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 149.3,
+        "p95": 216.6,
+        "p99": 229.3,
+        "avg": 130.4,
+        "max": 232,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_list_tasks",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 125.5,
+        "p95": 233.6,
+        "p99": 238,
+        "avg": 127.3,
+        "max": 240.5,
+        "sampleError": null
+      },
+      {
+        "name": "console:POST /api/models/custom (竞态)",
+        "count": 10,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 57.9,
+        "p95": 58.8,
+        "p99": 58.8,
+        "avg": 57.7,
+        "max": 58.8,
+        "sampleError": null
+      },
+      {
+        "name": "console:POST /api/models/remove (清理)",
+        "count": 10,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 81.6,
+        "p95": 95.8,
+        "p99": 95.8,
+        "avg": 82.9,
+        "max": 95.8,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/quota/refresh (60并发风暴)",
+        "count": 60,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 28394.5,
+        "p95": 29971.1,
+        "p99": 30422.6,
+        "avg": 28332.8,
+        "max": 30422.6,
+        "sampleError": null
+      }
+    ],
+    "writeRace": {
+      "apiOk": 10,
+      "apiTotal": 10,
+      "persisted": 1,
+      "expected": 10,
+      "lostUpdates": 9,
+      "msAdd": 64,
+      "msClean": 105,
+      "leftovers": []
+    },
+    "refreshStorm": {
+      "concurrency": 60,
+      "ms": 30449
+    }
+  },
+  "generatedAt": "2026-10-11T15:38:15.973Z",
+  "after": {
+    "tag": "after",
+    "finishedAt": "2026-10-11T15:38:15.971Z",
+    "config": {
+      "levels": [
+        10,
+        30,
+        60
+      ],
+      "roundsPerLevel": 2,
+      "endpointCount": 15,
+      "refreshStormConcurrency": 60,
+      "writeRace": 10
+    },
+    "totals": {
+      "requests": 3080,
+      "errors": 0,
+      "errorRatePct": 0,
+      "ladderWallMs": 47634
+    },
+    "rss": {
+      "consoleBeforeMB": 15.6,
+      "consoleAfterMB": 68.8,
+      "hubBeforeMB": 27.8,
+      "hubAfterMB": 28.8
+    },
+    "endpoints": [
+      {
+        "name": "console:GET /",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 793.9,
+        "p95": 1747,
+        "p99": 1819,
+        "avg": 818.7,
+        "max": 1843.8,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/snapshot",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 990,
+        "p95": 1398.7,
+        "p99": 1405.5,
+        "avg": 1002.9,
+        "max": 1407.4,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/quota",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 548.4,
+        "p95": 1612.5,
+        "p99": 22867.3,
+        "avg": 1814.1,
+        "max": 22868,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/quotas",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 647.5,
+        "p95": 850.5,
+        "p99": 22927.8,
+        "avg": 1747.5,
+        "max": 22929.2,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/accounts",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1455.8,
+        "p95": 1899.4,
+        "p99": 1908.4,
+        "avg": 1382.9,
+        "max": 1914.4,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/models",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 865.7,
+        "p95": 1151.1,
+        "p99": 1159.1,
+        "avg": 842.6,
+        "max": 1159.6,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/usage",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 621.3,
+        "p95": 924.3,
+        "p99": 925,
+        "avg": 655.3,
+        "max": 925.4,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/chat/list",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 795.2,
+        "p95": 1001.5,
+        "p99": 1027.5,
+        "avg": 759.8,
+        "max": 1038.4,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/chat/archives",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 1081.4,
+        "p95": 1331.8,
+        "p99": 1345,
+        "avg": 1025.2,
+        "max": 1345.8,
+        "sampleError": null
+      },
+      {
+        "name": "hub:GET /health",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 344.2,
+        "p95": 667.5,
+        "p99": 1140.6,
+        "avg": 331.6,
+        "max": 1210.9,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp ping",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 123.2,
+        "p95": 180.3,
+        "p99": 1047.1,
+        "avg": 132.9,
+        "max": 1058.6,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_list_agents",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 125.1,
+        "p95": 1073.6,
+        "p99": 1257.2,
+        "avg": 223.1,
+        "max": 1258.5,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_capabilities",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 2230.3,
+        "p95": 2842.9,
+        "p99": 2865.1,
+        "avg": 1918.6,
+        "max": 2899.6,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_list_models",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 139.1,
+        "p95": 152.6,
+        "p99": 154,
+        "avg": 113,
+        "max": 157.4,
+        "sampleError": null
+      },
+      {
+        "name": "hub:POST /mcp hub_list_tasks",
+        "count": 200,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 100.3,
+        "p95": 153.1,
+        "p99": 1027.6,
+        "avg": 119.4,
+        "max": 1034.4,
+        "sampleError": null
+      },
+      {
+        "name": "console:POST /api/models/custom (竞态)",
+        "count": 10,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 52.1,
+        "p95": 76.3,
+        "p99": 76.3,
+        "avg": 55.2,
+        "max": 76.3,
+        "sampleError": null
+      },
+      {
+        "name": "console:POST /api/models/remove (清理)",
+        "count": 10,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 46.2,
+        "p95": 71.3,
+        "p99": 71.3,
+        "avg": 48.2,
+        "max": 71.3,
+        "sampleError": null
+      },
+      {
+        "name": "console:GET /api/quota/refresh (60并发风暴)",
+        "count": 60,
+        "errors": 0,
+        "errorRate": 0,
+        "p50": 22555.9,
+        "p95": 22586.7,
+        "p99": 22592.7,
+        "avg": 22558,
+        "max": 22592.7,
+        "sampleError": null
+      }
+    ],
+    "writeRace": {
+      "apiOk": 10,
+      "apiTotal": 10,
+      "persisted": 10,
+      "expected": 10,
+      "lostUpdates": 0,
+      "msAdd": 80,
+      "msClean": 75,
+      "leftovers": []
+    },
+    "refreshStorm": {
+      "concurrency": 60,
+      "ms": 22609
+    }
+  }
+}

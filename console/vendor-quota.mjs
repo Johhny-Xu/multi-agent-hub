@@ -15,6 +15,15 @@ const HOME = homedir();
 const CACHE_TTL_MS = 60_000;
 /** @type {Map<string, {ts:number, data:object}>} */
 const cache = new Map();
+/** Singleflight：全量抓取并发合并锁 —— 同一时刻只允许一次 getAllQuotas 扫描，
+ *  后续并发请求复用同一 Promise，杜绝缓存过期/强刷时的 N×9 外部请求雪崩 */
+let inFlightAll = null;
+/** @type {Map<string, Promise<object>>} 单 worker 维度的在途抓取合并 */
+const inFlightWorker = new Map();
+/** 自检/压测计数：实际绕过缓存发起上游抓取的次数 */
+let fetchAttempts = 0;
+/** 仅供测试/自检读取实际抓取次数（不影响运行时行为） */
+export function debugFetchAttempts() { return fetchAttempts; }
 
 // 直连不可达的厂商（如 Google）经本地代理 CONNECT 隧道访问；可用环境变量覆盖
 const PROXY_URL = process.env.AGENTHUB_QUOTA_PROXY || 'http://127.0.0.1:7890';
@@ -642,23 +651,37 @@ export function clearQuotaCache(worker) {
 export async function getQuota(worker, { force = false } = {}) {
   const hit = cache.get(worker);
   if (!force && hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data;
-
-  const token = await readToken(worker);
-  const fetcher = FETCHERS[worker];
-  let data;
-  if (!fetcher) data = { message: `未知的配额 worker: ${worker}` };
-  else if (worker !== 'github-copilot' && !token) data = await fetcher(null);
-  else {
-    try { data = await fetcher(token); }
-    catch (e) { data = { message: `配额查询异常: ${e.message}` }; }
-  }
-  const payload = { worker, fetchedAt: new Date().toISOString(), ...data };
-  cache.set(worker, { ts: Date.now(), data: payload });
-  return payload;
+  const inFlight = inFlightWorker.get(worker);
+  if (inFlight) return inFlight;
+  const p = (async () => {
+    fetchAttempts++;
+    const token = await readToken(worker);
+    const fetcher = FETCHERS[worker];
+    let data;
+    if (!fetcher) data = { message: `未知的配额 worker: ${worker}` };
+    else if (worker !== 'github-copilot' && !token) data = await fetcher(null);
+    else {
+      try { data = await fetcher(token); }
+      catch (e) { data = { message: `配额查询异常: ${e.message}` }; }
+    }
+    const payload = { worker, fetchedAt: new Date().toISOString(), ...data };
+    cache.set(worker, { ts: Date.now(), data: payload });
+    return payload;
+  })();
+  inFlightWorker.set(worker, p);
+  try { return await p; } finally { inFlightWorker.delete(worker); }
 }
 
 export async function getAllQuotas({ force = false } = {}) {
-  const workers = {};
-  await Promise.all(QUOTA_WORKERS.map(async (w) => { workers[w] = await getQuota(w, { force }); }));
-  return { updatedAt: new Date().toISOString(), workers };
+  if (inFlightAll) return inFlightAll;
+  inFlightAll = (async () => {
+    const workers = {};
+    await Promise.all(QUOTA_WORKERS.map(async (w) => { workers[w] = await getQuota(w, { force }); }));
+    return { updatedAt: new Date().toISOString(), workers };
+  })();
+  try {
+    return await inFlightAll;
+  } finally {
+    inFlightAll = null;
+  }
 }
