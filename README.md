@@ -98,12 +98,63 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        按需选择最适合你的安装方式                       │
 ├────────────────────────────────────────────────────────────────────────┤
-│ 1. 最省心 · 本机一键安装   → 双击 install.cmd / bash install.sh (开箱即用)│
-│ 2. 任意 AI 客户端直连     → 填入 http://127.0.0.1:8790/mcp (10 秒接入)   │
-│ 3. 跨机部署 (服务器+个人端) → 服务端跑 Hub，客户端连过来 (局域网/SSH 均可)  │
-│ 4. 6 大原生宿主按需单装   → CodeArts/MiniMax/ZCode/Codex/DSH/Antigravity│
+│ 0. 懒人最爱 · 发一句话给 Agent → 复制下方提示词，让你的 AI 自动帮你装好！ │
+│ 1. 最省心 · 本机一键安装      → 双击 install.cmd / bash install.sh      │
+│ 2. 任意 AI 客户端直连        → 填入 http://127.0.0.1:8790/mcp (10 秒接入)│
+│ 3. 跨机部署 (服务器+个人端)    → 服务端跑 Hub，客户端连过来 (局域网/SSH)   │
+│ 4. 6 大原生宿主按需单装      → CodeArts/MiniMax/ZCode/Codex/DSH/AGY   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+### 🤖 方案零：零动手 · 复制一句话发给你的 AI Agent 自动配置（最推荐 ⭐⭐⭐⭐⭐）
+
+不用自己记命令或找配置文件，根据你正在使用的客户端类型，**直接复制下面对应的一句话发送给你的 AI 助手**，让它全自动帮你完成克隆、安装与配置：
+
+#### 🅰️ 第一类：6 大原生深度适配客户端（自动安装专属子代理 + 技能 + 命令）
+
+- **🌟 原生宿主通用一句话（适合 Antigravity / CodeArts / ZCode / Codex / DSH / MiniMax Code）**：
+  ```text
+  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git 到本地，阅读其中的 README.md，根据我当前所在的客户端环境执行对应的 install.cmd（Windows）或 ./install.sh（Linux/macOS）完成 Multi-Agent Hub 服务与当前客户端原生深度插件（子代理、Skills 与 MCP 桥）的安装配置，并调用 hub_status 验证连接状态。
+  ```
+
+- **🎯 分客户端精准一句话（按需复制对应客户端那一行）**：
+  - **发给 Google Antigravity**：
+    ```text
+    请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd（Linux 用 ./install.sh）并指定 --native-hosts antigravity，把 Multi-Agent Hub 原生插件与 9 个 hub-* 子代理安装到 ~/.gemini/config/plugins/multi-agent-hub 并启动 Hub 服务。
+    ```
+  - **发给 华为 CodeArts (IDE / CLI)**：
+    ```text
+    请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，为当前工作区执行 install.cmd --native-hosts codearts --project <当前项目路径>（Linux 用 ./install.sh），完成 Multi-Agent Hub 服务与当前工作区 .codeartsdoer/mcp/mcp_settings.json 及专属子代理的自动注册。
+    ```
+  - **发给 MiniMax Code (`mcode`) / Claude Code**：
+    ```text
+    请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，启动其中的 Multi-Agent Hub 服务，并将仓库内的 plugins/agenthub-workers 目录作为原生插件（含 .minimax-plugin/plugin.json、.claude-plugin/plugin.json、hub-bridge.mcp.json 与 dispatch-hub 技能）加载配置到当前客户端中。
+    ```
+  - **发给 ZCode (IDE / CLI)**：
+    ```text
+    请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd --native-hosts zcode（Linux 用 ./install.sh），将 plugins/agenthub-workers 原生插件（含 9 个外部 Worker 子代理与 MCP 桥）注册到我的 ZCode 环境中并启动 Hub。
+    ```
+  - **发给 OpenAI Codex**：
+    ```text
+    请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，针对当前项目工作区运行 install.cmd --native-hosts codex --project <当前项目路径>（Linux 用 ./install.sh），自动配置 Codex 原生插件市场与 .codex/agents/ 路由规则。
+    ```
+  - **发给 DeepSeek Harness (DSH)**：
+    ```text
+    请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd --native-hosts dsh（Linux 用 ./install.sh）或通过 dsh plugin add file:./integrations/dsh 挂载原生预设与工作流插件。
+    ```
+
+#### 🅱️ 第二类：任意通用 MCP 客户端（Cursor / Windsurf / Claude Desktop / Cline / Roo Code / Continue 等）
+
+- **🌐 已有运行中的 Hub（本机或局域网）· 10 秒接入一句话**：
+  ```text
+  请帮我在当前客户端的 MCP 配置文件中添加名为 "multi-agent-hub" 的 Streamable HTTP MCP 服务，URL 为 http://127.0.0.1:8790/mcp（若为局域网服务器请替换为对应 IP），配置完成后调用 subagent_agents 工具查看当前可用的外部子代理列表。
+  ```
+- **🛠️ 从零开始（让通用客户端自动克隆 + 启动服务 + 写入 MCP 配置）一句话**：
+  ```text
+  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，执行里面的 install.cmd（Linux 用 bash install.sh）启动 Multi-Agent Hub 与 Web 控制台服务（:8890 / :8790），然后把 http://127.0.0.1:8790/mcp 自动写入我当前客户端的 MCP 配置文件中。
+  ```
 
 ---
 

@@ -12,12 +12,9 @@ RULES = {
     "provider_key": re.compile(r"\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{40,}|AKIA[A-Z0-9]{16})\b"),
     "jwt": re.compile(r"\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\b"),
     "literal_credential": re.compile(r"(?i)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|HUB_TOKEN)[\"']?\s*[:=]\s*[\"']([A-Za-z0-9_./+=-]{20,})[\"']"),
-}
-
-WORKING_TREE_RULES = {
-    **RULES,
-    "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+" + r"Johhny|/home/" + r"johhny)\b"),
-    "private_lan_ip": re.compile(r"\b192\.168\.2\." + r"29\b"),
+    "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+Joh" + r"hny|/home/joh" + r"hny)\b"),
+    "private_lan_ip": re.compile(r"\b192\.168\." + r"2\.29\b"),
+    "legacy_hub_token": re.compile(r"sbl4LvbZ4DcvlgSN-" + r"JpNLBQmvkHlYqie"),
 }
 
 
@@ -40,7 +37,7 @@ def scan(history=False):
         except (OSError, UnicodeError):
             continue
         count += 1
-        findings.extend({"file": path.relative_to(ROOT).as_posix(), **item} for item in matches(text, WORKING_TREE_RULES))
+        findings.extend({"file": path.relative_to(ROOT).as_posix(), **item} for item in matches(text, RULES))
     historical = []
     if history:
         diff = subprocess.check_output(["git", "log", "--all", "--no-ext-diff", "--format=COMMIT:%H", "-p", "--"], cwd=ROOT, timeout=60).decode("utf-8", errors="replace")
