@@ -24,8 +24,11 @@ def package_files(component):
             if source.suffix == '.py' or source.name in ('capabilities.json', 'agents.example.json', 'agents.windows.example.json', 'agents.minimal.example.json'):
                 files['payload/hub/' + source.name] = source
         files['payload/drivers/zcode_rpc.mjs'] = ROOT / 'drivers/zcode_rpc.mjs'
+        files['payload/drivers/zcode_dom.js'] = ROOT / 'drivers/zcode_dom.js'
         files['payload/drivers/codearts_cli.py'] = ROOT / 'drivers/codearts_cli.py'
-        files['payload/console/server.mjs'] = ROOT / 'console/server.mjs'
+        for console_mod in ('server.mjs', 'vendor-quota.mjs', 'accounts.mjs', 'auth.mjs', 'secret-get.py'):
+            if (ROOT / 'console' / console_mod).is_file():
+                files['payload/console/' + console_mod] = ROOT / 'console' / console_mod
         for source in (ROOT / 'console/client').rglob('*'):
             if source.is_file() and source.suffix.lower() in ('.html', '.mjs', '.js', '.css', '.png', '.ico', '.svg'):
                 files['payload/console/client/' + source.relative_to(ROOT / 'console/client').as_posix()] = source
