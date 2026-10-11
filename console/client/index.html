@@ -3109,6 +3109,10 @@
     color: var(--mcode-text-muted);
   }
 
+.qa-models{margin:8px 0 2px}
+.qa-models select{flex:1;min-width:0;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:4px 6px;font-size:12px}
+.qa-input{flex:1;min-width:0;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:4px 8px;font-size:12px}
+.qa-models .qa-qname{display:flex;gap:6px;align-items:center}
 /* ===== 配额与账号面板（native quota + accounts） ===== */
 .qa-panel{margin:0 0 18px;padding:14px 16px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(148,163,184,.05)}
 .qa-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -6898,25 +6902,14 @@
     renderWorkbench();
   });
 
-  document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
-    if (tab.id === 'tab-chat') tab.addEventListener('click', function () { loadThreads(); loadUsage(); updateStatusBar(); });
-  });
-
-  loadSnapshot().then(function () { renderInflight(); loadThreads(); updateStatusBar(); updateModelSummaryUI(); });
-  loadUsage().then(updateStatusBar);
-  loadQuotas();
-  loadAvatars();
-})();
-</script>
-</body>
-</html>
-<script>
+  docume<script>
 (() => {
   const grid = document.getElementById('qaGrid');
   const esc = (s) => String(s ?? '');
   const pctColor = (p) => (p >= 99.5 ? ' full' : p >= 80 ? ' warn' : '');
   const shortTime = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : ` ${d.getMonth()+1}/${d.getDate()}`; };
-  let quotaData = null, accountData = null;
+  let quotaData = null, accountData = null, modelsData = null;
+  const jpost = (u, b) => fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b || {}) }).then((r) => r.json());
 
   function bar(name, q) {
     const row = document.createElement('div'); row.className = 'qa-row';
@@ -6938,7 +6931,136 @@
     return row;
   }
 
-  function workerCard(worker, q, acc) {
+  function modelRow(worker) {
+    const mw = (modelsData && modelsData.workers && modelsData.workers[worker]) || null;
+    const wrap = document.createElement('div'); wrap.className = 'qa-models';
+    if (!mw) return wrap;
+    const head = document.createElement('div'); head.className = 'qa-qname';
+    const sel = document.createElement('select');
+    const opts = [{ alias: '__default__', id: mw.default || '(未设置)' }, ...mw.models];
+    for (const o of opts) {
+      const el = document.createElement('option'); el.value = o.alias;
+      el.textContent = o.alias === '__default__' ? `当前默认: ${o.id}` : `${o.alias} → ${o.id}`;
+      sel.appendChild(el);
+    }
+    head.append(sel);
+    const setBtn = document.createElement('button'); setBtn.className = 'qa-btn'; setBtn.type = 'button'; setBtn.textContent = '设默认';
+    setBtn.onclick = async () => {
+      const alias = sel.value; if (!alias) return;
+      const r = await jpost('/api/models/default', { worker, alias });
+      window.alert(r.ok ? `${worker} 默认模型已切换（实时生效）` : `失败: ${r.error || '?'}`);
+      load();
+    };
+    const addBtn = document.createElement('button'); addBtn.className = 'qa-btn'; addBtn.type = 'button'; addBtn.textContent = '+自定义';
+    addBtn.onclick = async () => {
+      const alias = window.prompt('自定义模型别名（如 gpt-max）:', '');
+      if (!alias) return;
+      const id = window.prompt('模型 ID（发给 CLI 的真实模型名）:', '');
+      if (!id) return;
+      const r = await jpost('/api/models/custom', { worker, alias, id });
+      window.alert(r.ok ? `已添加自定义模型 ${alias}` : `失败: ${r.error || '?'}`);
+      load();
+    };
+    const rmBtn = document.createElement('button'); rmBtn.className = 'qa-btn'; rmBtn.type = 'button'; rmBtn.textContent = '删';
+    rmBtn.onclick = async () => {
+      const alias = sel.value;
+      if (!alias || alias === '__default__') { window.alert('请先在下拉框选择要删除的自定义别名'); return; }
+      if (!window.confirm(`删除 ${worker} 的模型别名「${alias}」？`)) return;
+      const r = await jpost('/api/models/remove', { worker, alias });
+      window.alert(r.ok ? `已删除 ${alias}` : `失败: ${r.error || '?'}`);
+      load();
+    };
+    head.append(setBtn, addBtn, rmBtn);
+    wrap.appendChild(head);
+    return wrap;
+  }
+
+  function authRow(worker, q, acc) {
+    const acts = document.createElement('div'); acts.className = 'qa-acts';
+    const sel = document.createElement('select');
+    const profiles = (acc && acc.profiles) || [];
+    const blank = document.createElement('option'); blank.value = ''; blank.textContent = profiles.length ? '账号档案…' : '（暂无档案）';
+    sel.appendChild(blank);
+    for (const p of profiles) {
+      const o = document.createElement('option'); o.value = p.name;
+      o.textContent = p.name + (p.active ? ' ✓当前' : '');
+      sel.appendChild(o);
+    }
+    const saveBtn = document.createElement('button'); saveBtn.className = 'qa-btn'; saveBtn.type = 'button'; saveBtn.textContent = '存当前';
+    const swBtn = document.createElement('button'); swBtn.className = 'qa-btn'; swBtn.type = 'button'; swBtn.textContent = '切换';
+    saveBtn.onclick = async () => {
+      const name = window.prompt(`将 ${worker} 当前凭据存为账号档案，名称：`, '');
+      if (!name) return;
+      const r = await jpost('/api/accounts/save', { worker, name });
+      window.alert(r.ok ? `已保存档案 ${name}` : `保存失败: ${r.error || '?'}`);
+      load();
+    };
+    swBtn.onclick = async () => {
+      if (!sel.value) { window.alert('请先在下拉框选择要切换到的账号档案'); return; }
+      if (!window.confirm(`确认把 ${worker} 切换到档案「${sel.value}」？当前凭据会自动备份。`)) return;
+      const r = await jpost('/api/accounts/switch', { worker, name: sel.value });
+      window.alert(r.ok ? `已切换到 ${sel.value}（原凭据已备份）` : `切换失败: ${r.error || '?'}`);
+      load();
+    };
+    acts.append(sel, saveBtn, swBtn);
+
+    const acts2 = document.createElement('div'); acts2.className = 'qa-acts';
+    const loginBtn = document.createElement('button'); loginBtn.className = 'qa-btn'; loginBtn.type = 'button'; loginBtn.textContent = '登录';
+    const logoutBtn = document.createElement('button'); logoutBtn.className = 'qa-btn'; logoutBtn.type = 'button'; logoutBtn.textContent = '退出';
+    loginBtn.onclick = async () => {
+      if (worker === 'codearts') { window.alert('CodeArts 请使用 AK/SK 表单保存凭据'); return; }
+      const r = await jpost('/api/auth/login', { worker });
+      if (!r.ok) { window.alert(r.note || r.error || '该 worker 不支持 WebUI 发起登录'); return; }
+      const box = window.open('', '_blank', 'width=560,height=480');
+      let done = false;
+      const timer = setInterval(async () => {
+        const p = await fetch(`/api/auth/poll?loginId=${r.loginId}`).then((x) => x.json()).catch(() => null);
+        if (!p || !p.ok) { clearInterval(timer); return; }
+        if (box && !box.closed) {
+          box.document.body.innerHTML = `<h3>${worker} 登录中…</h3>`
+            + (p.url ? `<p>打开 <a href="${p.url}" target="_blank">${p.url}</a></p>` : '')
+            + (p.deviceCode ? `<p>设备码: <b style="font-size:20px">${p.deviceCode}</b></p>` : '')
+            + `<pre style="white-space:pre-wrap;font-size:11px">${esc(p.output).slice(-600)}</pre>`
+            + `<p>在浏览器完成授权后，回到此处点击「我已完成」。</p>`
+            + `<button onclick="window.__qaFinish && window.__qaFinish()">我已完成</button>`;
+        }
+        if (p.exited && !done) { done = true; clearInterval(timer); load(); }
+      }, 2000);
+      window.__qaFinish = async () => {
+        clearInterval(timer);
+        await jpost('/api/auth/finish', { loginId: r.loginId });
+        if (box && !box.closed) box.close();
+        window.alert('登录流程已结束，若已在浏览器完成授权，配额将自动刷新。');
+        load();
+      };
+    };
+    logoutBtn.onclick = async () => {
+      if (!window.confirm(`确认退出 ${worker} 登录？凭据将移入备份目录（不会删除）。`)) return;
+      const r = await jpost('/api/auth/logout', { worker });
+      window.alert(r.ok ? `已退出：${(r.moved || []).join(', ')}` : `失败: ${r.error || '?'}`);
+      load();
+    };
+    acts2.append(loginBtn, logoutBtn);
+
+    const wrap = document.createElement('div');
+    wrap.append(acts, acts2);
+    if (worker === 'codearts') {
+      const ak = document.createElement('input'); ak.placeholder = 'CODEARTS_CLI_AK'; ak.className = 'qa-input'; ak.type = 'password';
+      const sk = document.createElement('input'); sk.placeholder = 'CODEARTS_CLI_SK'; sk.className = 'qa-input'; sk.type = 'password';
+      const save = document.createElement('button'); save.className = 'qa-btn'; save.type = 'button'; save.textContent = '保存 AK/SK';
+      save.onclick = async () => {
+        const r = await jpost('/api/auth/codearts', { ak: ak.value, sk: sk.value });
+        window.alert(r.ok ? 'CodeArts AK/SK 已保存' : `失败: ${r.error || '?'}`);
+        ak.value = sk.value = '';
+      };
+      const row = document.createElement('div'); row.className = 'qa-acts';
+      row.append(ak, sk, save);
+      wrap.appendChild(row);
+    }
+    return wrap;
+  }
+
+  function workerCard(worker, q, acc, mw) {
     const card = document.createElement('div'); card.className = 'qa-card';
     const h = document.createElement('h4');
     const t = document.createElement('span'); t.textContent = worker;
@@ -6948,46 +7070,23 @@
     if (quotas) { for (const [name, qq] of Object.entries(quotas)) card.appendChild(bar(name, qq)); }
     else { const m = document.createElement('div'); m.className = 'qa-msg'; m.textContent = q.message || '暂无配额数据'; card.appendChild(m); }
 
-    const acts = document.createElement('div'); acts.className = 'qa-acts';
-    const sel = document.createElement('select');
-    const blank = document.createElement('option'); blank.value = ''; blank.textContent = acc.profiles.length ? '选择账号档案…' : '（暂无档案）';
-    sel.appendChild(blank);
-    for (const p of acc.profiles) {
-      const o = document.createElement('option'); o.value = p.name;
-      o.textContent = p.name + (p.active ? ' ✓当前' : '');
-      sel.appendChild(o);
-    }
-    const saveBtn = document.createElement('button'); saveBtn.className = 'qa-btn'; saveBtn.type = 'button'; saveBtn.textContent = '存当前';
-    const swBtn = document.createElement('button'); swBtn.className = 'qa-btn'; swBtn.type = 'button'; swBtn.textContent = '切换';
-    saveBtn.onclick = async () => {
-      const name = window.prompt(`将 ${worker} 当前凭据存为档案，名称：`, '');
-      if (!name) return;
-      const r = await fetch('/api/accounts/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ worker, name }) }).then((x) => x.json());
-      window.alert(r.ok ? `已保存档案 ${name}` : `保存失败: ${r.error || r.error?.message || '?'}`);
-      load();
-    };
-    swBtn.onclick = async () => {
-      if (!sel.value) { window.alert('请先在下拉框选择要切换到的账号档案'); return; }
-      if (!window.confirm(`确认把 ${worker} 切换到档案「${sel.value}」？当前凭据会自动备份。`)) return;
-      const r = await fetch('/api/accounts/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ worker, name: sel.value }) }).then((x) => x.json());
-      window.alert(r.ok ? `已切换到 ${sel.value}（原凭据已备份）` : `切换失败: ${r.error || '?'}`);
-      load();
-    };
-    acts.append(sel, saveBtn, swBtn); card.appendChild(acts);
+    const modelsWrap = modelRow(worker);
+    if (modelsWrap.childNodes.length) card.appendChild(modelsWrap);
+    card.appendChild(authRow(worker, q, acc));
     return card;
   }
 
   async function load() {
     try {
-      const [q, a] = await Promise.all([
+      const [q, a, m] = await Promise.all([
         fetch('/api/quota').then((r) => r.json()),
         fetch('/api/accounts').then((r) => r.json()),
+        fetch('/api/models').then((r) => r.json()),
       ]);
-      quotaData = q; accountData = a;
+      quotaData = q; accountData = a; modelsData = m;
       grid.textContent = '';
-      const workers = Object.keys(q.workers || {});
-      for (const w of workers) {
-        grid.appendChild(workerCard(w, q.workers[w] || {}, (a.workers && a.workers[w]) || { profiles: [] }));
+      for (const w of Object.keys(q.workers || {})) {
+        grid.appendChild(workerCard(w, q.workers[w] || {}, (a.workers && a.workers[w]) || { profiles: [] }, (m.workers && m.workers[w]) || null));
       }
     } catch (e) {
       grid.textContent = '配额加载失败: ' + esc(e.message);
@@ -7002,3 +7101,4 @@
   setInterval(load, 60000);
 })();
 </script>
+

@@ -16,6 +16,7 @@ const execFile = promisify(execFileCb);
 // Multi-Agent Hub 原生配额跟踪 + 账号切换（自 9router 移植，OAuth 直读 CLI 凭据）
 import * as vendorQuota from './vendor-quota.mjs';
 import * as accountsMod from './accounts.mjs';
+import * as authMod from './auth.mjs';
 
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
@@ -2422,6 +2423,49 @@ export async function start(context) {
       if (request.method === 'POST' && p === '/api/accounts/switch') {
         const body = await readJson();
         send(200, await accountsMod.switchAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/auth/login') {
+        const body = await readJson();
+        send(200, authMod.startLogin(safeName(body.worker, 'worker')));
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/auth/poll') {
+        send(200, authMod.pollLogin(String(url.searchParams.get('loginId') || '')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/auth/finish') {
+        const body = await readJson();
+        send(200, authMod.finishLogin(String(body.loginId || '')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/auth/logout') {
+        const body = await readJson();
+        send(200, await authMod.logout(safeName(body.worker, 'worker')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/auth/codearts') {
+        const body = await readJson();
+        send(200, await authMod.saveCodeArts(String(body.ak || ''), String(body.sk || '')));
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/models') {
+        send(200, await authMod.listModels());
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/models/default') {
+        const body = await readJson();
+        send(200, await authMod.setDefaultModel(safeName(body.worker, 'worker'), String(body.alias || '')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/models/custom') {
+        const body = await readJson();
+        send(200, await authMod.addCustomModel(safeName(body.worker, 'worker'), String(body.alias || ''), String(body.id || '')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/models/remove') {
+        const body = await readJson();
+        send(200, await authMod.removeCustomModel(safeName(body.worker, 'worker'), String(body.alias || '')));
         return;
       }
       if (request.method === 'GET' && p === '/api/chat/list') {
