@@ -828,11 +828,27 @@ export function createTokenMonitorEngine({ dataDir, getHubUsage, getQuotas }) {
     }));
 
     // Merge Multi-Agent Hub's own console usage (data/usage.json)
+    const TOOL_ALIAS_MAP = {
+      agy: 'antigravity',
+      cb: 'codebuddy',
+      'cb-cn': 'codebuddy-cn',
+      trae: 'traecode',
+      copilot: 'github-copilot',
+      ghcp: 'github-copilot',
+      mimo: 'mimocode',
+      mmx: 'minimaxcode',
+      'minimax-code': 'minimaxcode',
+      minimax: 'minimaxcode',
+      zc: 'zcode',
+      glm: 'zcode',
+      deepseek: 'dsh',
+    };
     const hubUsage = typeof getHubUsage === 'function' ? getHubUsage() : null;
     if (hubUsage && hubUsage.days) {
       for (const [day, dayObj] of Object.entries(hubUsage.days)) {
         const agents = dayObj.agents || {};
-        for (const [agName, agStat] of Object.entries(agents)) {
+        for (const [rawAgName, agStat] of Object.entries(agents)) {
+          const agName = TOOL_ALIAS_MAP[rawAgName] || rawAgName;
           const inTok = Number(agStat.in || 0);
           const outTok = Number(agStat.out || 0);
           if (inTok <= 0 && outTok <= 0) continue;
