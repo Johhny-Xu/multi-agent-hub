@@ -26,7 +26,6 @@ def package_files(component):
         files['payload/drivers/zcode_rpc.mjs'] = ROOT / 'drivers/zcode_rpc.mjs'
         files['payload/drivers/codearts_cli.py'] = ROOT / 'drivers/codearts_cli.py'
         files['payload/console/server.mjs'] = ROOT / 'console/server.mjs'
-        files['payload/console/token_monitor.mjs'] = ROOT / 'console/token_monitor.mjs'
         for source in (ROOT / 'console/client').rglob('*'):
             if source.is_file() and source.suffix.lower() in ('.html', '.mjs', '.js', '.css', '.png', '.ico', '.svg'):
                 files['payload/console/client/' + source.relative_to(ROOT / 'console/client').as_posix()] = source
