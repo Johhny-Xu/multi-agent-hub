@@ -7049,7 +7049,36 @@
       window.alert(r.ok ? `已退出：${(r.moved || []).join(', ')}` : `失败: ${r.error || '?'}`);
       load();
     };
-    acts2.append(loginBtn, logoutBtn);
+    const addAccBtn = document.createElement('button'); addAccBtn.className = 'qa-btn'; addAccBtn.type = 'button'; addAccBtn.textContent = '+添加账号';
+    addAccBtn.onclick = async () => {
+      const name = window.prompt(`为 ${worker} 添加新账号，档案名：`, '');
+      if (!name) return;
+      const r = await jpost('/api/accounts/add', { worker, name });
+      if (!r.ok) { window.alert(r.note || r.error || '该 worker 不支持沙箱添加账号'); return; }
+      const box = window.open('', '_blank', 'width=560,height=480');
+      let done = false;
+      const timer = setInterval(async () => {
+        const p = await fetch(`/api/auth/poll?loginId=${r.loginId}`).then((x) => x.json()).catch(() => null);
+        if (!p || !p.ok) { clearInterval(timer); return; }
+        if (box && !box.closed) {
+          box.document.body.innerHTML = `<h3>添加账号 ${name}（沙箱隔离）</h3>`
+            + (p.url ? `<p>打开 <a href="${p.url}" target="_blank">${p.url}</a></p>` : '')
+            + (p.deviceCode ? `<p>设备码: <b style="font-size:20px">${p.deviceCode}</b></p>` : '')
+            + `<pre style="white-space:pre-wrap;font-size:11px">${esc(p.output).slice(-500)}</pre>`
+            + `<p>完成授权后点击下方按钮，新账号会自动存为档案并切换。</p>`
+            + `<button onclick="window.opener.__qaAddFinish && window.opener.__qaAddFinish()">授权完成</button>`;
+        }
+        if (p.exited && !done) { done = true; clearInterval(timer); }
+      }, 2000);
+      window.__qaAddFinish = async () => {
+        clearInterval(timer);
+        const fr = await jpost('/api/accounts/add/finish', { worker, name, loginId: r.loginId });
+        window.alert(fr.ok ? `新账号 ${name} 已添加并切换生效` : `失败: ${fr.error || '?'}`);
+        if (box && !box.closed) box.close();
+        load();
+      };
+    };
+    acts2.append(loginBtn, logoutBtn, addAccBtn);
 
     const wrap = document.createElement('div');
     wrap.append(acts, acts2);
