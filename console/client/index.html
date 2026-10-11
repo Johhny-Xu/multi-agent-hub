@@ -8,32 +8,58 @@
 <style>
   :root, [data-theme="dark"] {
     color-scheme: dark;
-    --mcode-bg: #0d1117;
-    --mcode-bg-secondary: #13171f;
-    --mcode-surface: #161b24;
-    --mcode-surface-muted: #1e2430;
-    --mcode-surface-hover: #262d3d;
-    --mcode-code-bg: #090c10;
-    --mcode-text: #f0f6fc;
-    --mcode-text-muted: #8b949e;
-    --mcode-text-subtle: #586069;
-    --mcode-border: rgba(240, 246, 252, 0.1);
-    --mcode-border-strong: rgba(240, 246, 252, 0.22);
-    --mcode-accent: #3b82f6;
-    --mcode-accent-from: #2563eb;
-    --mcode-accent-to: #7c3aed;
-    --mcode-accent-gradient: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-    --mcode-accent-glow: rgba(37, 99, 235, 0.35);
-    --mcode-focus-ring: rgba(59, 130, 246, 0.35);
-    --mcode-success: #10b981;
-    --mcode-warning: #f59e0b;
-    --mcode-danger: #ef4444;
-    --mcode-primary-action-bg: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-    --mcode-primary-action-text: #ffffff;
-    --mcode-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --mcode-card-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-    --mcode-scrollbar: rgba(255, 255, 255, 0.16);
-    --mcode-scrollbar-hover: rgba(255, 255, 255, 0.3);
+    /* token-monitor native frosted-glass palette */
+    --glass-rgb: 48, 52, 56;
+    --glass: rgba(var(--glass-rgb), 0.72);
+    --glass-strong: rgba(58, 63, 68, 0.84);
+    --panel-rgb: 16, 21, 30;
+    --sunken-rgb: 4, 8, 13;
+    --overlay-rgb: 255, 255, 255;
+    --control-alpha: 0.038;
+    --line-rgb: 232, 238, 244;
+    --line: rgba(var(--line-rgb), 0.11);
+    --line-strong: rgba(var(--line-rgb), 0.20);
+    --text: #eef5fb;
+    --fg: #d6e0ea;
+    --muted: #a3adbb;
+    --readable-muted: #b3becd;
+    --accent: #b7ead4;
+    --accent-rgb: 183, 234, 212;
+    --success: #b7ead4;
+    --success-rgb: 183, 234, 212;
+    --blue: #73bdf5;
+    --orange: #f4a073;
+    --yellow: #f1d973;
+    --red: #f47788;
+    /* WebUI mapped tokens */
+    --mcode-bg: #0c1016;
+    --mcode-bg-secondary: rgba(16, 21, 30, 0.88);
+    --mcode-surface: rgba(24, 29, 38, 0.84);
+    --mcode-surface-raised: rgba(32, 37, 46, 0.94);
+    --mcode-surface-muted: rgba(255, 255, 255, 0.042);
+    --mcode-surface-hover: rgba(255, 255, 255, 0.078);
+    --mcode-code-bg: rgba(4, 8, 13, 0.65);
+    --mcode-text: #eef5fb;
+    --mcode-text-bright: #ffffff;
+    --mcode-text-muted: #a3adbb;
+    --mcode-text-subtle: #6e7887;
+    --mcode-border: rgba(232, 238, 244, 0.11);
+    --mcode-border-strong: rgba(232, 238, 244, 0.21);
+    --mcode-accent: #b7ead4;
+    --mcode-accent-from: #73bdf5;
+    --mcode-accent-to: #b7ead4;
+    --mcode-accent-gradient: linear-gradient(135deg, rgba(183, 234, 212, 0.24) 0%, rgba(115, 189, 245, 0.24) 100%);
+    --mcode-accent-glow: rgba(183, 234, 212, 0.20);
+    --mcode-focus-ring: rgba(115, 189, 245, 0.28);
+    --mcode-success: #b7ead4;
+    --mcode-warning: #f1d973;
+    --mcode-danger: #f47788;
+    --mcode-primary-action-bg: rgba(183, 234, 212, 0.13);
+    --mcode-primary-action-text: #eef5fb;
+    --mcode-shadow: 0 22px 48px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    --mcode-card-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --mcode-scrollbar: rgba(232, 238, 244, 0.16);
+    --mcode-scrollbar-hover: rgba(232, 238, 244, 0.30);
   }
   [data-theme="light"] {
     color-scheme: light;
@@ -48,17 +74,17 @@
     --mcode-text-subtle: #94a3b8;
     --mcode-border: rgba(15, 23, 42, 0.09);
     --mcode-border-strong: rgba(15, 23, 42, 0.2);
-    --mcode-accent: #2563eb;
-    --mcode-accent-from: #2563eb;
-    --mcode-accent-to: #6d28d9;
-    --mcode-accent-gradient: linear-gradient(135deg, #2563eb 0%, #6d28d9 100%);
-    --mcode-accent-glow: rgba(37, 99, 235, 0.2);
-    --mcode-focus-ring: rgba(37, 99, 235, 0.25);
+    --mcode-accent: #0f766e;
+    --mcode-accent-from: #0284c7;
+    --mcode-accent-to: #0f766e;
+    --mcode-accent-gradient: linear-gradient(135deg, #0284c7 0%, #0f766e 100%);
+    --mcode-accent-glow: rgba(15, 118, 110, 0.18);
+    --mcode-focus-ring: rgba(2, 132, 199, 0.25);
     --mcode-success: #059669;
     --mcode-warning: #d97706;
     --mcode-danger: #dc2626;
-    --mcode-primary-action-bg: linear-gradient(135deg, #2563eb 0%, #6d28d9 100%);
-    --mcode-primary-action-text: #ffffff;
+    --mcode-primary-action-bg: rgba(15, 118, 110, 0.12);
+    --mcode-primary-action-text: #0f172a;
     --mcode-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.04);
     --mcode-card-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
     --mcode-scrollbar: rgba(0, 0, 0, 0.16);
@@ -68,14 +94,17 @@
   html { color-scheme: dark; }
   [data-theme="light"] { color-scheme: light; }
   body {
-    margin: 0; background: var(--mcode-bg); color: var(--mcode-text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
-    font-size: 14px; line-height: 1.55;
+    margin: 0;
+    background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.07), transparent 36%), linear-gradient(180deg, #121720 0%, #090d13 100%);
+    color: var(--mcode-text);
+    font-family: "SF Mono", "Cascadia Mono", "JetBrains Mono", "Fira Code", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Consolas, monospace;
+    font-size: 13px; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     min-height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
   }
   .mono {
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, Consolas, monospace;
+    font-family: "SF Mono", "Cascadia Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-feature-settings: "liga" 0;
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -86,63 +115,71 @@
 
   header.top {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;
-    padding: 14px 28px; background: var(--mcode-surface); border-bottom: 1px solid var(--mcode-border);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    padding: 10px 20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)), rgba(38, 42, 48, 0.74);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
-  .brand-box { display: flex; align-items: center; gap: 12px; }
+  .brand-box { display: flex; align-items: center; gap: 10px; }
   .brand-logo {
-    width: 34px; height: 34px; border-radius: 9px;
-    background: var(--mcode-surface-muted, rgba(255, 255, 255, 0.08));
-    border: 1px solid var(--mcode-border);
+    width: 30px; height: 30px; border-radius: 8px;
+    background: rgba(var(--sunken-rgb), 0.45);
+    border: 1px solid var(--line);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 12px var(--mcode-accent-glow); flex-shrink: 0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); flex-shrink: 0;
     overflow: hidden;
   }
   .brand-logo-img {
-    width: 26px; height: 26px; object-fit: contain;
-    filter: drop-shadow(0 2px 6px rgba(37, 99, 235, 0.45));
+    width: 22px; height: 22px; object-fit: contain;
     transition: transform .2s ease;
   }
   .brand-logo:hover .brand-logo-img {
-    transform: scale(1.12);
+    transform: scale(1.08);
   }
   header.top h1 {
-    font-size: 17px; line-height: 24px; font-weight: 600; margin: 0;
-    background: linear-gradient(135deg, var(--mcode-text) 60%, var(--mcode-accent));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-size: 15px; line-height: 20px; font-weight: 700; margin: 0;
+    color: var(--text);
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
     display: inline-block; letter-spacing: -0.2px;
   }
-  header.top .sub { color: var(--mcode-text-muted); font-size: 12px; margin-top: 2px; }
-  .top-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  header.top .sub { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
   main { padding: 24px; max-width: none; margin: 0 auto; }
 
   button {
-    font: inherit; border-radius: 8px; border: 1px solid var(--mcode-border);
-    background: var(--mcode-surface-muted); color: var(--mcode-text);
-    min-height: 32px; padding: 5px 14px; cursor: pointer;
-    font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    transition: all .16s ease;
+    font: inherit; border-radius: 7px; border: 1px solid var(--line);
+    background: rgba(var(--overlay-rgb), var(--control-alpha)); color: var(--text);
+    min-height: 30px; padding: 4px 12px; cursor: pointer;
+    font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    box-shadow: inset 0 1px 0 rgba(var(--overlay-rgb), 0.08);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    transition: border-color .15s ease, background-color .15s ease, color .15s ease, transform .12s ease;
   }
-  button:hover { border-color: var(--mcode-border-strong); background: var(--mcode-surface-hover); }
+  button:hover { border-color: var(--line-strong); background: rgba(var(--overlay-rgb), 0.072); }
   button:active { transform: scale(0.98); }
   button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
-    outline: 2px solid var(--mcode-accent); outline-offset: 1px;
+    outline: 1px solid rgba(115, 189, 245, 0.72); outline-offset: 2px;
   }
   button.primary {
-    background: var(--mcode-primary-action-bg); color: var(--mcode-primary-action-text);
-    border: none; box-shadow: 0 2px 8px var(--mcode-accent-glow);
+    background: rgba(var(--accent-rgb), 0.12); color: var(--accent);
+    border: 1px solid rgba(var(--accent-rgb), 0.42);
+    box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.14);
   }
   button.primary:hover {
-    filter: brightness(1.12); box-shadow: 0 4px 14px var(--mcode-accent-glow); transform: translateY(-1px);
+    border-color: rgba(var(--accent-rgb), 0.65);
+    background: rgba(var(--accent-rgb), 0.18);
+    color: var(--text);
   }
-  button.primary:active { transform: translateY(0) scale(0.98); }
-  button.text { background: transparent; border-color: transparent; color: var(--mcode-accent); padding: 5px 8px; }
-  button.text:hover { background: rgba(59, 130, 246, 0.1); border-color: transparent; }
-  button.danger { color: var(--mcode-danger); border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); }
-  button.danger:hover { background: rgba(239, 68, 68, 0.16); border-color: var(--mcode-danger); }
-  button:disabled { opacity: 0.45; border-color: var(--mcode-border); background: var(--mcode-surface-muted); cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-  button.small { min-height: 24px; padding: 2px 8px; font-size: 11.5px; border-radius: 6px; }
+  button.primary:active { transform: scale(0.98); }
+  button.text { background: transparent; border-color: transparent; box-shadow: none; color: var(--muted); padding: 4px 8px; }
+  button.text:hover { background: rgba(var(--overlay-rgb), 0.06); border-color: var(--line); color: var(--text); }
+  button.danger { color: var(--red); border-color: rgba(244, 119, 136, 0.35); background: rgba(244, 119, 136, 0.08); }
+  button.danger:hover { background: rgba(244, 119, 136, 0.16); border-color: var(--red); }
+  button:disabled { opacity: 0.42; border-color: var(--line); background: rgba(var(--overlay-rgb), 0.02); cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+  button.small { min-height: 24px; padding: 2px 8px; font-size: 11px; border-radius: 6px; }
 
   select, input[type="text"], input[type="number"], textarea {
     font: inherit; color: var(--mcode-text); background: var(--mcode-surface-muted);
@@ -3109,6 +3146,720 @@
     color: var(--mcode-text-muted);
   }
 
+/* === Token Monitor Native Renderer CSS === */
+
+  /* ==========================================================================
+     token-monitor (Javis603/token-monitor) Native Renderer Styles & Icon Masks
+     ========================================================================== */
+  .row-icon, .limit-icon {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    background-color: currentColor;
+    -webkit-mask-image: var(--row-icon-url);
+    mask-image: var(--row-icon-url);
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+  .row-icon-antigravity { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z' fill='%23fff'/%3E%3C/svg%3E"); }
+  .row-icon-codearts { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10.341 17.042s.062-.061 0-.061C7.516 10.902 3.646 6.22 3.646 6.22S1.557 8.168 1.68 10.174c.061 1.52 1.228 2.37 1.228 2.37 1.843 1.763 6.266 4.012 7.31 4.499h.123zm-.737 1.52c0-.061-.123-.061-.123-.061l-7.371.243c.798 1.398 2.15 2.492 3.563 2.188.983-.243 3.194-1.763 3.87-2.25.123-.12.061-.12.061-.12zm.123-.67c.062-.06 0-.12 0-.12C6.471 15.581.206 12.3.206 12.3c-.553 1.763.184 3.161.184 3.161.798 1.702 2.334 2.189 2.334 2.189.676.303 1.413.303 1.413.303h5.529c.061 0 .061-.06.061-.06zm.492-14.831c-.308 0-1.168.243-1.168.243-1.965.486-2.395 2.249-2.395 2.249-.369 1.094 0 2.31 0 2.31.675 2.857 3.87 7.598 4.545 8.57l.062.062c.061 0 .061-.061.061-.061C12.43 5.796 10.22 3.06 10.22 3.06zm2.457 13.373c.061 0 .123-.061.123-.061.737-1.033 3.87-5.714 4.545-8.57 0 0 .369-1.399 0-2.31 0 0-.491-1.764-2.457-2.25 0 0-.553-.121-1.167-.243 0 0-2.211 2.796-1.106 13.312 0 .122.062.122.062.122zm1.72 2.067s-.062 0-.062.06v.122c.738.486 2.826 2.006 3.87 2.249 0 0 1.905.669 3.563-2.188l-7.371-.243zm9.398-6.261s-6.265 3.343-9.521 5.531c0 0-.062.06-.062.122 0 0 0 .06.062.06h5.651s.553 0 1.29-.303c0 0 1.536-.487 2.396-2.25 0-.06.737-1.458.184-3.16zM13.66 17.042s.061.06.122 0c1.045-.547 5.468-2.736 7.31-4.499 0 0 1.168-.911 1.23-2.37.122-2.067-1.967-3.951-1.967-3.951s-3.87 4.559-6.695 10.698c0 0-.062.06 0 .122z' fill='%23fff'/%3E%3C/svg%3E"); }
+  .row-icon-codebuddy, .row-icon-workbuddy, .row-icon-codebuddy-cn { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3ECodeBuddy%3C/title%3E%3Cpath d='M18.777 1.647c.28-.02.536.114.972.51 1.018.926 2.437 2.828 3.318 4.452l.34.631.482.24.11.06v3.638a5.206 5.206 0 00-5.32-1.23c-.491.166-1.021.471-2.08 1.082l-6.09 3.516c-1.057.61-1.586.916-1.975 1.259a5.208 5.208 0 00-1.493 5.572c.165.49.471 1.02 1.082 2.08l.315.543h-3.26c-.685 0-1.34-.135-1.939-.377-.169-.956-.009-1.789.469-2.335.158-.18.164-.189.13-.493a11.846 11.846 0 01-.057-1.711l.02-.444-.667-1.18C2.1 15.622 1.445 14.078 1.192 12.9c-.133-.647-.125-.934.04-1.146.1-.128.427-.261.822-.334.994-.175 3.162-.017 5.575.41l.25.043.551-.487c.915-.81 1.522-1.264 2.641-1.962 1.167-.73 2.484-1.331 3.967-1.807l.476-.152.261-.688c.937-2.471 1.896-4.293 2.58-4.9.235-.21.25-.22.422-.23z'%3E%3C/path%3E%3Cpath d='M12.139 18.2a1.203 1.203 0 011.642.44l1.296 2.243a1.204 1.204 0 01-2.083 1.203l-1.296-2.243a1.203 1.203 0 01.44-1.644zM18.629 14.452a1.203 1.203 0 011.642.44l1.295 2.244a1.203 1.203 0 11-2.083 1.203l-1.295-2.243a1.203 1.203 0 01.44-1.644z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-trae, .row-icon-traecode { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3ETRAE%3C/title%3E%3Cpath d='M24 20.541H3.428v-3.426H0V3.4h24V20.54zM3.428 17.115h17.144V6.827H3.428v10.288zm8.573-5.196l-2.425 2.424-2.424-2.424 2.424-2.424 2.425 2.424zm6.857-.001l-2.424 2.423-2.425-2.423 2.425-2.425 2.424 2.425z' fill='%2332F08C'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-copilot, .row-icon-github-copilot { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EGithubCopilot%3C/title%3E%3Cpath d='M19.245 5.364c1.322 1.36 1.877 3.216 2.11 5.817.622 0 1.2.135 1.592.654l.73.964c.21.278.323.61.323.955v2.62c0 .339-.173.669-.453.868C20.239 19.602 16.157 21.5 12 21.5c-4.6 0-9.205-2.583-11.547-4.258-.28-.2-.452-.53-.453-.868v-2.62c0-.345.113-.679.321-.956l.73-.963c.392-.517.974-.654 1.593-.654l.029-.297c.25-2.446.81-4.213 2.082-5.52 2.461-2.54 5.71-2.851 7.146-2.864h.198c1.436.013 4.685.323 7.146 2.864zm-7.244 4.328c-.284 0-.613.016-.962.05-.123.447-.305.85-.57 1.108-1.05 1.023-2.316 1.18-2.994 1.18-.638 0-1.306-.13-1.851-.464-.516.165-1.012.403-1.044.996a65.882 65.882 0 00-.063 2.884l-.002.48c-.002.563-.005 1.126-.013 1.69.002.326.204.63.51.765 2.482 1.102 4.83 1.657 6.99 1.657 2.156 0 4.504-.555 6.985-1.657a.854.854 0 00.51-.766c.03-1.682.006-3.372-.076-5.053-.031-.596-.528-.83-1.046-.996-.546.333-1.212.464-1.85.464-.677 0-1.942-.157-2.993-1.18-.266-.258-.447-.661-.57-1.108-.32-.032-.64-.049-.96-.05zm-2.525 4.013c.539 0 .976.426.976.95v1.753c0 .525-.437.95-.976.95a.964.964 0 01-.976-.95v-1.752c0-.525.437-.951.976-.951zm5 0c.539 0 .976.426.976.95v1.753c0 .525-.437.95-.976.95a.964.964 0 01-.976-.95v-1.752c0-.525.437-.951.976-.951zM7.635 5.087c-1.05.102-1.935.438-2.385.906-.975 1.037-.765 3.668-.21 4.224.405.394 1.17.657 1.995.657h.09c.649-.013 1.785-.176 2.73-1.11.435-.41.705-1.433.675-2.47-.03-.834-.27-1.52-.63-1.813-.39-.336-1.275-.482-2.265-.394zm6.465.394c-.36.292-.6.98-.63 1.813-.03 1.037.24 2.06.675 2.47.968.957 2.136 1.104 2.776 1.11h.044c.825 0 1.59-.263 1.995-.657.555-.556.765-3.187-.21-4.224-.45-.468-1.335-.804-2.385-.906-.99-.088-1.875.058-2.265.394zM12 7.615c-.24 0-.525.015-.84.044.03.16.045.336.06.526l-.001.159a2.94 2.94 0 01-.014.25c.225-.022.425-.027.612-.028h.366c.187 0 .387.006.612.028-.015-.146-.015-.277-.015-.409.015-.19.03-.365.06-.526a9.29 9.29 0 00-.84-.044z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-minimax, .row-icon-minimaxcode { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EMinimax%3C/title%3E%3Cpath d='M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709.74.74 0 00.743-.709V9.099a2.06 2.06 0 012.071-2.049A2.06 2.06 0 0124 9.1v6.561a.649.649 0 01-.652.645.649.649 0 01-.653-.645V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v7.472a2.037 2.037 0 01-2.048 2.026 2.037 2.037 0 01-2.048-2.026v-12.5a.785.785 0 00-.788-.753.785.785 0 00-.789.752l-.001 15.904A2.037 2.037 0 0113.441 22a2.037 2.037 0 01-2.048-2.026V18.04c0-.356.292-.645.652-.645.36 0 .652.289.652.645v1.934c0 .263.142.506.372.638.23.131.514.131.744 0a.734.734 0 00.372-.638V4.07c0-1.143.937-2.07 2.093-2.07zm-5.674 0c1.156 0 2.093.927 2.093 2.07v11.523a.648.648 0 01-.652.645.648.648 0 01-.652-.645V4.07a.785.785 0 00-.789-.78.785.785 0 00-.789.78v14.013a2.06 2.06 0 01-2.07 2.048 2.06 2.06 0 01-2.071-2.048V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v3.8a2.06 2.06 0 01-2.071 2.049A2.06 2.06 0 010 12.9v-1.378c0-.357.292-.646.652-.646.36 0 .653.29.653.646V12.9c0 .418.343.757.766.757s.766-.339.766-.757V9.099a2.06 2.06 0 012.07-2.048 2.06 2.06 0 012.071 2.048v8.984c0 .419.343.758.767.758.423 0 .766-.339.766-.758V4.07c0-1.143.937-2.07 2.093-2.07z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-zai, .row-icon-zcode { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EZ.ai%3C/title%3E%3Cpath d='M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-mimo, .row-icon-mimocode { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='%23FF6900' role='img' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EXiaomi%3C/title%3E%3Cpath d='M12 0C8.016 0 4.756.255 2.493 2.516.23 4.776 0 8.033 0 12.012c0 3.98.23 7.235 2.494 9.497C4.757 23.77 8.017 24 12 24c3.983 0 7.243-.23 9.506-2.491C23.77 19.247 24 15.99 24 12.012c0-3.984-.233-7.243-2.502-9.504C19.234.252 15.978 0 12 0zM4.906 7.405h5.624c1.47 0 3.007.068 3.764.827.746.746.827 2.233.83 3.676v4.54a.15.15 0 0 1-.152.147h-1.947a.15.15 0 0 1-.152-.148V11.83c-.002-.806-.048-1.634-.464-2.051-.358-.36-1.026-.441-1.72-.458H7.158a.15.15 0 0 0-.151.147v6.98a.15.15 0 0 1-.152.148H4.906a.15.15 0 0 1-.15-.148V7.554a.15.15 0 0 1 .15-.149zm12.131 0h1.949a.15.15 0 0 1 .15.15v8.892a.15.15 0 0 1-.15.148h-1.949a.15.15 0 0 1-.151-.148V7.554a.15.15 0 0 1 .151-.149zM8.92 10.948h2.046c.083 0 .15.066.15.147v5.352a.15.15 0 0 1-.15.148H8.92a.15.15 0 0 1-.152-.148v-5.352a.15.15 0 0 1 .152-.147Z'/%3E%3C/svg%3E"); }
+  .row-icon-deepseek, .row-icon-dsh { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EDeepSeek%3C/title%3E%3Cpath d='M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-claude { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EClaude%3C/title%3E%3Cpath d='M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-codex { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EOpenAI%3C/title%3E%3Cpath d='M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-gemini { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EGemini%3C/title%3E%3Cpath d='M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-qwen { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EQwen%3C/title%3E%3Cpath d='M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z'%3E%3C/path%3E%3C/svg%3E"); }
+  .row-icon-token-monitor { --row-icon-url: url("data:image/svg+xml;utf8,%3Csvg fill='currentColor' fill-rule='evenodd' height='1em' style='flex:none%3Bline-height:1' viewBox='0 0 24 24' width='1em' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EToken Monitor%3C/title%3E%3Ctext x='12' y='12.57' text-anchor='middle' dominant-baseline='central' font-family='ui-monospace%2C SFMono-Regular%2C Menlo%2C Consolas%2C monospace' font-weight='700' font-size='30'%3E%26%23931%3B%3C/text%3E%3C/svg%3E"); }
+  .settings-section-icon-limits {
+    --settings-section-icon-url: url("data:image/svg+xml;utf8,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='currentColor' d='M10 2.48a7.65 7.65 0 0 1 7.65 7.65c0 2.68-1.39 5.06-3.5 6.43a.68.68 0 0 1-.74-1.14 6.25 6.25 0 1 0-6.82 0 .68.68 0 0 1-.74 1.14 7.63 7.63 0 0 1-3.5-6.43A7.65 7.65 0 0 1 10 2.48Z' /%3E%3Cpath fill='currentColor' d='M10.88 11.97a1.66 1.66 0 0 1-2.27-.61 1.66 1.66 0 0 1 .61-2.27c.95-.55 4.68-1.58 4.98-1.06.3.52-2.37 3.39-3.32 3.94Z' /%3E%3C/svg%3E");
+  }
+
+  /* Native token-monitor .tm-shell / .shell container */
+  dialog.tm-dialog {
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text);
+    width: min(460px, 94vw);
+    max-width: 460px;
+    max-height: 86vh;
+    overflow: visible;
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.65);
+  }
+  dialog.tm-dialog::backdrop {
+    background: rgba(4, 8, 13, 0.56);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .tm-shell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-height: 84vh;
+    padding: 12px 14px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background:
+      radial-gradient(circle at top left, rgba(var(--overlay-rgb), 0.12), transparent 32%),
+      linear-gradient(180deg, rgba(var(--overlay-rgb), 0.055), rgba(var(--overlay-rgb), 0.018)),
+      var(--glass);
+    color: var(--text);
+    font-family: "SF Mono", "Cascadia Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgba(var(--overlay-rgb), 0.14), 0 18px 46px rgba(0, 0, 0, 0.42);
+    overflow: hidden;
+  }
+  #panel-limits {
+    overflow-y: auto;
+    padding: 20px 24px;
+  }
+  .tm-stage-wrap {
+    width: 100%;
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .tm-stage-wrap .tm-shell {
+    max-height: none;
+  }
+
+  /* Native .titlebar */
+  .tm-shell .titlebar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 30px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(var(--line-rgb), 0.09);
+  }
+  .tm-shell .app-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 14.5px;
+    font-weight: 700;
+    line-height: 1.12;
+    color: var(--text);
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+  }
+  .tm-shell .app-title-sigma {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: rgba(var(--accent-rgb), 0.13);
+    border: 1px solid rgba(var(--accent-rgb), 0.32);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .tm-shell .live-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-left: 2px;
+    border-radius: 50%;
+    background: #5b6471;
+    transition: background 200ms ease;
+  }
+  .tm-shell .live-dot.live {
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.65);
+  }
+  .tm-titlebar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tm-tabs {
+    display: inline-grid;
+    grid-template-columns: repeat(2, auto);
+    height: 28px;
+    padding: 2px;
+    gap: 2px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(var(--sunken-rgb), 0.38);
+  }
+  .tm-tab {
+    min-height: 22px;
+    height: 22px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    box-shadow: none;
+    cursor: pointer;
+    transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+  }
+  .tm-tab:hover {
+    color: var(--text);
+    background: rgba(var(--overlay-rgb), 0.04);
+  }
+  .tm-tab.active {
+    color: var(--text);
+    background: rgba(var(--overlay-rgb), 0.10);
+    border-color: rgba(var(--line-rgb), 0.16);
+    box-shadow: inset 0 1px 0 rgba(var(--overlay-rgb), 0.08);
+  }
+  .tm-icon-btn {
+    width: 30px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(var(--overlay-rgb), var(--control-alpha));
+    color: var(--text);
+    display: inline-grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(var(--overlay-rgb), 0.08);
+  }
+  .tm-icon-btn:hover {
+    border-color: var(--line-strong);
+    background: rgba(var(--overlay-rgb), 0.072);
+  }
+  .tm-icon-btn.active {
+    border-color: rgba(var(--accent-rgb), 0.58);
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.10);
+  }
+  .tm-refresh-glyph {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    background: currentColor;
+    --tm-refresh-url: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22.14' height='21.22' viewBox='1 1.35 22.14 21.22' fill='none' stroke='currentColor' stroke-linejoin='miter' %3E%3Cpath stroke-width='3.67' d='M18.75 6.02A8.6 8.6 0 1 1 9.46 4.17' /%3E%3Cpath stroke-width='2.82' d='M9.46 11.08V2.76H1' /%3E%3C/svg%3E");
+    -webkit-mask: var(--tm-refresh-url) center / contain no-repeat;
+    mask: var(--tm-refresh-url) center / contain no-repeat;
+    transition: transform 360ms ease;
+  }
+  .tm-icon-btn.is-refreshing .tm-refresh-glyph {
+    animation: tmSpin 0.8s linear infinite;
+  }
+  @keyframes tmSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .tm-settings-glyph {
+    width: 13px;
+    height: 13px;
+    display: inline-block;
+    background: currentColor;
+    --tm-settings-url: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915' /%3E%3Ccircle cx='12' cy='12' r='3' /%3E%3C/svg%3E");
+    -webkit-mask: var(--tm-settings-url) center / contain no-repeat;
+    mask: var(--tm-settings-url) center / contain no-repeat;
+  }
+
+  /* Native .limits-panel & .limit-row */
+  .limits-panel {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    flex: 1;
+    min-height: 0;
+    align-content: start;
+    gap: 12px;
+    overflow: hidden auto;
+    padding: 2px 2px 2px 0;
+  }
+  .limit-row {
+    display: grid;
+    gap: 9px;
+    padding: 0 0 12px;
+    border-bottom: 1px solid rgba(var(--line-rgb), 0.11);
+  }
+  .limit-row:last-child {
+    border-bottom: none;
+    padding-bottom: 2px;
+  }
+  .limit-head, .limit-window-text {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .limit-head { align-items: start; }
+  .limit-title {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+  .limit-name {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .limit-name-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .limit-meta {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .limit-plan {
+    flex: 0 0 auto;
+    max-width: 46%;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.25;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .limit-plan-action {
+    min-height: 20px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    border: 1px solid rgba(var(--line-rgb), 0.16);
+    background: rgba(var(--overlay-rgb), 0.04);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .limit-plan-action:hover {
+    border-color: rgba(var(--accent-rgb), 0.45);
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.08);
+  }
+  .limit-windows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .limit-windows > .limit-window:only-child {
+    grid-column: 1 / -1;
+  }
+  .limit-windows-antigravity-grouped {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  .limit-window-group {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+  }
+  .limit-window-group-title {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.9;
+  }
+  .limit-window-group-items {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-width: 0;
+    gap: 10px;
+  }
+  .limit-window-group-items > .limit-window:only-child {
+    grid-column: 1 / -1;
+  }
+  .limit-window {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+  }
+  .limit-window-wide {
+    grid-column: 1 / -1;
+  }
+  .limit-window-text {
+    color: var(--readable-muted);
+    font-size: 10.5px;
+  }
+  .limit-window-text span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .limit-window-text strong,
+  .limit-window-text span:last-child {
+    color: var(--text);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .limit-meter {
+    width: 100%;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: rgba(var(--sunken-rgb), 0.52);
+  }
+  .limit-meter-fill {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 3px;
+    transform: scaleX(var(--bar-scale, 0));
+    transform-origin: left center;
+    transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .limit-reset {
+    min-height: 11px;
+    overflow: hidden;
+    color: var(--readable-muted);
+    font-size: 9.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .limit-reset-split {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .limit-detail {
+    color: var(--text);
+    opacity: 0.72;
+    white-space: nowrap;
+  }
+
+  /* Native .settings-panel & .cursor-account-group */
+  .settings-panel {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 0;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden auto;
+    padding: 2px 0 4px;
+  }
+  .settings-collapsible-group {
+    min-width: 0;
+    border: 1px solid rgba(var(--line-rgb), 0.11);
+    border-radius: 12px;
+    background: rgba(var(--panel-rgb), 0.52);
+    overflow: clip;
+  }
+  .settings-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 11px;
+    border-bottom: 1px solid rgba(var(--line-rgb), 0.08);
+  }
+  .settings-section-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .settings-section-icon {
+    flex: 0 0 auto;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+    color: var(--accent);
+    -webkit-mask: var(--settings-section-icon-url) center / contain no-repeat;
+    mask: var(--settings-section-icon-url) center / contain no-repeat;
+  }
+  .settings-section-details-inner {
+    display: grid;
+    min-width: 0;
+    gap: 0;
+    padding: 2px 11px 8px;
+  }
+  .settings-subgroup {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+    padding: 9px 0;
+    border-top: 1px solid rgba(var(--line-rgb), 0.075);
+  }
+  .settings-section-details-inner > .settings-subgroup:first-child {
+    border-top: 0;
+    padding-top: 6px;
+  }
+  .settings-subgroup:last-child {
+    padding-bottom: 2px;
+  }
+  .cursor-settings-toggle {
+    width: 100%;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .cursor-settings-toggle:hover {
+    background: transparent;
+    border-color: transparent;
+    color: var(--accent);
+  }
+  .settings-item-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .cursor-settings-summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 10px;
+  }
+  .cursor-status-pill {
+    display: inline-block;
+    min-width: 0;
+    max-width: 190px;
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(var(--overlay-rgb), 0.045);
+    color: var(--muted);
+    font-size: 9.5px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cursor-status-pill.connected {
+    border-color: rgba(var(--accent-rgb), 0.35);
+    background: rgba(var(--accent-rgb), 0.11);
+    color: var(--accent);
+  }
+  .cursor-status-pill.warning {
+    border-color: rgba(241, 217, 115, 0.32);
+    background: rgba(241, 217, 115, 0.09);
+    color: var(--yellow);
+  }
+  .cursor-status-pill.error {
+    border-color: rgba(244, 119, 136, 0.36);
+    background: rgba(244, 119, 136, 0.10);
+    color: var(--red);
+  }
+  .cursor-disclosure-icon {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 12px;
+    height: 12px;
+    color: var(--muted);
+    transition: transform 140ms ease;
+  }
+  .cursor-disclosure-icon::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-1.5px) rotate(45deg);
+  }
+  .cursor-account-group.expanded .cursor-disclosure-icon {
+    transform: rotate(180deg);
+  }
+  .cursor-settings-details {
+    display: none;
+    min-width: 0;
+    padding-top: 6px;
+  }
+  .cursor-account-group.expanded .cursor-settings-details {
+    display: grid;
+    gap: 8px;
+  }
+  .settings-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+  .settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .settings-actions button {
+    min-height: 27px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .codex-login-output {
+    max-height: 130px;
+    margin: 0;
+    padding: 7px 9px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(var(--sunken-rgb), 0.45);
+    color: var(--text);
+    font-size: 10.5px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .opencode-add-form {
+    margin-top: 2px;
+    border-radius: 6px;
+  }
+  .opencode-add-summary {
+    cursor: pointer;
+    width: fit-content;
+    min-height: 26px;
+    color: var(--text);
+    font-size: 10.5px;
+    padding: 0 9px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(var(--overlay-rgb), 0.035);
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    list-style: none;
+    transition: border-color 0.18s, background 0.18s;
+  }
+  .opencode-add-summary::-webkit-details-marker { display: none; }
+  .opencode-add-summary:hover {
+    border-color: var(--line-strong);
+    background: rgba(var(--overlay-rgb), 0.072);
+  }
+  .opencode-add-body {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid rgba(var(--line-rgb), 0.09);
+    border-radius: 7px;
+    background: rgba(var(--sunken-rgb), 0.34);
+  }
+  .opencode-add-body .settings-row {
+    display: grid;
+    gap: 4px;
+  }
+  .opencode-add-body .settings-row label {
+    font-size: 10px;
+    color: var(--muted);
+    margin: 0;
+  }
+  .opencode-add-body .settings-row input {
+    width: 100%;
+    height: 28px;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 6px;
+    background: rgba(var(--panel-rgb), 0.72);
+    border: 1px solid var(--line);
+    color: var(--text);
+  }
+
+  /* Native .footer */
+  .tm-shell .footer {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(var(--line-rgb), 0.09);
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+  .tool-detail-footer {
+    display: inline-grid;
+    height: 26px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid rgba(var(--line-rgb), 0.16);
+    border-radius: 6px;
+    background: rgba(var(--overlay-rgb), var(--control-alpha));
+  }
+  .tool-detail-footer-option {
+    min-width: 54px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+    line-height: 1;
+    transition: color 120ms ease, background 120ms ease;
+  }
+  .tool-detail-footer-option + .tool-detail-footer-option {
+    border-left: 1px solid rgba(var(--line-rgb), 0.14);
+  }
+  .tool-detail-footer-option:hover {
+    color: var(--text);
+    background: rgba(var(--overlay-rgb), 0.04);
+  }
+  .tool-detail-footer-option[aria-pressed="true"] {
+    color: var(--text);
+    background: rgba(var(--accent-rgb), 0.13);
+    font-weight: 600;
+  }
+
 </style>
 </head>
 <body>
@@ -3123,6 +3874,11 @@
     </div>
   </div>
   <div class="top-actions">
+    <button id="btn-top-tm" type="button" class="text" title="打开 Token Monitor 原生配额与账号管理面板" style="display:inline-flex;align-items:center;gap:6px;border-color:rgba(183,234,212,0.28);background:rgba(183,234,212,0.1);color:var(--accent)">
+      <span class="limit-icon row-icon-token-monitor" style="color:var(--accent)"></span>
+      <span>Token Monitor</span>
+      <span class="app-mark" style="font-size:11px;margin-left:-2px">Σ</span>
+    </button>
     <span class="dot" id="conn-dot" title="连接状态"></span>
     <label class="visually-hidden" for="endpoint" style="display:none">枢纽端点</label>
     <select id="endpoint" aria-label="枢纽端点"></select>
@@ -3143,6 +3899,10 @@
         <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
         <span class="tab-label">对话</span>
         <span class="chat-badge" id="chat-badge"></span>
+      </button>
+      <button role="tab" id="tab-limits" aria-selected="false" aria-controls="panel-limits" type="button" class="cb-activity-tab" title="Token Monitor 原生配额与账号管理">
+        <span class="limit-icon row-icon-token-monitor" style="width:18px;height:18px;color:currentColor"></span>
+        <span class="tab-label">监控</span>
       </button>
       <button role="tab" id="tab-agents" aria-selected="false" aria-controls="panel-agents" type="button" class="cb-activity-tab" title="子代理概览与拓扑">
         <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 16.5 13"/></svg>
@@ -3222,7 +3982,10 @@
                 <button id="btn-new-chat" class="primary btn-sm-icon" type="button" title="在此平台新建对话">
                   <span>+ 新建对话</span>
                 </button>
-                <button id="btn-chat-auth" class="text" type="button" title="平台登录与 token-monitor 原生配额管理">🔑 登录/配额</button>
+                <button id="btn-chat-auth" class="text" type="button" title="Token Monitor 原生配额与账号管理" style="display:inline-flex;align-items:center;gap:5px">
+                  <span class="limit-icon row-icon-token-monitor" style="color:var(--accent)"></span>
+                  <span>Token Monitor</span>
+                </button>
                 <button id="btn-chat-clear" class="text" type="button" title="清空当前会话">清空</button>
                 <button id="btn-chat-export" class="text" type="button" title="导出当前会话为本机文件">导出</button>
                 <button id="btn-workbench-toggle" class="text" type="button" title="展开或收起工作台">工作台</button>
@@ -3354,6 +4117,11 @@
         </div>
       </section>
 
+      <!-- Token Monitor 原生配额与账号管理面板 -->
+      <section class="tabpanel" id="panel-limits" role="tabpanel" aria-labelledby="tab-limits" hidden>
+        <div class="tm-stage-wrap" id="tm-stage-host"></div>
+      </section>
+
       <!-- 子代理面板 -->
       <section class="tabpanel" id="panel-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
         <div class="kpi-row" id="kpis" aria-label="枢纽概览" style="display:none"></div>
@@ -3412,6 +4180,8 @@
     </div>
   </div>
 </main>
+
+<dialog id="tm-dialog" class="tm-dialog" aria-label="Token Monitor"></dialog>
 
 <dialog id="modal" aria-labelledby="modal-title">
   <div class="dlg-head">
@@ -3806,26 +4576,23 @@
 
   // ---------------- 实时对话（CodeBuddy 平台与多会话机制）
   var AGENT_COLORS = {
-    'codearts': { bg: 'linear-gradient(135deg, #C7000B, #ef4444)', code: 'CA' },
-    'codebuddy': { bg: 'linear-gradient(135deg, #2563eb, #7c3aed)', code: 'CB' },
-    'codebuddy-cn': { bg: 'linear-gradient(135deg, #0284c7, #6366f1)', code: 'CN' },
-    'zcode': { bg: 'linear-gradient(135deg, #059669, #0284c7)', code: 'ZC' },
-    'antigravity': { bg: 'linear-gradient(135deg, #4f46e5, #9333ea)', code: 'AN' },
-    'github-copilot': { bg: 'linear-gradient(135deg, #475569, #2563eb)', code: 'GH' },
-    'mimocode': { bg: 'linear-gradient(135deg, #db2777, #7c3aed)', code: 'MC' },
-    'traecode': { bg: 'linear-gradient(135deg, #ea580c, #dc2626)', code: 'TR' },
-    'console': { bg: 'linear-gradient(135deg, #0ea5e9, #6366f1)', code: 'CS' },
-    'minimax-code': { bg: 'linear-gradient(135deg, #d97706, #ea580c)', code: 'MX' }
+    'codearts': { bg: 'rgba(4, 8, 13, 0.56)', code: 'CA' },
+    'codebuddy': { bg: 'rgba(4, 8, 13, 0.56)', code: 'CB' },
+    'codebuddy-cn': { bg: 'rgba(4, 8, 13, 0.56)', code: 'CN' },
+    'zcode': { bg: 'rgba(4, 8, 13, 0.56)', code: 'ZC' },
+    'antigravity': { bg: 'rgba(4, 8, 13, 0.56)', code: 'AN' },
+    'github-copilot': { bg: 'rgba(4, 8, 13, 0.56)', code: 'GH' },
+    'mimocode': { bg: 'rgba(4, 8, 13, 0.56)', code: 'MC' },
+    'traecode': { bg: 'rgba(4, 8, 13, 0.56)', code: 'TR' },
+    'console': { bg: 'rgba(4, 8, 13, 0.56)', code: 'CS' },
+    'minimaxcode': { bg: 'rgba(4, 8, 13, 0.56)', code: 'MX' },
+    'minimax-code': { bg: 'rgba(4, 8, 13, 0.56)', code: 'MX' }
   };
   function getAgentVisual(name) {
     if (name && AGENT_COLORS[name]) return AGENT_COLORS[name];
     var str = String(name || 'AG');
-    var hash = 0;
-    for (var i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    var h1 = Math.abs(hash % 360);
-    var h2 = (h1 + 45) % 360;
     return {
-      bg: 'linear-gradient(135deg, hsl(' + h1 + ', 70%, 46%), hsl(' + h2 + ', 70%, 46%))',
+      bg: 'rgba(4, 8, 13, 0.56)',
       code: str.slice(0, 2).toUpperCase()
     };
   }
@@ -3835,7 +4602,7 @@
     'antigravity': '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Antigravity</title><mask height="23" id="lobe-icons-antigravity-0-_R_0_" maskUnits="userSpaceOnUse" width="24" x="0" y="1"><path d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z" fill="#fff"></path></mask><g mask="url(#lobe-icons-antigravity-0-_R_0_)"><g filter="url(#lobe-icons-antigravity-1-_R_0_)"><path d="M-1.018-3.992c-.408 3.591 2.686 6.89 6.91 7.37 4.225.48 7.98-2.043 8.387-5.633.408-3.59-2.686-6.89-6.91-7.37-4.225-.479-7.98 2.043-8.387 5.633z" fill="#FFE432"></path></g><g filter="url(#lobe-icons-antigravity-2-_R_0_)"><path d="M15.269 7.747c1.058 4.557 5.691 7.374 10.348 6.293 4.657-1.082 7.575-5.653 6.516-10.21-1.058-4.556-5.691-7.374-10.348-6.292-4.657 1.082-7.575 5.653-6.516 10.21z" fill="#FC413D"></path></g><g filter="url(#lobe-icons-antigravity-3-_R_0_)"><path d="M-12.443 10.804c1.338 4.703 7.36 7.11 13.453 5.378 6.092-1.733 9.947-6.95 8.61-11.652C8.282-.173 2.26-2.58-3.833-.848-9.925.884-13.78 6.1-12.443 10.804z" fill="#00B95C"></path></g><g filter="url(#lobe-icons-antigravity-4-_R_0_)"><path d="M-12.443 10.804c1.338 4.703 7.36 7.11 13.453 5.378 6.092-1.733 9.947-6.95 8.61-11.652C8.282-.173 2.26-2.58-3.833-.848-9.925.884-13.78 6.1-12.443 10.804z" fill="#00B95C"></path></g><g filter="url(#lobe-icons-antigravity-5-_R_0_)"><path d="M-7.608 14.703c3.352 3.424 9.126 3.208 12.896-.483 3.77-3.69 4.108-9.459.756-12.883C2.69-2.087-3.083-1.871-6.853 1.82c-3.77 3.69-4.108 9.458-.755 12.883z" fill="#00B95C"></path></g><g filter="url(#lobe-icons-antigravity-6-_R_0_)"><path d="M9.932 27.617c1.04 4.482 5.384 7.303 9.7 6.3 4.316-1.002 6.971-5.448 5.93-9.93-1.04-4.483-5.384-7.304-9.7-6.301-4.316 1.002-6.971 5.448-5.93 9.93z" fill="#3186FF"></path></g><g filter="url(#lobe-icons-antigravity-7-_R_0_)"><path d="M2.572-8.185C.392-3.329 2.778 2.472 7.9 4.771c5.122 2.3 11.042.227 13.222-4.63 2.18-4.855-.205-10.656-5.327-12.955-5.122-2.3-11.042-.227-13.222 4.63z" fill="#FBBC04"></path></g><g filter="url(#lobe-icons-antigravity-8-_R_0_)"><path d="M-3.267 38.686c-5.277-2.072 3.742-19.117 5.984-24.83 2.243-5.712 8.34-8.664 13.616-6.592 5.278 2.071 11.533 13.482 9.29 19.195-2.242 5.713-23.613 14.298-28.89 12.227z" fill="#3186FF"></path></g><g filter="url(#lobe-icons-antigravity-9-_R_0_)"><path d="M28.71 17.471c-1.413 1.649-5.1.808-8.236-1.878-3.135-2.687-4.531-6.201-3.118-7.85 1.412-1.649 5.1-.808 8.235 1.878s4.532 6.2 3.119 7.85z" fill="#749BFF"></path></g><g filter="url(#lobe-icons-antigravity-10-_R_0_)"><path d="M18.163 9.077c5.81 3.93 12.502 4.19 14.946.577 2.443-3.612-.287-9.727-6.098-13.658-5.81-3.931-12.502-4.19-14.946-.577-2.443 3.612.287 9.727 6.098 13.658z" fill="#FC413D"></path></g><g filter="url(#lobe-icons-antigravity-11-_R_0_)"><path d="M-.915 2.684c-1.44 3.473-.97 6.967 1.05 7.804 2.02.837 4.824-1.3 6.264-4.772 1.44-3.473.97-6.967-1.05-7.804-2.02-.837-4.824 1.3-6.264 4.772z" fill="#FFEE48"></path></g></g><defs><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="17.587" id="lobe-icons-antigravity-1-_R_0_" width="19.838" x="-3.288" y="-11.917"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="0.558"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="38.565" id="lobe-icons-antigravity-2-_R_0_" width="38.9" x="4.251" y="-13.493"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="2.7"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="36.517" id="lobe-icons-antigravity-3-_R_0_" width="40.955" x="-21.889" y="-10.592"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="2.296"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="36.517" id="lobe-icons-antigravity-4-_R_0_" width="40.955" x="-21.889" y="-10.592"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="2.296"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="36.595" id="lobe-icons-antigravity-5-_R_0_" width="36.632" x="-19.099" y="-10.278"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="2.296"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="34.087" id="lobe-icons-antigravity-6-_R_0_" width="33.533" x=".981" y="8.758"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="2.182"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="35.276" id="lobe-icons-antigravity-7-_R_0_" width="35.978" x="-6.143" y="-21.659"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="1.977"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="46.523" id="lobe-icons-antigravity-8-_R_0_" width="45.114" x="-11.96" y="-.46"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="1.766"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="24.054" id="lobe-icons-antigravity-9-_R_0_" width="25.094" x="10.485" y=".58"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="1.579"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="30.007" id="lobe-icons-antigravity-10-_R_0_" width="33.508" x="5.833" y="-12.467"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="1.335"></feGaussianBlur></filter><filter color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse" height="26.151" id="lobe-icons-antigravity-11-_R_0_" width="22.194" x="-8.355" y="-8.876"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_977_115" stdDeviation="1.651"></feGaussianBlur></filter></defs></svg>',
     'codebuddy': '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>CodeBuddy</title><path d="M18.821 0H5.18A5.179 5.179 0 000 5.179V18.82A5.179 5.179 0 005.179 24H18.82A5.179 5.179 0 0024 18.821V5.18A5.179 5.179 0 0018.821 0z" fill="url(#lobe-icons-code-buddy-_R_0_)"></path><path d="M18.777 1.647c.28-.02.536.114.972.51 1.018.926 2.437 2.828 3.318 4.452l.34.631.482.24.11.06v3.638a5.206 5.206 0 00-5.32-1.23c-.491.166-1.021.471-2.08 1.082l-6.09 3.516c-1.057.61-1.586.916-1.975 1.259a5.208 5.208 0 00-1.493 5.572c.165.49.471 1.02 1.082 2.08l.315.543h-3.26c-.685 0-1.34-.135-1.939-.377-.169-.956-.009-1.789.469-2.335.158-.18.164-.189.13-.493a11.846 11.846 0 01-.057-1.711l.02-.444-.667-1.18C2.1 15.622 1.445 14.078 1.192 12.9c-.133-.647-.125-.934.04-1.146.1-.128.427-.261.822-.334.994-.175 3.162-.017 5.575.41l.25.043.551-.487c.915-.81 1.522-1.264 2.641-1.962 1.167-.73 2.484-1.331 3.967-1.807l.476-.152.261-.688c.937-2.471 1.896-4.293 2.58-4.9.235-.21.25-.22.422-.23z" fill="#fff"></path><path d="M12.139 18.2a1.203 1.203 0 011.642.44l1.296 2.243a1.204 1.204 0 01-2.083 1.203l-1.296-2.243a1.203 1.203 0 01.44-1.644zM18.629 14.452a1.203 1.203 0 011.642.44l1.295 2.244a1.203 1.203 0 11-2.083 1.203l-1.295-2.243a1.203 1.203 0 01.44-1.644z" fill="#fff"></path><defs><radialGradient cx="0" cy="0" gradientTransform="matrix(-9.00009 -16 16 -9.00009 21 24.5)" gradientUnits="userSpaceOnUse" id="lobe-icons-code-buddy-_R_0_" r="1"><stop stop-color="#2EA99D"></stop><stop offset="1" stop-color="#6C4DFF"></stop></radialGradient></defs></svg>',
     'codebuddy-cn': '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>CodeBuddy</title><path d="M18.821 0H5.18A5.179 5.179 0 000 5.179V18.82A5.179 5.179 0 005.179 24H18.82A5.179 5.179 0 0024 18.821V5.18A5.179 5.179 0 0018.821 0z" fill="url(#lobe-icons-code-buddy-_R_0_)"></path><path d="M18.777 1.647c.28-.02.536.114.972.51 1.018.926 2.437 2.828 3.318 4.452l.34.631.482.24.11.06v3.638a5.206 5.206 0 00-5.32-1.23c-.491.166-1.021.471-2.08 1.082l-6.09 3.516c-1.057.61-1.586.916-1.975 1.259a5.208 5.208 0 00-1.493 5.572c.165.49.471 1.02 1.082 2.08l.315.543h-3.26c-.685 0-1.34-.135-1.939-.377-.169-.956-.009-1.789.469-2.335.158-.18.164-.189.13-.493a11.846 11.846 0 01-.057-1.711l.02-.444-.667-1.18C2.1 15.622 1.445 14.078 1.192 12.9c-.133-.647-.125-.934.04-1.146.1-.128.427-.261.822-.334.994-.175 3.162-.017 5.575.41l.25.043.551-.487c.915-.81 1.522-1.264 2.641-1.962 1.167-.73 2.484-1.331 3.967-1.807l.476-.152.261-.688c.937-2.471 1.896-4.293 2.58-4.9.235-.21.25-.22.422-.23z" fill="#fff"></path><path d="M12.139 18.2a1.203 1.203 0 011.642.44l1.296 2.243a1.204 1.204 0 01-2.083 1.203l-1.296-2.243a1.203 1.203 0 01.44-1.644zM18.629 14.452a1.203 1.203 0 011.642.44l1.295 2.244a1.203 1.203 0 11-2.083 1.203l-1.295-2.243a1.203 1.203 0 01.44-1.644z" fill="#fff"></path><defs><radialGradient cx="0" cy="0" gradientTransform="matrix(-9.00009 -16 16 -9.00009 21 24.5)" gradientUnits="userSpaceOnUse" id="lobe-icons-code-buddy-_R_0_" r="1"><stop stop-color="#2EA99D"></stop><stop offset="1" stop-color="#6C4DFF"></stop></radialGradient></defs></svg>',
-    'github-copilot': '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Github</title><path d="M12 0c6.63 0 12 5.276 12 11.79-.001 5.067-3.29 9.567-8.175 11.187-.6.118-.825-.25-.825-.56 0-.398.015-1.665.015-3.242 0-1.105-.375-1.813-.81-2.181 2.67-.295 5.475-1.297 5.475-5.822 0-1.297-.465-2.344-1.23-3.169.12-.295.54-1.503-.12-3.125 0 0-1.005-.324-3.3 1.209a11.32 11.32 0 00-3-.398c-1.02 0-2.04.133-3 .398-2.295-1.518-3.3-1.209-3.3-1.209-.66 1.622-.24 2.83-.12 3.125-.765.825-1.23 1.887-1.23 3.169 0 4.51 2.79 5.527 5.46 5.822-.345.294-.66.81-.765 1.577-.69.31-2.415.81-3.495-.973-.225-.354-.9-1.223-1.845-1.209-1.005.015-.405.56.015.781.51.28 1.095 1.327 1.23 1.666.24.663 1.02 1.93 4.035 1.385 0 .988.015 1.916.015 2.196 0 .31-.225.664-.825.56C3.303 21.374-.003 16.867 0 11.791 0 5.276 5.37 0 12 0z"></path></svg>',
+    'github-copilot': '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>GithubCopilot</title><path d="M23.702 16.058a4.544 4.544 0 00-.772-1.829l-.976-1.466a1.158 1.158 0 01-.12-.243l-.671-2.162-.019-.094-.229-1.148a5.654 5.654 0 00-.231-.765 4.242 4.242 0 00-.441-1.958C19.345 4.864 17.752 4 15.85 4a4.273 4.273 0 00-2.617.786A9.805 9.805 0 0012 4.682a9.805 9.805 0 00-1.233.104A4.273 4.273 0 008.15 4c-1.902 0-3.495.864-4.393 2.393a4.242 4.242 0 00-.441 1.958c-.09.25-.167.505-.231.765L2.856 10.264l-.019.094-.671 2.162a1.158 1.158 0 01-.12.243l-.976 1.466a4.544 4.544 0 00-.772 1.829A2.68 2.68 0 000 16.688v.675C0 18.82 1.18 20 2.637 20h18.726C22.82 20 24 18.82 24 17.363v-.675c0-.212-.025-.423-.073-.63zM9.23 14.375a1.125 1.125 0 11-2.25 0v-1.75a1.125 1.125 0 112.25 0v1.75zm7.79 0a1.125 1.125 0 11-2.25 0v-1.75a1.125 1.125 0 112.25 0v1.75z"></path></svg>',
     'mimocode': '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>XiaomiMiMo</title><path d="M.958 15.936a.459.459 0 01.459.44v2.729a.46.46 0 01-.918 0v-2.729a.459.459 0 01.459-.44zm4.814-2.035a.46.46 0 01.553.45v4.754a.458.458 0 11-.918 0V15.48L3.74 17.202a.462.462 0 01-.655.016.462.462 0 01-.065-.082L.628 14.67a.459.459 0 01.658-.637l2.124 2.187 2.127-2.188a.46.46 0 01.235-.13zm2.068.004a.46.46 0 01.458.445v4.755a.46.46 0 01-.458.458.459.459 0 01-.458-.458V14.35a.459.459 0 01.458-.445zm1.973 2.014a.46.46 0 01.46.457v2.729a.46.46 0 01-.784.324.46.46 0 01-.134-.324v-2.729a.46.46 0 01.458-.458zm.002-2.045a.458.458 0 01.328.157l2.127 2.19 2.125-2.19a.459.459 0 01.784.318v4.756a.46.46 0 01-.455.458.46.46 0 01-.458-.458V15.48l-1.667 1.723a.46.46 0 01-.65.008l-.005-.005c0-.002-.002-.002-.004-.003l-2.455-2.534a.46.46 0 01-.008-.667.461.461 0 01.338-.128zm6.797 1.206a.46.46 0 01.53.651A1.966 1.966 0 0019.81 18.4a.462.462 0 01.623.18.46.46 0 01-.181.624 2.863 2.863 0 01-1.38.353l-.142-.004a2.88 2.88 0 01-2.393-4.263.461.461 0 01.274-.21zm.864-.931a2.884 2.884 0 013.915 3.914.46.46 0 01-.402.24l-.057-.004a.458.458 0 01-.164-.055.46.46 0 01-.182-.622 1.967 1.967 0 00-2.669-2.67.459.459 0 11-.441-.803zM9.59 6.368c1.481 0 1.696 1.202 1.696 1.654v2.648h-.917v-.432c-.26.346-.792.535-1.36.535-.133 0-1.289-.03-1.384-1.136-.082-.932.675-1.61 2.053-1.61h.691c0-.563-.367-.886-.983-.886-.44.013-.864.174-1.2.458l-.36-.664c.484-.379 1.012-.567 1.764-.567zm4.427.1c1.263 0 2.082.97 2.083 2.15 0 1.181-.824 2.154-2.083 2.154-1.26 0-2.084-.972-2.084-2.152 0-1.18.82-2.153 2.084-2.153zm6.801.015c.68 0 1.202.465 1.197 1.548v2.642H21.1V8.29c0-.312-.002-.98-.63-.98s-.628.667-.628.838v2.524h-.89V8.148c0-.17-.001-.838-.63-.838-.628 0-.628.668-.628.98v2.383h-.917v-4.03h.917V7a1.22 1.22 0 01.947-.516c.398 0 .76.193.982.686a1.321 1.321 0 011.195-.686zm-18.093.872l1.457-1.772H5.32L3.311 8.07l2.14 2.602H4.24L2.725 8.796 1.21 10.672H0L2.138 8.07.13 5.583h1.138l1.458 1.772zm4.149 3.317h-.916V6.644h.916v4.028zm16.99 0h-.916V6.644h.916v4.028zM9.925 8.71c-1.055 0-1.359.412-1.326.742.032.329.324.537.757.537a1.013 1.013 0 001.014-.968l.002-.31h-.447zM14.018 7.3c-.663 0-1.184.487-1.184 1.32 0 .832.52 1.32 1.184 1.32.662 0 1.182-.49 1.182-1.32 0-.832-.52-1.32-1.182-1.32zM6.417 5.001a.568.568 0 01.587.582.588.588 0 01-1.175 0A.57.57 0 016.417 5zm16.991 0a.57.57 0 01.592.582.588.588 0 01-1.174 0 .57.57 0 01.357-.542.572.572 0 01.225-.04z"></path></svg>',
     'minimaxcode': '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Minimax</title><defs><linearGradient id="lobe-icons-minimax-_R_0_" x1="0%" x2="100.182%" y1="50.057%" y2="50.057%"><stop offset="0%" stop-color="#E2167E"></stop><stop offset="100%" stop-color="#FE603C"></stop></linearGradient></defs><path d="M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709.74.74 0 00.743-.709V9.099a2.06 2.06 0 012.071-2.049A2.06 2.06 0 0124 9.1v6.561a.649.649 0 01-.652.645.649.649 0 01-.653-.645V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v7.472a2.037 2.037 0 01-2.048 2.026 2.037 2.037 0 01-2.048-2.026v-12.5a.785.785 0 00-.788-.753.785.785 0 00-.789.752l-.001 15.904A2.037 2.037 0 0113.441 22a2.037 2.037 0 01-2.048-2.026V18.04c0-.356.292-.645.652-.645.36 0 .652.289.652.645v1.934c0 .263.142.506.372.638.23.131.514.131.744 0a.734.734 0 00.372-.638V4.07c0-1.143.937-2.07 2.093-2.07zm-5.674 0c1.156 0 2.093.927 2.093 2.07v11.523a.648.648 0 01-.652.645.648.648 0 01-.652-.645V4.07a.785.785 0 00-.789-.78.785.785 0 00-.789.78v14.013a2.06 2.06 0 01-2.07 2.048 2.06 2.06 0 01-2.071-2.048V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v3.8a2.06 2.06 0 01-2.071 2.049A2.06 2.06 0 010 12.9v-1.378c0-.357.292-.646.652-.646.36 0 .653.29.653.646V12.9c0 .418.343.757.766.757s.766-.339.766-.757V9.099a2.06 2.06 0 012.07-2.048 2.06 2.06 0 012.071 2.048v8.984c0 .419.343.758.767.758.423 0 .766-.339.766-.758V4.07c0-1.143.937-2.07 2.093-2.07z" fill="#E2167E" fill-rule="nonzero"></path></svg>',
     'traecode': '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>TRAE</title><path d="M24 20.541H3.428v-3.426H0V3.4h24V20.54zM3.428 17.115h17.144V6.827H3.428v10.288zm8.573-5.196l-2.425 2.424-2.424-2.424 2.424-2.424 2.425 2.424zm6.857-.001l-2.424 2.423-2.425-2.423 2.425-2.425 2.424 2.425z" fill="#32F08C"></path></svg>',
@@ -3847,6 +4614,7 @@
     container.textContent = '';
     var vis = getAgentVisual(agent);
     container.style.background = vis.bg;
+    container.style.border = '1px solid var(--line, rgba(232, 238, 244, 0.11))';
     var avData = (chat.avatars && chat.avatars[agent]) ? chat.avatars[agent] : null;
     if (avData && avData.img) {
       var img = document.createElement('img');
@@ -3857,9 +4625,7 @@
     } else if (avData && avData.emoji) {
       container.textContent = avData.emoji;
     } else if (BRAND_ICONS[agent]) {
-      container.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.06))';
-      // 同一图标会在页面出现多次(侧栏+卡片), id/引用必须逐实例唯一,
-      // 否则重复 mask/gradient 定义会让渲染互相干扰(空头像/方块)
+      container.style.background = 'rgba(4, 8, 13, 0.56)';
       var uid = 'av' + (applyAvatar.seq = (applyAvatar.seq || 0) + 1);
       var iconSvg = String(BRAND_ICONS[agent])
         .replace(/id="([^"]+)"/g, 'id="$1-' + uid + '"')
@@ -3868,7 +4634,7 @@
       container.innerHTML = iconSvg;
       var svgEl = container.querySelector('svg');
       if (svgEl) svgEl.setAttribute('class', 'avatar-brand-svg');
-      container.style.color = '#d4d4d8';   // mimo 的 currentColor 需要
+      container.style.color = '#eef5fb';
     } else {
       container.textContent = vis.code;
     }
@@ -5160,6 +5926,8 @@
       quotasError = null;
       var qBox = $('#cb-pop-quotas-box');
       if (qBox) qBox.innerHTML = renderQuotasContent(quotasData, null);
+      if (typeof refreshTmViews === 'function') refreshTmViews();
+      if (state.snap && $('#panel-agents') && !$('#panel-agents').hidden) renderAgents(state.snap);
       updateStatusBar();
       return res;
     }).catch(function (err) {
@@ -5205,150 +5973,212 @@
     return null;
   }
 
-  function renderQuotasContent(data, err, agent) {
-    if (!agent) agent = chat.activeAgent || 'antigravity';
-    var plat = resolveQuotaPlat(agent);
+  var TM_VENDOR_PRESENTATION = {
+    'antigravity': { label: 'Antigravity', iconClass: 'row-icon-antigravity', color: '#4285f4', iconColor: '#4285f4' },
+    'codebuddy-cn': { label: 'CodeBuddy CN', iconClass: 'row-icon-workbuddy', color: '#0DC8A5', iconColor: '#0DC8A5' },
+    'codebuddy': { label: 'CodeBuddy', iconClass: 'row-icon-codebuddy', color: '#8064FF', iconColor: '#8064FF' },
+    'traecode': { label: 'Trae', iconClass: 'row-icon-trae', color: '#32F08C', iconColor: '#32F08C' },
+    'github-copilot': { label: 'Copilot', iconClass: 'row-icon-copilot', color: '#eef5fb', iconColor: '#eef5fb' },
+    'minimaxcode': { label: 'MiniMax', iconClass: 'row-icon-minimax', color: '#f23f5d', iconColor: '#f23f5d' },
+    'zcode': { label: 'Z.ai / ZCode', iconClass: 'row-icon-zai', color: '#eef5fb', iconColor: '#eef5fb' },
+    'mimocode': { label: 'MiMo', iconClass: 'row-icon-mimo', color: '#eef5fb', iconColor: '#eef5fb' },
+    'dsh': { label: 'DeepSeek', iconClass: 'row-icon-deepseek', color: '#4d6bfe', iconColor: '#4d6bfe' },
+    'codearts': { label: 'CodeArts', iconClass: 'row-icon-codearts', color: '#6ab4f0', iconColor: '#C7000B' }
+  };
 
-    if (!plat) {
-      return '<div class="cb-pop-quotas-list">' +
-        '<div class="cb-quota-plat-card">' +
-          '<div class="cb-quota-untracked-item">' +
-            '<span class="cb-quota-untracked-name">' + esc(agent) + '</span>' +
-            '<span class="cb-quota-untracked-tag">未接入配额跟踪</span>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    }
+  var tmQuotaShowUsed = false;
+  try {
+    tmQuotaShowUsed = localStorage.getItem('tm_quota_show_used') === '1';
+  } catch (e) {}
 
-    if (err) {
-      return '<div class="cb-pop-empty" style="color:var(--mcode-text-subtle)">配额信息暂时不可用 (' + esc(err) + ')</div>';
-    }
-    if (!data) {
-      return '<div class="cb-pop-empty">正在查询平台配额…</div>';
-    }
+  function getTmVendorSpec(agentId) {
+    return TM_VENDOR_PRESENTATION[agentId] || {
+      label: String(agentId || 'Agent'),
+      iconClass: 'row-icon-token-monitor',
+      color: '#73bdf5',
+      iconColor: '#eef5fb'
+    };
+  }
 
+  function extractAgentQuotaWindows(data, agentId) {
+    var plat = resolveQuotaPlat(agentId);
+    var spec = getTmVendorSpec(agentId);
+    if (!plat || !data || !data[plat]) {
+      return { tracked: false, connected: false, plan: '', source: '', error: 'Not configured', windows: [], spec: spec };
+    }
     var pInfo = data[plat];
-    if (!pInfo || pInfo.error || pInfo.tracked === false) {
-      var errMsg = (!pInfo ? '未配置配额凭据' : (pInfo.error || '未配置配额凭据'));
-      return '<div class="cb-pop-quotas-list">' +
-        '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
-          '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
-            '<span class="cb-quota-plat-name" style="font-weight:600">' + esc(agent) + '</span>' +
-            '<span class="cb-quota-err-text" style="font-size:12px;color:var(--mcode-text-muted)">' + esc(errMsg) + '</span>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+    if (pInfo.error || pInfo.tracked === false) {
+      return {
+        tracked: false,
+        connected: false,
+        plan: pInfo.plan || '',
+        source: pInfo.source || '',
+        error: pInfo.error || 'No credentials',
+        windows: [],
+        spec: spec
+      };
     }
 
-    var srcBadge = pInfo.source === 'token-monitor' ? ' · token-monitor 原生' : (pInfo.source === 'cli' ? ' · CLI' : '');
-    var html = '<div class="cb-pop-quotas-list">';
     if (plat === 'codebuddy') {
       var allGroups = Array.isArray(pInfo.groups) ? pInfo.groups : [];
-      var targetSource = (agent === 'codebuddy-cn') ? '国内' : '国际';
-      var groups = allGroups.filter(function (g) { return g.source === targetSource; });
-      if (!groups.length && allGroups.length) groups = [allGroups[0]];
-      if (!groups.length) {
-        html += '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
-          '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
-            '<span class="cb-quota-plat-name">' + esc('codebuddy ' + targetSource) + '</span>' +
-            '<span class="cb-quota-plan-tag">' + esc((pInfo.plan || '已接入') + srcBadge) + '</span>' +
-          '</div>' +
-          '<div class="cb-quota-reset">暂无配额数据</div>' +
-        '</div>';
-      } else {
-        var g = groups[0];
-        var tot = g.totalRemaining || 0;
-        var totalHtml = '<div class="cb-quota-total" style="display:flex;justify-content:space-between;margin:6px 0;font-size:12px" title="总剩余 ' + tot + ' 积分"><span>总剩余积分（' + (g.packageCount || 0) + ' 个有效包）</span><b>' + fmtTok(tot) + '</b></div>';
-        var topList = Array.isArray(g.top) ? g.top : [];
-        var cbItems = topList.map(function (q) {
-          var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
-          var barColor = remPct > 30 ? 'var(--mcode-accent, #38bdf8)' : (remPct > 10 ? '#f59e0b' : '#ef4444');
-          var resetText = formatResetTime(q.resetAt);
-          return '<div class="cb-quota-item" style="margin-top:6px">' +
-            '<div class="cb-quota-item-top" style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
-              '<span class="cb-quota-item-name">' + esc(q.displayName || q.name) + '</span>' +
-              '<span class="cb-quota-item-stat">剩 <b>' + fmtQuotaVal(q.remaining) + '</b>/' + fmtQuotaVal(q.total) + '</span>' +
-            '</div>' +
-            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + ';height:100%"></div></div>' +
-            (resetText ? '<div class="cb-quota-reset" style="font-size:11px;color:var(--mcode-text-muted);margin-top:2px">' + esc(resetText) + '</div>' : '') +
-          '</div>';
-        }).join('');
-        if (!cbItems) cbItems = '<div class="cb-quota-reset" style="font-size:12px;color:var(--mcode-text-muted)">暂无有效配额包</div>';
-        html += '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
-          '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
-            '<span class="cb-quota-plat-name" style="font-weight:600">' + esc('codebuddy ' + (g.source || '')) + '</span>' +
-            '<span class="cb-quota-plan-tag" style="padding:2px 8px">' + esc((g.plan || '已接入') + srcBadge) + '</span>' +
-          '</div>' +
-          totalHtml + cbItems +
-        '</div>';
+      var targetSource = (agentId === 'codebuddy-cn') ? '国内' : '国际';
+      var group = allGroups.filter(function (g) { return g.source === targetSource; })[0];
+      if (!group) {
+        return {
+          tracked: false,
+          connected: false,
+          plan: '',
+          source: pInfo.source || '',
+          error: targetSource + '版未配置或未登录',
+          windows: [],
+          spec: spec
+        };
       }
-    } else {
-      var qList = Array.isArray(pInfo.quotas) ? pInfo.quotas : [];
-      var majorQuotas = [];
-      if (plat === 'antigravity') {
-        majorQuotas = qList.filter(function (q) {
-          return q.name === 'gemini_session' || q.name === 'gemini_weekly' || q.name === 'claude_gpt_weekly';
-        });
-        if (!majorQuotas.length) majorQuotas = qList.slice(0, 4);
-      } else if (plat === 'traecode' || plat === 'zcode' || plat === 'mimocode' || plat === 'dsh') {
-        majorQuotas = qList.slice(0, 5);
-      } else if (plat === 'github-copilot') {
-        var sortedCopilot = qList.slice().sort(function (a, b) {
-          var aUnlim = a.unlimited ? 1 : 0;
-          var bUnlim = b.unlimited ? 1 : 0;
-          return aUnlim - bUnlim;
-        });
-        majorQuotas = sortedCopilot.slice(0, 2);
-      } else if (plat === 'minimaxcode') {
-        var cred = qList.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
-        if (cred) {
-          majorQuotas = [cred];
-        } else {
-          majorQuotas = qList.slice().sort(function (a, b) {
-            if (a.name === 'general') return -1;
-            if (b.name === 'general') return 1;
-            return 0;
-          });
-        }
-      } else {
-        majorQuotas = qList.slice(0, 3);
-      }
-
-      var itemsHtml = majorQuotas.map(function (q) {
-        if (q.isCreditBalance || q.name === 'Credits') {
-          var rem = q.remaining != null ? q.remaining : q.total;
-          var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
-          return '<div class="cb-quota-item" style="margin-top:6px">' +
-            '<div class="cb-quota-item-top" style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
-              '<span class="cb-quota-item-name">' + esc(q.displayName || '剩余积分') + '</span>' +
-              '<span class="cb-quota-item-stat"><b>' + remStr + '</b> 积分</span>' +
-            '</div>' +
-            '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:100%;background:var(--mcode-accent, #38bdf8);height:100%"></div></div>' +
-          '</div>';
-        }
+      var topList = Array.isArray(group.top) ? group.top : [];
+      var cbWins = topList.slice(0, 4).map(function (q) {
         var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
-        var barColor = remPct > 30 ? 'var(--mcode-accent, #38bdf8)' : (remPct > 10 ? '#f59e0b' : '#ef4444');
-        var resetText = formatResetTime(q.resetAt);
-        return '<div class="cb-quota-item" style="margin-top:6px">' +
-          '<div class="cb-quota-item-top" style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
-            '<span class="cb-quota-item-name">' + esc(q.displayName || q.name) + '</span>' +
-            '<span class="cb-quota-item-stat"><b>' + fmtQuotaVal(q.used) + '</b>/' + fmtQuotaVal(q.total) + ' <small>(' + remPct + '% 余)</small></span>' +
-          '</div>' +
-          '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + Math.min(100, Math.max(0, remPct)) + '%;background:' + barColor + ';height:100%"></div></div>' +
-          (resetText ? '<div class="cb-quota-reset" style="font-size:11px;color:var(--mcode-text-muted);margin-top:2px">' + esc(resetText) + '</div>' : '') +
-        '</div>';
-      }).join('');
-
-      html += '<div class="cb-quota-plat-card" style="padding:10px 12px">' +
-        '<div class="cb-quota-plat-header" style="display:flex;justify-content:space-between;align-items:center">' +
-          '<span class="cb-quota-plat-name" style="font-weight:600">' + esc(plat) + '</span>' +
-          '<span class="cb-quota-plan-tag" style="padding:2px 8px">' + esc((pInfo.plan || '已接入') + srcBadge) + '</span>' +
-        '</div>' +
-        itemsHtml +
-      '</div>';
+        var usedPct = Math.max(0, Math.min(100, 100 - remPct));
+        var dispPct = tmQuotaShowUsed ? usedPct : remPct;
+        var scale = Math.max(0, Math.min(1, dispPct / 100));
+        return {
+          label: (q.displayName || q.name || 'Quota') + ' ' + Math.round(dispPct) + '%',
+          scale: scale,
+          color: remPct <= 10 ? 'var(--red)' : (remPct <= 25 ? 'var(--orange)' : spec.color),
+          leftMeta: fmtQuotaVal(q.remaining) + ' / ' + fmtQuotaVal(q.total),
+          rightMeta: formatResetTime(q.resetAt) || (tmQuotaShowUsed ? 'used' : 'left')
+        };
+      });
+      if (!cbWins.length && group.totalRemaining != null) {
+        cbWins.push({
+          label: 'Total Credits ' + fmtTok(group.totalRemaining),
+          scale: group.totalRemaining > 0 ? 1 : 0,
+          color: spec.color,
+          leftMeta: (group.packageCount || 0) + ' active pkgs',
+          rightMeta: group.plan || 'Active'
+        });
+      }
+      return {
+        tracked: true,
+        connected: true,
+        plan: group.plan || pInfo.plan || 'Active',
+        source: pInfo.source || 'token-monitor',
+        metaText: fmtTok(group.totalRemaining || 0) + ' credits',
+        error: '',
+        windows: cbWins,
+        spec: spec
+      };
     }
-    html += '</div>';
-    return html;
+
+    var qList = Array.isArray(pInfo.quotas) ? pInfo.quotas : [];
+    var major = qList.slice(0, 4);
+    if (plat === 'github-copilot') {
+      major = qList.slice().sort(function (a, b) { return (a.unlimited ? 1 : 0) - (b.unlimited ? 1 : 0); }).slice(0, 2);
+    }
+    var wins = major.map(function (q) {
+      if (q.isCreditBalance || q.name === 'Credits') {
+        var rem = q.remaining != null ? q.remaining : q.total;
+        var remStr = typeof rem === 'number' ? rem.toFixed(2) : String(rem || '0');
+        return {
+          label: (q.displayName || 'Credits') + ' ' + remStr,
+          scale: Number(rem) > 0 ? 1 : 0,
+          color: spec.color,
+          leftMeta: 'Balance',
+          rightMeta: formatResetTime(q.resetAt) || 'Active'
+        };
+      }
+      if (q.unlimited) {
+        return {
+          label: (q.displayName || q.name || 'Quota') + ' ∞',
+          scale: 1,
+          color: spec.color,
+          leftMeta: 'Unlimited',
+          rightMeta: formatResetTime(q.resetAt) || 'Included'
+        };
+      }
+      var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 100;
+      var usedPct = Math.max(0, Math.min(100, 100 - remPct));
+      var dispPct = tmQuotaShowUsed ? usedPct : remPct;
+      var scale = Math.max(0, Math.min(1, dispPct / 100));
+      var statLeft = (q.total != null && q.total > 0)
+        ? (fmtQuotaVal(tmQuotaShowUsed ? q.used : (q.remaining != null ? q.remaining : Math.max(0, q.total - (q.used || 0)))) + '/' + fmtQuotaVal(q.total))
+        : (Math.round(dispPct) + '% ' + (tmQuotaShowUsed ? 'used' : 'left'));
+      return {
+        label: (q.displayName || q.name || 'Window') + ' ' + Math.round(dispPct) + '%',
+        scale: scale,
+        color: remPct <= 10 ? 'var(--red)' : (remPct <= 25 ? 'var(--orange)' : spec.color),
+        leftMeta: statLeft,
+        rightMeta: formatResetTime(q.resetAt) || ''
+      };
+    });
+
+    return {
+      tracked: true,
+      connected: true,
+      plan: pInfo.plan || 'Active',
+      source: pInfo.source || 'token-monitor',
+      metaText: pInfo.source === 'token-monitor' ? 'Σ Native' : (pInfo.source || ''),
+      error: '',
+      windows: wins,
+      spec: spec
+    };
+  }
+
+  function renderTmLimitRowHtml(data, agentId, compactMode) {
+    var info = extractAgentQuotaWindows(data, agentId);
+    var spec = info.spec;
+    var winCount = info.windows.length;
+    var gridClass = 'limit-windows' + (winCount === 1 ? ' limit-windows-single' : (winCount >= 3 ? ' limit-windows-antigravity-grouped' : ''));
+    var windowsHtml = '';
+    if (!info.connected) {
+      windowsHtml = '<div class="limit-note">' + esc(info.error || 'No credentials configured') + '</div>';
+    } else if (!winCount) {
+      windowsHtml = '<div class="limit-note">Connected · No active quota windows</div>';
+    } else {
+      windowsHtml = '<div class="' + gridClass + '">' + info.windows.map(function (w) {
+        return '<div class="limit-window">' +
+          '<div class="limit-window-text">' + esc(w.label) + '</div>' +
+          '<div class="limit-meter"><div class="limit-meter-fill" style="--bar-scale:' + w.scale.toFixed(3) + ';background:' + w.color + '"></div></div>' +
+          '<div class="limit-reset limit-reset-split">' +
+            '<span class="limit-reset-time">' + esc(w.leftMeta || '') + '</span>' +
+            '<span class="limit-reset-pace">' + esc(w.rightMeta || '') + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    if (compactMode) {
+      return windowsHtml;
+    }
+
+    return '<div class="limit-row" data-agent="' + esc(agentId) + '">' +
+      '<div class="limit-head">' +
+        '<div class="limit-title">' +
+          '<span class="limit-name">' +
+            '<span class="limit-icon ' + esc(spec.iconClass) + '" style="color:' + esc(spec.iconColor) + '"></span>' +
+            '<span>' + esc(spec.label) + '</span>' +
+          '</span>' +
+          (info.metaText ? '<span class="limit-meta">' + esc(info.metaText) + '</span>' : '') +
+        '</div>' +
+        (info.plan ? '<span class="limit-plan">' + esc(info.plan) + '</span>' : '<span class="limit-plan" style="color:var(--muted)">' + esc(info.connected ? 'Connected' : 'Disconnected') + '</span>') +
+      '</div>' +
+      windowsHtml +
+    '</div>';
+  }
+
+  function renderQuotasContent(data, err, agent) {
+    if (err) {
+      return '<div class="limits-panel"><div class="limit-row"><div class="limit-note">' + esc(err) + '</div></div></div>';
+    }
+    if (!data) {
+      return '<div class="limits-panel"><div class="limit-row"><div class="limit-note">Loading quota limits…</div></div></div>';
+    }
+    if (agent) {
+      return '<div class="limits-panel">' + renderTmLimitRowHtml(data, agent, false) + '</div>';
+    }
+    var order = ['antigravity', 'codebuddy-cn', 'codebuddy', 'traecode', 'github-copilot', 'minimaxcode', 'zcode', 'mimocode'];
+    return '<div class="limits-panel">' + order.map(function (ag) {
+      return renderTmLimitRowHtml(data, ag, false);
+    }).join('') + '</div>';
   }
 
   function sbStats(agent) {
@@ -5840,7 +6670,7 @@
     applyStatusBarVisibility(quotaShow);
   }
 
-  // ---------------- 平台登录与 token-monitor 原生配额集成弹窗
+  // ---------------- Token Monitor Σ 原生配额与账号管理 (复用 token-monitor 原生外观与 DOM)
   var authPollTimer = null;
   function clearAuthPoll() {
     if (authPollTimer) { clearInterval(authPollTimer); authPollTimer = null; }
@@ -5848,390 +6678,494 @@
 
   var AUTH_PLATFORMS = [
     { id: 'antigravity', label: 'Antigravity', cliLogin: false, credFields: [] },
-    { id: 'codebuddy-cn', label: 'CodeBuddy 国内', cliLogin: true, credFields: [
-      { key: 'codebuddyCnAccessToken', label: '国内版 AccessToken (copilot.tencent.com)', placeholder: '粘贴 Bearer Token（若本机已装客户端会自动读取）' },
-      { key: 'codebuddyCnUid', label: 'X-User-Id (可选)', placeholder: '用户 UID（可选）' }
+    { id: 'codebuddy-cn', label: 'CodeBuddy CN', cliLogin: true, credFields: [
+      { key: 'codebuddyCnAccessToken', label: 'CN AccessToken (copilot.tencent.com)', placeholder: 'Bearer Token (Auto-detected from local IDE if empty)' },
+      { key: 'codebuddyCnUid', label: 'X-User-Id (Optional)', placeholder: 'User UID (optional)' }
     ] },
-    { id: 'codebuddy', label: 'CodeBuddy 国际', cliLogin: true, credFields: [
-      { key: 'codebuddyIntlAccessToken', label: '国际版 AccessToken (codebuddy.ai)', placeholder: '粘贴 Bearer Token（若本机已装客户端会自动读取）' },
-      { key: 'codebuddyIntlUid', label: 'X-User-Id (可选)', placeholder: '用户 UID（可选）' }
+    { id: 'codebuddy', label: 'CodeBuddy Intl', cliLogin: true, credFields: [
+      { key: 'codebuddyIntlAccessToken', label: 'Intl AccessToken (codebuddy.ai)', placeholder: 'Bearer Token (Auto-detected from local IDE if empty)' },
+      { key: 'codebuddyIntlUid', label: 'X-User-Id (Optional)', placeholder: 'User UID (optional)' }
     ] },
     { id: 'traecode', label: 'Trae', cliLogin: false, credFields: [
-      { key: 'traeAccessToken', label: 'Trae Cloud-IDE-Token (JWT)', placeholder: '粘贴 eyJ... 开头的 Token（支持自动扫描本机 Trae）' }
+      { key: 'traeAccessToken', label: 'Trae Cloud-IDE-Token (JWT)', placeholder: 'eyJ... Token (Auto-detected from local Trae if empty)' }
     ] },
-    { id: 'github-copilot', label: 'GitHub Copilot', cliLogin: true, credFields: [
-      { key: 'copilotApiToken', label: 'GitHub OAuth / Copilot Token', placeholder: 'gho_... 或点击上方 Device Flow 一键授权自动填入' }
+    { id: 'github-copilot', label: 'Copilot', cliLogin: true, credFields: [
+      { key: 'copilotApiToken', label: 'GitHub OAuth / Copilot Token', placeholder: 'gho_... or use GitHub Device Flow above' }
     ] },
     { id: 'minimaxcode', label: 'MiniMax', cliLogin: true, credFields: [
-      { key: 'minimaxApiKey', label: 'MiniMax Coding Plan API Key', placeholder: '粘贴 API Key（或使用本机 ~/.minimax / mmx CLI）' }
+      { key: 'minimaxApiKey', label: 'MiniMax Coding Plan API Key', placeholder: 'API Key (Auto-detected from ~/.minimax or mmx CLI)' }
     ] },
-    { id: 'zcode', label: 'ZCode (智谱 GLM)', cliLogin: false, credFields: [
-      { key: 'zaiApiKey', label: 'BigModel / Z.ai API Key', placeholder: '粘贴 API Key（本机 ~/.zcode/v2/credentials.json 已支持自动解密）' }
+    { id: 'zcode', label: 'Z.ai / ZCode', cliLogin: false, credFields: [
+      { key: 'zaiApiKey', label: 'BigModel / Z.ai API Key', placeholder: 'API Key (Auto-decrypted from ~/.zcode/v2/credentials.json)' }
     ] },
-    { id: 'mimocode', label: 'MiMo (小米)', cliLogin: true, credFields: [
-      { key: 'mimoCookie', label: '小米 MiMo 平台 Cookie', placeholder: '粘贴包含 serviceToken 的 Cookie（或通过上方 CLI 登录查订阅）' }
-    ] }
+    { id: 'mimocode', label: 'MiMo', cliLogin: true, credFields: [
+      { key: 'mimoCookie', label: 'Xiaomi MiMo Cookie', placeholder: 'serviceToken=... or use CLI Login above' }
+    ] },
+    { id: 'codearts', label: 'CodeArts', cliLogin: true, credFields: [] }
   ];
 
-  function openAgentAuthModal(initialAgent) {
-    clearAuthPoll();
-    var currentAgent = initialAgent || chat.activeAgent || 'codebuddy-cn';
-    if (!AUTH_PLATFORMS.some(function (p) { return p.id === currentAgent; })) {
-      currentAgent = 'codebuddy-cn';
+  var tmActiveTab = 'limits'; // 'limits' | 'accounts'
+  var tmExpandedAccount = null;
+
+  function buildTmShell(hostEl, options) {
+    options = options || {};
+    var isDialog = !!options.isDialog;
+    if (options.initialTab) tmActiveTab = options.initialTab;
+    if (options.initialAgent) {
+      tmExpandedAccount = options.initialAgent;
     }
 
-    var wrapper = el('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.gap = '12px';
-    wrapper.style.minWidth = 'min(540px, 86vw)';
+    hostEl.textContent = '';
+    var shell = el('div', 'tm-shell');
 
-    var tabsRow = el('div');
-    tabsRow.style.display = 'flex';
-    tabsRow.style.flexWrap = 'wrap';
-    tabsRow.style.gap = '6px';
-    tabsRow.style.paddingBottom = '8px';
-    tabsRow.style.borderBottom = '1px solid var(--mcode-border)';
-    wrapper.appendChild(tabsRow);
+    // 1. Native Titlebar
+    var titlebar = el('div', 'titlebar');
+    var appTitle = el('div', 'app-title');
+    appTitle.innerHTML = '<span>Token Monitor</span><span class="app-mark">Σ</span><span class="live-dot live" title="token-monitor native engine"></span>';
+    titlebar.appendChild(appTitle);
 
-    var bodyBox = el('div');
-    bodyBox.style.display = 'flex';
-    bodyBox.style.flexDirection = 'column';
-    bodyBox.style.gap = '12px';
-    bodyBox.style.maxHeight = '68vh';
-    bodyBox.style.overflowY = 'auto';
-    wrapper.appendChild(bodyBox);
+    var titleActions = el('div', 'title-actions');
+    var tabsWrap = el('div', 'tm-tabs');
+    var tabLimitsBtn = el('button', 'tm-tab' + (tmActiveTab === 'limits' ? ' active' : ''), 'LIMITS');
+    tabLimitsBtn.type = 'button';
+    var tabAccountsBtn = el('button', 'tm-tab' + (tmActiveTab === 'accounts' ? ' active' : ''), 'ACCOUNTS');
+    tabAccountsBtn.type = 'button';
+    tabsWrap.appendChild(tabLimitsBtn);
+    tabsWrap.appendChild(tabAccountsBtn);
+    titleActions.appendChild(tabsWrap);
 
-    function renderTabs() {
-      tabsRow.textContent = '';
-      AUTH_PLATFORMS.forEach(function (p) {
-        var b = btn(p.label, p.id === currentAgent ? 'primary small' : 'small', function () {
-          clearAuthPoll();
-          currentAgent = p.id;
-          renderTabs();
-          renderBody();
-        });
-        b.style.borderRadius = '999px';
-        b.style.fontSize = '12px';
-        b.style.padding = '3px 10px';
-        tabsRow.appendChild(b);
+    var refreshBtn = el('button', 'tm-icon-btn');
+    refreshBtn.type = 'button';
+    refreshBtn.title = 'Refresh Quotas';
+    refreshBtn.innerHTML = '<span class="row-icon row-icon-refresh"></span>';
+    refreshBtn.addEventListener('click', function () {
+      refreshBtn.classList.add('spinning');
+      loadQuotas(true).finally(function () {
+        refreshBtn.classList.remove('spinning');
+        renderTmContent();
+        toast('Quotas refreshed');
       });
+    });
+    titleActions.appendChild(refreshBtn);
+
+    var gearBtn = el('button', 'tm-icon-btn' + (tmActiveTab === 'accounts' ? ' active' : ''));
+    gearBtn.type = 'button';
+    gearBtn.title = 'Toggle Accounts / Settings';
+    gearBtn.innerHTML = '<span class="row-icon row-icon-settings"></span>';
+    gearBtn.addEventListener('click', function () {
+      tmActiveTab = (tmActiveTab === 'accounts') ? 'limits' : 'accounts';
+      renderTmContent();
+    });
+    titleActions.appendChild(gearBtn);
+
+    if (isDialog) {
+      var closeBtn = el('button', 'tm-icon-btn', '✕');
+      closeBtn.type = 'button';
+      closeBtn.title = 'Close (Esc)';
+      closeBtn.style.fontSize = '12px';
+      closeBtn.addEventListener('click', function () {
+        clearAuthPoll();
+        var dlg = $('#tm-dialog');
+        if (dlg && dlg.open) dlg.close();
+      });
+      titleActions.appendChild(closeBtn);
     }
 
-    function renderBody() {
-      bodyBox.textContent = '';
-      var platCfg = AUTH_PLATFORMS.filter(function (p) { return p.id === currentAgent; })[0] || AUTH_PLATFORMS[0];
+    titlebar.appendChild(titleActions);
+    shell.appendChild(titlebar);
 
-      // 1. 原生配额展示卡片
-      var quotaSec = el('div', 'card');
-      quotaSec.style.padding = '12px';
-      var qHead = el('div');
-      qHead.style.display = 'flex';
-      qHead.style.justifyContent = 'space-between';
-      qHead.style.alignItems = 'center';
-      qHead.style.marginBottom = '8px';
-      var qTitle = el('b', null, '📊 实时配额（token-monitor 原生引擎）');
-      qTitle.style.fontSize = '13px';
-      var refreshQBtn = btn('🔄 刷新配额', 'small', function () {
-        withBusy(refreshQBtn, function () {
-          return loadQuotas(true).then(function () {
-            qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
-            toast('配额已刷新');
-          });
-        });
-      });
-      qHead.appendChild(qTitle);
-      qHead.appendChild(refreshQBtn);
-      quotaSec.appendChild(qHead);
+    // 2. Main Body Container
+    var bodyHost = el('div');
+    shell.appendChild(bodyHost);
 
-      var qContent = el('div');
-      qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
-      quotaSec.appendChild(qContent);
-      bodyBox.appendChild(quotaSec);
+    // 3. Native Footer
+    var footer = el('div', 'footer');
+    var footerLeft = el('div', 'footer-left');
+    var viewSwitchBtn = el('button', 'footer-btn');
+    viewSwitchBtn.type = 'button';
+    footerLeft.appendChild(viewSwitchBtn);
 
-      // 2. 官方登录 / OAuth / 设备码授权区
-      var loginSec = el('div', 'card');
-      loginSec.style.padding = '12px';
-      var lHead = el('div');
-      lHead.style.display = 'flex';
-      lHead.style.justifyContent = 'space-between';
-      lHead.style.alignItems = 'center';
-      lHead.style.marginBottom = '8px';
-      var lTitle = el('b', null, '🔑 账号一键登录与授权');
-      lTitle.style.fontSize = '13px';
-      var lBadge = el('span', 'pill', '检测中…');
-      lHead.appendChild(lTitle);
-      lHead.appendChild(lBadge);
-      loginSec.appendChild(lHead);
+    var footerCenter = el('div', 'footer-center');
+    var footerRight = el('div', 'footer-right');
+    var modeSwitchWrap = el('div', 'tool-detail-footer');
+    var btnPctLeft = el('button', 'tool-detail-mode' + (!tmQuotaShowUsed ? ' active' : ''), '% left');
+    btnPctLeft.type = 'button';
+    var btnPctUsed = el('button', 'tool-detail-mode' + (tmQuotaShowUsed ? ' active' : ''), '% used');
+    btnPctUsed.type = 'button';
+    btnPctLeft.addEventListener('click', function () {
+      tmQuotaShowUsed = false;
+      try { localStorage.setItem('tm_quota_show_used', '0'); } catch (e) {}
+      refreshTmViews();
+      if (state.snap) renderAgents(state.snap);
+    });
+    btnPctUsed.addEventListener('click', function () {
+      tmQuotaShowUsed = true;
+      try { localStorage.setItem('tm_quota_show_used', '1'); } catch (e) {}
+      refreshTmViews();
+      if (state.snap) renderAgents(state.snap);
+    });
+    modeSwitchWrap.appendChild(btnPctLeft);
+    modeSwitchWrap.appendChild(btnPctUsed);
+    footerRight.appendChild(modeSwitchWrap);
 
-      var lStatusBox = el('div');
-      lStatusBox.style.fontSize = '12px';
-      lStatusBox.style.color = 'var(--mcode-text-muted)';
-      lStatusBox.style.marginBottom = '8px';
-      lStatusBox.textContent = '正在读取登录与凭据状态…';
-      loginSec.appendChild(lStatusBox);
+    footer.appendChild(footerLeft);
+    footer.appendChild(footerCenter);
+    footer.appendChild(footerRight);
+    shell.appendChild(footer);
 
-      var lFlowBox = el('div');
-      lFlowBox.style.display = 'none';
-      lFlowBox.style.padding = '10px';
-      lFlowBox.style.borderRadius = '8px';
-      lFlowBox.style.background = 'var(--mcode-surface-muted)';
-      lFlowBox.style.border = '1px solid var(--mcode-border)';
-      lFlowBox.style.marginBottom = '8px';
-      loginSec.appendChild(lFlowBox);
+    tabLimitsBtn.addEventListener('click', function () {
+      tmActiveTab = 'limits';
+      renderTmContent();
+    });
+    tabAccountsBtn.addEventListener('click', function () {
+      tmActiveTab = 'accounts';
+      renderTmContent();
+    });
+    viewSwitchBtn.addEventListener('click', function () {
+      tmActiveTab = (tmActiveTab === 'limits') ? 'accounts' : 'limits';
+      renderTmContent();
+    });
 
-      var lBtns = el('div');
-      lBtns.style.display = 'flex';
-      lBtns.style.flexWrap = 'wrap';
-      lBtns.style.gap = '8px';
-      loginSec.appendChild(lBtns);
-      bodyBox.appendChild(loginSec);
+    function buildAccountsView(container) {
+      var panel = el('div', 'settings-panel');
 
-      function renderLoginResult(res) {
-        lFlowBox.textContent = '';
-        if (!res) return;
-        lFlowBox.style.display = 'block';
-        if (res.message) {
-          var msgEl = el('div', null, res.message);
-          msgEl.style.fontSize = '12px';
-          msgEl.style.marginBottom = '6px';
-          lFlowBox.appendChild(msgEl);
+      // Group 1: Quota & CLI Accounts
+      var groupBox = el('div', 'settings-collapsible-group open');
+      var groupHead = el('div', 'settings-section-head');
+      groupHead.innerHTML = '<div class="settings-title">PROVIDER ACCOUNTS &amp; QUOTA CREDENTIALS</div>' +
+        '<span class="settings-group-summary">Auto-discovery + OAuth + CLI Login</span>';
+      groupBox.appendChild(groupHead);
+
+      var groupBody = el('div', 'settings-section-details');
+      var groupInner = el('div', 'settings-section-details-inner');
+
+      var savedCredsCache = {};
+
+      AUTH_PLATFORMS.forEach(function (platCfg) {
+        var spec = getTmVendorSpec(platCfg.id);
+        var qInfo = extractAgentQuotaWindows(quotasData, platCfg.id);
+        var isExpanded = (tmExpandedAccount === platCfg.id);
+
+        var sub = el('div', 'settings-subgroup cursor-account-group' + (isExpanded ? ' open' : ''));
+        var toggleBtn = el('button', 'cursor-settings-toggle');
+        toggleBtn.type = 'button';
+
+        var titleSpan = el('span', 'settings-subtitle cursor-settings-toggle-title');
+        titleSpan.innerHTML = '<span class="limit-icon ' + esc(spec.iconClass) + '" style="color:' + esc(spec.iconColor) + '"></span>' +
+          '<span>' + esc(platCfg.label) + '</span>';
+
+        var statusWrap = el('span', 'cursor-settings-toggle-status');
+        var statusPill = el('span', 'cursor-status-pill ' + (qInfo.connected ? 'connected' : 'warning'), qInfo.connected ? (qInfo.plan || 'Connected') : 'Configure');
+        var chevron = el('span', 'cursor-disclosure-icon', '▸');
+        statusWrap.appendChild(statusPill);
+        statusWrap.appendChild(chevron);
+
+        toggleBtn.appendChild(titleSpan);
+        toggleBtn.appendChild(statusWrap);
+        sub.appendChild(toggleBtn);
+
+        var detailsWrap = el('div', 'cursor-settings-details');
+        var detailsInner = el('div', 'cursor-settings-details-inner');
+
+        // Live mini quota preview inside account drawer
+        if (qInfo.connected && qInfo.windows.length) {
+          var miniLimitWrap = el('div');
+          miniLimitWrap.style.marginBottom = '4px';
+          miniLimitWrap.innerHTML = renderTmLimitRowHtml(quotasData, platCfg.id, true);
+          detailsInner.appendChild(miniLimitWrap);
         }
-        if (res.user_code || res.userCode) {
-          var codeVal = res.user_code || res.userCode;
-          var codeRow = el('div');
-          codeRow.style.display = 'flex';
-          codeRow.style.alignItems = 'center';
-          codeRow.style.gap = '8px';
-          codeRow.style.marginBottom = '6px';
-          var codeTag = el('code', 'mono', '设备码: ' + codeVal);
-          codeTag.style.fontSize = '14px';
-          codeTag.style.fontWeight = '700';
-          codeTag.style.padding = '3px 8px';
-          codeTag.style.borderRadius = '6px';
-          codeTag.style.background = 'var(--mcode-surface)';
-          var cpBtn = btn('复制设备码', 'small', function () { copyText(codeVal, '已复制设备码: ' + codeVal); });
-          codeRow.appendChild(codeTag);
-          codeRow.appendChild(cpBtn);
-          lFlowBox.appendChild(codeRow);
-        }
-        var urlVal = res.login_url || res.verificationUri || res.authUrl;
-        if (urlVal) {
-          var linkRow = el('div');
-          linkRow.style.display = 'flex';
-          linkRow.style.alignItems = 'center';
-          linkRow.style.gap = '8px';
-          var openBtn = btn('🌐 打开官方授权页面', 'primary small', function () {
-            window.open(urlVal, '_blank', 'noopener,noreferrer');
-          });
-          var copyUrlBtn = btn('复制链接', 'small', function () { copyText(urlVal, '已复制授权链接'); });
-          linkRow.appendChild(openBtn);
-          linkRow.appendChild(copyUrlBtn);
-          lFlowBox.appendChild(linkRow);
-        }
-      }
 
-      if (platCfg.cliLogin) {
-        var startCliBtn = btn('🚀 启动 CLI 官方登录', 'primary small', function () {
-          clearAuthPoll();
-          withBusy(startCliBtn, function () {
-            return api('/api/auth/cli-login', { agent: currentAgent, action: 'start' }).then(function (res) {
-              renderLoginResult(res);
-              if (res.logged_in) {
-                lBadge.className = 'pill ok';
-                lBadge.textContent = 'CLI 已登录';
-                loadQuotas(true).then(function () {
-                  qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
-                });
-              } else if (res.status === 'pending' || res.login_url) {
-                lBadge.className = 'pill warn';
-                lBadge.textContent = '等待浏览器授权…';
-                authPollTimer = setInterval(function () {
-                  api('/api/auth/cli-login', { agent: currentAgent, action: 'status' }).then(function (st) {
-                    if (st && st.logged_in) {
-                      clearAuthPoll();
-                      lBadge.className = 'pill ok';
-                      lBadge.textContent = 'CLI 已登录';
-                      lStatusBox.textContent = st.message || 'CLI 登录已完成！';
-                      toast(currentAgent + ' 登录成功');
-                      loadQuotas(true).then(function () {
-                        qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
-                      });
-                    }
-                  }).catch(function () {});
-                }, 4000);
-              }
-            }).catch(function (e) { toast(e.message, true); });
-          });
-        });
-        lBtns.appendChild(startCliBtn);
-      }
+        // Action buttons row
+        var actionsRow = el('div', 'settings-actions');
+        var logOutPre = el('pre', 'codex-login-output');
+        logOutPre.hidden = true;
 
-      if (currentAgent === 'github-copilot') {
-        var cpDeviceBtn = btn('🔗 GitHub Device Flow 配额授权 (token-monitor)', 'small', function () {
-          clearAuthPoll();
-          withBusy(cpDeviceBtn, function () {
-            return api('/api/auth/copilot/device', { action: 'start' }).then(function (flow) {
-              renderLoginResult({
-                message: '请在 GitHub 页面输入以下设备码完成 Copilot 配额授权（授权后自动保存）：',
-                userCode: flow.userCode,
-                verificationUri: flow.verificationUri
-              });
-              authPollTimer = setInterval(function () {
-                api('/api/auth/copilot/device', { action: 'poll', deviceCode: flow.deviceCode }).then(function (p) {
-                  if (p && p.status === 'ok') {
-                    clearAuthPoll();
-                    lBadge.className = 'pill ok';
-                    lBadge.textContent = '已授权';
-                    lStatusBox.textContent = 'GitHub Copilot 原生配额 Token 已保存！';
-                    toast('GitHub Copilot 配额授权成功');
-                    loadQuotas(true).then(function () {
-                      qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
-                    });
-                  }
-                }).catch(function () {});
-              }, (flow.interval || 5) * 1000);
-            }).catch(function (e) { toast(e.message, true); });
-          });
-        });
-        lBtns.appendChild(cpDeviceBtn);
-      }
-
-      if (currentAgent === 'antigravity') {
-        var agyOAuthBtn = btn('🔗 Google OAuth 原生配额登录', 'primary small', function () {
-          withBusy(agyOAuthBtn, function () {
-            return api('/api/auth/antigravity/oauth', { action: 'start' }).then(function (info) {
-              renderLoginResult({
-                message: '1. 点击下方按钮登录 Google 账号；2. 登录跳转后复制浏览器地址栏完整 URL（或 code 参数）粘贴到下方完成绑定：',
-                authUrl: info.authUrl
-              });
-              var codeInput = document.createElement('input');
-              codeInput.type = 'text';
-              codeInput.placeholder = '粘贴回调 URL (http://localhost:51121/oauth-callback?code=...) 或授权码';
-              codeInput.style.width = '100%';
-              codeInput.style.marginTop = '8px';
-              codeInput.style.padding = '6px 8px';
-              codeInput.style.fontSize = '12px';
-              var bindBtn = btn('确认绑定 Google OAuth', 'primary small', function () {
-                withBusy(bindBtn, function () {
-                  return api('/api/auth/antigravity/oauth', { action: 'complete', code: codeInput.value, state: info.state }).then(function (r) {
-                    toast('Antigravity OAuth 绑定成功' + (r.email ? ' (' + r.email + ')' : ''));
-                    loadQuotas(true).then(function () {
-                      qContent.innerHTML = renderQuotasContent(quotasData, quotasError, currentAgent);
-                    });
-                  }).catch(function (e) { toast(e.message, true); });
-                });
-              });
-              bindBtn.style.marginTop = '6px';
-              lFlowBox.appendChild(codeInput);
-              lFlowBox.appendChild(bindBtn);
-            }).catch(function (e) { toast(e.message, true); });
-          });
-        });
-        lBtns.appendChild(agyOAuthBtn);
-      }
-
-      // 3. 原生配额凭据录入区
-      if (platCfg.credFields && platCfg.credFields.length) {
-        var credSec = el('div', 'card');
-        credSec.style.padding = '12px';
-        var cTitle = el('b', null, '⚙️ token-monitor 原生配额凭据配置');
-        cTitle.style.fontSize = '13px';
-        cTitle.style.display = 'block';
-        cTitle.style.marginBottom = '8px';
-        credSec.appendChild(cTitle);
-
-        var inputsMap = {};
-        platCfg.credFields.forEach(function (f) {
-          var row = el('div');
-          row.style.marginBottom = '8px';
-          var lb = el('label', null, f.label);
-          lb.style.display = 'block';
-          lb.style.fontSize = '12px';
-          lb.style.marginBottom = '4px';
-          lb.style.color = 'var(--mcode-text-muted)';
-          var inp = document.createElement('input');
-          inp.type = 'password';
-          inp.placeholder = f.placeholder || '';
-          inp.style.width = '100%';
-          inp.style.padding = '6px 8px';
-          inp.style.fontSize = '12px';
-          inp.style.borderRadius = '6px';
-          inp.style.border = '1px solid var(--mcode-border)';
-          inp.style.background = 'var(--mcode-surface-muted)';
-          inp.style.color = 'var(--mcode-text)';
-          inputsMap[f.key] = inp;
-          row.appendChild(lb);
-          row.appendChild(inp);
-          credSec.appendChild(row);
-        });
-
-        var saveBtn = btn('💾 保存凭据并刷新原生配额', 'primary small', function () {
-          var payload = {};
-          Object.keys(inputsMap).forEach(function (k) {
-            var val = inputsMap[k].value.trim();
-            if (val) payload[k] = val;
-          });
-          if (!Object.keys(payload).length) {
-            toast('请先输入要更新的 Token 或 API Key', true);
-            return;
+        function setLogOutput(txt) {
+          if (!txt) {
+            logOutPre.hidden = true;
+            logOutPre.textContent = '';
+          } else {
+            logOutPre.hidden = false;
+            logOutPre.textContent = txt;
           }
-          withBusy(saveBtn, function () {
-            return api('/api/auth/credentials', payload).then(function (res) {
-              if (res && res.quotas) {
-                quotasData = res.quotas;
-                quotasLastFetch = Date.now();
-                updateStatusBar();
-                qContent.innerHTML = renderQuotasContent(quotasData, null, currentAgent);
-              }
-              toast('凭据已保存并刷新原生配额');
-            }).catch(function (e) { toast(e.message, true); });
+        }
+
+        // 1) Antigravity Google OAuth
+        if (platCfg.id === 'antigravity') {
+          var agBtn = el('button', 'primary-btn', 'Sign in with Google');
+          agBtn.type = 'button';
+          agBtn.addEventListener('click', function () {
+            withBusy(agBtn, function () {
+              return api('/api/quotas/oauth/antigravity/start', {}).then(function (r) {
+                if (r && r.url) {
+                  window.open(r.url, '_blank');
+                  setLogOutput('Opened Google OAuth in browser:\n' + r.url + '\nWaiting for authorization callback…');
+                  clearAuthPoll();
+                  var polls = 0;
+                  authPollTimer = setInterval(function () {
+                    polls++;
+                    if (polls > 60) { clearAuthPoll(); return; }
+                    api('/api/quotas/oauth/antigravity/status').then(function (st) {
+                      if (st && st.status === 'success') {
+                        clearAuthPoll();
+                        toast('Antigravity OAuth connected');
+                        loadQuotas(true);
+                      } else if (st && st.status === 'error') {
+                        clearAuthPoll();
+                        setLogOutput('OAuth failed: ' + (st.error || 'Unknown error'));
+                      }
+                    }).catch(function () {});
+                  }, 2500);
+                }
+              }).catch(function (e) { toast(e.message, true); });
+            });
+          });
+          actionsRow.appendChild(agBtn);
+        }
+
+        // 2) GitHub Copilot Device Flow
+        if (platCfg.id === 'github-copilot') {
+          var cpBtn = el('button', 'primary-btn', 'GitHub Device Flow');
+          cpBtn.type = 'button';
+          cpBtn.addEventListener('click', function () {
+            withBusy(cpBtn, function () {
+              return api('/api/quotas/oauth/copilot/start', {}).then(function (r) {
+                if (r && r.userCode) {
+                  setLogOutput('Verification URI: ' + r.verificationUri + '\nOne-time Code:    ' + r.userCode + '\n\nCopied code & opened GitHub authorization page…');
+                  copyText(r.userCode, 'Copied code: ' + r.userCode);
+                  window.open(r.verificationUri, '_blank');
+                  clearAuthPoll();
+                  var polls = 0;
+                  authPollTimer = setInterval(function () {
+                    polls++;
+                    if (polls > 60) { clearAuthPoll(); return; }
+                    api('/api/quotas/oauth/copilot/status').then(function (st) {
+                      if (st && st.status === 'success') {
+                        clearAuthPoll();
+                        toast('GitHub Copilot connected');
+                        loadQuotas(true);
+                      } else if (st && st.status === 'error') {
+                        clearAuthPoll();
+                        setLogOutput('Device Flow failed: ' + (st.error || 'Unknown error'));
+                      }
+                    }).catch(function () {});
+                  }, 3000);
+                }
+              }).catch(function (e) { toast(e.message, true); });
+            });
+          });
+          actionsRow.appendChild(cpBtn);
+        }
+
+        // 3) Hub CLI Official Login (hub_login)
+        if (platCfg.cliLogin) {
+          var cliCheckBtn = el('button', 'ghost-btn', 'Check CLI Status');
+          cliCheckBtn.type = 'button';
+          cliCheckBtn.addEventListener('click', function () {
+            withBusy(cliCheckBtn, function () {
+              return api('/api/agents/login', { agent: platCfg.id, action: 'status' }).then(function (res) {
+                var d = (res && res.data) || res || {};
+                var msg = d.message || d.stdout || d.stderr || JSON.stringify(d, null, 2);
+                setLogOutput(msg);
+                if (d.status === 'already_logged_in' || d.logged_in) {
+                  statusPill.className = 'cursor-status-pill connected';
+                  statusPill.textContent = 'CLI Ready';
+                }
+              }).catch(function (e) { setLogOutput('Check failed: ' + e.message); });
+            });
+          });
+
+          var cliStartBtn = el('button', 'primary-btn', 'CLI Login (hub_login)');
+          cliStartBtn.type = 'button';
+          cliStartBtn.addEventListener('click', function () {
+            withBusy(cliStartBtn, function () {
+              setLogOutput('Starting official CLI login for ' + platCfg.id + '…');
+              return api('/api/agents/login', { agent: platCfg.id, action: 'start' }).then(function (res) {
+                var d = (res && res.data) || res || {};
+                var lines = [];
+                if (d.message) lines.push(d.message);
+                if (d.VerificationUri) lines.push('Auth URL: ' + d.VerificationUri);
+                if (d.UserCode) lines.push('User Code: ' + d.UserCode);
+                if (d.stdout) lines.push(d.stdout);
+                setLogOutput(lines.join('\n') || 'CLI login started');
+                if (d.VerificationUri) {
+                  window.open(d.VerificationUri, '_blank');
+                }
+                if (d.status === 'already_logged_in' || d.logged_in) {
+                  statusPill.className = 'cursor-status-pill connected';
+                  statusPill.textContent = 'CLI Logged In';
+                  loadQuotas(true);
+                }
+              }).catch(function (e) { setLogOutput('CLI Login error: ' + e.message); });
+            });
+          });
+
+          actionsRow.appendChild(cliStartBtn);
+          actionsRow.appendChild(cliCheckBtn);
+        }
+
+        // 4) Refresh single button
+        var refSingleBtn = el('button', 'ghost-btn', 'Refresh Quota');
+        refSingleBtn.type = 'button';
+        refSingleBtn.addEventListener('click', function () {
+          withBusy(refSingleBtn, function () {
+            return loadQuotas(true).then(function () {
+              toast(platCfg.label + ' quota refreshed');
+            });
           });
         });
-        credSec.appendChild(saveBtn);
-        bodyBox.appendChild(credSec);
-      }
+        actionsRow.appendChild(refSingleBtn);
 
-      // 异步查询当前登录状态与本机凭据发现状态
-      api('/api/auth/status?agent=' + encodeURIComponent(currentAgent)).then(function (st) {
-        var credInfo = (st && st.credentials && st.credentials[currentAgent]) || {};
-        var cli = st && st.cliLogin;
-        var hasNative = credInfo.hasToken || credInfo.hasKey || credInfo.hasOAuth || credInfo.hasCookie;
-        var cliOk = cli && cli.logged_in;
-        if (cliOk || hasNative) {
-          lBadge.className = 'pill ok';
-          lBadge.textContent = cliOk && hasNative ? '已登录 · 原生配额已就绪' : (cliOk ? 'CLI 已登录' : '原生配额凭据已就绪');
-        } else {
-          lBadge.className = 'pill warn';
-          lBadge.textContent = '待配置';
+        detailsInner.appendChild(actionsRow);
+        detailsInner.appendChild(logOutPre);
+
+        // 5) Manual Token / API Key Collapsible Drawer (token-monitor native .opencode-add-form)
+        if (platCfg.credFields && platCfg.credFields.length) {
+          var manualDetails = document.createElement('details');
+          manualDetails.className = 'opencode-add-form';
+          var manualSummary = document.createElement('summary');
+          manualSummary.className = 'opencode-add-summary ghost-btn';
+          manualSummary.textContent = '+ Manual Token / API Key Override';
+          manualDetails.appendChild(manualSummary);
+
+          var formBody = el('div', 'opencode-add-body');
+          var inputsMap = {};
+          platCfg.credFields.forEach(function (f) {
+            var lbl = el('div', 'settings-hint', f.label);
+            var inp = document.createElement('input');
+            inp.type = 'password';
+            inp.className = 'token-input';
+            inp.placeholder = f.placeholder || '';
+            inp.autocomplete = 'off';
+            if (savedCredsCache[f.key]) inp.value = savedCredsCache[f.key];
+            inputsMap[f.key] = inp;
+            formBody.appendChild(lbl);
+            formBody.appendChild(inp);
+          });
+
+          var saveRow = el('div', 'settings-actions');
+          var saveCredBtn = el('button', 'primary-btn', 'Save & Fetch');
+          saveCredBtn.type = 'button';
+          saveCredBtn.addEventListener('click', function () {
+            var payload = {};
+            Object.keys(inputsMap).forEach(function (k) {
+              var v = inputsMap[k].value.trim();
+              if (v && !/^\*+$/.test(v)) payload[k] = v;
+            });
+            withBusy(saveCredBtn, function () {
+              return api('/api/quotas/credentials', payload).then(function () {
+                toast('Saved credentials');
+                return loadQuotas(true);
+              }).catch(function (e) { toast(e.message, true); });
+            });
+          });
+          saveRow.appendChild(saveCredBtn);
+          formBody.appendChild(saveRow);
+          manualDetails.appendChild(formBody);
+          detailsInner.appendChild(manualDetails);
+
+          manualDetails.addEventListener('toggle', function () {
+            if (manualDetails.open) {
+              api('/api/quotas/credentials').then(function (res) {
+                var c = (res && res.credentials) || {};
+                savedCredsCache = c;
+                Object.keys(inputsMap).forEach(function (k) {
+                  if (c[k] && !inputsMap[k].value) inputsMap[k].value = c[k];
+                });
+              }).catch(function () {});
+            }
+          });
         }
-        var notes = [];
-        if (cli && cli.message) notes.push('CLI 状态: ' + cli.message);
-        if (credInfo.autoDetected) notes.push('✅ 已自动检测到本机客户端凭据（token-monitor 原生直连）');
-        else if (hasNative) notes.push('✅ 已保存原生配额凭据' + (credInfo.email ? ' (' + credInfo.email + ')' : ''));
-        lStatusBox.textContent = notes.join(' · ') || '可点击下方按钮启动官方登录或配置原生配额凭据。';
-      }).catch(function () {
-        lBadge.className = 'pill';
-        lBadge.textContent = '就绪';
-        lStatusBox.textContent = '可点击下方按钮启动官方登录或配置原生配额凭据。';
+
+        detailsWrap.appendChild(detailsInner);
+        sub.appendChild(detailsWrap);
+
+        toggleBtn.addEventListener('click', function () {
+          var willOpen = !sub.classList.contains('open');
+          groupInner.querySelectorAll('.cursor-account-group.open').forEach(function (other) {
+            if (other !== sub) other.classList.remove('open');
+          });
+          sub.classList.toggle('open', willOpen);
+          tmExpandedAccount = willOpen ? platCfg.id : null;
+        });
+
+        groupInner.appendChild(sub);
       });
+
+      groupBody.appendChild(groupInner);
+      groupBox.appendChild(groupBody);
+      panel.appendChild(groupBox);
+      container.appendChild(panel);
     }
 
-    renderTabs();
-    renderBody();
+    function renderTmContent() {
+      tabLimitsBtn.classList.toggle('active', tmActiveTab === 'limits');
+      tabAccountsBtn.classList.toggle('active', tmActiveTab === 'accounts');
+      gearBtn.classList.toggle('active', tmActiveTab === 'accounts');
+      btnPctLeft.classList.toggle('active', !tmQuotaShowUsed);
+      btnPctUsed.classList.toggle('active', tmQuotaShowUsed);
+      viewSwitchBtn.textContent = tmActiveTab === 'limits' ? 'ACCOUNTS ▸' : '◂ LIMITS';
 
-    $('#modal-title').textContent = '🔑 平台登录与原生配额管理';
-    var headActions = $('#modal-head-actions');
-    if (headActions) headActions.textContent = '';
-    var form = $('#modal-form');
-    form.textContent = '';
-    form.appendChild(wrapper);
-    var errEl = $('#modal-err');
-    if (errEl) errEl.style.display = 'none';
-    var okBtn = $('#modal-ok');
-    if (okBtn) okBtn.textContent = '关闭';
-    modalResolver = { resolve: function () { clearAuthPoll(); }, inputs: {}, form: form };
-    $('#modal').showModal();
+      var trackedCount = 0;
+      if (quotasData) {
+        ['antigravity', 'codebuddy-cn', 'codebuddy', 'traecode', 'github-copilot', 'minimaxcode', 'zcode', 'mimocode'].forEach(function (ag) {
+          if (extractAgentQuotaWindows(quotasData, ag).connected) trackedCount++;
+        });
+      }
+      footerCenter.textContent = trackedCount + ' active providers · token-monitor Σ';
+
+      bodyHost.textContent = '';
+      if (tmActiveTab === 'limits') {
+        bodyHost.innerHTML = renderQuotasContent(quotasData, quotasError, null);
+        // Clicking any limit-row jumps to its account configuration drawer
+        bodyHost.querySelectorAll('.limit-row[data-agent]').forEach(function (row) {
+          row.style.cursor = 'pointer';
+          row.title = 'Click to configure account or refresh login';
+          row.addEventListener('click', function () {
+            tmExpandedAccount = row.getAttribute('data-agent');
+            tmActiveTab = 'accounts';
+            renderTmContent();
+          });
+        });
+      } else {
+        buildAccountsView(bodyHost);
+      }
+    }
+
+    renderTmContent();
+    hostEl.appendChild(shell);
+  }
+
+  function refreshTmViews() {
+    var stageHost = $('#tm-stage-host');
+    if (stageHost && $('#panel-limits') && !$('#panel-limits').hidden) {
+      buildTmShell(stageHost, { isDialog: false });
+    }
+    var dlg = $('#tm-dialog');
+    if (dlg && dlg.open) {
+      buildTmShell(dlg, { isDialog: true });
+    }
+  }
+
+  function openAgentAuthModal(initialAgent, initialTab) {
+    clearAuthPoll();
+    var dlg = $('#tm-dialog');
+    if (!dlg) return;
+    if (initialAgent) {
+      tmExpandedAccount = initialAgent;
+      tmActiveTab = initialTab || 'accounts';
+    } else {
+      tmActiveTab = initialTab || 'limits';
+    }
+    buildTmShell(dlg, {
+      isDialog: true,
+      initialAgent: initialAgent,
+      initialTab: tmActiveTab
+    });
+    if (!dlg.open) {
+      dlg.showModal();
+    }
+    loadQuotas(false);
   }
 
   // ---------------- 子代理接入端点展示
@@ -6447,10 +7381,9 @@
         head.appendChild(toggleWrap);
       }
 
-      // 待机·可直派去掉，把登录/配额与头像设置按钮移到这里
-      if (a.name !== SELF && resolveQuotaPlat(a.name)) {
-        var authBtn = btn('🔑 登录/配额', 'btn-avatar-setting', function () {
-          openAgentAuthModal(a.name);
+      if (a.name !== SELF) {
+        var authBtn = btn('Σ 配额/账号', 'btn-avatar-setting', function () {
+          openAgentAuthModal(a.name, 'accounts');
         });
         authBtn.style.marginLeft = 'auto';
         head.appendChild(authBtn);
@@ -6458,12 +7391,24 @@
       var avatarBtn = btn('头像', 'btn-avatar-setting', function () {
         promptChangeAvatar(a.name);
       });
-      if (a.name !== SELF && resolveQuotaPlat(a.name)) {
+      if (a.name !== SELF) {
         avatarBtn.style.marginLeft = '0';
       }
       head.appendChild(avatarBtn);
       card.appendChild(head);
       card.appendChild(el('div', 'role', a.role || '未声明角色'));
+
+      // 嵌入 token-monitor 原生双列配额进度条 (.limit-windows)
+      if (a.name !== SELF && resolveQuotaPlat(a.name) && quotasData) {
+        var qBox = el('div');
+        qBox.style.marginTop = '4px';
+        qBox.style.padding = '8px 10px';
+        qBox.style.borderRadius = '10px';
+        qBox.style.background = 'rgba(4, 8, 13, 0.5)';
+        qBox.style.border = '1px solid var(--line)';
+        qBox.innerHTML = renderTmLimitRowHtml(quotasData, a.name, true);
+        card.appendChild(qBox);
+      }
       // 已精简：卡片内不再展示底层的 CLI 路径、model_arg、心跳提示与默认模型，界面保持紧凑清晰
       if (a.models && a.models.length) {
         var validChips = a.models.filter(function (mm) { return mm.alias !== '默认' && mm.alias !== 'default'; });
@@ -7249,8 +8194,28 @@
     renderWorkbench();
   });
 
+  var topTmBtn = $('#btn-top-tm');
+  if (topTmBtn) {
+    topTmBtn.addEventListener('click', function () {
+      openAgentAuthModal(null, 'limits');
+    });
+  }
+  var tmDlgEl = $('#tm-dialog');
+  if (tmDlgEl) {
+    tmDlgEl.addEventListener('click', function (e) {
+      if (e.target === tmDlgEl) {
+        clearAuthPoll();
+        tmDlgEl.close();
+      }
+    });
+  }
   document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
     if (tab.id === 'tab-chat') tab.addEventListener('click', function () { loadThreads(); loadUsage(); updateStatusBar(); });
+    if (tab.id === 'tab-limits') tab.addEventListener('click', function () {
+      var stageHost = $('#tm-stage-host');
+      if (stageHost) buildTmShell(stageHost, { isDialog: false });
+      loadQuotas(false);
+    });
   });
 
   loadSnapshot().then(function () { renderInflight(); loadThreads(); updateStatusBar(); updateModelSummaryUI(); });
