@@ -1,4 +1,4 @@
-// ZCode 桌面版聊天驱动 v4 (经 CDP): 基线快照 → 聚焦清空 → Input.insertText → Enter → 抓增量回复
+// ZCode 桌面版聊天驱动 v4 (经 CDP): 基线快照 → 聚焦清空 → 页面内写入 → Enter → 抓增量回复
 // 用法: node zcode_dom.js "提示词"  → stdout: 本次新增的回复文本
 // 调试: ZCODE_DEBUG_DIR=/tmp/x node zcode_dom.js "..."  → 额外落盘 before/after 正文, 便于离线调参
 //
@@ -6,7 +6,8 @@
 //   1) 提交前记录正文基线, 返回时只取"本次新增部分", 不再把整段历史对话当回复返回;
 //   2) 提交前清空输入框, 避免上次残留文本与新提示词拼接;
 //   3) 稳定性判定基于增量文本, 长历史对话下也能正确收敛;
-//   4) 异常路径统一关闭 WebSocket, 不留悬挂连接。
+//   4) 异常路径统一关闭 WebSocket, 不留悬挂连接;
+//   5) 完整跳过 --stream / --thinking / --attach 等带值参数, 防止 "--stream off" 将提示词覆盖为 "off"。
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -25,13 +26,24 @@ function get(url) {
 }
 
 let parsedPrompt = "";
+const VALUE_FLAGS = new Set([
+  "--model", "-m",
+  "--timeout",
+  "--stream",
+  "--thinking",
+  "--attach", "--file",
+  "--cwd", "--session",
+  "--format", "--output",
+]);
 for (let i = 2; i < process.argv.length; i++) {
   const arg = process.argv[i];
-  if (arg === "--model" || arg === "--timeout") {
+  if (VALUE_FLAGS.has(arg)) {
     i++;
-  } else if (arg === "--prompt") {
+  } else if (arg === "--prompt" || arg === "-p") {
     parsedPrompt = process.argv[++i] || "";
-  } else if (!arg.startsWith("-")) {
+  } else if (arg.startsWith("-")) {
+    // 忽略其它布尔开关或 --key=value 形式参数
+  } else if (!parsedPrompt) {
     parsedPrompt = arg;
   }
 }
@@ -175,10 +187,21 @@ function extractDelta(beforeText, afterText, prompt) {
 
     await send("Page.bringToFront", {});
 
-    // 1) 提交前基线快照
-    const beforeState = JSON.parse((await evalExpr(bodyExpr)) || "{}");
-    const beforeText = beforeState.text || "";
-    dump("before.txt", beforeText);
+    // 1) NEW_CHAT_PER_TASK: 优先点击侧栏「新建任务」按钮或发送 Ctrl+N，避免旧会话污染
+    try {
+      await evalExpr(`(() => {
+        const btn = [...document.querySelectorAll('button,[role="button"]')].find(
+          (el) => (el.innerText || '').includes('新建任务')
+        );
+        if (btn) { btn.click(); return 'NEW_CHAT_BTN_CLICKED'; }
+        for (const type of ['keydown','keyup']) {
+          document.dispatchEvent(new KeyboardEvent(type, { key: 'n', code: 'KeyN', ctrlKey: true, bubbles: true, cancelable: true }));
+          window.dispatchEvent(new KeyboardEvent(type, { key: 'n', code: 'KeyN', ctrlKey: true, bubbles: true, cancelable: true }));
+        }
+        return 'NEW_CHAT_KBD_SENT';
+      })()`);
+    } catch (_) { /* 新会话失败不阻断主流程 */ }
+    await new Promise((r) => setTimeout(r, 1200));
 
     // 2) 聚焦 + 清空输入框
     let prepRes = await evalExpr(prepExpr);
@@ -191,15 +214,58 @@ function extractDelta(beforeText, afterText, prompt) {
       console.log("输入框未找到");
       ws.close();
       process.exit(1);
-    } // PALETTE_RETRY_ONCE
-
-    // 3) 输入 + 回车
-    await send("Input.insertText", { text: PROMPT });
-    for (const type of ["rawKeyDown", "char", "keyUp"]) {
-      await send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: "\r" });
     }
 
-    // 4) 轮询增量文本, 稳定后返回
+    // 3) 提交前基线快照（在新会话切换与清空输入框之后采集）
+    const beforeState = JSON.parse((await evalExpr(bodyExpr)) || "{}");
+    const beforeText = beforeState.text || "";
+    dump("before.txt", beforeText);
+
+    // 4) 输入 + 回车 —— JS_SUBMIT: CDP insertText 不触发 React 状态导致 Enter 空发,
+    //    改为页面内 execCommand 写入（触发 input 事件）+ JS KeyboardEvent 提交
+    await evalExpr(`(() => {
+      const input = document.querySelector('[contenteditable="true"]');
+      if (!input) return 'NO_INPUT';
+      input.focus();
+      input.innerHTML = '';
+      const ok = document.execCommand('insertText', false, ${JSON.stringify(PROMPT)});
+      if (!ok) input.textContent = ${JSON.stringify(PROMPT)};
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      return 'TYPED:' + (input.textContent || '').length;
+    })()`);
+    await new Promise((r) => setTimeout(r, 800));
+    await evalExpr(`(() => {
+      const input = document.querySelector('[contenteditable="true"]');
+      if (!input) return 'NO_INPUT';
+      for (const type of ['keydown', 'keyup']) {
+        input.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      }
+      return 'ENTER_SENT';
+    })()`);
+
+    // SUBMIT_VERIFY: 确认 composer 已清空（任务已提交），否则重发 Enter（最多 6 次）
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      let st = {};
+      try {
+        st = JSON.parse((await evalExpr(`(() => {
+          const i = document.querySelector('[contenteditable="true"]');
+          return JSON.stringify({ len: i ? (i.textContent || '').length : -1, busy: (document.body.innerText || '').indexOf('停止生成') !== -1 });
+        })()`)) || "{}");
+      } catch (_) { st = {}; }
+      if (st.len === 0 || st.busy || st.len === -1) break;
+      try {
+        await evalExpr(`(() => {
+          const input = document.querySelector('[contenteditable="true"]');
+          if (input) for (const type of ['keydown', 'keyup']) {
+            input.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+          }
+          return 'REENTER';
+        })()`);
+      } catch (_) { /* ignore */ }
+    }
+
+    // 5) 轮询增量文本, 稳定后返回
     let afterText = "";
     let sawBusy = false;
     const reply = await new Promise((resolve) => {
@@ -210,6 +276,14 @@ function extractDelta(beforeText, afterText, prompt) {
       (async () => {
         for (let i = 0; i < 300; i++) {
           await new Promise((r) => setTimeout(r, 3000));
+          // AUTO_DISMISS_DIALOG: 代理弹出的选择框会阻塞回复, 自动点「忽略」放行
+          try {
+            await evalExpr(`(() => {
+              const btns = [...document.querySelectorAll('button,[role=button],div')].filter((el) => el.childElementCount <= 1 && (el.innerText || '').trim() === '忽略');
+              if (btns.length) { btns[btns.length - 1].click(); return 'DISMISSED'; }
+              return 'NONE';
+            })()`);
+          } catch (_) { /* 忽略清理失败不影响主流程 */ }
           const s = JSON.parse((await evalExpr(bodyExpr)) || "{}");
           afterText = s.text || "";
           if (!submitted && s.inputLen === 0) submitted = true;
