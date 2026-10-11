@@ -4,7 +4,7 @@
   "description": "Multi-agent orchestration and Hub bridge for CodeArts IDE & VS Code",
   "version": "0.9.9",
   "publisher": "agenthub",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "vscode": "^1.52.0"
   },

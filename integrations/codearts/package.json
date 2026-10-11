@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "description": "Native CodeArts Agent plugin, agents, commands and MCP client for multi-agent-hub",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": { "node": ">=20" }
 }

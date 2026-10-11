@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/Johhny-Xu/multi-agent-hub",
   "repository": "https://github.com/Johhny-Xu/multi-agent-hub",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "multi-agent",
     "mcp",
