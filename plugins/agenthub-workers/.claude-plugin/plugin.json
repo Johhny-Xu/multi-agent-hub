@@ -1,0 +1,23 @@
+{
+  "name": "agenthub-workers",
+  "version": "0.9.4",
+  "description": "Bridge nine multi-agent-hub workers into MiniMax Code and Claude Code, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, and concurrent dispatch skills.",
+  "author": {
+    "name": "multi-agent-hub Contributors"
+  },
+  "agents": "agents",
+  "skills": [
+    "./skills/dispatch-hub/SKILL.md"
+  ],
+  "commands": "commands",
+  "mcpServers": {
+    "hub-bridge": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./mcp/server.mjs"
+      ]
+    }
+  },
+  "icon": "icon.png"
+}

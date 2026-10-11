@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "agenthub-workers",
+  "displayName": "Multi-Agent Hub Workers",
+  "version": "0.9.4",
+  "description": "连接 Multi-Agent Hub 协同总线，支持将开发与审查任务并发分派给 9 个主流 AI 编程代理、自动发现局域网节点、查询在线状态与回收执行结果。",
+  "author": "multi-agent-hub Contributors",
+  "icon": "icon.png",
+  "category": "Code",
+  "exampleQueries": [
+    "调用 hub_status 查看当前在线的外部编程代理状态与可用模型",
+    "把代码审查任务并发分派给 zcode、minimaxcode 和 antigravity 并汇总结论",
+    "调用 hub_discover 扫描局域网内可用的 Multi-Agent Hub 节点"
+  ],
+  "apps": [],
+  "mcpServers": [
+    "hub-bridge.mcp.json"
+  ],
+  "skills": [
+    "skills/dispatch-hub/SKILL.md"
+  ]
+}

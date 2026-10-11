@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agenthub-workers",
+  "version": "0.9.4",
+  "description": "Bridge nine multi-agent-hub workers with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, and concurrent dispatch skills.",
+  "author": {
+    "name": "multi-agent-hub Contributors"
+  },
+  "homepage": "https://github.com/Johhny-Xu/multi-agent-hub",
+  "repository": "https://github.com/Johhny-Xu/multi-agent-hub",
+  "license": "MIT",
+  "keywords": [
+    "multi-agent",
+    "mcp",
+    "orchestration",
+    "minimax-code",
+    "zcode",
+    "antigravity"
+  ]
+}
