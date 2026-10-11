@@ -17,9 +17,9 @@ const CODEARTS_ENV = join(HOME, '.config', 'agenthub-codearts', 'codearts-auth.e
 export const LOGIN_COMMANDS = {
   'github-copilot': { cmd: [join(HOME, '.local', 'bin', 'copilot'), 'login', '--device-code'], headless: true, note: 'GitHub OAuth 设备码流程，输出中的 URL + Code 在浏览器完成' },
   'minimaxcode': { cmd: [join(HOME, '.npm-global', 'bin', 'mmx'), 'auth', 'login', '--recommend', '--region=cn'], headless: true, note: 'MiniMax OAuth，输出中的 URL 在浏览器完成' },
-  'codebuddy': { interactive: true, note: '请在终端运行 codebuddy 后输入 /login（当前凭据目录见账号档案）' },
-  'codebuddy-cn': { interactive: true, note: '请在终端运行 codebuddy-cn 后输入 /login（国内版）' },
-  'antigravity': { desktop: true, note: '令牌由 Antigravity 桌面端/CLI 自动刷新，WebUI 暂不支持发起登录' },
+  'codebuddy': { interactive: true, note: '终端运行 codebuddy 进入会话后输入 /login（OAuth 走 www.codebuddy.ai），凭据落盘 .codebuddy/auth.info' },
+  'codebuddy-cn': { interactive: true, note: '终端运行 codebuddy-cn 进入会话后输入 /login（OAuth 走 copilot.tencent.com），凭据落盘 .codebuddy-cn/auth.info' },
+  'antigravity': { interactive: true, note: '终端运行 agy（TUI）触发 Google OAuth（accounts.google.com → antigravity.google/oauth-callback），令牌落盘 .gemini/antigravity-cli/antigravity-oauth-token' },
   'mimocode': { note: 'serviceToken 由本机续期脚本管理，WebUI 暂不支持登录' },
   'traecode': { desktop: true, note: '请在 TraeCode 桌面端登录' },
   'zcode': { desktop: true, note: '请在 ZCode 桌面端登录' },
