@@ -10,23 +10,6 @@ import { join, resolve, sep, dirname, basename } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import {
-  loadProviderCredentials,
-  saveProviderCredentials,
-  getProviderCredentialSummary,
-  fetchZcodeQuotas,
-  fetchCodebuddyDirect,
-  fetchTraeDirect,
-  fetchAntigravityDirect,
-  startAntigravityOAuth,
-  completeAntigravityOAuth,
-  startCopilotDeviceFlow,
-  pollCopilotDeviceFlowOnce,
-  fetchCopilotDirect,
-  fetchMinimaxDirect,
-  fetchMimoDirect,
-  fetchDeepSeekDirect,
-} from './token_monitor.mjs';
 
 const execFile = promisify(execFileCb);
 
@@ -904,98 +887,16 @@ export async function start(context) {
   let quotasCacheTime = 0;
   let quotasFetchInFlight = null;
 
-  function normalizeNativeQuotaResult(tm) {
-    if (!tm || !Array.isArray(tm.models) || !tm.models.length) return null;
-    const quotas = tm.models.map((m) => {
-      const total = typeof m.total === 'number' && m.total > 0 ? m.total : 100;
-      const pct = typeof m.pct === 'number' ? Math.max(0, Math.min(100, m.pct)) : 100;
-      const used = typeof m.used === 'number' ? m.used : Math.round(total * (100 - pct) / 100);
-      const remaining = typeof m.total === 'number' && typeof m.used === 'number'
-        ? Math.max(0, m.total - m.used)
-        : Math.max(0, total - used);
-      return {
-        name: m.id || m.name || 'quota',
-        displayName: m.name || '配额',
-        used,
-        total,
-        remaining,
-        remainingPercentage: pct,
-        resetAt: m.resetAt || tm.resetTime || null,
-        unlimited: m.reset === 'Unlimited' || !!m.unlimited,
-        recurring: true,
-        isCreditBalance: false,
-      };
-    });
-    return {
-      tracked: true,
-      source: 'token-monitor',
-      plan: tm.plan || tm.name || '原生配额',
-      user: tm.account || null,
-      balance: tm.balance || null,
-      quotas,
-    };
-  }
-
-  async function getQuotas(force = false) {
+  async function getQuotas() {
     const now = Date.now();
-    if (!force && quotasCache && (now - quotasCacheTime < 60_000)) {
+    if (quotasCache && (now - quotasCacheTime < 60_000)) {
       return quotasCache;
     }
-    if (!force && quotasFetchInFlight) {
+    if (quotasFetchInFlight) {
       return quotasFetchInFlight;
     }
     quotasFetchInFlight = (async () => {
-      const creds = loadProviderCredentials(dataDir);
-      const result = {
-        zcode: { tracked: false },
-        mimocode: { tracked: false },
-      };
-
-      // 1. 优先执行 token-monitor 原生配额直查 (不依赖 9router)
-      const [
-        agyDirect,
-        cbIntlDirect,
-        cbCnDirect,
-        traeDirect,
-        cpDirect,
-        mmDirect,
-        zcodeDirect,
-        mimoDirect,
-        dsDirect,
-      ] = await Promise.all([
-        fetchAntigravityDirect(creds).catch(() => null),
-        fetchCodebuddyDirect(creds, 'intl').catch(() => null),
-        fetchCodebuddyDirect(creds, 'cn').catch(() => null),
-        fetchTraeDirect(creds).catch(() => null),
-        fetchCopilotDirect(creds).catch(() => null),
-        fetchMinimaxDirect(creds).catch(() => null),
-        fetchZcodeQuotas(creds).catch(() => null),
-        fetchMimoDirect(creds).catch(() => null),
-        fetchDeepSeekDirect(creds).catch(() => null),
-      ]);
-
-      const agyNorm = normalizeNativeQuotaResult(agyDirect);
-      const cbIntlNorm = normalizeNativeQuotaResult(cbIntlDirect);
-      const cbCnNorm = normalizeNativeQuotaResult(cbCnDirect);
-      const traeNorm = normalizeNativeQuotaResult(traeDirect);
-      const cpNorm = normalizeNativeQuotaResult(cpDirect);
-      const mmNorm = normalizeNativeQuotaResult(mmDirect);
-      const zcodeNorm = normalizeNativeQuotaResult(zcodeDirect);
-      const mimoNorm = normalizeNativeQuotaResult(mimoDirect);
-      const dsNorm = normalizeNativeQuotaResult(dsDirect);
-
-      if (agyNorm) result.antigravity = agyNorm;
-      if (cbIntlNorm) result.codebuddy = cbIntlNorm;
-      if (cbCnNorm) result['codebuddy-cn'] = cbCnNorm;
-      if (traeNorm) result.traecode = traeNorm;
-      if (cpNorm) result['github-copilot'] = cpNorm;
-      if (mmNorm) result.minimaxcode = mmNorm;
-      if (zcodeNorm) result.zcode = zcodeNorm;
-      if (mimoNorm) result.mimocode = mimoNorm;
-      if (dsNorm) result.dsh = dsNorm;
-
-      // 2. 对尚未配置本机原生凭据的平台，可选回退 9router (若存在)
-      const ROUTER_URL = process.env.ROUTER_QUOTA_URL || 'http://127.0.0.1:20128';
+      const ROUTER_URL = 'http://127.0.0.1:20128';
       const CID_MAP = {
         antigravity: '258f489a-1b2d-430c-b5e7-9e64df53706b',
         codebuddy: 'ae5ef69e-df9a-4417-9b1f-d081d75b336f',
@@ -1004,10 +905,13 @@ export async function start(context) {
         'github-copilot': 'c19b0e0c-5792-4dd3-aeb1-07d345f353d9',
         minimaxcode: '27be3c86-808b-4cd2-b8f2-9a1033157fea',
       };
+      const result = {
+        zcode: { tracked: false },
+        mimocode: { tracked: false },
+      };
       await Promise.all(Object.entries(CID_MAP).map(async ([platform, cid]) => {
-        if (result[platform] && result[platform].tracked) return;
         try {
-          const res = await fetch(`${ROUTER_URL}/api/usage/${cid}`, { signal: AbortSignal.timeout(5000) });
+          const res = await fetch(`${ROUTER_URL}/api/usage/${cid}`, { signal: AbortSignal.timeout(8000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           const plan = data.plan || (data.subscriptionInfo && data.subscriptionInfo.currentTier && data.subscriptionInfo.currentTier.name) || '未知套餐';
@@ -1024,15 +928,12 @@ export async function start(context) {
             isCreditBalance: !!q.isCreditBalance,
             currency: q.currency || '',
           }));
-          result[platform] = { tracked: true, source: '9router', plan, quotas, user: data.user || null };
+          result[platform] = { tracked: true, plan, quotas, user: data.user || null };
         } catch (err) {
-          if (!result[platform]) {
-            result[platform] = { error: '未配置原生配额凭据' };
-          }
+          result[platform] = { error: err.message || '查询失败' };
         }
       }));
-
-      // 3. 若 minimaxcode 仍未取得配额，回退到 mmx CLI
+      // 若 9router 未能取得 minimaxcode 配额，则回退到 mmx CLI
       if (!result.minimaxcode || !result.minimaxcode.tracked) {
         try {
           const mmxBin = process.env.MMX_BIN || join(os.homedir(), '.npm-global', 'bin', 'mmx');
@@ -1054,13 +955,12 @@ export async function start(context) {
               weeklyPercentage: typeof element.current_weekly_remaining_percent === 'number' ? element.current_weekly_remaining_percent : 0,
             };
           });
-          result.minimaxcode = { tracked: true, source: 'cli', plan: 'MiniMax Token Plan', quotas };
+          result.minimaxcode = { tracked: true, plan: 'MiniMax Token Plan', quotas };
         } catch (err) {
-          result.minimaxcode = { tracked: false, error: '未配置 MiniMax 配额凭据' };
+          result.minimaxcode = { tracked: false };
         }
       }
-
-      // 4. codebuddy 国内+国际分组: 各组分别计算总剩余与 top 5
+      // codebuddy 国内+国际分组: 各组分别计算总剩余与 top 5
       const round2 = (n) => Math.round(n * 100) / 100;
       const parts = [];
       if (result.codebuddy && result.codebuddy.tracked) parts.push({ src: '国际', r: result.codebuddy });
@@ -1072,6 +972,7 @@ export async function start(context) {
         for (const { src, r } of parts) {
           const quotas = [];
           for (const q of r.quotas || []) {
+            // 非循环且已过期的包视为已失效, 不计入总数与清单
             if (!q.unlimited && !q.recurring && q.resetAt && new Date(q.resetAt).getTime() <= ts) continue;
             quotas.push({
               ...q,
@@ -1081,13 +982,12 @@ export async function start(context) {
             });
           }
           const top = quotas
-            .filter((q) => !q.unlimited && (q.remaining || 0) > 0)
+            .filter((q) => !q.unlimited && (q.remaining || 0) > 50)
             .sort((a, b) => byExpiry(a) - byExpiry(b))
             .slice(0, 5);
           groups.push({
             source: src,
             plan: r.plan,
-            nativeSource: r.source || 'token-monitor',
             totalRemaining: round2(quotas.reduce((s, q) => s + (q.remaining || 0), 0)),
             packageCount: quotas.length,
             top,
@@ -1100,12 +1000,11 @@ export async function start(context) {
         const sources = groups.map((g) => g.source);
         result.codebuddy = {
           tracked: true,
-          source: groups.some((g) => g.nativeSource === 'token-monitor') ? 'token-monitor' : '9router',
           plan: groups.length === 2 ? '国内+国际' : `${sources.join('+')}（${groups[0].plan}）`,
           groups,
         };
       } else {
-        result.codebuddy = { error: (result.codebuddy && result.codebuddy.error) || (result['codebuddy-cn'] && result['codebuddy-cn'].error) || '未配置 CodeBuddy 配额凭据' };
+        result.codebuddy = { error: (result.codebuddy && result.codebuddy.error) || (result['codebuddy-cn'] && result['codebuddy-cn'].error) || '查询失败' };
       }
       delete result['codebuddy-cn'];
       quotasCache = result;
@@ -2609,106 +2508,8 @@ export async function start(context) {
         return;
       }
       if (request.method === 'GET' && p === '/api/quotas') {
-        const force = url.searchParams.get('force') === '1' || url.searchParams.get('refresh') === '1';
-        const data = await getQuotas(force);
+        const data = await getQuotas();
         send(200, data);
-        return;
-      }
-      if (request.method === 'GET' && p === '/api/auth/status') {
-        const agent = url.searchParams.get('agent') ? safeName(url.searchParams.get('agent'), 'agent') : null;
-        const credentials = getProviderCredentialSummary(dataDir);
-        let cliLogin = null;
-        if (agent) {
-          try {
-            const raw = await hub.callTool('hub_login', { agent, action: 'status' });
-            cliLogin = JSON.parse(raw);
-          } catch (err) {
-            cliLogin = { status: 'error', message: sanitizeHubError(err && err.message) };
-          }
-        }
-        send(200, { ok: true, credentials, cliLogin });
-        return;
-      }
-      if (request.method === 'POST' && p === '/api/auth/cli-login') {
-        const b = await readJson();
-        const agent = safeName(b.agent, 'agent');
-        const action = typeof b.action === 'string' && ['status', 'start', 'cancel'].includes(b.action) ? b.action : 'start';
-        const raw = await hub.callTool('hub_login', { agent, action, timeout_sec: 15 });
-        let parsed = null;
-        try { parsed = JSON.parse(raw); } catch { parsed = { status: 'ok', message: String(raw) }; }
-        quotasCache = null;
-        send(200, parsed);
-        return;
-      }
-      if (request.method === 'POST' && p === '/api/auth/copilot/device') {
-        const b = await readJson();
-        const action = b.action || 'start';
-        if (action === 'start') {
-          const flow = await startCopilotDeviceFlow();
-          send(200, { ok: true, ...flow });
-          return;
-        }
-        if (action === 'poll') {
-          const dc = str(b.deviceCode, 256, 'deviceCode');
-          const poll = await pollCopilotDeviceFlowOnce(dc);
-          if (poll.status === 'ok' && poll.accessToken) {
-            await saveProviderCredentials(dataDir, { copilotApiToken: poll.accessToken });
-            quotasCache = null;
-          }
-          send(200, poll);
-          return;
-        }
-        throw badReq('不支持的 action');
-      }
-      if (request.method === 'POST' && p === '/api/auth/antigravity/oauth') {
-        const b = await readJson();
-        const action = b.action || 'start';
-        if (action === 'start') {
-          const info = startAntigravityOAuth();
-          send(200, { ok: true, ...info });
-          return;
-        }
-        if (action === 'complete') {
-          const code = str(b.code, 2048, 'code');
-          const creds = await completeAntigravityOAuth(code, typeof b.state === 'string' ? b.state : '');
-          await saveProviderCredentials(dataDir, { antigravityOAuthCredentials: creds });
-          quotasCache = null;
-          send(200, { ok: true, email: creds.email || '' });
-          return;
-        }
-        throw badReq('不支持的 action');
-      }
-      if (request.method === 'POST' && p === '/api/auth/credentials') {
-        const b = await readJson();
-        const allowedKeys = [
-          'traeAccessToken',
-          'codebuddyCnAccessToken',
-          'codebuddyCnUid',
-          'codebuddyIntlAccessToken',
-          'codebuddyIntlUid',
-          'workbuddyAccessToken',
-          'workbuddyUid',
-          'zaiApiKey',
-          'zaiApiRegion',
-          'minimaxApiKey',
-          'mimoCookie',
-          'deepseekApiKey',
-          'copilotApiToken',
-        ];
-        const patch = {};
-        for (const k of allowedKeys) {
-          if (Object.prototype.hasOwnProperty.call(b, k)) {
-            patch[k] = typeof b[k] === 'string' ? b[k].trim() : b[k];
-          }
-        }
-        await saveProviderCredentials(dataDir, patch);
-        quotasCache = null;
-        const quotas = await getQuotas(true);
-        send(200, {
-          ok: true,
-          credentials: getProviderCredentialSummary(dataDir),
-          quotas,
-        });
         return;
       }
       if (request.method === 'GET' && p === '/api/chat/archives') {
@@ -2785,12 +2586,6 @@ export async function start(context) {
 
       if (request.method === 'POST' && p.startsWith('/api/')) {
         const body = await readJson();
-        if (p === '/api/token-monitor/config') {
-          const cfg = await tokenMonitor.saveConfig(body || {});
-          const dash = await tokenMonitor.buildDashboard({ force: true });
-          send(200, { ok: true, config: cfg, dashboard: dash });
-          return;
-        }
         if (p === '/api/endpoint') {
           const id = String(body.id || '');
           if (!id || id === 'local' || !config.endpoints.some((e) => e.id === id)) throw badReq('未知或已移除端点');
