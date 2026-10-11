@@ -3109,10 +3109,6 @@
     color: var(--mcode-text-muted);
   }
 
-.qa-models{margin:8px 0 2px}
-.qa-models select{flex:1;min-width:0;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:4px 6px;font-size:12px}
-.qa-input{flex:1;min-width:0;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:4px 8px;font-size:12px}
-.qa-models .qa-qname{display:flex;gap:6px;align-items:center}
 /* ===== 配额与账号面板（native quota + accounts） ===== */
 .qa-panel{margin:0 0 18px;padding:14px 16px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(148,163,184,.05)}
 .qa-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -6902,7 +6898,20 @@
     renderWorkbench();
   });
 
-  docume<script>
+  document.querySelectorAll('nav.tabs [role="tab"]').forEach(function (tab) {
+    if (tab.id === 'tab-chat') tab.addEventListener('click', function () { loadThreads(); loadUsage(); updateStatusBar(); });
+  });
+
+  loadSnapshot().then(function () { renderInflight(); loadThreads(); updateStatusBar(); updateModelSummaryUI(); });
+  loadUsage().then(updateStatusBar);
+  loadQuotas();
+  loadAvatars();
+})();
+</script>
+</body>
+</html>
+
+<script>
 (() => {
   const grid = document.getElementById('qaGrid');
   const esc = (s) => String(s ?? '');
@@ -7022,7 +7031,7 @@
             + (p.deviceCode ? `<p>设备码: <b style="font-size:20px">${p.deviceCode}</b></p>` : '')
             + `<pre style="white-space:pre-wrap;font-size:11px">${esc(p.output).slice(-600)}</pre>`
             + `<p>在浏览器完成授权后，回到此处点击「我已完成」。</p>`
-            + `<button onclick="window.__qaFinish && window.__qaFinish()">我已完成</button>`;
+            + `<button onclick="window.opener.__qaFinish && window.opener.__qaFinish()">我已完成</button>`;
         }
         if (p.exited && !done) { done = true; clearInterval(timer); load(); }
       }, 2000);
@@ -7102,3 +7111,5 @@
 })();
 </script>
 
+</body>
+</html>
