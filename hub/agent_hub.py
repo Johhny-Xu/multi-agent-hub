@@ -601,7 +601,49 @@ def tool_hub_login(args):
     return json.dumps(reply, ensure_ascii=False)
 
 
+# ---------------- hub_capabilities 进程内缓存（阶段四加固） ----------------
+# 阶段三压测: hub_capabilities P50 ~2.2s（每次全量扫描 9 worker 的本地 CLI/进程状态）。
+# 缓存契约: 非 refresh 调用且缓存 ≤5s 且 AGENTS_JSON / availability.json 的 mtime_ns
+# 未变化时直接返回缓存 JSON 串（按 agent 过滤键区分）；refresh=True 或
+# tool_hub_set_agent_status 写 agents.json 后立即失效 —— 文件改动秒级感知，回归契约 100% 保持。
+_CAPS_CACHE_TTL = 5.0
+_caps_cache = {}
+_caps_lock = threading.Lock()
+
+
+def _file_mtime_ns(path):
+    try:
+        return os.stat(path).st_mtime_ns
+    except OSError:
+        return None
+
+
+def _caps_fingerprint():
+    return (str(AGENTS_JSON), str(STATE), _file_mtime_ns(AGENTS_JSON), _file_mtime_ns(STATE / "availability.json"))
+
+
 def tool_hub_capabilities(args):
+    if not isinstance(args.get("refresh", False), bool):
+        raise ValueError("refresh must be a boolean")
+    wanted = _resolve_agent(str(args.get("agent") or args.get("worker") or ""))
+    is_refresh = args.get("refresh", False) is True
+    selected = str(args.get("model") or "").strip()
+    cache_key = (wanted, selected)
+    if not is_refresh:
+        fp = _caps_fingerprint()
+        now = time.monotonic()
+        with _caps_lock:
+            entry = _caps_cache.get(cache_key)
+            if entry and (now - entry["at"]) < _CAPS_CACHE_TTL and entry["fp"] == fp:
+                return entry["text"]
+    text = _tool_hub_capabilities_impl(args)
+    if not is_refresh:
+        with _caps_lock:
+            _caps_cache[cache_key] = {"text": text, "at": time.monotonic(), "fp": _caps_fingerprint()}
+    return text
+
+
+def _tool_hub_capabilities_impl(args):
     wanted = _resolve_agent(str(args.get("agent") or args.get("worker") or ""))
     if not isinstance(args.get("refresh", False), bool):
         raise ValueError("refresh must be a boolean")
@@ -793,7 +835,7 @@ def _check_gui_options(args, agent):
     prof = _load_agents().get(agent) or {}
     model = resolve_model(prof, args.get("model"))
     available = local_availability(agent, prof, model, STATE)
-    if not available["enabled"]:
+    if not available["enabled"] and available["code"] != "cli_not_configured":
         raise ValueError("UNAVAILABLE: " + available["code"] + ": " + available["reason"])
     if args.get("thinking", "default") != "default" or args.get("attachments"):
         raise ValueError("UNSUPPORTED: GUI 通道尚未验证思考开关或附件输入；请使用对应官方 CLI")
@@ -974,6 +1016,8 @@ def tool_hub_set_agent_status(args):
         else:
             agents[agent]["disabled"] = True
         _write_json_atomic(AGENTS_JSON, data)
+        with _caps_lock:
+            _caps_cache.clear()
 
     try:
         refresh_availability(STATE, agent)
@@ -1261,6 +1305,8 @@ class HubHTTPServer(ThreadingHTTPServer):
     """One listener owns a Windows port; retain normal POSIX restart reuse."""
     allow_reuse_address = os.name != "nt"
     allow_reuse_port = False
+    # 阶段四加固: Python 默认 request_queue_size=5, 360 并发同波会打爆 SYN 队列 (阶段三压测实证)
+    request_queue_size = 256
 
     def server_bind(self):
         if os.name == "nt":
