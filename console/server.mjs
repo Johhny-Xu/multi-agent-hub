@@ -13,6 +13,10 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCb);
 
+// Multi-Agent Hub 原生配额跟踪 + 账号切换（自 9router 移植，OAuth 直读 CLI 凭据）
+import * as vendorQuota from './vendor-quota.mjs';
+import * as accountsMod from './accounts.mjs';
+
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
@@ -2396,6 +2400,28 @@ export async function start(context) {
       }
       if (request.method === 'GET' && p === '/api/snapshot') {
         send(200, await snapshot());
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/quota') {
+        send(200, await vendorQuota.getAllQuotas());
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/quota/refresh') {
+        send(200, await vendorQuota.getAllQuotas({ force: true }));
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/accounts') {
+        send(200, await accountsMod.listAccounts());
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/accounts/save') {
+        const body = await readJson();
+        send(200, await accountsMod.saveAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/accounts/switch') {
+        const body = await readJson();
+        send(200, await accountsMod.switchAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
         return;
       }
       if (request.method === 'GET' && p === '/api/chat/list') {

@@ -3109,6 +3109,28 @@
     color: var(--mcode-text-muted);
   }
 
+/* ===== 配额与账号面板（native quota + accounts） ===== */
+.qa-panel{margin:0 0 18px;padding:14px 16px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(148,163,184,.05)}
+.qa-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.qa-head b{font-size:14px;color:#e2e8f0}
+.qa-refresh{border:1px solid rgba(148,163,184,.3);background:transparent;color:#94a3b8;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
+.qa-refresh:hover{color:#e2e8f0;border-color:#94a3b8}
+.qa-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.qa-card{border:1px solid rgba(148,163,184,.15);border-radius:10px;padding:10px 12px;background:rgba(15,23,42,.35)}
+.qa-card h4{margin:0 0 6px;font-size:13px;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.qa-plan{font-size:11px;color:#94a3b8;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qa-row{margin:6px 0}
+.qa-qname{display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:2px;gap:8px}
+.qa-qname span:last-child{white-space:nowrap}
+.qa-bar{height:5px;border-radius:3px;background:rgba(148,163,184,.15);overflow:hidden}
+.qa-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#22d3ee)}
+.qa-bar i.warn{background:linear-gradient(90deg,#f59e0b,#f97316)}
+.qa-bar i.full{background:linear-gradient(90deg,#ef4444,#dc2626)}
+.qa-acts{display:flex;gap:6px;margin-top:8px}
+.qa-acts select{flex:1;min-width:0;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:4px 6px;font-size:12px}
+.qa-btn{border:1px solid rgba(148,163,184,.3);background:transparent;color:#cbd5e1;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
+.qa-btn:hover{border-color:#60a5fa;color:#60a5fa}
+.qa-msg{font-size:11px;color:#94a3b8;line-height:1.5;word-break:break-all}
 </style>
 </head>
 <body>
@@ -3356,6 +3378,10 @@
       <!-- 子代理面板 -->
       <section class="tabpanel" id="panel-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
         <div class="kpi-row" id="kpis" aria-label="枢纽概览" style="display:none"></div>
+        <div class="qa-panel" id="qaPanel">
+          <div class="qa-head"><b>配额与账号 <span style="font-size:11px;color:#64748b">OAuth 直读 · 非反代</span></b><button class="qa-refresh" id="qaRefreshBtn" type="button">刷新配额</button></div>
+          <div class="qa-grid" id="qaGrid"><div class="qa-msg">加载中…</div></div>
+        </div>
         <div class="grid" id="agents"></div>
         <div class="inflight" id="inflight-box-wrap" style="display:none">
           <h2 style="font-size:16px;font-weight:500;margin:8px 0 0">异步任务（本控制台派发）</h2>
@@ -6884,3 +6910,95 @@
 </script>
 </body>
 </html>
+<script>
+(() => {
+  const grid = document.getElementById('qaGrid');
+  const esc = (s) => String(s ?? '');
+  const pctColor = (p) => (p >= 99.5 ? ' full' : p >= 80 ? ' warn' : '');
+  const shortTime = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : ` ${d.getMonth()+1}/${d.getDate()}`; };
+  let quotaData = null, accountData = null;
+
+  function bar(name, q) {
+    const row = document.createElement('div'); row.className = 'qa-row';
+    const head = document.createElement('div'); head.className = 'qa-qname';
+    const left = document.createElement('span'); const right = document.createElement('span');
+    let pct = null;
+    if (typeof q.remainingPercentage === 'number') pct = 100 - q.remainingPercentage;
+    else if (q.total > 0) pct = (q.used / q.total) * 100;
+    const label = q.unlimited ? '不限量' : (q.total > 0 ? `${q.used}/${q.total}` : '—');
+    left.textContent = name;
+    right.textContent = label + (q.recurring === false ? shortTime(q.resetAt) : (q.resetAt ? ` ↻${shortTime(q.resetAt)}` : ''));
+    head.append(left, right);
+    const bar = document.createElement('div'); bar.className = 'qa-bar';
+    const fill = document.createElement('i');
+    fill.style.width = `${Math.max(2, Math.min(100, pct ?? 100))}%`;
+    fill.className = pctColor(pct ?? 0);
+    bar.appendChild(fill);
+    row.append(head, bar);
+    return row;
+  }
+
+  function workerCard(worker, q, acc) {
+    const card = document.createElement('div'); card.className = 'qa-card';
+    const h = document.createElement('h4');
+    const t = document.createElement('span'); t.textContent = worker;
+    const plan = document.createElement('span'); plan.className = 'qa-plan'; plan.textContent = q.plan || '';
+    h.append(t, plan); card.appendChild(h);
+    const quotas = q.quotas && Object.keys(q.quotas).length ? q.quotas : null;
+    if (quotas) { for (const [name, qq] of Object.entries(quotas)) card.appendChild(bar(name, qq)); }
+    else { const m = document.createElement('div'); m.className = 'qa-msg'; m.textContent = q.message || '暂无配额数据'; card.appendChild(m); }
+
+    const acts = document.createElement('div'); acts.className = 'qa-acts';
+    const sel = document.createElement('select');
+    const blank = document.createElement('option'); blank.value = ''; blank.textContent = acc.profiles.length ? '选择账号档案…' : '（暂无档案）';
+    sel.appendChild(blank);
+    for (const p of acc.profiles) {
+      const o = document.createElement('option'); o.value = p.name;
+      o.textContent = p.name + (p.active ? ' ✓当前' : '');
+      sel.appendChild(o);
+    }
+    const saveBtn = document.createElement('button'); saveBtn.className = 'qa-btn'; saveBtn.type = 'button'; saveBtn.textContent = '存当前';
+    const swBtn = document.createElement('button'); swBtn.className = 'qa-btn'; swBtn.type = 'button'; swBtn.textContent = '切换';
+    saveBtn.onclick = async () => {
+      const name = window.prompt(`将 ${worker} 当前凭据存为档案，名称：`, '');
+      if (!name) return;
+      const r = await fetch('/api/accounts/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ worker, name }) }).then((x) => x.json());
+      window.alert(r.ok ? `已保存档案 ${name}` : `保存失败: ${r.error || r.error?.message || '?'}`);
+      load();
+    };
+    swBtn.onclick = async () => {
+      if (!sel.value) { window.alert('请先在下拉框选择要切换到的账号档案'); return; }
+      if (!window.confirm(`确认把 ${worker} 切换到档案「${sel.value}」？当前凭据会自动备份。`)) return;
+      const r = await fetch('/api/accounts/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ worker, name: sel.value }) }).then((x) => x.json());
+      window.alert(r.ok ? `已切换到 ${sel.value}（原凭据已备份）` : `切换失败: ${r.error || '?'}`);
+      load();
+    };
+    acts.append(sel, saveBtn, swBtn); card.appendChild(acts);
+    return card;
+  }
+
+  async function load() {
+    try {
+      const [q, a] = await Promise.all([
+        fetch('/api/quota').then((r) => r.json()),
+        fetch('/api/accounts').then((r) => r.json()),
+      ]);
+      quotaData = q; accountData = a;
+      grid.textContent = '';
+      const workers = Object.keys(q.workers || {});
+      for (const w of workers) {
+        grid.appendChild(workerCard(w, q.workers[w] || {}, (a.workers && a.workers[w]) || { profiles: [] }));
+      }
+    } catch (e) {
+      grid.textContent = '配额加载失败: ' + esc(e.message);
+    }
+  }
+  document.getElementById('qaRefreshBtn').addEventListener('click', async () => {
+    grid.textContent = '刷新中…';
+    try { await fetch('/api/quota/refresh').then((r) => r.json()); } catch { /* ignore */ }
+    load();
+  });
+  load();
+  setInterval(load, 60000);
+})();
+</script>
