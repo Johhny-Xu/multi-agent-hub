@@ -5,6 +5,7 @@
 // 模型：以 ~/.config/agenthub-codearts/agents.json 为唯一权威（读-改-写 + 备份）
 
 import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { readFile, writeFile, mkdir, rename, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -68,6 +69,34 @@ function trim(entry) { if (entry.buf.length > 8000) entry.buf = entry.buf.slice(
 
 const URL_RE = /https?:\/\/[^\s"'<>]+/g;
 const CODE_RE = /\b([A-Z0-9]{4}-[A-Z0-9]{4,8}|[A-Z0-9]{8,12})\b/;
+
+/** 沙箱添加账号：以隔离 HOME 启动登录命令，授权后凭据落在沙箱内，供快照成档案 */
+export function startLoginSandbox(worker, name) {
+  const spec = LOGIN_COMMANDS[worker];
+  if (!spec || !spec.cmd || !spec.headless) {
+    return { ok: false, error: (spec && spec.note) || '该 worker 不支持沙箱添加账号' };
+  }
+  const sandbox = join(HOME, '.agenthub', 'sandbox', `${worker}-${name}-${Date.now()}`);
+  mkdirSync(sandbox, { recursive: true });
+  const id = `add-${Date.now()}-${++seq}`;
+  const child = spawn(spec.cmd[0], spec.cmd.slice(1), {
+    cwd: sandbox,
+    env: { ...process.env, HOME: sandbox, TERM: 'dumb', NO_COLOR: '1' },
+  });
+  const entry = { proc: child, buf: '', exited: false, code: null, startedAt: Date.now(), sandbox };
+  sessions.set(id, entry);
+  child.stdout.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
+  child.stderr.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
+  child.on('exit', (code) => { entry.exited = true; entry.code = code; });
+  child.on('error', (e) => { entry.buf += `\n[spawn-error] ${e.message}\n`; entry.exited = true; entry.code = -1; });
+  return { ok: true, loginId: id, worker, name, sandbox, note: spec.note };
+}
+
+/** 取登录会话的沙箱目录（供 addFromSandbox 快照） */
+export function getSandbox(loginId) {
+  const e = sessions.get(loginId);
+  return e ? e.sandbox : null;
+}
 
 export function pollLogin(loginId) {
   const e = sessions.get(loginId);

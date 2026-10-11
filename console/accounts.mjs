@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { clearQuotaCache } from './vendor-quota.mjs';
+import { getSandbox } from './auth.mjs';
 
 const HOME = homedir();
 const ROOT = join(HOME, '.agenthub', 'accounts');
@@ -91,6 +92,34 @@ export async function saveAccount(worker, name) {
   }
   await writeFile(join(dest, 'meta.json'), JSON.stringify({ savedAt: new Date().toISOString(), files: relFiles }, null, 2), 'utf-8');
   return { ok: true, worker, name, savedAt: new Date().toISOString() };
+}
+
+/** 凭据文件位于 HOME 下的 worker（可沙箱添加账号）；copilot 在 keyring、codebuddy 走 /login，不在此列 */
+const SANDBOX_CRED_FILES = {
+  'minimaxcode': ['.mmx/config.json'],
+};
+
+/** 沙箱添加账号：把沙箱 HOME 里新生成的凭据快照成档案并立即切换 */
+export async function addFromSandbox(worker, name, loginId) {
+  const rels = SANDBOX_CRED_FILES[worker];
+  if (!rels) return { ok: false, error: `该 worker 暂不支持沙箱添加账号` };
+  const sandbox = getSandbox(loginId);
+  if (!sandbox) return { ok: false, error: '登录会话不存在或已过期' };
+  const dest = profileDir(worker, name);
+  await mkdir(dest, { recursive: true });
+  for (const rel of rels) {
+    const base = rel.split('/').pop();
+    const srcFile = join(sandbox, rel);
+    try {
+      await readFile(srcFile, 'utf-8');
+    } catch {
+      return { ok: false, error: `沙箱内未生成凭据（可能尚未完成授权）: ${rel}` };
+    }
+    await copyFile(srcFile, join(dest, base));
+  }
+  await writeFile(join(dest, 'meta.json'), JSON.stringify({ savedAt: new Date().toISOString(), via: 'sandbox-add' }, null, 2), 'utf-8');
+  const sw = await switchAccount(worker, name);
+  return { ok: true, worker, name, switched: sw.ok === true, note: '新账号已快照为档案并切换生效' };
 }
 
 /** 切换到指定档案：先把当前凭据备份到 .backup-<ts>，再复制档案文件到生效位 */
