@@ -2,7 +2,7 @@
   "platform": "Windows",
   "real_calls": true,
   "layer": "new JavaScript bridge -> isolated HTTP Hub -> authenticated official worker CLI",
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-hub-57fa32r1",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-hub-57fa32r1",
   "port": 58791,
   "source_files_separate_from_worker_cwd": true,
   "results": [

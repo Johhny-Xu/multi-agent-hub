@@ -1,7 +1,7 @@
 {
   "platform": "Windows",
   "real_calls": true,
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w",
   "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
   "results": [
     {
@@ -13,7 +13,7 @@
       "file": true,
       "case": "github-copilot-t0s1i0f1",
       "argv": [
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -30,11 +30,11 @@
         "--no-auto-update",
         "--no-color",
         "--log-dir",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s1i0f1\\cli-logs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s1i0f1\\cli-logs",
         "--deny-tool=shell",
         "--allow-tool=read,write"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s1i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s1i0f1",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -250,7 +250,7 @@
             "linesAdded": 2,
             "linesRemoved": 0,
             "filesModified": [
-              "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s1i0f1\\output.json"
+              "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s1i0f1\\output.json"
             ]
           }
         }
@@ -274,7 +274,7 @@
       "file": true,
       "case": "github-copilot-t0s0i1f1",
       "argv": [
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nInspect image.png (or the attached image) and calculate the sum of the two numbers displayed in its pixels. Do not infer values from filenames.\nRead input.txt (or its attached contents), add value_a and value_b, and use its nonce exactly.\nAdd the image sum and the input.txt sum to obtain one total.\nWrite output.json in this current test directory with {\"total\": the computed total, \"nonce\": the exact nonce}.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -291,13 +291,13 @@
         "--no-auto-update",
         "--no-color",
         "--log-dir",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s0i1f1\\cli-logs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s0i1f1\\cli-logs",
         "--deny-tool=shell",
         "--allow-tool=read,write",
         "--attachment",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s0i1f1\\image.png"
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s0i1f1\\image.png"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s0i1f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-iq8nq63w\\github-copilot-t0s0i1f1",
       "status": "failed",
       "exit_code": 0,
       "timed_out": false,

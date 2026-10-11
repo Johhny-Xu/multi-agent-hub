@@ -6,9 +6,9 @@
     "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
     "app-server",
     "--cwd",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
   ],
-  "isolated_workspace": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+  "isolated_workspace": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
   "records": [
     {
       "method": "runtime/capabilities",
@@ -27,8 +27,8 @@
         "id": "probe-2",
         "result": {
           "workspace": {
-            "workspacePath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
-            "workspaceKey": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+            "workspacePath": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+            "workspaceKey": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
           },
           "mode": "build",
           "omitted_field_names": [
@@ -75,8 +75,8 @@
             "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
             "status": "idle",
             "workspace": {
-              "workspacePath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
-              "workspaceKey": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+              "workspacePath": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+              "workspaceKey": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
             },
             "omitted_field_names": [
               "createdAt",
@@ -365,8 +365,8 @@
             "sessionId": "sess_03b15b7d-974e-4bf9-8d74-a9366c527abf",
             "status": "idle",
             "workspace": {
-              "workspacePath": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
-              "workspaceKey": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
+              "workspacePath": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz",
+              "workspaceKey": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-zcode-rpc-_lii0ygz"
             },
             "omitted_field_names": [
               "createdAt",

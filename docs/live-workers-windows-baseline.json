@@ -1,7 +1,7 @@
 {
   "platform": "Windows",
   "real_calls": true,
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7",
   "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
   "results": [
     {
@@ -14,7 +14,7 @@
       "case": "codebuddy-cn-t0s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_e0ca871278.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -30,7 +30,7 @@
         "--setting-sources",
         "user"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\codebuddy-cn-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\codebuddy-cn-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -114,7 +114,7 @@
       "case": "codebuddy-t0s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-codebuddy-20261008\\package\\bin\\codebuddy",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_62be34a048.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -130,7 +130,7 @@
         "--setting-sources",
         "user"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\codebuddy-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\codebuddy-t0s0i0f0",
       "status": "blocked_auth",
       "exit_code": 0,
       "timed_out": false,
@@ -164,13 +164,13 @@
       "case": "minimaxcode-t0s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
         "text",
         "chat",
         "--model",
         "MiniMax-M3.1-Flash-Preview",
         "--messages-file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\minimaxcode-t0s0i0f0\\messages.json",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\minimaxcode-t0s0i0f0\\messages.json",
         "--output",
         "json",
         "--max-tokens",
@@ -180,7 +180,7 @@
         "--non-interactive",
         "--no-color"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\minimaxcode-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\minimaxcode-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -232,7 +232,7 @@
       "file": false,
       "case": "github-copilot-t0s0i0f0",
       "argv": [
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
         "-p",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_f4d7ddd67d.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}.",
         "--model",
@@ -249,11 +249,11 @@
         "--no-auto-update",
         "--no-color",
         "--log-dir",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\github-copilot-t0s0i0f0\\cli-logs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\github-copilot-t0s0i0f0\\cli-logs",
         "--available-tools=view,create,edit",
         "--allow-tool=read,write"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\github-copilot-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\github-copilot-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -338,7 +338,7 @@
       "file": false,
       "case": "traecode-t0s0i0f0",
       "argv": [
-        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
         "exec",
         "--model",
         "GLM-5.3-FlashX",
@@ -352,10 +352,10 @@
         "--config",
         "model_reasoning_effort=\"none\"",
         "--output-last-message",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\traecode-t0s0i0f0\\last-message.txt",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\traecode-t0s0i0f0\\last-message.txt",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_19c49c4da2.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\traecode-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\traecode-t0s0i0f0",
       "status": "failed",
       "exit_code": 2,
       "timed_out": false,
@@ -389,7 +389,7 @@
       "case": "mimocode-t0s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--model",
@@ -399,7 +399,7 @@
         "--thinking",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_09c28a1da0.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\mimocode-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\mimocode-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -464,7 +464,7 @@
         "C:\\Program Files\\nodejs\\node.exe",
         "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
         "--cwd",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\zcode-t0s0i0f0",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\zcode-t0s0i0f0",
         "--mode",
         "plan",
         "--disallowed-tools",
@@ -473,7 +473,7 @@
         "--prompt",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_1b7e6236f3.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\zcode-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-emmwjaq7\\zcode-t0s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,

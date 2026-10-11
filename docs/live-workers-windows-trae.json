@@ -1,7 +1,7 @@
 {
   "platform": "Windows",
   "real_calls": true,
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-jq9g36gj",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-jq9g36gj",
   "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
   "results": [
     {
@@ -13,7 +13,7 @@
       "file": false,
       "case": "traecode-t0s0i0f0",
       "argv": [
-        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\hub-windows-root-20261008\\traecli.exe",
         "--ask-for-approval",
         "never",
         "exec",
@@ -27,10 +27,10 @@
         "--config",
         "model_reasoning_effort=\"none\"",
         "--output-last-message",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-jq9g36gj\\traecode-t0s0i0f0\\last-message.txt",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-jq9g36gj\\traecode-t0s0i0f0\\last-message.txt",
         "This is an isolated capability test. Do not browse, use network tools, read credentials or inspect paths outside the current test directory.\nUse nonce=CHECK_eda7cbd3ad.\nCompute 31+47 without tools.\nThe final answer must be only JSON {\"total\": the computed total, \"nonce\": the exact nonce}."
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-jq9g36gj\\traecode-t0s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-jq9g36gj\\traecode-t0s0i0f0",
       "status": "failed",
       "exit_code": 1,
       "timed_out": false,

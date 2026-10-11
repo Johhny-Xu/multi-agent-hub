@@ -120,7 +120,7 @@ def build_extension(source_dir: Path, output_dirs: list[Path]):
 
         for p in (out_vsix, out_carts, out_cloudide):
             results.append({
-                "path": str(p),
+                "path": f"dist/{p.name}" if target_dir == dist_dir else p.name,
                 "name": p.name,
                 "size_bytes": p.stat().st_size,
                 "sha256": sha256_file(p)

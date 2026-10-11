@@ -14,9 +14,15 @@ RULES = {
     "literal_credential": re.compile(r"(?i)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|HUB_TOKEN)[\"']?\s*[:=]\s*[\"']([A-Za-z0-9_./+=-]{20,})[\"']"),
 }
 
+WORKING_TREE_RULES = {
+    **RULES,
+    "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+Johhny|/home/user)\b"),
+    "private_lan_ip": re.compile(r"\b192\.168\.2\.29\b"),
+}
 
-def matches(text):
-    for rule, pattern in RULES.items():
+
+def matches(text, active_rules=RULES):
+    for rule, pattern in active_rules.items():
         for found in pattern.finditer(text):
             value = found.group(1) if found.lastindex else found.group()
             if value.startswith(("SYNTHETIC_", "EXAMPLE_", "REPLACE_WITH_")):
@@ -34,7 +40,7 @@ def scan(history=False):
         except (OSError, UnicodeError):
             continue
         count += 1
-        findings.extend({"file": path.relative_to(ROOT).as_posix(), **item} for item in matches(text))
+        findings.extend({"file": path.relative_to(ROOT).as_posix(), **item} for item in matches(text, WORKING_TREE_RULES))
     historical = []
     if history:
         diff = subprocess.check_output(["git", "log", "--all", "--no-ext-diff", "--format=COMMIT:%H", "-p", "--"], cwd=ROOT, timeout=60).decode("utf-8", errors="replace")

@@ -2,7 +2,7 @@
 
 代码与原生适配已更新到本地 0.6.0；**不能得出全部平台、宿主和选项都通过的结论**。本轮同时验证实际模型输出、附件内容、思考开关证据、流式通知与失败处理。账号授权、余额、地区、模型目录和模型本身的错误均单独保留，没有通过重复派发掩盖失败。
 
-源码位于 `<USER_HOME>/Desktop/agenthub`。原生插件源码分别在 `integrations/codex`、`plugins/agenthub-workers`、`integrations/dsh`；这不是个人客户端插件缓存目录。临时安装使用隔离 profile，未发布新版本。
+源码位于 `C:/Users/user/Desktop/agenthub`。原生插件源码分别在 `integrations/codex`、`plugins/agenthub-workers`、`integrations/dsh`；这不是个人客户端插件缓存目录。临时安装使用隔离 profile，未发布新版本。
 
 ## 默认模型
 
@@ -81,6 +81,6 @@ Codex 子代理模板、三个工作流技能，以及 DSH 子代理/三份工�
 
 [密钥模式扫描](security-audit.json)覆盖当前仓库文本及全部 Git 历史补丁；不记录匹配值。官方认证、Hub token、原始 CLI 日志与个人连接配置保留在项目外。扫描结果是模式检查，不能作为所有潜在秘密格式的数学证明。
 
-阶段备份保存在 `<USER_HOME>/Desktop/agenthub-backups`，每包含逐文件 SHA-256 清单并重新读回验证；排除机器配置、凭据及运行目录。工具为 `scripts/checkpoint.py`。Windows 测试生成的 PowerShell ModuleAnalysisCache 删除被自动审批拦截，文件保留并已排除 Git/后续备份；其不参与运行。
+阶段备份保存在 `C:/Users/user/Desktop/agenthub-backups`，每包含逐文件 SHA-256 清单并重新读回验证；排除机器配置、凭据及运行目录。工具为 `scripts/checkpoint.py`。Windows 测试生成的 PowerShell ModuleAnalysisCache 删除被自动审批拦截，文件保留并已排除 Git/后续备份；其不参与运行。
 
 外部条件仍需各官方账号/环境解决：授权与区域限制、DSH 余额、Linux MiMo 26f 凭据、ZCode 指定型号可用性、Linux CodeBuddy 工具行为及共享认证 wrapper。模型空回答、算术错误和超时都保留为真实失败。本轮未覆盖 macOS、GPU/长上下文压力、全部宿主×全部 worker×全部选项的笛卡尔积，也未替换用户日常部署配置。

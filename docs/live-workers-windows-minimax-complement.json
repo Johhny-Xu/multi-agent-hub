@@ -1,7 +1,7 @@
 {
   "platform": "Windows",
   "real_calls": true,
-  "raw_log_root": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v",
+  "raw_log_root": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v",
   "scope": "CLI computation, real fixture image/file input, output artifact; bit requests are not claims of supported thinking/transport",
   "results": [
     {
@@ -14,13 +14,13 @@
       "case": "minimaxcode-t1s0i0f0",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
         "text",
         "chat",
         "--model",
         "MiniMax-M3.1-Flash-Preview",
         "--messages-file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f0\\messages.json",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f0\\messages.json",
         "--output",
         "json",
         "--max-tokens",
@@ -30,7 +30,7 @@
         "--non-interactive",
         "--no-color"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f0",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f0",
       "status": "passed",
       "exit_code": 0,
       "timed_out": false,
@@ -90,13 +90,13 @@
       "case": "minimaxcode-t1s0i0f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
         "text",
         "chat",
         "--model",
         "MiniMax-M3.1-Flash-Preview",
         "--messages-file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f1\\messages.json",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f1\\messages.json",
         "--output",
         "json",
         "--max-tokens",
@@ -106,7 +106,7 @@
         "--non-interactive",
         "--no-color"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s0i0f1",
       "status": "unsupported_native_file_write",
       "exit_code": 0,
       "timed_out": false,
@@ -168,13 +168,13 @@
       "case": "minimaxcode-t1s1i0f1",
       "argv": [
         "C:\\Program Files\\nodejs\\node.exe",
-        "<USER_HOME>\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\hub-windows-root-20261008\\mmx\\node_modules\\mmx-cli\\dist\\mmx.mjs",
         "text",
         "chat",
         "--model",
         "MiniMax-M3.1-Flash-Preview",
         "--messages-file",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s1i0f1\\messages.json",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s1i0f1\\messages.json",
         "--output",
         "text",
         "--max-tokens",
@@ -185,7 +185,7 @@
         "--no-color",
         "--stream"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s1i0f1",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-live-workers-6rxs5o6v\\minimaxcode-t1s1i0f1",
       "status": "unsupported_native_file_write",
       "exit_code": 0,
       "timed_out": false,

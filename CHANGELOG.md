@@ -72,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - 新增 `refreshConnection()` 与 `getConnection()` 动态重试机制：当连接配置在 MCP 进程启动后被创建或修正时，后续任意工具调用（`hub_status`、`hub_capabilities`、`hub_ask` 等）均能自动重新加载配置并与 Hub 恢复连接，无需重启 IDE 或杀死后台进程。
   - 将修复同步至全部集成目标（`mcp/`、`plugins/agenthub-workers/mcp/`、`integrations/dsh/mcp/`、`integrations/codex/mcp/`、`integrations/codearts/mcp/`、`integrations/antigravity/mcp/`、`integrations/vscode/mcp/`）。
 - **Windows Antigravity 客户端配置就绪**：
-  - 修复 `%LOCALAPPDATA%\AgentHub-Antigravity\client.json` 配置路径缺失问题，配置标准文件模式连接至 `http://127.0.0.1:8765/mcp` 与凭据。
+  - 修复 `%LOCALAPPDATA%\AgentHub-Antigravity\client.json` 配置路径缺失问题，配置标准文件模式连接至局域网 Hub 节点（`http://<LAN_HUB_IP>:8765/mcp`）与凭据。
   - 实时热重载 Antigravity 宿主插件进程，实测通过原生 `call_mcp_tool` 执行 `hub_status` 与 `hub_capabilities`，成功返回远程 9 家 Worker 在线状态及 TraeCode 等通道能力。
 - **单元测试与全量回归**：
   - 在 `tests/mcp_bridge.test.mjs` 中新增 `bridge recovers dynamically when connection configuration is restored` 单元测试，并将 `integrations/vscode/mcp` 纳入跨端桥接一致性自动化检验（117 项测试全量通过）。
@@ -87,7 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `agent_hub.py` 中 `hub_capabilities` 将 TraeCode 的 `configured` 字段正确置为 `true`。
   - `hub_status`（`hub_list_agents`）输出明确显示 `| 调度通道: TraeClaw 网关`，彻底消除模型在推理前误判该 Worker 无法使用的歧义。
 - **回归测试覆盖**：在 `tests/runtime_regressions.py` 中新增 `test_gateway_accepts_completed_and_ok_status` 测试用例，在 `tests/capability_availability_regressions.py` 中增加 TraeCode 网关免 CLI 就绪断言。
-- **远程服务热重载验证**：修改已同步并部署至远程服务器 `127.0.0.1`，经 `ask.mjs trae` 真实调用验证顺利通过。
+- **远程服务热重载验证**：修改已同步并部署至远程 Linux 节点，经 `ask.mjs trae` 真实调用验证顺利通过。
 
 
 ### 子代理模型目录精简与去重 (Model Catalog Optimization)

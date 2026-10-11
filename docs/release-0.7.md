@@ -51,7 +51,7 @@ MCP、Codex、ZCode、DSH 共用外部 `client.json` 连接读取逻辑，支持
 
 ### 正式本地产物
 
-文件位于 `<USER_HOME>/Desktop/agenthub-releases`。这三个 ZIP 的字节已经完成上述 Linux 安装验收；暂未上传远程 release。`SHA256SUMS` 同时放在发布目录和每个包内。
+文件位于 `C:/Users/user/Desktop/agenthub-releases`。这三个 ZIP 的字节已经完成上述 Linux 安装验收；暂未上传远程 release。`SHA256SUMS` 同时放在发布目录和每个包内。
 
 | 文件 | 字节 | SHA256 |
 | --- | ---: | --- |

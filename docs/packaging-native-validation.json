@@ -6,16 +6,16 @@
   "personal_profiles_touched": false,
   "entrypoints": {
     "codex": [
-      "<USER_HOME>\\AppData\\Local\\OpenAI\\Codex\\bin\\9691020b546a15b2\\codex.exe"
+      "C:\\Users\\user\\AppData\\Local\\OpenAI\\Codex\\bin\\9691020b546a15b2\\codex.exe"
     ],
     "zcode": [
       "C:\\Program Files\\nodejs\\node.exe",
       "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs"
     ],
     "dsh": [
-      "<USER_HOME>\\AppData\\Local\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe",
+      "C:\\Users\\user\\AppData\\Local\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe",
       "--expose-internals",
-      "<USER_HOME>\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js"
+      "C:\\Users\\user\\AppData\\Local\\Programs\\DeepSeek Harness\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js"
     ]
   },
   "node": "C:\\Program Files\\nodejs\\node.exe",
@@ -102,7 +102,7 @@
         "host": "codex",
         "status": "registered",
         "configuration_backups": 0,
-        "project": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
+        "project": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
         "profile": null
       },
       {
@@ -130,7 +130,7 @@
         "host": "codex",
         "status": "registered",
         "configuration_backups": 1,
-        "project": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
+        "project": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
         "profile": null
       },
       {
@@ -156,7 +156,7 @@
         "host": "codex",
         "status": "registered",
         "configuration_backups": 1,
-        "project": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
+        "project": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-native-package-fixed-agexd4uf\\project with spaces",
         "profile": null
       },
       {

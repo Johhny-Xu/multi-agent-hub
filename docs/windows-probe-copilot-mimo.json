@@ -3,20 +3,20 @@
   "timezone": "Asia/Shanghai",
   "platform": "Windows x64; PowerShell 7.6.5",
   "prompt": "reply exactly HUB_WINDOWS_OK, do not use tools or read files",
-  "temporary_directory": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf",
+  "temporary_directory": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf",
   "credentials_printed": false,
   "source_changes": false,
   "copilot": {
     "official_windows_support": true,
     "version": "1.0.93",
-    "executable": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
+    "executable": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
     "download_url": "https://github.com/github/copilot-cli/releases/download/v1.0.93/copilot-win32-x64.zip",
     "sha256": "71f2b3de8543aaa7c388eea60e6d1ec5ade8ddb1a19f1ac07ad116f454efa91d",
     "bootstrap": "passed_native",
     "generation": "passed_authenticated_generation",
     "generation_probe": {
       "name": "copilot-run-restricted",
-      "executable": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
+      "executable": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-portable\\copilot.exe",
       "argv": [
         "--silent",
         "--model",
@@ -28,18 +28,18 @@
         "--available-tools=shell",
         "--deny-tool=shell",
         "--log-dir",
-        "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-logs",
+        "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-logs",
         "-p",
         "reply exactly HUB_WINDOWS_OK, do not use tools or read files"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-work",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-work",
       "timeout_seconds": 60,
       "started": true,
       "exit_code": 0,
       "timed_out": false,
       "elapsed_ms": 7626,
       "error": null,
-      "log": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-run-restricted.log",
+      "log": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-run-restricted.log",
       "output": "HUB_WINDOWS_OK\n\n",
       "isolated_xdg": false
     },
@@ -63,33 +63,33 @@
     "auth_process": {
       "started_pid": 23068,
       "state": "completed_successfully",
-      "metadata": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-live.json"
+      "metadata": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-live.json"
     }
   },
   "mimo": {
     "official_windows_support": true,
     "version": "0.1.9",
     "executable": "C:\\Program Files\\nodejs\\node.exe",
-    "cli_entry": "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+    "cli_entry": "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
     "bootstrap": "passed_native",
     "generation": "passed_authenticated_generation",
     "status_probe": {
       "name": "mimo-auth-whoami",
       "executable": "C:\\Program Files\\nodejs\\node.exe",
       "argv": [
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "auth",
         "whoami",
         "--pure"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-work",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-work",
       "timeout_seconds": 15,
       "started": true,
       "exit_code": 0,
       "timed_out": false,
       "elapsed_ms": 2221,
       "error": null,
-      "log": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-whoami.log",
+      "log": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-whoami.log",
       "output": "T  Current user\n|\nx  Not logged in. Run `mimo auth login` to log in.\n\n[stderr]\n\u001b[0m\r\n",
       "isolated_xdg": false
     },
@@ -130,7 +130,7 @@
       "started_utc": "2026-10-08T08:09:42Z",
       "loopback_port": 52415,
       "callback_url_reconstruction": "validated_by_actual_login_success",
-      "metadata": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-login-live.json"
+      "metadata": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-login-live.json"
     },
     "plugin_login_interface": {
       "executable": "node",
@@ -160,28 +160,28 @@
       "name": "mimo-run-normal-unsandboxed",
       "executable": "C:\\Program Files\\nodejs\\node.exe",
       "argv": [
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--format",
         "json",
         "reply exactly HUB_WINDOWS_OK, do not use tools or read files"
       ],
-      "cwd": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-work",
+      "cwd": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-work",
       "timeout_seconds": 60,
       "started": true,
       "exit_code": 0,
       "timed_out": false,
       "elapsed_ms": 13122,
       "error": null,
-      "log": "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-normal-unsandboxed.log",
+      "log": "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-normal-unsandboxed.log",
       "output": "{\"type\":\"error\",\"timestamp\":1791445548111,\"sessionID\":\"ses_ee5866d1cffeDUwDWCiCChw6Xs\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"MiMo free API service has ended. Sign in or configure a third-party API.\"}}}\r\n",
       "isolated_xdg": false
     },
     "generation_probe": {
       "executable": "C:\\Program Files\\nodejs\\node.exe",
       "argv": [
-        "<USER_HOME>\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
+        "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@mimo-ai\\cli\\bin\\mimo",
         "run",
         "--pure",
         "--agent",
@@ -215,22 +215,22 @@
     }
   },
   "logs": [
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-help-native.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-help.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-help.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-live.stderr.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-live.stdout.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-run-native.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-run-restricted.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-version-native.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-version.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-help.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-login-help.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-whoami.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-help.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-help.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-normal-unsandboxed.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-normal.log",
-    "<USER_HOME>\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-version.log"
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-help-native.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-help.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-help.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-live.stderr.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-login-live.stdout.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-run-native.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-run-restricted.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-version-native.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\copilot-version.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-help.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-login-help.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-auth-whoami.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-help.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-help.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-normal-unsandboxed.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-run-normal.log",
+    "C:\\Users\\user\\AppData\\Local\\Temp\\agenthub-windows-copilot-mimo-9534cab629d242d5b092e769920a2ecf\\mimo-version.log"
   ]
 }
