@@ -59,7 +59,18 @@ function dump(name, text) {
 
 // 聚焦并清空输入框: 只 focus 不清理时, 上次未提交的残留文本会与新提示词拼接
 const prepExpr = `(() => {
-  const input = document.querySelector('[contenteditable="true"]');
+  let input = document.querySelector('[contenteditable="true"]');
+  // PALETTE_HEAL: 若输入框不存在，多半是窗口卡在命令面板视图 —— 点「新建任务」自愈
+  if (!input) {
+    const cands = [...document.querySelectorAll('div,span,button,li,a')].filter((el) => el.childElementCount === 0 && (el.innerText || '').trim() === '新建任务');
+    if (cands.length) {
+      const clickable = cands[0].closest('[role=button],button,[class*=item],[class*=row]') || cands[0];
+      clickable.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      clickable.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      clickable.click();
+      return JSON.stringify({ ok: false, why: 'PALETTE_HEALED_RETRY' });
+    }
+  }
   if (!input) return JSON.stringify({ ok: false, why: 'NO_INPUT' });
   input.focus();
   if ((input.textContent || '').length > 0) {
@@ -170,12 +181,17 @@ function extractDelta(beforeText, afterText, prompt) {
     dump("before.txt", beforeText);
 
     // 2) 聚焦 + 清空输入框
-    const prepRes = await evalExpr(prepExpr);
+    let prepRes = await evalExpr(prepExpr);
+    // PALETTE_RETRY_ONCE: 自愈点击后重试一次聚焦
+    if (!prepRes.includes('"ok":true') && prepRes.includes('PALETTE_HEALED_RETRY')) {
+      await new Promise((r) => setTimeout(r, 1200));
+      prepRes = await evalExpr(prepExpr);
+    }
     if (!prepRes.includes('"ok":true')) {
       console.log("输入框未找到");
       ws.close();
       process.exit(1);
-    }
+    } // PALETTE_RETRY_ONCE
 
     // 3) 输入 + 回车
     await send("Input.insertText", { text: PROMPT });
