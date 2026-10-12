@@ -4,9 +4,10 @@
 // 令牌直接读取各官方 CLI 的 OAuth 凭据文件 —— 不再依赖 9router。
 // 零第三方依赖（Node 22 全局 fetch）。
 
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import http from 'node:http';
+import https from 'node:https';
 import tls from 'node:tls';
 import { homedir, platform as osPlatform, userInfo as osUserInfo } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -70,12 +71,12 @@ async function fetchJson(url, options = {}, timeoutMs = 10_000) {
   return { status: res.status, ok: res.ok, json, text };
 }
 
-/** 经 HTTP 代理 CONNECT 隧道的 HTTPS 请求（零依赖，返回与 fetchJson 同构结果） */
+/** 经 HTTP 代理 CONNECT 隧道的 HTTPS 请求（使用 Node 原生 https.request 解析 chunked 响应） */
 function fetchViaProxy(targetUrl, options = {}, timeoutMs = 20_000) {
   return new Promise((resolve, reject) => {
     const u = new URL(targetUrl);
     const proxy = new URL(PROXY_URL);
-    const port = u.port || 443;
+    const port = Number(u.port) || 443;
     const req = http.request({
       host: proxy.hostname,
       port: Number(proxy.port) || 80,
@@ -83,54 +84,50 @@ function fetchViaProxy(targetUrl, options = {}, timeoutMs = 20_000) {
       path: `${u.hostname}:${port}`,
       headers: { Host: `${u.hostname}:${port}` },
     });
-    const timer = setTimeout(() => req.destroy(new Error('proxy connect timeout')), timeoutMs);
+    const timer = setTimeout(() => {
+      req.destroy(new Error('proxy connect timeout'));
+      reject(new Error('proxy connect timeout'));
+    }, timeoutMs);
     req.on('connect', (pres, socket) => {
       if (pres.statusCode !== 200) {
         clearTimeout(timer); socket.destroy();
         return reject(new Error(`proxy connect failed: ${pres.statusCode}`));
       }
-      const tlsSocket = tls.connect({ socket, servername: u.hostname }, () => {
-        clearTimeout(timer);
-        const body = options.body || '';
-        const lines = [`${options.method || 'GET'} ${u.pathname}${u.search} HTTP/1.1`, `Host: ${u.hostname}`];
-        for (const [k, v] of Object.entries(options.headers || {})) if (v != null) lines.push(`${k}: ${v}`);
-        lines.push('Connection: close', `Content-Length: ${Buffer.byteLength(body)}`);
-        tlsSocket.write(lines.join('\r\n') + '\r\n\r\n' + body);
+      const tlsSocket = tls.connect({ socket, servername: u.hostname });
+      tlsSocket.on('error', (e) => { clearTimeout(timer); reject(e); });
+      const bodyStr = options.body ? String(options.body) : '';
+      const reqHeaders = { ...(options.headers || {}) };
+      if (bodyStr && !reqHeaders['Content-Length'] && !reqHeaders['content-length']) {
+        reqHeaders['Content-Length'] = Buffer.byteLength(bodyStr);
+      }
+      const hreq = https.request({
+        hostname: u.hostname,
+        port,
+        path: `${u.pathname}${u.search}`,
+        method: options.method || 'GET',
+        headers: reqHeaders,
+        createConnection: () => tlsSocket,
+      }, (hres) => {
         /** @type {Buffer[]} */
         const chunks = [];
-        tlsSocket.on('data', (c) => chunks.push(c));
-        tlsSocket.on('end', () => {
-          const raw = Buffer.concat(chunks).toString('utf-8');
-          const sep = raw.indexOf('\r\n\r\n');
-          const head = sep >= 0 ? raw.slice(0, sep) : raw;
-          let text = sep >= 0 ? raw.slice(sep + 4) : '';
-          if (/transfer-encoding:\s*chunked/i.test(head)) text = decodeChunked(text);
-          const status = parseInt(head.split(' ')[1], 10) || 0;
+        hres.on('data', (c) => chunks.push(c));
+        hres.on('end', () => {
+          clearTimeout(timer);
+          const text = Buffer.concat(chunks).toString('utf-8');
+          const status = hres.statusCode || 0;
           let json = null;
           try { json = text ? JSON.parse(text) : null; } catch { json = null; }
           resolve({ status, ok: status >= 200 && status < 300, json, text });
         });
-        tlsSocket.on('error', reject);
+        hres.on('error', (e) => { clearTimeout(timer); reject(e); });
       });
-      tlsSocket.on('error', (e) => { clearTimeout(timer); reject(e); });
+      hreq.on('error', (e) => { clearTimeout(timer); reject(e); });
+      if (bodyStr) hreq.write(bodyStr);
+      hreq.end();
     });
     req.on('error', (e) => { clearTimeout(timer); reject(e); });
     req.end();
   });
-}
-
-function decodeChunked(body) {
-  let out = '';
-  let i = 0;
-  while (i < body.length) {
-    const nl = body.indexOf('\r\n', i);
-    if (nl < 0) break;
-    const size = parseInt(body.slice(i, nl).split(';')[0], 16);
-    if (!Number.isFinite(size) || size <= 0) break;
-    out += body.substr(nl + 2, size);
-    i = nl + 2 + size + 2;
-  }
-  return out;
 }
 
 /** 直连优先，网络级失败（超时/DNS/拒连）自动走代理重试 */
@@ -178,24 +175,83 @@ export function decryptZcodeCred(raw) {
   }
 }
 
+function parseJwtPayloadSafe(tok) {
+  if (!tok || typeof tok !== 'string' || !tok.includes('.')) return null;
+  try {
+    return JSON.parse(Buffer.from(tok.split('.')[1], 'base64').toString('utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+const ANTIGRAVITY_REFRESH = {
+  tokenUrl: 'https://oauth2.googleapis.com/token',
+  clientId: '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com',
+  installedVerifierB64: 'R09DU1BYLUs1OEZXUjQ4NkxkTEoxbUxCOHNYQzR6NnFEQWY=',
+};
+
+async function refreshAntigravityTokenIfNeeded(credPath, d) {
+  const tokObj = d?.token;
+  if (!tokObj?.access_token) return null;
+  const expMs = tokObj.expiry ? new Date(tokObj.expiry).getTime() : 0;
+  if ((!expMs || expMs - Date.now() > 120_000) && tokObj.access_token) {
+    return tokObj.access_token;
+  }
+  if (!tokObj.refresh_token) return tokObj.access_token;
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: ANTIGRAVITY_REFRESH.clientId,
+      client_secret: process.env.ANTIGRAVITY_OAUTH_CLIENT_SECRET || Buffer.from(ANTIGRAVITY_REFRESH.installedVerifierB64, 'base64').toString('utf8'),
+      refresh_token: tokObj.refresh_token,
+    }).toString();
+    const res = await fetchJsonSmart(ANTIGRAVITY_REFRESH.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body,
+    }, 15_000);
+    if (res.ok && res.json?.access_token) {
+      d.token.access_token = res.json.access_token;
+      d.token.expiry = new Date(Date.now() + (Number(res.json.expires_in) || 3600) * 1000).toISOString();
+      if (res.json.id_token) d.id_token = res.json.id_token;
+      await writeFile(credPath, JSON.stringify(d, null, 2) + '\n', { mode: 0o600 }).catch(() => {});
+      return d.token.access_token;
+    }
+  } catch { /* fallback to current access_token */ }
+  return tokObj.access_token;
+}
+
 // ---------------------------------------------------------------- token readers
 /** 令牌读取器：CLI OAuth 凭据文件是唯一事实来源 */
 const TOKEN_READERS = {
   'codebuddy': async () => {
     const d = await readJsonSafe(join(HOME, '.codebuddy', 'auth.info'));
-    return d?.auth?.accessToken || null;
+    if (!d?.auth?.accessToken) return null;
+    const pl = parseJwtPayloadSafe(d.auth.accessToken);
+    const account = d.account?.nickname || pl?.email || pl?.preferred_username || pl?.name || null;
+    return { token: d.auth.accessToken, account };
   },
   'codebuddy-cn': async () => {
     const d = await readJsonSafe(join(HOME, '.codebuddy-cn', 'auth.info'));
-    return d?.auth?.accessToken || null;
+    if (!d?.auth?.accessToken) return null;
+    const pl = parseJwtPayloadSafe(d.auth.accessToken);
+    const phone = d.account?.phoneNumber || pl?.preferred_username || '';
+    const nick = d.account?.nickname || pl?.nickname || '';
+    const account = (nick && phone && nick !== phone) ? `${nick} (${phone})` : (nick || phone || null);
+    return { token: d.auth.accessToken, account };
   },
   'minimaxcode': async () => {
     const d = await readJsonSafe(join(HOME, '.mmx', 'config.json'));
     return d?.oauth?.access_token || d?.api_key || d?.apiKey || null;
   },
   'antigravity': async () => {
-    const d = await readJsonSafe(join(HOME, '.gemini', 'antigravity-cli', 'antigravity-oauth-token'));
-    return d?.token?.access_token || null;
+    const credPath = join(HOME, '.gemini', 'antigravity-cli', 'antigravity-oauth-token');
+    const d = await readJsonSafe(credPath);
+    if (!d?.token?.access_token) return null;
+    const accessToken = await refreshAntigravityTokenIfNeeded(credPath, d);
+    const pl = parseJwtPayloadSafe(d.id_token);
+    const email = pl?.email || d.email || d.user?.email || null;
+    return { token: accessToken, email };
   },
   'github-copilot': async () => {
     // 优先检查本地镜像凭据文件（支持多账号档案切换与 WebUI 登出状态），其次读取 gnome-keyring
@@ -284,7 +340,9 @@ function refillCadence(acc) {
   return 'Monthly';
 }
 
-async function fetchCodeBuddyQuota(token, base, label) {
+async function fetchCodeBuddyQuota(tokenObj, base, label) {
+  const token = typeof tokenObj === 'object' && tokenObj ? tokenObj.token : tokenObj;
+  const account = typeof tokenObj === 'object' && tokenObj ? tokenObj.account : null;
   if (!token) return { message: `${label} 凭据不可用（未登录或 auth.info 缺失）。` };
   let res;
   try {
@@ -294,16 +352,16 @@ async function fetchCodeBuddyQuota(token, base, label) {
       body: '{}',
     });
   } catch (e) {
-    return { message: `${label} 请求异常: ${e.message}` };
+    return { account, message: `${label} 请求异常: ${e.message}` };
   }
-  if (res.status === 401 || res.status === 403) return { message: `${label} 凭据无效或已过期。` };
-  if (!res.ok) return { message: `${label} 配额接口错误 (${res.status})。` };
+  if (res.status === 401 || res.status === 403) return { account, message: `${label} 凭据无效或已过期。` };
+  if (!res.ok) return { account, message: `${label} 配额接口错误 (${res.status})。` };
   const json = res.json;
-  if (json?.code !== 0) return { message: `${label} 配额错误: ${json?.msg || 'unknown'}` };
+  if (json?.code !== 0) return { account, message: `${label} 配额错误: ${json?.msg || 'unknown'}` };
 
   const data = json?.data?.Response?.Data || {};
   const accounts = Array.isArray(data.Accounts) ? data.Accounts : [];
-  if (accounts.length === 0) return { message: `${label} 已连接，未发现积分套餐。` };
+  if (accounts.length === 0) return { account, message: `${label} 已连接，未发现积分套餐。` };
 
   const cycleEndMs = (acc) => {
     const r = parseResetTime(acc.CycleEndTime);
@@ -350,7 +408,7 @@ async function fetchCodeBuddyQuota(token, base, label) {
   });
 
   const basePkg = refills[0] || accounts[0] || {};
-  return { plan: basePkg.PackageName || basePkg.SubProductName || label, quotas };
+  return { account, plan: basePkg.PackageName || basePkg.SubProductName || label, quotas };
 }
 
 // ---------------------------------------------------------------- minimax
@@ -539,17 +597,19 @@ const ANTIGRAVITY_IDE_VERSION = '2.1.1';
 const PLATFORM_ENUM = { linux: 3, darwin: 2, win32: 1 };
 const CLIENT_METADATA = { ideType: 9, platform: PLATFORM_ENUM[process.platform] ?? 3, pluginType: 2 };
 const ANTIGRAVITY_IMPORTANT_MODELS = [
-  'gemini-3-flash-agent', 'gemini-3.5-flash-low', 'gemini-3.5-flash-extra-low',
-  'gemini-pro-agent', 'gemini-3.1-pro-low', 'claude-sonnet-4-6', 'claude-opus-4-6-thinking',
-  'gpt-oss-120b-medium', 'gemini-3-flash', 'gemini-3.1-flash-image', 'gemini-3-pro-image',
+  'gemini-3.1-pro-high', 'gemini-3.6-flash-high', 'gemini-3-flash-agent',
+  'claude-sonnet-4-6', 'claude-opus-4-6-thinking', 'gpt-oss-120b-medium',
+  'gemini-3.1-pro-low', 'gemini-3.5-flash-low', 'gemini-3-flash', 'gemini-3.1-flash-image',
 ];
 
-async function fetchAntigravityQuota(token) {
+async function fetchAntigravityQuota(tokenObj) {
+  const token = typeof tokenObj === 'object' && tokenObj ? tokenObj.token : tokenObj;
+  const email = typeof tokenObj === 'object' && tokenObj ? tokenObj.email : null;
   if (!token) return { message: 'Antigravity 凭据不可用（antigravity-oauth-token 缺失或未登录）。' };
   try {
     // 先取订阅信息拿 projectId 与套餐名
     let projectId = null;
-    let plan = 'Unknown';
+    let tierName = 'Antigravity';
     try {
       const sub = await fetchJsonSmart(ANTIGRAVITY_LOADCODEASSIST_URL, {
         method: 'POST',
@@ -558,9 +618,11 @@ async function fetchAntigravityQuota(token) {
       }, 20_000);
       if (sub.ok && sub.json) {
         projectId = sub.json.cloudaicompanionProject || null;
-        plan = sub.json.currentTier?.name || plan;
+        tierName = sub.json.currentTier?.name || tierName;
       }
     } catch { /* 订阅信息失败不阻断配额查询 */ }
+
+    const plan = email ? `${tierName} (${email.split('@')[0]})` : tierName;
 
     const res = await fetchJsonSmart(ANTIGRAVITY_QUOTA_URL, {
       method: 'POST',
@@ -573,35 +635,40 @@ async function fetchAntigravityQuota(token) {
       },
       body: JSON.stringify(projectId ? { project: projectId } : {}),
     }, 20_000);
-    if (res.status === 403) return { plan, message: 'Antigravity 配额接口拒绝访问（会话可能仍可用）。', quotas: {} };
-    if (res.status === 401) return { plan, message: 'Antigravity 令牌已过期，请在 CLI 重新登录。', quotas: {} };
-    if (!res.ok) return { message: `Antigravity 配额接口错误 (${res.status})。` };
+    if (res.status === 403) return { account: email, plan, message: 'Antigravity 配额接口拒绝访问（会话可能仍可用）。', quotas: {} };
+    if (res.status === 401) return { account: email, plan, message: 'Antigravity 令牌已过期，请点击下方 OAuth 登录重新授权。', quotas: {} };
+    if (!res.ok) return { account: email, plan, message: `Antigravity 配额接口错误 (${res.status})。` };
 
     const data = res.json || {};
     const quotas = {};
+    const seenDisplay = new Set();
     if (data.models) {
-      for (const [modelKey, info] of Object.entries(data.models)) {
-        if (!info?.quotaInfo) continue;
-        if (info.isInternal || !ANTIGRAVITY_IMPORTANT_MODELS.includes(modelKey)) continue;
-        const remainingFraction = info.quotaInfo.remainingFraction || 0;
-        const total = 1000; // 归一化基数
-        const remaining = Math.round(total * remainingFraction);
-        quotas[modelKey] = {
-          used: total - remaining,
+      for (const modelKey of ANTIGRAVITY_IMPORTANT_MODELS) {
+        const info = data.models[modelKey];
+        if (!info?.quotaInfo || info.isInternal) continue;
+        const label = info.displayName || modelKey;
+        if (seenDisplay.has(label)) continue;
+        seenDisplay.add(label);
+        const remainingFraction = Number(info.quotaInfo.remainingFraction ?? 0);
+        const total = 100;
+        const remaining = Math.round(total * remainingFraction * 10) / 10;
+        quotas[label] = {
+          used: Math.max(0, Math.round((total - remaining) * 10) / 10),
           total,
           resetAt: parseResetTime(info.quotaInfo.resetTime),
           remainingPercentage: remainingFraction * 100,
           unlimited: false,
-          displayName: info.displayName || modelKey,
+          displayName: label,
         };
+        if (seenDisplay.size >= 5) break;
       }
     }
     if (Object.keys(quotas).length === 0) {
-      return { plan, message: '上游未返回分模型配额（free-tier 账号常见）；订阅与连通性正常。', quotas: {} };
+      return { account: email, plan, message: `凭据在线${email ? ` (${email})` : ''}；上游未返回分模型配额，订阅与连通性正常。`, quotas: {} };
     }
-    return { plan, quotas };
+    return { account: email, plan, quotas };
   } catch (e) {
-    return { message: `Antigravity 错误: ${e.message}` };
+    return { account: email, message: `Antigravity 错误: ${e.message}` };
   }
 }
 
@@ -625,13 +692,17 @@ async function fetchCopilotQuota(token) {
   }
   if (!res.ok) return { message: `GitHub API 错误 (${res.status})。` };
   const data = res.json || {};
+  const login = data.login || null;
+  const basePlan = data.copilot_plan || data.access_type_sku || 'Copilot';
+  const plan = login ? `${basePlan} (${login})` : basePlan;
   const fmtSnap = (q) => q ? { used: (q.entitlement || 0) - (q.remaining || 0), total: q.entitlement || 0, remaining: q.remaining || 0, unlimited: !!q.unlimited } : { used: 0, total: 0, unlimited: true };
 
   if (data.quota_snapshots) {
     const resetAt = parseResetTime(data.quota_reset_date);
     const s = data.quota_snapshots;
     return {
-      plan: data.copilot_plan || data.access_type_sku || 'Copilot',
+      account: login,
+      plan,
       quotas: {
         chat: { ...fmtSnap(s.chat), resetAt },
         completions: { ...fmtSnap(s.completions), resetAt },
@@ -644,31 +715,35 @@ async function fetchCopilotQuota(token) {
     const used = data.limited_user_quotas || {};
     const resetAt = parseResetTime(data.limited_user_reset_date);
     return {
-      plan: data.copilot_plan || data.access_type_sku || 'Copilot',
+      account: login,
+      plan,
       quotas: {
         chat: { used: used.chat || 0, total: monthly.chat || 0, unlimited: false, resetAt },
         completions: { used: used.completions || 0, total: monthly.completions || 0, unlimited: false, resetAt },
       },
     };
   }
-  return { plan: data.copilot_plan || data.access_type_sku || null, message: 'Copilot 已连接，未返回配额结构。' };
+  return { account: login, plan, message: 'Copilot 已连接，未返回配额结构。' };
 }
 
 // ---------------------------------------------------------------- traecode
-function jwtExp(token) {
+function jwtPayload(token) {
   try {
-    const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64').toString('utf-8'));
-    return payload.exp ? Number(payload.exp) : null;
+    return JSON.parse(Buffer.from(String(token).split('.')[1], 'base64').toString('utf-8'));
   } catch { return null; }
 }
 
 async function fetchTraeQuota(token) {
   if (!token) return { message: 'Trae 凭据不可用（~/.trae-cn/trae-jwt-token 缺失）。' };
-  const exp = jwtExp(token);
-  if (!exp) return { plan: 'Trae CN', message: '凭据在线（JWT 无法解析有效期）。' };
+  const pl = jwtPayload(token);
+  const exp = pl?.exp ? Number(pl.exp) : null;
+  const uid = pl?.data?.user_id || pl?.data?.id || pl?.user_id || pl?.sub || null;
+  const account = uid ? `UID:${uid}` : null;
+  const plan = uid ? `Trae CN (${String(uid).slice(-6)})` : 'Trae CN';
+  if (!exp) return { account, plan, message: '凭据在线（JWT 无法解析有效期）。' };
   const days = (exp * 1000 - Date.now()) / 86400000;
-  if (days <= 0) return { plan: 'Trae CN', message: 'JWT 已过期，请重新登录 TraeCode 桌面端。' };
-  return { plan: 'Trae CN', message: `凭据在线，有效期约 ${days < 1 ? Math.max(1, Math.round(days * 24)) + ' 小时' : Math.round(days) + ' 天'}（官方未公开分模型配额端点）。` };
+  if (days <= 0) return { account, plan, message: 'JWT 已过期，请重新点击下方 OAuth 登录。' };
+  return { account, plan, message: `凭据在线${uid ? `（账号 UID: ${uid}）` : ''}，有效期约 ${days < 1 ? Math.max(1, Math.round(days * 24)) + ' 小时' : Math.round(days) + ' 天'}（官方未公开分模型配额端点）。` };
 }
 
 // ---------------------------------------------------------------- zcode
@@ -692,6 +767,7 @@ async function fetchZcodeQuota(tokenObj) {
           const used = toFiniteNumber(d?.total_usage?.used ?? d?.used, 0);
           const total = toFiniteNumber(d?.total_usage?.limit ?? d?.total, 100);
           return {
+            account: username,
             plan: d.level ? `${planName} · ${d.level}` : planName,
             quotas: {
               usage: {
@@ -707,7 +783,7 @@ async function fetchZcodeQuota(tokenObj) {
     } catch { /* 下一个 */ }
   }
   const acctLabel = username ? `账号 ${username} (${activeProv})` : `通道 ${activeProv}`;
-  return { plan: planName, message: `凭据在线（${acctLabel}）；当前账号未返回公开 Coding Plan 配额，以客户端显示为准。` };
+  return { account: username, plan: planName, message: `凭据在线（${acctLabel}）；当前账号未返回公开 Coding Plan 配额，以客户端显示为准。` };
 }
 
 // ---------------------------------------------------------------- mimocode
@@ -715,10 +791,13 @@ async function fetchMimoQuota(tokenObj) {
   if (!tokenObj) return { message: 'MiMo 凭据不可用（未登录或 ~/.local/share/mimocode/auth.json 缺失）。' };
   const provs = Array.isArray(tokenObj.providers) ? tokenObj.providers : ['xiaomi'];
   const xm = tokenObj.raw?.xiaomi;
-  const uid = xm?.metadata?.uid ? ` · UID:${xm.metadata.uid}` : '';
+  const uidVal = xm?.metadata?.uid ? String(xm.metadata.uid) : null;
+  const uidSuffix = uidVal ? ` · UID:${uidVal}` : '';
+  const account = uidVal ? `mimo-${uidVal}` : provs[0] || null;
   return {
-    plan: `Xiaomi MiMo${uid}`,
-    message: `凭据在线（已配置通道: ${provs.join(', ')}）；官方暂无公开分模型配额端点。`,
+    account,
+    plan: `Xiaomi MiMo${uidSuffix}`,
+    message: `凭据在线（账号: ${uidVal ? `小米 UID ${uidVal}` : provs.join(', ')} · 已配置通道: ${provs.join(', ')}）；官方暂无公开分模型配额端点。`,
   };
 }
 
@@ -729,6 +808,7 @@ async function fetchCodeArtsQuota(tokenObj) {
     ? `${tokenObj.ak.slice(0, 4)}…${tokenObj.ak.slice(-4)}`
     : `${tokenObj.ak.slice(0, 3)}…`;
   return {
+    account: akMask,
     plan: `CodeArts Doer (${akMask})`,
     message: `AK/SK 凭据已就绪（${akMask}）；计费倍率见模型目录。`,
   };
