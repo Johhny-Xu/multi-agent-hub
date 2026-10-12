@@ -7668,7 +7668,7 @@
     const sbRow = document.createElement('div'); sbRow.className = 'uh-auth-input-row';
     const sbInput = document.createElement('input'); sbInput.className = 'uh-auth-input';
     sbInput.value = customAccountName;
-    sbInput.placeholder = '留空自动识别（如邮箱前缀 user2），也可自定义如 work / backup';
+    sbInput.placeholder = '留空自动识别（如邮箱前缀 user01），也可自定义如 work / backup';
     sbInput.oninput = () => {
       customAccountName = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
     };
