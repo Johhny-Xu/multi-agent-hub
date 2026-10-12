@@ -3121,8 +3121,9 @@
 .qa-panel:has(.uh-grid.qa-loading) .qa-refresh{opacity:.65;pointer-events:none}
 .uh-grid#agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;transition:opacity .2s ease}
 .uh-grid#agents.qa-loading{opacity:.65;pointer-events:none}
-.card.uh-card{min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:11px;padding:16px 18px;border-radius:14px;background:linear-gradient(165deg,rgba(30,41,59,.62) 0%,rgba(15,23,42,.82) 100%);border:1px solid rgba(148,163,184,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 6px 20px rgba(0,0,0,.22);transition:transform .2s cubic-bezier(.22,1,.36,1),box-shadow .2s ease,border-color .2s ease}
+.card.uh-card{color-scheme:dark;min-width:0;overflow:visible;position:relative;display:flex;flex-direction:column;gap:11px;padding:16px 18px;border-radius:14px;background:linear-gradient(165deg,rgba(30,41,59,.62) 0%,rgba(15,23,42,.82) 100%);border:1px solid rgba(148,163,184,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 6px 20px rgba(0,0,0,.22);transition:transform .2s cubic-bezier(.22,1,.36,1),box-shadow .2s ease,border-color .2s ease}
 .card.uh-card:hover{border-color:rgba(96,165,250,.45);transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(147,197,253,.2),0 12px 28px rgba(0,0,0,.34)}
+.card.uh-card.uh-dropdown-open{z-index:40;transform:none}
 .card.uh-card.disabled-card{opacity:.62;background:rgba(15,23,42,.45);border-style:dashed}
 .card.uh-card .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid rgba(148,163,184,.13);flex-wrap:nowrap}
 .uh-head-left{display:flex;align-items:center;gap:11px;min-width:0;flex:1 1 auto}
@@ -3153,19 +3154,59 @@
 .qa-quotas::-webkit-scrollbar{width:4px}
 .qa-quotas::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);border-radius:3px}
 .qa-msg{font-size:11px;color:#94a3b8;line-height:1.45;word-break:break-word;padding:2px 0;display:flex;align-items:center;gap:6px}
-.uh-chips-wrap{display:flex;flex-direction:column;gap:6px}
-.uh-chips-wrap .chips{gap:5px;max-height:76px;overflow-y:auto;padding-right:2px}
-.uh-chips-wrap .chips::-webkit-scrollbar{width:4px}
-.uh-chips-wrap .chips::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:3px}
-.uh-chips-wrap .chip{font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.2);color:#cbd5e1;cursor:pointer;transition:all .14s ease}
-.uh-chips-wrap .chip:hover{border-color:#60a5fa;color:#fff;background:rgba(59,130,246,.14)}
-.uh-chips-wrap .chip.is-default{border-color:rgba(59,130,246,.55);background:rgba(59,130,246,.18);color:#93c5fd;font-weight:600}
-.qa-section{display:flex;flex-direction:column;gap:6px;min-width:0;border-top:1px dashed rgba(148,163,184,.14);padding-top:9px}
-.qa-section-title{font-size:11px;font-weight:600;color:#7dd3fc;letter-spacing:.02em;display:flex;align-items:center;justify-content:space-between}
-.card.uh-card select,.card.uh-card input.qa-input{width:100%;min-width:0;max-width:100%;box-sizing:border-box;background:rgba(15,23,42,.65);color:#e2e8f0;border:1px solid rgba(148,163,184,.24);border-radius:8px;padding:5px 8px;font-size:11.5px;text-overflow:ellipsis;outline:none;transition:border-color .15s,box-shadow .15s}
+.qa-section{display:flex;flex-direction:column;gap:7px;min-width:0;border-top:1px dashed rgba(148,163,184,.14);padding-top:10px}
+.qa-section-title{font-size:11px;font-weight:600;color:#7dd3fc;letter-spacing:.02em;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.uh-mp-head-left{display:inline-flex;align-items:center;gap:6px}
+.uh-mp-count{font-size:10px;font-weight:500;color:#94a3b8;background:rgba(30,41,59,.75);border:1px solid rgba(148,163,184,.2);border-radius:999px;padding:1px 7px}
+.uh-mp-add-btn{font-size:10.5px;font-weight:500;color:#93c5fd;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);border-radius:999px;padding:2px 9px;cursor:pointer;transition:all .15s ease}
+.uh-mp-add-btn:hover{color:#fff;background:rgba(59,130,246,.24);border-color:#60a5fa}
+.uh-mp-wrap{position:relative;display:flex;flex-direction:column;gap:7px;min-width:0}
+.uh-mp-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 11px;border-radius:10px;background:linear-gradient(180deg,rgba(15,23,42,.85),rgba(15,23,42,.68));border:1px solid rgba(96,165,250,.32);color:#f8fafc;cursor:pointer;text-align:left;transition:all .16s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 8px rgba(0,0,0,.2)}
+.uh-mp-trigger:hover{border-color:#60a5fa;background:linear-gradient(180deg,rgba(30,41,59,.85),rgba(15,23,42,.8))}
+.uh-mp-trigger-left{display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 auto;overflow:hidden}
+.uh-mp-star{font-size:10px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.38);border-radius:5px;padding:1px 6px;white-space:nowrap;flex:0 0 auto}
+.uh-mp-cur-name{font-size:12px;font-weight:600;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-mp-cur-id{font-size:10.5px;color:#64748b;font-family:var(--mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-mp-trigger-right{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.uh-mp-caret{font-size:11px;color:#94a3b8;transition:transform .18s ease;margin-left:2px}
+.uh-mp-wrap.open .uh-mp-caret{transform:rotate(180deg);color:#60a5fa}
+.uh-mp-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px;white-space:nowrap;line-height:1.35}
+.uh-mp-badge.credits{color:#67e8f9;background:rgba(6,182,212,.14);border:1px solid rgba(6,182,212,.3)}
+.uh-mp-badge.tag{color:#6ee7b7;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.3)}
+.uh-mp-badge.alias{color:#cbd5e1;background:rgba(148,163,184,.14);border:1px solid rgba(148,163,184,.25);font-family:var(--mono,monospace)}
+.uh-mp-dropdown{display:none;position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:80;background:rgba(11,17,30,.98);backdrop-filter:blur(18px);border:1px solid rgba(96,165,250,.42);border-radius:12px;padding:7px;box-shadow:0 16px 40px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.08);flex-direction:column;gap:6px}
+.uh-mp-wrap.open .uh-mp-dropdown{display:flex}
+.uh-mp-search{width:100%;box-sizing:border-box;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.24);border-radius:8px;padding:5px 9px;font-size:11.5px;color:#f1f5f9;outline:none}
+.uh-mp-search:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(59,130,246,.2)}
+.uh-mp-list{display:flex;flex-direction:column;gap:3px;max-height:215px;overflow-y:auto;padding-right:2px}
+.uh-mp-list::-webkit-scrollbar{width:5px}
+.uh-mp-list::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);border-radius:3px}
+.uh-mp-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;border-radius:8px;border:1px solid transparent;background:transparent;cursor:pointer;transition:all .12s ease;min-width:0}
+.uh-mp-item:hover{background:rgba(59,130,246,.15);border-color:rgba(96,165,250,.3)}
+.uh-mp-item.is-active{background:linear-gradient(90deg,rgba(59,130,246,.22),rgba(37,99,235,.12));border-color:rgba(96,165,250,.48)}
+.uh-mp-item-left{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto}
+.uh-mp-item-title{display:flex;align-items:center;gap:6px;min-width:0}
+.uh-mp-item-name{font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-mp-item.is-active .uh-mp-item-name{color:#93c5fd}
+.uh-mp-item-sub{font-size:10.5px;color:#64748b;font-family:var(--mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-mp-item-right{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.uh-mp-del{border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.12);color:#fca5a5;border-radius:6px;padding:1px 6px;font-size:10px;cursor:pointer}
+.uh-mp-del:hover{background:rgba(239,68,68,.28);color:#fff}
+.uh-mp-pills{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.uh-mp-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2.5px 8px;border-radius:7px;background:rgba(15,23,42,.62);border:1px solid rgba(148,163,184,.2);color:#cbd5e1;cursor:pointer;transition:all .14s ease;max-width:100%}
+.uh-mp-pill:hover{border-color:#60a5fa;color:#fff;background:rgba(59,130,246,.16);transform:translateY(-1px)}
+.uh-mp-pill.is-default{border-color:rgba(59,130,246,.58);background:linear-gradient(135deg,rgba(59,130,246,.24),rgba(37,99,235,.15));color:#bfdbfe;font-weight:600;box-shadow:0 0 10px rgba(59,130,246,.15)}
+.uh-mp-pill-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:155px}
+.uh-mp-pill-credit{font-size:9.5px;color:#67e8f9;opacity:.9}
+.uh-mp-more{font-size:10.5px;color:#93c5fd;background:rgba(59,130,246,.1);border:1px dashed rgba(96,165,250,.35);border-radius:7px;padding:2px 8px;cursor:pointer}
+.uh-mp-more:hover{background:rgba(59,130,246,.2);color:#fff}
+.uh-mp-custom-form{display:none;flex-direction:column;gap:6px;background:rgba(15,23,42,.72);border:1px dashed rgba(96,165,250,.35);border-radius:10px;padding:9px;margin-top:2px}
+.uh-mp-custom-form.open{display:flex}
+.uh-mp-custom-row{display:grid;grid-template-columns:1fr 1.3fr;gap:6px}
+.card.uh-card select,.card.uh-card input.qa-input{color-scheme:dark;width:100%;min-width:0;max-width:100%;box-sizing:border-box;background:rgba(15,23,42,.75);color:#e2e8f0;border:1px solid rgba(148,163,184,.24);border-radius:8px;padding:5px 8px;font-size:11.5px;text-overflow:ellipsis;outline:none;transition:border-color .15s,box-shadow .15s}
 .card.uh-card select:hover,.card.uh-card input.qa-input:hover{border-color:rgba(96,165,250,.5)}
 .card.uh-card select:focus,.card.uh-card input.qa-input:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(59,130,246,.18)}
-.card.uh-card select option{background:#0f172a;color:#e2e8f0}
+.card.uh-card select option{background:#0f172a;color:#e2e8f0;padding:6px}
 .qa-rowbtns{display:flex;gap:6px;flex-wrap:wrap;row-gap:6px;min-width:0}
 .qa-rowbtns .qa-btn{padding:4px 9px}
 .qa-rowbtns.qa-even .qa-btn{flex:1 1 0;text-align:center;justify-content:center}
@@ -6210,39 +6251,7 @@
       quotaSlot.innerHTML = '<div class="qa-msg"><span class="qa-status-dot"></span><span>实时配额同步中…</span></div>';
       card.appendChild(quotaSlot);
 
-      // 可选模型胶囊标签（点击联动下方下拉框，双击快速设为默认）
-      if (a.models && a.models.length) {
-        var validChips = a.models.filter(function (mm) { return mm.alias !== '默认' && mm.alias !== 'default'; });
-        if (validChips.length) {
-          var chipsWrap = el('div', 'uh-chips-wrap');
-          var chips = el('div', 'chips');
-          validChips.forEach(function (m) {
-            var isDef = a.defaultModel && (m.id === a.defaultModel || m.alias === a.defaultModel);
-            var c = el('span', 'chip mono' + (isDef ? ' is-default' : ''), (isDef ? '★ ' : '') + m.alias);
-            c.setAttribute('data-chip-alias', m.alias);
-            c.setAttribute('data-chip-id', m.id);
-            c.title = m.alias + ' → ' + m.id + '（单击选中，双击设为默认模型）';
-            c.addEventListener('click', function () {
-              var sel = card.querySelector('.uh-model-slot select.qa-select');
-              if (sel) sel.value = m.alias;
-            });
-            c.addEventListener('dblclick', function () {
-              fetch('/api/models/default', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ worker: a.name, alias: m.alias }) })
-                .then(function (r) { return r.json(); })
-                .then(function (r) {
-                  toast(r.ok ? (a.name + ' 默认模型已切换为 ' + m.alias) : ('失败: ' + (r.error || '?')), !r.ok);
-                  if (typeof window.__ahReloadQuotas === 'function') window.__ahReloadQuotas();
-                  pollUpdates();
-                });
-            });
-            chips.appendChild(c);
-          });
-          chipsWrap.appendChild(chips);
-          card.appendChild(chipsWrap);
-        }
-      }
-
-      // 模型配置与多账号切换内嵌槽位
+      // 统一模型配置工作台与多账号切换内嵌槽位
       var modelSlot = el('div', 'uh-model-slot');
       modelSlot.setAttribute('data-model-slot', a.name);
       card.appendChild(modelSlot);
@@ -7073,51 +7082,288 @@
     return b;
   }
 
+  // 全局点击外部关闭模型下拉菜单
+  if (!window.__uhMpOutsideBound) {
+    window.__uhMpOutsideBound = true;
+    document.addEventListener('click', (ev) => {
+      document.querySelectorAll('.uh-mp-wrap.open').forEach((w) => {
+        if (!w.contains(ev.target)) {
+          w.classList.remove('open');
+          const c = w.closest('.uh-card');
+          if (c) c.classList.remove('uh-dropdown-open');
+        }
+      });
+    });
+  }
+
+  const expandedPillsWorkers = new Set();
+
   function modelRow(worker) {
     const mw = (modelsData && modelsData.workers && modelsData.workers[worker]) || null;
     const wrap = document.createElement('div'); wrap.className = 'qa-section';
     if (!mw) return wrap;
-    wrap.appendChild(sectionTitle('模型配置'));
-    const sel = document.createElement('select'); sel.className = 'qa-select';
-    const opts = [{ alias: '__default__', id: mw.default || '(未设置)' }, ...mw.models];
-    for (const o of opts) {
-      const el = document.createElement('option'); el.value = o.alias;
-      el.textContent = o.alias === '__default__' ? `当前默认: ${o.id}` : `${o.alias} → ${o.id}`;
-      sel.appendChild(el);
+
+    const allModels = Array.isArray(mw.models) ? mw.models : [];
+    const curDefaultId = mw.default || (allModels.find((m) => m.isDefault) || allModels[0] || {}).id || '';
+    const curModel = allModels.find((m) => m.id === curDefaultId || m.alias === curDefaultId)
+      || (curDefaultId ? { alias: curDefaultId, id: curDefaultId, name: curDefaultId, credits: null, tag: null } : { alias: '', id: '', name: '(系统默认)', credits: null, tag: null });
+
+    async function switchDefault(targetKey, displayName) {
+      if (!targetKey) return;
+      const r = await jpost('/api/models/default', { worker, alias: targetKey });
+      notify(r.ok ? `✓ ${worker} 默认模型已切换为 ${displayName || targetKey}` : `失败: ${r.error || '?'}`, !r.ok);
+      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
+      load();
     }
-    wrap.appendChild(sel);
-    const btns = document.createElement('div'); btns.className = 'qa-rowbtns';
-    const setBtn = qaBtn('设默认', 'qa-primary');
-    setBtn.onclick = async () => {
-      const alias = sel.value; if (!alias) return;
-      const r = await jpost('/api/models/default', { worker, alias });
-      notify(r.ok ? `${worker} 默认模型已切换（实时生效）` : `失败: ${r.error || '?'}`, !r.ok);
-      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
-      load();
+
+    // 1. 顶部标题栏：模型配置 + 数量徽章 + 「+自定义模型」按钮
+    const head = document.createElement('div'); head.className = 'qa-section-title';
+    const headLeft = document.createElement('div'); headLeft.className = 'uh-mp-head-left';
+    const titleSpan = document.createElement('span'); titleSpan.textContent = '模型配置';
+    const countBadge = document.createElement('span'); countBadge.className = 'uh-mp-count';
+    countBadge.textContent = `${allModels.length} 款可选`;
+    headLeft.append(titleSpan, countBadge);
+
+    const addToggleBtn = document.createElement('button');
+    addToggleBtn.type = 'button';
+    addToggleBtn.className = 'uh-mp-add-btn';
+    addToggleBtn.textContent = '+ 自定义模型';
+    head.append(headLeft, addToggleBtn);
+    wrap.appendChild(head);
+
+    // 2. 暗色毛玻璃自定义下拉选择器
+    const mpWrap = document.createElement('div'); mpWrap.className = 'uh-mp-wrap';
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'uh-mp-trigger';
+    trigger.title = '点击展开完整模型目录并切换默认模型';
+
+    const trigLeft = document.createElement('div'); trigLeft.className = 'uh-mp-trigger-left';
+    const starBadge = document.createElement('span'); starBadge.className = 'uh-mp-star'; starBadge.textContent = '★ 默认';
+    const curNameEl = document.createElement('span'); curNameEl.className = 'uh-mp-cur-name'; curNameEl.textContent = curModel.name || curModel.id || '(未设置)';
+    trigLeft.append(starBadge, curNameEl);
+    if (curModel.id && curModel.name && curModel.id !== curModel.name) {
+      const curIdEl = document.createElement('span'); curIdEl.className = 'uh-mp-cur-id'; curIdEl.textContent = curModel.id;
+      trigLeft.appendChild(curIdEl);
+    }
+
+    const trigRight = document.createElement('div'); trigRight.className = 'uh-mp-trigger-right';
+    if (curModel.credits) {
+      const cb = document.createElement('span'); cb.className = 'uh-mp-badge credits'; cb.textContent = curModel.credits;
+      trigRight.appendChild(cb);
+    }
+    if (curModel.tag) {
+      const tb = document.createElement('span'); tb.className = 'uh-mp-badge tag'; tb.textContent = curModel.tag;
+      trigRight.appendChild(tb);
+    }
+    const caret = document.createElement('span'); caret.className = 'uh-mp-caret'; caret.textContent = '▾';
+    trigRight.appendChild(caret);
+    trigger.append(trigLeft, trigRight);
+
+    const dropdown = document.createElement('div'); dropdown.className = 'uh-mp-dropdown';
+    let searchInput = null;
+    if (allModels.length > 5) {
+      searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'uh-mp-search';
+      searchInput.placeholder = `🔍 搜索 ${worker} 的 ${allModels.length} 款模型名称或 ID…`;
+      dropdown.appendChild(searchInput);
+    }
+
+    const listEl = document.createElement('div'); listEl.className = 'uh-mp-list';
+    function renderDropdownItems(filterText) {
+      listEl.textContent = '';
+      const q = String(filterText || '').trim().toLowerCase();
+      const filtered = allModels.filter((m) => {
+        if (!q) return true;
+        return String(m.name || '').toLowerCase().includes(q)
+          || String(m.id || '').toLowerCase().includes(q)
+          || String(m.alias || '').toLowerCase().includes(q)
+          || (Array.isArray(m.aliases) && m.aliases.some((a) => String(a).toLowerCase().includes(q)));
+      });
+      if (!filtered.length) {
+        const empty = document.createElement('div');
+        empty.className = 'qa-msg';
+        empty.style.padding = '6px 8px';
+        empty.textContent = '未匹配到模型，可点击右上角「+ 自定义模型」添加';
+        listEl.appendChild(empty);
+        return;
+      }
+      for (const m of filtered) {
+        const isAct = (m.id && m.id === curDefaultId) || (m.alias && m.alias === curDefaultId) || !!m.isDefault;
+        const item = document.createElement('div');
+        item.className = 'uh-mp-item' + (isAct ? ' is-active' : '');
+
+        const itemLeft = document.createElement('div'); itemLeft.className = 'uh-mp-item-left';
+        const titleRow = document.createElement('div'); titleRow.className = 'uh-mp-item-title';
+        const nameEl = document.createElement('span'); nameEl.className = 'uh-mp-item-name';
+        nameEl.textContent = (isAct ? '★ ' : '') + (m.name || m.id);
+        titleRow.appendChild(nameEl);
+        if (Array.isArray(m.aliases) && m.aliases.length) {
+          for (const al of m.aliases.slice(0, 2)) {
+            if (al !== m.id && al !== m.name) {
+              const ab = document.createElement('span'); ab.className = 'uh-mp-badge alias'; ab.textContent = al;
+              titleRow.appendChild(ab);
+            }
+          }
+        }
+        itemLeft.appendChild(titleRow);
+        if (m.id && m.id !== m.name) {
+          const subEl = document.createElement('div'); subEl.className = 'uh-mp-item-sub'; subEl.textContent = m.id;
+          itemLeft.appendChild(subEl);
+        }
+
+        const itemRight = document.createElement('div'); itemRight.className = 'uh-mp-item-right';
+        if (m.credits) {
+          const cb = document.createElement('span'); cb.className = 'uh-mp-badge credits'; cb.textContent = m.credits;
+          itemRight.appendChild(cb);
+        }
+        if (m.tag) {
+          const tb = document.createElement('span'); tb.className = 'uh-mp-badge tag'; tb.textContent = m.tag;
+          itemRight.appendChild(tb);
+        }
+        if (m.custom) {
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'uh-mp-del';
+          delBtn.textContent = '删除';
+          delBtn.title = `删除自定义模型 ${m.alias}`;
+          delBtn.onclick = async (ev) => {
+            ev.stopPropagation();
+            if (!window.confirm(`删除 ${worker} 的自定义模型「${m.alias}」？`)) return;
+            const r = await jpost('/api/models/remove', { worker, alias: m.alias });
+            notify(r.ok ? `已删除自定义模型 ${m.alias}` : `失败: ${r.error || '?'}`, !r.ok);
+            if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
+            load();
+          };
+          itemRight.appendChild(delBtn);
+        }
+
+        item.append(itemLeft, itemRight);
+        item.onclick = () => {
+          mpWrap.classList.remove('open');
+          const parentCard = mpWrap.closest('.uh-card');
+          if (parentCard) parentCard.classList.remove('uh-dropdown-open');
+          switchDefault(m.id || m.alias, m.name || m.id);
+        };
+        listEl.appendChild(item);
+      }
+    }
+    renderDropdownItems('');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => renderDropdownItems(searchInput.value));
+      searchInput.addEventListener('click', (ev) => ev.stopPropagation());
+    }
+    dropdown.appendChild(listEl);
+
+    trigger.onclick = (ev) => {
+      ev.stopPropagation();
+      const willOpen = !mpWrap.classList.contains('open');
+      document.querySelectorAll('.uh-mp-wrap.open').forEach((w) => {
+        w.classList.remove('open');
+        const c = w.closest('.uh-card');
+        if (c) c.classList.remove('uh-dropdown-open');
+      });
+      if (willOpen) {
+        mpWrap.classList.add('open');
+        const parentCard = mpWrap.closest('.uh-card');
+        if (parentCard) parentCard.classList.add('uh-dropdown-open');
+        if (searchInput) {
+          searchInput.value = '';
+          renderDropdownItems('');
+          setTimeout(() => searchInput.focus(), 20);
+        }
+      }
     };
-    const addBtn = qaBtn('+自定义');
-    addBtn.onclick = async () => {
-      const alias = window.prompt('自定义模型别名（如 gpt-max）:', '');
-      if (!alias) return;
-      const id = window.prompt('模型 ID（发给 CLI 的真实模型名）:', '');
-      if (!id) return;
+
+    mpWrap.append(trigger, dropdown);
+    wrap.appendChild(mpWrap);
+
+    // 3. 快捷模型胶囊栏（一键点击即切换默认模型，超 5 款可展开/收起）
+    if (allModels.length > 0) {
+      const pillsWrap = document.createElement('div'); pillsWrap.className = 'uh-mp-pills';
+      const PILL_LIMIT = 5;
+      const isExpanded = expandedPillsWorkers.has(worker);
+      // 确保当前默认模型始终排在可见区域前列
+      const sortedForPills = [...allModels].sort((a, b) => {
+        const aDef = (a.id === curDefaultId || a.isDefault) ? 1 : 0;
+        const bDef = (b.id === curDefaultId || b.isDefault) ? 1 : 0;
+        return bDef - aDef;
+      });
+      const visibleModels = isExpanded ? sortedForPills : sortedForPills.slice(0, PILL_LIMIT);
+      for (const m of visibleModels) {
+        const isDef = (m.id && m.id === curDefaultId) || !!m.isDefault;
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'uh-mp-pill' + (isDef ? ' is-default' : '');
+        pill.title = `${m.name || m.id} (${m.id})${m.credits ? ' · ' + m.credits : ''}${m.tag ? ' · ' + m.tag : ''}\n点击直接设为 ${worker} 默认模型`;
+        const txt = document.createElement('span'); txt.className = 'uh-mp-pill-text';
+        txt.textContent = (isDef ? '★ ' : '') + (m.name || m.id);
+        pill.appendChild(txt);
+        if (m.credits) {
+          const cr = document.createElement('span'); cr.className = 'uh-mp-pill-credit'; cr.textContent = m.credits;
+          pill.appendChild(cr);
+        }
+        pill.onclick = () => switchDefault(m.id || m.alias, m.name || m.id);
+        pillsWrap.appendChild(pill);
+      }
+      if (allModels.length > PILL_LIMIT) {
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'uh-mp-more';
+        moreBtn.textContent = isExpanded ? '收起 ▴' : `+${allModels.length - PILL_LIMIT} 款更多 ▾`;
+        moreBtn.onclick = () => {
+          if (expandedPillsWorkers.has(worker)) expandedPillsWorkers.delete(worker);
+          else expandedPillsWorkers.add(worker);
+          hydrateAllUnifiedCards();
+        };
+        pillsWrap.appendChild(moreBtn);
+      }
+      wrap.appendChild(pillsWrap);
+    }
+
+    // 4. 内联自定义模型抽屉（告别生硬的 window.prompt 弹窗）
+    const customForm = document.createElement('div'); customForm.className = 'uh-mp-custom-form';
+    const inputRow = document.createElement('div'); inputRow.className = 'uh-mp-custom-row';
+    const aliasInput = document.createElement('input');
+    aliasInput.className = 'qa-input';
+    aliasInput.placeholder = '别名 (如 gpt-max)';
+    const idInput = document.createElement('input');
+    idInput.className = 'qa-input';
+    idInput.placeholder = '真实模型 ID (发给 CLI)';
+    inputRow.append(aliasInput, idInput);
+
+    const formBtns = document.createElement('div'); formBtns.className = 'qa-rowbtns';
+    const saveSetBtn = qaBtn('添加并设默认', 'qa-primary');
+    const saveOnlyBtn = qaBtn('仅添加');
+    const cancelBtn = qaBtn('取消');
+
+    async function submitCustom(alsoSetDefault) {
+      const alias = aliasInput.value.trim();
+      const id = idInput.value.trim();
+      if (!alias || !id) { notify('请填写自定义模型别名与真实模型 ID', true); return; }
       const r = await jpost('/api/models/custom', { worker, alias, id });
-      notify(r.ok ? `已添加自定义模型 ${alias}` : `失败: ${r.error || '?'}`, !r.ok);
+      if (!r.ok) { notify(`添加失败: ${r.error || '?'}`, true); return; }
+      if (alsoSetDefault) {
+        await jpost('/api/models/default', { worker, alias });
+      }
+      notify(alsoSetDefault ? `✓ 已添加 ${alias} 并设为 ${worker} 默认模型` : `✓ 已添加自定义模型 ${alias}`);
+      customForm.classList.remove('open');
       if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
       load();
+    }
+    saveSetBtn.onclick = () => submitCustom(true);
+    saveOnlyBtn.onclick = () => submitCustom(false);
+    cancelBtn.onclick = () => { customForm.classList.remove('open'); };
+    addToggleBtn.onclick = () => {
+      customForm.classList.toggle('open');
+      if (customForm.classList.contains('open')) setTimeout(() => aliasInput.focus(), 20);
     };
-    const rmBtn = qaBtn('删');
-    rmBtn.onclick = async () => {
-      const alias = sel.value;
-      if (!alias || alias === '__default__') { notify('请先在下拉框选择要删除的自定义别名', true); return; }
-      if (!window.confirm(`删除 ${worker} 的模型别名「${alias}」？`)) return;
-      const r = await jpost('/api/models/remove', { worker, alias });
-      notify(r.ok ? `已删除 ${alias}` : `失败: ${r.error || '?'}`, !r.ok);
-      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
-      load();
-    };
-    btns.append(setBtn, addBtn, rmBtn);
-    wrap.appendChild(btns);
+
+    formBtns.append(saveSetBtn, saveOnlyBtn, cancelBtn);
+    customForm.append(inputRow, formBtns);
+    wrap.appendChild(customForm);
+
     return wrap;
   }
 

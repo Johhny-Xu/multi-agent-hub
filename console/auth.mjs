@@ -172,6 +172,96 @@ async function _saveCodeArts(ak, sk) {
 }
 
 // ---------------------------------------------------------------- 模型管理
+const CATALOG_MODELS = {
+  codearts: [
+    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x', default: true },
+    { id: 'huaweicloud-maas/glm-5.2-sft-harmony', name: 'GLM-5.2-ArkTS-SPARK', credits: '0.70x' },
+    { id: 'huaweicloud-maas/openpangu-2.0-pro', name: 'OpenPangu-2.0-Pro', credits: '0.70x' },
+    { id: 'huaweicloud-maas/openpangu-2.0-flash', name: 'OpenPangu-2.0-Flash', credits: '0.35x' },
+  ],
+  'github-copilot': [
+    { id: 'auto', name: 'Auto (Copilot 自动选型)', default: true },
+  ],
+  codebuddy: [
+    { id: 'default-model', name: 'Auto' },
+    { id: 'fast-model', name: 'Fast' },
+    { id: 'balanced-model', name: 'Balanced' },
+    { id: 'primary-model', name: 'Primary' },
+    { id: 'deep-model', name: 'Deep' },
+    { id: 'hy4-preview', name: 'Hy4 preview' },
+    { id: 'deepseek-v4.1-flash', name: 'Deepseek-V4.1-Flash', tag: '免费', default: true },
+    { id: 'gpt-6-astra', name: 'GPT-6-Astra' },
+    { id: 'gpt-5.6-sol', name: 'GPT-5.6-Sol' },
+    { id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra' },
+    { id: 'gpt-5.6-luna', name: 'GPT-5.6-Luna' },
+    { id: 'gpt-5.5', name: 'GPT-5.5' },
+    { id: 'glm-5.3', name: 'GLM-5.3' },
+    { id: 'glm-5.2', name: 'GLM-5.2' },
+    { id: 'kimi-k3', name: 'Kimi-K3' },
+    { id: 'kimi-k2.8-preview', name: 'Kimi-K2.8-Preview' },
+    { id: 'grok-4.7', name: 'Grok-4.7' },
+    { id: 'custom-local:trae', name: 'Trae (9router)' },
+  ],
+  'codebuddy-cn': [
+    { id: 'default', name: 'Default', credits: 'x2.00' },
+    { id: 'deepseek-v4.1-flash', name: 'Deepseek-V4.1-Flash', credits: 'x0.11', default: true },
+    { id: 'deepseek-v4-pro', name: 'Deepseek-V4-Pro', credits: 'x0.51' },
+    { id: 'minimax-m3', name: 'MiniMax-M3', credits: 'x0.25' },
+    { id: 'glm-5.3', name: 'GLM-5.3', credits: 'x0.79' },
+    { id: 'glm-5.3-flash', name: 'GLM-5.3-Flash', credits: 'x0.06' },
+    { id: 'glm-5.2', name: 'GLM-5.2', credits: 'x0.79' },
+    { id: 'glm-5.1', name: 'GLM-5.1', credits: 'x0.79' },
+    { id: 'kimi-k3-1', name: 'Kimi-K3', credits: 'x1.62' },
+    { id: 'kimi-k2.8-preview', name: 'Kimi-K2.8-Preview', credits: 'x0.77' },
+    { id: 'kimi-k2.7', name: 'Kimi-K2.7-Code', credits: 'x0.57' },
+    { id: 'hy4-preview', name: 'Hy4 preview', credits: 'x0.29', tag: '试用' },
+    { id: 'hunyuan-chat', name: 'Hunyuan-Turbos', credits: 'x0.10' },
+  ],
+  antigravity: [
+    { id: 'gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash Medium', default: true },
+    { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High' },
+    { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro High' },
+    { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)' },
+    { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
+    { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' },
+  ],
+  mimocode: [
+    { id: 'xiaomi/mimo-v2.6-flash', name: 'MiMo-V2.6-Flash (26f)', default: true },
+    { id: 'mimo-v2.6-pro', name: 'MiMo-V2.6-Pro' },
+    { id: 'mimo-v2.6-pro-ultraspeed', name: 'MiMo-V2.6-Pro-UltraSpeed' },
+    { id: '9router/trae', name: 'Trae (9router 通道)' },
+  ],
+  minimaxcode: [
+    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K/1M', default: true },
+    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文' },
+  ],
+  zcode: [
+    { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },
+  ],
+  traecode: [
+    { id: 'GLM-5.3-FlashX', name: 'GLM-5.3-FlashX', credits: '0.31x', default: true },
+    { id: 'glm-5.3-flash', name: 'GLM-5.3-Flash', credits: '0.06x' },
+    { id: 'glm-5.3', name: 'GLM-5.3', credits: '0.78x', tag: '会员 5 折' },
+    { id: 'glm-5.2', name: 'GLM-5.2', credits: '0.78x', tag: '会员 5 折' },
+    { id: 'MiMo-V2.6-Flash', name: 'MiMo-V2.6-Flash', credits: '0.06x' },
+    { id: 'MiMo-V2.6-Pro', name: 'MiMo-V2.6-Pro', credits: '0.15x' },
+    { id: 'deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', credits: '0.20x', tag: '限时折扣' },
+    { id: 'DeepSeek-V4-Flash', name: 'DeepSeek-V4-Flash', credits: '0.20x', tag: '限时折扣' },
+    { id: 'DeepSeek-V4-Pro', name: 'DeepSeek-V4-Pro', credits: '0.72x', tag: '限时折扣' },
+    { id: 'qwen3.8-flash', name: 'Qwen3.8-Flash', credits: '0.08x' },
+    { id: 'qwen3.8-max', name: 'Qwen3.8-Max', credits: '1.50x' },
+    { id: 'qwen-3.7-plus', name: 'Qwen-3.7-Plus', credits: '0.25x' },
+    { id: 'Doubao-Seed-Evolving', name: 'Seed-Evolving', credits: '0.08x', tag: '限时 1 折' },
+    { id: 'Doubao-Seed-2.1-Pro', name: 'Seed-2.1-Pro', credits: '0.08x', tag: '限时 1 折' },
+    { id: 'Doubao-Seed-2.1-Turbo', name: 'Seed-2.1-Turbo', credits: '0.20x', tag: '专属补贴' },
+    { id: 'Doubao-Seed-Code', name: 'Seed-Code', credits: '0.06x', tag: '专属补贴' },
+    { id: 'kimi-k3', name: 'Kimi-K3', credits: '1.50x' },
+    { id: 'kimi-k2.8-preview', name: 'Kimi-K2.8-Preview', credits: '0.60x' },
+    { id: 'minimax-m3', name: 'MiniMax-M3', credits: '0.25x' },
+    { id: 'step-5-preview', name: 'Step-5-Preview', credits: '0.50x' },
+  ],
+};
+
 async function loadAgents() {
   try { return JSON.parse((await readFile(AGENTS_JSON, 'utf-8')).replace(/^\uFEFF/, '')); } catch { return { agents: {} }; }
 }
@@ -197,27 +287,85 @@ async function saveAgents(data) {
 export async function listModels() {
   const d = await loadAgents();
   const workers = {};
-  for (const [w, prof] of Object.entries(d.agents || {})) {
-    const models = prof.models || {};
+  const allWorkerNames = new Set([...Object.keys(CATALOG_MODELS), ...Object.keys(d.agents || {})]);
+  for (const w of allWorkerNames) {
+    const prof = (d.agents && d.agents[w]) || {};
+    const rawModels = prof.models || {};
+    const catalog = CATALOG_MODELS[w] || [];
+    const defaultId = rawModels.default || catalog.find((m) => m.default)?.id || null;
+    const merged = [];
+    const seenIds = new Set();
+
+    for (const cat of catalog) {
+      const shortAliases = Object.entries(rawModels)
+        .filter(([k, v]) => k !== 'default' && v === cat.id && k !== cat.id)
+        .map(([k]) => k);
+      merged.push({
+        alias: shortAliases[0] || cat.id,
+        id: cat.id,
+        name: cat.name || cat.id,
+        credits: cat.credits || null,
+        tag: cat.tag || null,
+        aliases: shortAliases,
+        custom: false,
+        isDefault: cat.id === defaultId,
+      });
+      seenIds.add(cat.id);
+    }
+
+    for (const [alias, id] of Object.entries(rawModels)) {
+      if (alias === 'default' || !id) continue;
+      if (seenIds.has(id)) continue;
+      merged.push({
+        alias,
+        id,
+        name: alias === id ? id : `${alias} (${id})`,
+        credits: null,
+        tag: '自定义',
+        aliases: [alias],
+        custom: true,
+        isDefault: id === defaultId,
+      });
+    }
+
     workers[w] = {
-      default: models.default || null,
-      models: Object.entries(models).filter(([k]) => k !== 'default').map(([alias, id]) => ({ alias, id })),
+      default: defaultId,
+      models: merged,
     };
   }
   return { file: AGENTS_JSON, workers };
 }
 
-async function _setDefaultModel(worker, alias) {
+async function _setDefaultModel(worker, aliasOrId) {
   const d = await loadAgents();
   const prof = d.agents?.[worker];
   if (!prof) return { ok: false, error: `agents.json 中不存在 worker: ${worker}` };
   const models = prof.models || {};
-  if (alias === 'default' || !(alias in models)) {
-    return { ok: false, error: `别名 ${alias} 不存在（default 键不可直接指派；请用具体别名或先添加自定义模型）` };
+  const catalog = CATALOG_MODELS[worker] || [];
+  let targetId = null;
+
+  if (aliasOrId !== 'default' && aliasOrId in models) {
+    targetId = models[aliasOrId];
+  } else {
+    const catMatch = catalog.find((m) => m.id === aliasOrId || m.name === aliasOrId);
+    if (catMatch) {
+      targetId = catMatch.id;
+      // 确保该模型写入 agents.json 的别名表，便于 Hub 校验与直接调用
+      const hasEntry = Object.entries(models).some(([k, v]) => k !== 'default' && v === targetId);
+      if (!hasEntry) {
+        const safeKey = targetId.replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 32) || 'model';
+        models[safeKey] = targetId;
+      }
+    } else if (Object.values(models).includes(aliasOrId)) {
+      targetId = aliasOrId;
+    }
+  }
+
+  if (!targetId) {
+    return { ok: false, error: `模型或别名 ${aliasOrId} 不存在` };
   }
   const prev = models.default;
-  // default 存别名解析后的真实 id，保持 hub 语义（models.default 为 id）
-  models.default = models[alias];
+  models.default = targetId;
   prof.models = models;
   await saveAgents(d);
   return { ok: true, worker, prev, now: models.default, note: 'hub 每次派发实时读取，无需重启' };
@@ -240,7 +388,7 @@ async function _removeCustomModel(worker, alias) {
   if (alias === 'default') return { ok: false, error: 'default 别名不可删除' };
   const d = await loadAgents();
   const prof = d.agents?.[worker];
-  if (!prof || !prof.models || !(alias in prof.models)) return { ok: false, error: `别名 ${alias} 不存在` };
+  if (!prof || !prof.models || !(alias in prof.models)) return { ok: false, error: `仅可删除已保存的自定义模型别名（内置预设模型不可删除）` };
   delete prof.models[alias];
   await saveAgents(d);
   return { ok: true, worker, alias };
