@@ -292,7 +292,8 @@ export async function listModels() {
     const prof = (d.agents && d.agents[w]) || {};
     const rawModels = prof.models || {};
     const catalog = CATALOG_MODELS[w] || [];
-    const defaultId = rawModels.default || catalog.find((m) => m.default)?.id || null;
+    const rawDefault = rawModels.default || catalog.find((m) => m.default)?.id || null;
+    const defaultId = (rawDefault && rawDefault !== 'default' && rawModels[rawDefault]) ? rawModels[rawDefault] : rawDefault;
     const merged = [];
     const seenIds = new Set();
 
