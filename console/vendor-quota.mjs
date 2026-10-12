@@ -226,19 +226,25 @@ async function refreshAntigravityTokenIfNeeded(credPath, d) {
 const TOKEN_READERS = {
   'codebuddy': async () => {
     const d = await readJsonSafe(join(HOME, '.codebuddy', 'auth.info'));
-    if (!d?.auth?.accessToken) return null;
-    const pl = parseJwtPayloadSafe(d.auth.accessToken);
-    const account = d.account?.nickname || pl?.email || pl?.preferred_username || pl?.name || null;
-    return { token: d.auth.accessToken, account };
+    const tok = String(d?.auth?.accessToken || '').trim();
+    // 未完成授权的半成品：accessToken 是 started?state=... 跳转 URL
+    if (!tok || tok.startsWith('http')) return null;
+    const pl = parseJwtPayloadSafe(tok);
+    const acct = d.account || d.accounts?.[0] || d.allAccounts?.[0] || {};
+    const account = acct.nickname || acct.email || pl?.email || pl?.preferred_username || pl?.name || (acct.uid ? `UID:${String(acct.uid).slice(0, 8)}…` : null);
+    return { token: tok, account };
   },
   'codebuddy-cn': async () => {
     const d = await readJsonSafe(join(HOME, '.codebuddy-cn', 'auth.info'));
-    if (!d?.auth?.accessToken) return null;
-    const pl = parseJwtPayloadSafe(d.auth.accessToken);
-    const phone = d.account?.phoneNumber || pl?.preferred_username || '';
-    const nick = d.account?.nickname || pl?.nickname || '';
-    const account = (nick && phone && nick !== phone) ? `${nick} (${phone})` : (nick || phone || null);
-    return { token: d.auth.accessToken, account };
+    const tok = String(d?.auth?.accessToken || '').trim();
+    if (!tok || tok.startsWith('http')) return null;
+    const pl = parseJwtPayloadSafe(tok);
+    const acct = d.account || d.accounts?.[0] || d.allAccounts?.[0] || {};
+    const phone = acct.phoneNumber || pl?.preferred_username || '';
+    const nick = acct.nickname || pl?.nickname || '';
+    const uid = acct.uid || acct.uin || pl?.sub || '';
+    const account = (nick && phone && nick !== phone) ? `${nick} (${phone})` : (nick || phone || (uid ? `UID:${String(uid).slice(0, 8)}…` : null));
+    return { token: tok, account };
   },
   'minimaxcode': async () => {
     const d = await readJsonSafe(join(HOME, '.mmx', 'config.json'));
@@ -523,6 +529,13 @@ function addMiniMaxQuota(quotas, key, model, getTotal, countSnake, countCamel, p
 
 async function fetchMiniMaxQuota(token) {
   if (!token) return { message: 'MiniMax 凭据不可用（~/.mmx/config.json 缺失或未登录）。' };
+  // 账号名：mmx OAuth 登录时官方 CLI 会把 token 响应里的 account 写回 config.json（本地无 userinfo 接口可查）
+  const mmxCfg = (await readJsonSafe(join(HOME, '.mmx', 'config.json'))) || {};
+  const mmxAcctRaw = mmxCfg?.account ?? mmxCfg?.oauth?.account ?? null;
+  const mmxAccount = (typeof mmxAcctRaw === 'string' && mmxAcctRaw.trim())
+    || (mmxAcctRaw && (mmxAcctRaw.email || mmxAcctRaw.name || mmxAcctRaw.username || mmxAcctRaw.user_name || mmxAcctRaw.nick))
+    || null;
+  const withAcct = (obj) => (mmxAccount ? { account: mmxAccount, ...obj } : obj);
   const usageUrls = await minimaxUrls();
   let lastErrorMessage = '';
   for (let index = 0; index < usageUrls.length; index += 1) {
@@ -566,7 +579,7 @@ async function fetchMiniMaxQuota(token) {
       const modelRemains = payload?.model_remains ?? payload?.modelRemains;
       const allModels = Array.isArray(modelRemains) ? modelRemains : [];
       const quotaModels = allModels.filter(hasMiniMaxQuota);
-      if (quotaModels.length === 0) return { message: 'MiniMax 已连接，未返回配额数据。' };
+      if (quotaModels.length === 0) return withAcct({ message: 'MiniMax 已连接，未返回配额数据。' });
 
       const capturedAtMs = Date.now();
       const countMeansRemaining = usageUrl.includes('/coding_plan/remains');
@@ -582,11 +595,11 @@ async function fetchMiniMaxQuota(token) {
           'current_weekly_remaining_percent', 'currentWeeklyRemainingPercent',
           [capturedAtMs, 'weekly_remains_time', 'weeklyRemainsTime', 'weekly_end_time', 'weeklyEndTime'], countMeansRemaining);
       }
-      if (Object.keys(quotas).length === 0) return { message: 'MiniMax 已连接，无法解析配额。' };
-      return { quotas };
+      if (Object.keys(quotas).length === 0) return withAcct({ message: 'MiniMax 已连接，无法解析配额。' });
+      return withAcct({ quotas });
     }
   }
-  return { message: lastErrorMessage ? `MiniMax 已连接，拉取配额失败: ${lastErrorMessage}` : 'MiniMax 已连接，拉取配额失败。' };
+  return withAcct({ message: lastErrorMessage ? `MiniMax 已连接，拉取配额失败: ${lastErrorMessage}` : 'MiniMax 已连接，拉取配额失败。' });
 }
 
 // ---------------------------------------------------------------- antigravity

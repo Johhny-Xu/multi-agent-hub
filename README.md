@@ -1,13 +1,13 @@
 # multi-agent-hub
 
-![multi-agent-hub 0.9.4 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
+![multi-agent-hub 0.9.9.2 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
 
 **multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，具备三层灵活接入形态：
 1. **任意 MCP 客户端直连即用**：任何支持标准 MCP 协议的客户端（如 Cursor、Claude Desktop、Windsurf、VS Code Cline/Roo Code、Continue 等），仅需配置 Hub 的 MCP URL（或使用内置一键复制的 Prompt 指令），即可直接调度多端 Worker；
 2. **6 款原生宿主深度适配（体验更顺畅、更舒服）**：针对 **Codex**、**ZCode**、**MiniMax Code（及 Claude Code / Agent Plugins 1.0）**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 提供了深度定制的原生插件、专用子代理体系（`hub-*.md`）、专属技能与斜杠命令，上下文自动隔离，免去手动配置参数的繁琐；
 3. **零客户端独立使用**：即使没有外部 IDE 或 AI 客户端，Hub 内置的 **CodeBuddy 风格三栏式 WebUI 管理大盘** 也能独立完成平台多会话树管理、沉浸式对话、任务派发与监控、全量会话归档复原与彻底清理。
 
-当前源码版本为 **0.9.4**，本阶段重点在于**MiniMaxCode 双向深度攻坚（Worker + MiniMax Plugin V1）与 WebUI 全面交互优化**：引入 CodeBuddy 风格三栏式交互大盘、精细时段问候语与跨平台全局头像定制、全量会话聚合归档与一键复原/二次确认批量删除、原生 HTTP MCP 子代理直连端点与全自动 Agent 配置提示词复制、无缝剪贴板兼容、并发深度探活替代独立心跳、Worker 启停权威同步与模型目录精炼。
+当前源码版本为 **0.9.9.2**，本阶段重点在于**9 Worker 登录链路全量状态检测化重构与真实凭据结构对齐**：统一登录/加号入口与「我已完成授权」状态检测收口（杜绝假成功）、CodeBuddy 新版 XDG 共享会话存储对齐与官方 state 兑换看门狗（CLI 轮询卡死由 Hub 兜底完成）、Trae 官方 PKCE 授权链接修复、ZCode 国际/国内双区切换、MiMo API Key 通道与账号身份分离、MiniMax 账户名注入识别、模型别名逐个可删。
 
 ---
 
@@ -41,7 +41,7 @@
 | --- | --- | --- |
 | Windows 回归测试 | ✅ 通过 (32组) | 2026-10-12 压测与加固后 32/32 组全量通过（见 `docs/refactor-validation.json`）；非全量付费模型实测证明 |
 | Linux 回归测试 & 压测 | ✅ 通过 (29组 + >4,500次压测) | 360 并发洪峰 0 报错（`/health` P95 1.25s）、60 并发配额 Singleflight 合并（P95 850ms）、100KB 大任务 + 30 并发状态机零损坏（见 `docs/stage3-stress-report.json`、`docs/stage4-5-load-report.json`、`docs/stage6-compat-report.json`） |
-| Linux 生产 Hub 0.9.4 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，内置原生 9 厂商配额监控与多账号切换，已有配置、任务历史与鉴权平滑保留 |
+| Linux 生产 Hub 0.9.9.2 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，内置原生 9 厂商配额监控与多账号切换，已有配置、任务历史与鉴权平滑保留 |
 | Linux Antigravity CLI 1.3.1 | ✅ 真实调用通过 | gemini-3.8-flash-medium 精确标记通过，插件模式校验通过（4技能/9代理/1MCP）；真实模型调用 `hub_status` 成功返回 9 种 worker，完整原生子代理 `hub-mimocode` 派发成功（返回 `ref=mimocode-79e2416c91`，`completed`，`answer=95`） |
 | Linux ZCode CLI 0.16.9 | ✅ 真实调用通过 | 原生 `agenthub-workers:mimocode` 子代理经插件派发，原 ref 续查返回 `73` |
 | Windows Codex / ZCode | ✅ 真实调用通过 | 两种原生子代理分别返回 `2117`、`2077`；初轮长标记回答不完整的记录也保留 |

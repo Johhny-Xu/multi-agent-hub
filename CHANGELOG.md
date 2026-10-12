@@ -9,6 +9,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [0.9.9.2] - 2026-10-12
+
+### 登录链路全量重构：状态检测收口、CodeBuddy 共享会话存储对齐、Trae PKCE 修复、ZCode 双区切换 (`console`)
+
+- **统一登录入口与「状态检测式」授权收口 ([`console/client/index.html`](console/client/index.html) / [`console/auth.mjs`](console/auth.mjs))**：
+  - 卡片上并列的「🔐 OAuth 登录」与「+添加新账号」合并为单一「🔐 登录 / 添加账号」入口（后端本就同走沙箱隔离流程，并列按钮纯属逻辑冲突）；
+  - 「✓ 我已完成授权」从"按按钮即报成功"改为**真实状态检测**：核验凭据落盘，未检测到明确报错并继续自动轮询，彻底杜绝假成功；所有回调提交分支在账号归档失败时如实返回错误；
+  - 修复 CodeBuddy 粘贴 `/started` 完成页链接被误当 accessToken 反复写入、并杀死进行中登录进程导致"卡死"的缺陷：网页 URL 一律拒绝充当凭据，started 链接自动提取 `state` 走官方协议完成兑换。
+- **CodeBuddy（国际版/国内版）登录修复与官方协议对齐 ([`console/auth.mjs`](console/auth.mjs) / [`console/accounts.mjs`](console/accounts.mjs))**：
+  - 实证新版 CLI（≥2.164）会话真实落盘位置为 XDG 共享存储 `~/.local/share/CodeBuddyExtension/Data/Public/auth/<authentication-id>.info`（随 HOME 而非 `CODEBUDDY_CONFIG_DIR`，且 CN/国际版共用同一文件）：ACP 成功回包后同时轮询 legacy 路径与共享存储并自动镜像归档，修复"授权成功但检测不到凭据"；
+  - 补齐官方 `GET /v2/plugin/auth/token?state=` 与 `GET /v2/plugin/account` 兑换链路（国际 `www.codebuddy.ai` / 国内 `copilot.tencent.com`，prefixPath `/plugin`），授权链接到达即启动后台看门狗并行轮询，CLI 自身轮询卡死时由 Hub 直接完成落盘；
+  - 账户身份识别覆盖 `account` / `accounts[0]` / `allAccounts[0]` 三份副本与 JWT payload（CN 版 email 恒为空，按 uid/uin/手机号识别；ACP 结果自带 userinfo 作兜底）；未完成授权的半成品（accessToken 为 started 跳转 URL）一律判为未登录，不再被误归档；
+  - 切换账号时同步写入官方共享会话存储，真实 CLI 与其本地网页端即时跟随 hub 的账号切换；登录弹窗对 CodeBuddy 明示"重复授权会使同账号网页端会话下线"的单会话策略提醒，并提供不影响网页端的凭据导入通道。
+- **Trae 官方 OAuth 修复（授权页报错"链接有误"）**：与 Trae IDE `loginUrlBuilder` 逐参数对齐——补齐强制 PKCE（`code_challenge` + `code_challenge_method=S256`）、回调路径改用官方 `/authorize`、登录主机改由 `GetLoginGuidance` 动态探测（国内/国际双区）；回调解析新增 `userJwt` 直通与 `authCodeInfo→AuthCode+CodeVerifier` 走 IDE 原生 `/trae/api/v3/oauth/ExchangeToken` 兑换。
+- **ZCode 国际/国内切换**：登录弹窗新增区域选择（国内版 BigModel / 国际版 Z.ai），后端按区域走官方 `provider: bigmodel|zai` 初始化、轮询与 `enc:v1:` 加密落盘，初始化失败按区域回退对应 API Key 获取页。
+- **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
+- **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
+- **模型别名可删除 ([`console/auth.mjs`](console/auth.mjs) / [`console/client/index.html`](console/client/index.html))**：内置模型行暴露 agents.json 中的别名徽章并可单个删除（修复"指向内置模型 id 的自定义别名永远无法删除"），删除当前 default 别名时自动回退内置默认模型。
+- **版本号统一**：console 服务与 WebUI 此前分叉停在 0.9.4（落后于主线 0.9.9.1），本版将 Hub 核心、console/WebUI、插件市场与全部集成/插件清单一律对齐到 **0.9.9.2**，结束双线并存。
+
+---
+
 ## [0.9.4] - 2026-10-12
 
 ### 全接口高并发压测、大负载加固、原生配额/多账号面板重塑与跨平台兼容 (`hub` / `console` / `drivers` / `mcp`)

@@ -90,6 +90,45 @@ function profileDir(worker, name) {
   return join(ROOT, worker, name);
 }
 
+/**
+ * CodeBuddy 新版 CLI（≥2.164）的真实会话存储：XDG sharedDataPath 下的 auth/<产品认证ID>.info。
+ * 注意它跟随 HOME，不随 CODEBUDDY_CONFIG_DIR；官方 CN/国际版共用同一文件（同 authentication.id）。
+ */
+const CODEBUDDY_SHARED_AUTH_REL = join('.local', 'share', 'CodeBuddyExtension', 'Data', 'Public', 'auth');
+
+/**
+ * 在指定 HOME 下扫描 CodeBuddy 共享会话存储，返回首个有效凭据（auth.accessToken 为真实 JWT 而非跳转 URL）。
+ * 备份轮换文件（文件名带日期戳）自动排在后面。
+ * @returns {Promise<{ file: string, data: any } | null>}
+ */
+export async function findCodeBuddySharedAuth(baseHome = HOME) {
+  const dir = join(baseHome, CODEBUDDY_SHARED_AUTH_REL);
+  let files = [];
+  try { files = await readdir(dir); } catch { return null; }
+  const cands = files.filter((f) => f.endsWith('.info')).sort((a, b) => a.length - b.length);
+  for (const f of cands) {
+    try {
+      const d = JSON.parse((await readFile(join(dir, f), 'utf-8')).replace(/^\uFEFF/, ''));
+      const tok = String(d?.auth?.accessToken || '').trim();
+      if (tok && !tok.startsWith('http')) return { file: join(dir, f), data: d };
+    } catch { /* 下一个候选 */ }
+  }
+  return null;
+}
+
+/** 把 CodeBuddy 会话 JSON 同步写入 HOME 下的官方共享存储（让真实 CLI / 网页端跟随 hub 的账号切换） */
+async function syncCodeBuddySharedAuth(payloadText) {
+  const sharedDir = join(HOME, CODEBUDDY_SHARED_AUTH_REL);
+  let sharedName = 'Tencent-Cloud.coding-copilot.info';
+  try {
+    const ex = (await readdir(sharedDir)).filter((f) => f.endsWith('.info') && !/\d{4}-\d{2}-\d{2}T/.test(f));
+    if (ex.length) sharedName = ex.sort((a, b) => a.length - b.length)[0];
+  } catch { /* 目录不存在 */ }
+  await mkdir(sharedDir, { recursive: true });
+  await writeFile(join(sharedDir, sharedName), payloadText, { mode: 0o600 });
+}
+
+
 async function fingerprint(relPaths, baseHome = HOME) {
   const hash = createHash('sha256');
   for (const rel of relPaths) {
@@ -139,8 +178,11 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
     }
     if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
-      const acct = raw?.account || raw?.user || {};
-      const jwtClaims = decodeJwtPayload(raw?.auth?.accessToken || '') || {};
+      // account / accounts[0] / allAccounts[0] 是三份同构副本，任取其一；国际版可能只有 JWT
+      const acct = raw?.account || raw?.accounts?.[0] || raw?.allAccounts?.[0] || raw?.user || {};
+      const rawTok = String(raw?.auth?.accessToken || '');
+      // 国际版未完成登录时 accessToken 会是 https://...started?state=... 跳转 URL，不是 JWT
+      const jwtClaims = (rawTok && !rawTok.startsWith('http') ? decodeJwtPayload(rawTok) : null) || {};
       const emailOrPhone = String(acct.email || jwtClaims.email || acct.phoneNumber || jwtClaims.preferred_username || '').trim();
       const rawNick = String(acct.nickname || jwtClaims.nickname || jwtClaims.name || '').trim();
       const uid = String(acct.uid || acct.uin || acct.oneidAccountId || jwtClaims.sub || '').trim();
@@ -148,7 +190,7 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       const label = cleanProfileLabel(emailOrPhone || rawNick) || (uid ? `${prefix}-${cleanProfileLabel(uid).slice(0, 8)}` : `${prefix}-${shortFp}`);
       const display = (rawNick && emailOrPhone && rawNick !== emailOrPhone)
         ? `${rawNick} (${emailOrPhone})`
-        : (emailOrPhone || rawNick || label);
+        : (emailOrPhone || rawNick || (uid ? `UID:${uid.slice(0, 8)}…` : label));
       return { label, identity: uid || emailOrPhone || fp, display };
     }
     if (worker === 'zcode') {
@@ -178,9 +220,12 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
     if (worker === 'minimaxcode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       const reg = cleanProfileLabel(raw?.region || raw?.oauth?.region || 'cn') || 'cn';
-      const uname = cleanProfileLabel(raw?.email || raw?.user?.email || raw?.user?.name || '');
+      // mmx OAuth 登录时官方 CLI 会把 token 响应里的 account 写回 config.json
+      const acctRaw = raw?.account ?? raw?.oauth?.account ?? null;
+      const acctStr = typeof acctRaw === 'string' ? acctRaw : (acctRaw?.email || acctRaw?.name || acctRaw?.username || acctRaw?.user_name || acctRaw?.nick || '');
+      const uname = cleanProfileLabel(acctStr || raw?.email || raw?.user?.email || raw?.user?.name || '');
       const label = uname || `mmx-${reg}-${shortFp}`;
-      return { label, identity: fp, display: raw?.email || raw?.user?.email || label };
+      return { label, identity: uname || fp, display: acctStr || raw?.email || raw?.user?.email || label };
     }
     if (worker === 'mimocode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
@@ -225,6 +270,12 @@ async function isLiveCredValid(worker, relFiles, baseHome = HOME) {
         const keys = Object.keys(d || {}).filter((k) => d[k] && (d[k].key || d[k].access || d[k].token));
         if (!keys.length) return false;
       }
+      if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
+        // 未完成授权时 auth.accessToken 可能是 https://...started?state=... 跳转 URL 半成品，不算有效凭据
+        const d = JSON.parse(txt.replace(/^\uFEFF/, ''));
+        const tok = String(d?.auth?.accessToken || '').trim();
+        if (!tok || tok.startsWith('http')) return false;
+      }
     } catch {
       return false;
     }
@@ -246,6 +297,17 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
   if (worker === 'github-copilot') await ensureCopilotMirrorFile();
   const valid = await isLiveCredValid(worker, relFiles, HOME);
   if (!valid) return { ok: false, reason: 'not_logged_in' };
+
+  // mimocode 特例：仅有 xiaomi API Key（无 OAuth uid、无其他通道）时，凭据只是通道配置而非账号身份，
+  // 不自动归档为账号，避免「自添加 API Key 被当作账号加入列表」
+  if (worker === 'mimocode') {
+    try {
+      const d = JSON.parse((await readFile(join(HOME, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
+      const hasUid = !!(d?.xiaomi?.metadata?.uid);
+      const otherProviders = Object.keys(d || {}).filter((k) => k !== 'xiaomi' && d[k] && (d[k].key || d[k].access || d[k].token));
+      if (!hasUid && !otherProviders.length) return { ok: false, reason: 'api_key_only' };
+    } catch { /* 解析失败时按普通流程处理 */ }
+  }
 
   const dir = join(ROOT, worker);
   await mkdir(dir, { recursive: true });
@@ -471,8 +533,24 @@ async function _addFromSandbox(worker, name, loginId) {
       const content = (await readFile(srcFile, 'utf-8')).trim();
       if (!content || content === '__LOGGED_OUT__') throw new Error('empty');
     } catch {
+      // codebuddy 新版 CLI 把会话写进 XDG 共享存储而非配置目录：尝试从共享存储镜像出 legacy auth.info
+      if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
+        const shared = await findCodeBuddySharedAuth(srcHome);
+        if (shared) {
+          const payload = { ...shared.data };
+          if (!payload.allAccounts && payload.account) payload.allAccounts = [payload.account];
+          payload.updatedAt = payload.updatedAt || new Date().toISOString();
+          await mkdir(dirname(srcFile), { recursive: true });
+          await writeFile(srcFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+          continue;
+        }
+      }
       return { ok: false, error: `尚未检测到新登录凭据（若授权后浏览器跳转到了 localhost 回调地址，请复制浏览器地址栏完整链接粘贴到上方输入框并点击「提交」）` };
     }
+  }
+  // 复用各 worker 专属有效性校验（如 codebuddy 半成品 URL、mimocode 空通道），拦住未完成的授权
+  if (!(await isLiveCredValid(worker, rels, srcHome))) {
+    return { ok: false, error: '凭据文件尚未写入完整（授权可能仍在进行），请稍候再次点击「我已完成授权」检测' };
   }
 
   const dir = join(ROOT, worker);
@@ -550,6 +628,13 @@ async function _switchAccount(worker, name) {
   }
   if (worker === 'github-copilot') {
     await syncCopilotKeyringFromMirror();
+  }
+  if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
+    // CodeBuddy 官方 CN/国际版 CLI 共用 XDG 共享会话存储：切换账号时同步过去，CLI 与其网页端才能跟随
+    try {
+      const liveTxt = await readFile(join(HOME, relFiles[0]), 'utf-8');
+      await syncCodeBuddySharedAuth(liveTxt);
+    } catch { /* ignore */ }
   }
   await writeFile(join(ROOT, worker, '.active'), name, 'utf-8').catch(() => {});
   await writeFile(join(backupDir, 'meta.json'), JSON.stringify({ note: `切换到 ${name} 前的自动备份`, at: new Date().toISOString() }, null, 2), 'utf-8');

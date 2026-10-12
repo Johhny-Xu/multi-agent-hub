@@ -21,7 +21,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { clearQuotaCache, fetchJsonSmart, encryptZcodeCred } from './vendor-quota.mjs';
-import { autoSyncLiveAccount, addFromSandbox } from './accounts.mjs';
+import { autoSyncLiveAccount, addFromSandbox, findCodeBuddySharedAuth } from './accounts.mjs';
 
 const execFile = promisify(execFileCb);
 const HOME = homedir();
@@ -81,10 +81,31 @@ const TRAE_OAUTH = {
     'https://api.marscode.com',
     'https://www.trae.ai',
   ],
+  // IDE 原生兑换端点（AuthCode + PKCE CodeVerifier，与 Trae IDE main.js 一致）
+  ideApiOrigins: ['https://api.trae.cn', 'https://api.trae.com.cn', 'https://api.trae.ai'],
   exchangeTokenPath: '/cloudide/api/v3/trae/oauth/ExchangeToken',
+  ideExchangeTokenPath: '/trae/api/v3/oauth/ExchangeToken',
   userAgent: 'Trae/1.0.0 antigravity-cockpit-tools',
   defaultAppVersion: '3.5.54',
 };
+
+/** 通过官方 GetLoginGuidance 动态探测登录主机名，失败回退默认域名 */
+async function fetchTraeLoginHost(urls, fallbackHost) {
+  for (const u of urls) {
+    try {
+      const r = await fetchJsonSmart(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }, 6000);
+      const host = r.json?.Result?.LoginHost || r.json?.result?.LoginHost || r.json?.result?.loginHost;
+      if (typeof host === 'string' && host.trim()) {
+        return host.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+      }
+    } catch { /* 尝试下一个 */ }
+  }
+  return fallbackHost;
+}
 
 const ZCODE_OAUTH = {
   initUrl: 'https://zcode.z.ai/api/v1/oauth/cli/init',
@@ -93,13 +114,18 @@ const ZCODE_OAUTH = {
   userinfoUrl: 'https://bigmodel.cn/api/biz/customer/getCustomerInfo',
 };
 
+/** zcode 区域 → 官方 OAuth provider（与 ZCode 官方 CLI 的 zai/bigmodel 账号族一致） */
+function zcodeProviderOf(region) {
+  return String(region || '').trim().toLowerCase() === 'intl' ? 'zai' : 'bigmodel';
+}
+
 // ---------------------------------------------------------------- 登录命令表（全部 9 个 Worker 均支持 WebUI 登录）
 export const LOGIN_COMMANDS = {
   'minimaxcode': {
     cmd: [join(HOME, '.npm-global', 'bin', 'mmx'), 'auth', 'login', '--recommend', '--region=cn'],
     headless: true,
     mode: 'pty_device',
-    note: '打开 MiniMax 授权链接并确认设备码，后端将自动轮询并写入 ~/.mmx/config.json；也可直接在下方粘贴 MiniMax API Key (sk-...)',
+    note: '打开 MiniMax 授权链接并确认设备码，后端将自动轮询并写入 ~/.mmx/config.json；也可直接在下方粘贴 MiniMax API Key (sk-...)。MiniMax 官方不返回账户名，建议在上方填写「账号备注名称」以便识别',
     callbackHint: '可选：直接粘贴 MiniMax API Key (sk-...) 立即完成认证',
   },
   'codebuddy': {
@@ -107,16 +133,16 @@ export const LOGIN_COMMANDS = {
     headless: true,
     mode: 'acp_oauth',
     acpEnv: 'external',
-    note: '点击下方 CodeBuddy 国际版 (www.codebuddy.ai) OAuth 链接完成登录，后端通过 ACP 协议自动检测并落盘 ~/.codebuddy/auth.info',
-    callbackHint: '可选：粘贴已有的 auth.info JSON 或 accessToken 直接导入',
+    note: '点击下方 CodeBuddy 国际版 (www.codebuddy.ai) OAuth 链接完成登录；浏览器显示 started 成功页后系统会自动落盘（也可把该 started 链接粘贴到下方立即完成）。注意：官方单会话策略下重新授权会使同账号网页端会话下线',
+    callbackHint: '可选：粘贴 started 成功页链接自动完成认证；或粘贴 auth.info JSON / accessToken 导入（不影响网页端会话）',
   },
   'codebuddy-cn': {
     cmd: [join(HOME, '.npm-global', 'bin', 'codebuddy'), '--acp'],
     headless: true,
     mode: 'acp_oauth',
     acpEnv: 'internal',
-    note: '点击下方 CodeBuddy 国内版 (copilot.tencent.com) OAuth 链接完成微信/腾讯云扫码登录，后端自动检测并落盘 ~/.codebuddy-cn/auth.info',
-    callbackHint: '可选：粘贴已有的 auth.info JSON 或 accessToken 直接导入',
+    note: '点击下方 CodeBuddy 国内版 (copilot.tencent.com) OAuth 链接完成微信/腾讯云扫码登录；浏览器显示 started 成功页后系统会自动落盘（也可把该 started 链接粘贴到下方立即完成）。注意：官方单会话策略下重新授权会使同账号网页端会话下线',
+    callbackHint: '可选：粘贴 started 成功页链接自动完成认证；或粘贴 auth.info JSON / accessToken 导入（不影响网页端会话）',
   },
   'github-copilot': {
     cmd: [join(HOME, '.local', 'bin', 'copilot'), 'login', '--device-code'],
@@ -143,13 +169,14 @@ export const LOGIN_COMMANDS = {
     headless: true,
     mode: 'trae_oauth',
     needsCallbackInput: true,
-    note: '1. 点击下方 Trae 国内版（或国际版）授权链接完成登录；2. 浏览器跳转到 http://127.0.0.1:<端口>/callback?refreshToken=... 后，复制地址栏完整链接（或直接粘贴 Trae JWT Token）到下方输入框并点击「提交完成认证」',
-    callbackHint: '粘贴浏览器跳转后的 http://127.0.0.1.../callback?refreshToken=... 完整链接或 Trae JWT Token',
+    note: '1. 点击下方 Trae 国内版（或国际版）授权链接完成登录（已按官方 IDE 标准启用 PKCE）；2. 浏览器跳转到 http://127.0.0.1:<端口>/authorize?refreshToken=... 后，复制地址栏完整链接（或直接粘贴 Trae JWT Token）到下方输入框并点击「提交完成认证」',
+    callbackHint: '粘贴浏览器跳转后的 http://127.0.0.1.../authorize?refreshToken=... 完整链接或 Trae JWT Token',
   },
   'zcode': {
     headless: true,
     mode: 'zcode_oauth',
-    note: '点击下方智谱 BigModel（或 Z.ai）官方 OAuth 链接并在浏览器登录，后端每 3 秒自动轮询并加密写入 ~/.zcode/v2/credentials.json；也可直接在下方粘贴 Coding Plan API Key',
+    supportsRegion: true,
+    note: '先在上方选择版本区域（🇨🇳 国内版 BigModel / 🌍 国际版 Z.ai），再点击下方官方 OAuth 链接登录，后端每 3 秒自动轮询并加密写入 ~/.zcode/v2/credentials.json；也可直接粘贴对应区域的 Coding Plan API Key',
     callbackHint: '可选：直接粘贴智谱 BigModel / Z.ai API Key 或 OAuth 回调链接',
   },
   'codearts': {
@@ -193,6 +220,24 @@ function getMimoKeyName(targetHome) {
     writeFileSync(file, generated, 'utf-8');
   } catch { /* ignore */ }
   return generated;
+}
+
+/**
+ * MiniMax mmx 官方 CLI 登录不落盘账户名，但 config.json 的 oauth.account 字段会被官方 normalizer
+ * 保留、并显示在 `mmx auth status` 的 Account 行。登录完成时把用户在 WebUI 填的备注名注入该字段。
+ */
+async function injectMinimaxAccountName(targetHome, name) {
+  const nn = String(name || '').trim();
+  if (!nn) return;
+  const cfgFile = join(targetHome, '.mmx', 'config.json');
+  try {
+    const cfg = JSON.parse((await readFile(cfgFile, 'utf-8')).replace(/^\uFEFF/, ''));
+    cfg.oauth = cfg.oauth && typeof cfg.oauth === 'object' ? cfg.oauth : {};
+    if (!cfg.oauth.account) {
+      cfg.oauth.account = nn;
+      await writeFile(cfgFile, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+    }
+  } catch { /* ignore */ }
 }
 
 function decryptMimoCode(privateKeyDer, encryptedBase64Url) {
@@ -397,43 +442,90 @@ async function exchangeTraeCallback(entry, rawInput, preferredName = '') {
   const input = String(rawInput || '').trim();
   if (!input) throw new Error('请输入 Trae 回调链接或 JWT Token');
   let accessToken = '';
-  if (input.includes('refreshToken=') || input.includes('refresh_token=')) {
+  const isCallbackUrl = input.includes('refreshToken=') || input.includes('refresh_token=')
+    || input.includes('authCodeInfo=') || input.includes('userJwt=') || input.includes('user_jwt=');
+  if (isCallbackUrl) {
     const q = input.includes('?') ? input.slice(input.indexOf('?') + 1) : input.replace(/^[?#]/, '');
     const params = new URLSearchParams(q);
+    // 1) 官方 IDE 回调可能直接携带最终 JWT（userJwt）
+    const directJwt = params.get('userJwt') || params.get('user_jwt') || '';
     const refreshToken = params.get('refreshToken') || params.get('refresh_token') || params.get('RefreshToken') || '';
     const cloudideToken = params.get('x-cloudide-token') || params.get('xCloudideToken') || params.get('accessToken') || params.get('token') || '';
-    if (!refreshToken) throw new Error('回调链接缺少 refreshToken 参数');
-    entry.buf += `\n[OAuth] 正在通过 Trae ExchangeToken 接口换取 JWT…\n`;
-    let lastErr = '无响应';
-    for (const origin of TRAE_OAUTH.apiOrigins) {
-      try {
-        const headers = {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': TRAE_OAUTH.userAgent,
-          ...(cloudideToken ? { 'x-cloudide-token': cloudideToken } : {}),
-        };
-        const r = await fetchJsonSmart(`${origin}${TRAE_OAUTH.exchangeTokenPath}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            ClientID: TRAE_OAUTH.clientId,
-            RefreshToken: refreshToken,
-            ClientSecret: TRAE_OAUTH.clientSecret,
-            UserID: '',
-          }),
-        }, 12_000);
-        const tok = r.json?.Result?.AccessToken || r.json?.Result?.accessToken || r.json?.result?.access_token || r.json?.accessToken;
-        if (tok) {
-          accessToken = String(tok).trim();
-          break;
-        }
-        lastErr = r.json?.Result?.Message || r.json?.message || `HTTP ${r.status}`;
-      } catch (e) {
-        lastErr = e.message;
-      }
+    // authCodeInfo 是 URL 编码的 JSON（内含 AuthCode），配合登录时的 PKCE CodeVerifier 兑换
+    let authCode = '';
+    const authCodeInfoRaw = params.get('authCodeInfo') || params.get('auth_code_info') || '';
+    if (authCodeInfoRaw) {
+      try { authCode = String(JSON.parse(authCodeInfoRaw)?.AuthCode || ''); } catch { /* ignore */ }
     }
-    if (!accessToken) throw new Error(`Trae ExchangeToken 失败: ${lastErr}`);
+    if (!authCode) authCode = params.get('AuthCode') || params.get('authCode') || params.get('code') || '';
+
+    if (directJwt) {
+      accessToken = directJwt.replace(/^(Cloud-IDE-JWT|Bearer)\s+/i, '').trim();
+    } else if (refreshToken) {
+      entry.buf += `\n[OAuth] 正在通过 Trae ExchangeToken (cloudide refreshToken) 接口换取 JWT…\n`;
+      let lastErr = '无响应';
+      for (const origin of TRAE_OAUTH.apiOrigins) {
+        try {
+          const headers = {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': TRAE_OAUTH.userAgent,
+            ...(cloudideToken ? { 'x-cloudide-token': cloudideToken } : {}),
+          };
+          const r = await fetchJsonSmart(`${origin}${TRAE_OAUTH.exchangeTokenPath}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ClientID: TRAE_OAUTH.clientId,
+              RefreshToken: refreshToken,
+              ClientSecret: TRAE_OAUTH.clientSecret,
+              UserID: '',
+            }),
+          }, 12_000);
+          const tok = r.json?.Result?.AccessToken || r.json?.Result?.accessToken || r.json?.result?.access_token || r.json?.accessToken;
+          if (tok) {
+            accessToken = String(tok).trim();
+            break;
+          }
+          lastErr = r.json?.Result?.Message || r.json?.message || `HTTP ${r.status}`;
+        } catch (e) {
+          lastErr = e.message;
+        }
+      }
+      if (!accessToken && !authCode) throw new Error(`Trae ExchangeToken 失败: ${lastErr}`);
+    }
+    // 2) refreshToken 不可用或兑换失败时，用 AuthCode + PKCE CodeVerifier 走 IDE 原生兑换端点
+    if (!accessToken && authCode) {
+      const verifier = entry.traeCodeVerifier || '';
+      if (!verifier) throw new Error('回调包含 AuthCode 但当前会话缺少 PKCE CodeVerifier，请重新发起登录后再试');
+      entry.buf += `\n[OAuth] 正在通过 Trae IDE 原生 ExchangeToken (AuthCode+PKCE) 接口换取 JWT…\n`;
+      let lastErr = '无响应';
+      for (const origin of TRAE_OAUTH.ideApiOrigins) {
+        try {
+          const r = await fetchJsonSmart(`${origin}${TRAE_OAUTH.ideExchangeTokenPath}`, {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': TRAE_OAUTH.userAgent },
+            body: JSON.stringify({
+              ClientID: TRAE_OAUTH.clientId,
+              AuthCode: authCode,
+              CodeVerifier: verifier,
+              IDEVersion: TRAE_OAUTH.defaultAppVersion,
+            }),
+          }, 12_000);
+          const tok = r.json?.Result?.AccessToken || r.json?.Result?.accessToken || r.json?.Result?.JwtToken
+            || r.json?.result?.access_token || r.json?.accessToken || r.json?.token;
+          if (tok) {
+            accessToken = String(tok).trim();
+            break;
+          }
+          lastErr = r.json?.Result?.Message || r.json?.message || `HTTP ${r.status}`;
+        } catch (e) {
+          lastErr = e.message;
+        }
+      }
+      if (!accessToken) throw new Error(`Trae AuthCode 兑换失败: ${lastErr}`);
+    }
+    if (!accessToken) throw new Error('回调链接缺少可用参数（refreshToken / authCodeInfo / userJwt）');
   } else {
     accessToken = input.replace(/^(Cloud-IDE-JWT|Bearer)\s+/i, '').trim();
   }
@@ -482,7 +574,129 @@ async function saveZcodeOAuthResult(targetHome, provider, tokenData) {
   clearQuotaCache('zcode');
 }
 
-function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
+// ---------------------------------------------------------------- CodeBuddy 官方 state→token 完成兑换
+// 与官方 CLI（codebuddy-headless.js AccountScopedAuth）对齐：
+//   POST {endpoint}/v2/plugin/auth/state?platform=CLI   → authUrl + state
+//   GET  {endpoint}/v2/plugin/auth/token?state=<state>  → 轮询直到 accessToken 可用
+//   GET  {endpoint}/v2/plugin/account                   → Bearer 换取账号信息（uid/nickname/phone）
+const CODEBUDDY_AUTH_ENDPOINTS = {
+  'codebuddy': 'https://www.codebuddy.ai',
+  'codebuddy-cn': 'https://copilot.tencent.com',
+};
+
+async function fetchCodeBuddyAuthByState(worker, state, maxAttempts = 20, intervalMs = 3000) {
+  const base = CODEBUDDY_AUTH_ENDPOINTS[worker] || CODEBUDDY_AUTH_ENDPOINTS.codebuddy;
+  const headers = {
+    Accept: 'application/json',
+    'X-No-Authorization': 'true',
+    'X-No-User-Id': 'true',
+    'X-No-Enterprise-Id': 'true',
+    'X-No-Department-Info': 'true',
+  };
+  let lastErr = '无响应';
+  for (let i = 0; i < maxAttempts; i += 1) {
+    try {
+      const r = await fetchJsonSmart(`${base}/v2/plugin/auth/token?state=${encodeURIComponent(state)}`, { headers }, 10_000);
+      const data = r.json?.data?.data ?? r.json?.data ?? null;
+      if (data && (data.accessToken || data.access_token)) {
+        const now = Date.now();
+        const auth = { ...data, lastRefreshTime: now };
+        if (data.expiresIn && !data.expiresAt) auth.expiresAt = now + Number(data.expiresIn) * 1000;
+        if (data.refreshExpiresIn && !data.refreshExpiresAt) auth.refreshExpiresAt = now + Number(data.refreshExpiresIn) * 1000;
+        // 再取账号信息（uid/nickname/phone），失败不阻塞登录
+        let account = null;
+        try {
+          const ar = await fetchJsonSmart(`${base}/v2/plugin/account`, {
+            headers: { Accept: 'application/json', Authorization: `Bearer ${data.accessToken || data.access_token}` },
+          }, 10_000);
+          account = ar.json?.data?.data ?? ar.json?.data ?? null;
+        } catch { /* ignore */ }
+        return { auth, account };
+      }
+      lastErr = r.json?.msg || r.json?.message || `HTTP ${r.status}`;
+    } catch (err) {
+      lastErr = err.message;
+    }
+    await new Promise((r) => { setTimeout(r, intervalMs); });
+  }
+  throw new Error(`CodeBuddy 官方 token 兑换未完成（${lastErr}）`);
+}
+
+/** 从 ACP authenticate 结果里的 userinfo 提取账号对象（落盘身份兜底） */
+function codeBuddyAccountFromHint(hint) {
+  if (!hint || typeof hint !== 'object') return null;
+  const uid = String(hint.userId || hint.uid || '').trim();
+  const nick = String(hint.userNickname || hint.userName || hint.nickname || '').trim();
+  if (!uid && !nick) return null;
+  return { uid, nickname: nick, userName: String(hint.userName || nick) };
+}
+
+/** 粘贴 /started 成功页链接时：提取 state 直接向官方完成兑换并落盘归档（短轮询，长等待交给后台 watchdog） */
+async function completeCodeBuddyByState(e, state, prefName) {
+  e.buf += `\n[CodeBuddy] 检测到 started 授权完成页链接，正在用 state 向官方服务换取凭据…\n`;
+  let result;
+  try {
+    result = await fetchCodeBuddyAuthByState(e.worker, state, 3, 2000);
+  } catch (err) {
+    return { ok: false, worker: e.worker, error: `${err.message}。授权若已完成，后台会持续自动检测并收口；也可稍后点击「我已完成授权」重试` };
+  }
+  const dirName = e.worker === 'codebuddy-cn' ? '.codebuddy-cn' : '.codebuddy';
+  const authInfoFile = join(e.targetHome, dirName, 'auth.info');
+  await mkdir(dirname(authInfoFile), { recursive: true });
+  const account = result.account || codeBuddyAccountFromHint(e.cbUserInfo);
+  const payload = {
+    ...(account ? { account, accounts: [account], allAccounts: [account] } : {}),
+    auth: result.auth,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeFile(authInfoFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+  e.buf += `[CodeBuddy] ✓ 官方凭据已换取并写入 ${authInfoFile}\n`;
+  const acc = await finalizeLoginAccount(e, prefName);
+  if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试' };
+  const accName = acc?.name || e.savedAccountName || '';
+  clearQuotaCache(e.worker);
+  cleanupSessionResources(e);
+  e.code = 0;
+  e.exited = true;
+  return {
+    ok: true,
+    worker: e.worker,
+    accountName: accName,
+    note: accName ? `${e.worker} 认证成功，已自动添加并切换至账号「${accName}」` : `${e.worker} 凭据已保存并生效`,
+  };
+}
+
+/**
+ * ACP 授权链接到达后启动的后台兜底轮询：官方 CLI 的 loopGetToken 在部分网络环境下会卡住，
+ * 这里用同一 state 并行向官方轮询，拿到 token 后自行落盘并完成会话（与 CLI 完成路径互斥）。
+ */
+function startCodeBuddyCompletionWatchdog(e, state) {
+  if (!state || e.cbWatchdog) return;
+  e.cbWatchdog = true;
+  (async () => {
+    try {
+      const result = await fetchCodeBuddyAuthByState(e.worker, state, 170, 3000);
+      if (e.exited) return; // CLI 已完成，无需兜底
+      e.buf += `\n[CodeBuddy] ✓ 后台兜底轮询拿到官方凭据（CLI 未完成，由 Hub 直接完成）\n`;
+      const dirName = e.worker === 'codebuddy-cn' ? '.codebuddy-cn' : '.codebuddy';
+      const authInfoFile = join(e.targetHome, dirName, 'auth.info');
+      await mkdir(dirname(authInfoFile), { recursive: true });
+      const payload = {
+        ...(result.account ? { account: result.account, accounts: [result.account], allAccounts: [result.account] } : {}),
+        auth: result.auth,
+        updatedAt: new Date().toISOString(),
+      };
+      await writeFile(authInfoFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+      await finalizeLoginAccount(e);
+      e.exited = true;
+      e.code = 0;
+      clearQuotaCache(e.worker);
+      cleanupSessionResources(e);
+    } catch { /* 超时放弃：用户仍可粘贴 started 链接手动兑换 */ }
+  })();
+}
+
+function launchWorkerSession(worker, { sandbox = null, name = null, region = '' } = {}) {
   const spec = LOGIN_COMMANDS[worker];
   if (!spec) return { ok: false, error: `不支持的 worker: ${worker}` };
   // 启动新登录前自动将当前已生效凭据归档保存，避免新账号登录覆盖丢失原账号
@@ -497,6 +711,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
     id,
     worker,
     name: name || null,
+    region: region || null,
     sandbox: effectiveSandbox,
     targetHome,
     mode: spec.mode,
@@ -553,6 +768,8 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
         } catch { /* ignore */ }
       }
       if (code === 0) {
+        // MiniMax：官方不落盘账户名，注入用户备注名到 oauth.account（官方保留字段）后再归档
+        if (worker === 'minimaxcode') await injectMinimaxAccountName(targetHome, entry.name);
         await finalizeLoginAccount(entry);
       }
       entry.exited = true;
@@ -602,16 +819,72 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
           if (msg.method === '_codebuddy.ai/authUrl' && msg.params?.authUrl) {
             entry.authUrl = msg.params.authUrl;
             entry.buf += `[ACP] 已获取 OAuth 授权链接:\n${msg.params.authUrl}\n请在浏览器打开该链接完成登录授权，系统正在自动等待回调…\n`;
+            // 授权链接内含 state：启动后台兜底轮询（CLI 的 loopGetToken 卡住时由 Hub 直接完成兑换）
+            try {
+              const st = new URL(msg.params.authUrl).searchParams.get('state')
+                || new URL(msg.params.authUrl).searchParams.get('stateId') || '';
+              if (st) {
+                entry.cbState = st;
+                startCodeBuddyCompletionWatchdog(entry, st);
+              }
+            } catch { /* ignore */ }
           } else if (msg.id === 2 && (msg.result !== undefined || msg.error)) {
             if (msg.error) {
               entry.buf += `[ACP] 授权返回错误: ${JSON.stringify(msg.error)}\n`;
             } else {
-              entry.buf += `[ACP] ✓ 授权成功！凭据已自动写入 ${join(cfgDir, 'auth.info')}\n`;
-              await finalizeLoginAccount(entry);
-              entry.exited = true;
-              entry.code = 0;
-              clearQuotaCache(worker);
-              cleanupSessionResources(entry);
+              if (msg.result) entry.buf += `[ACP] 授权返回: ${JSON.stringify(msg.result).slice(0, 400)}\n`;
+              // ACP 结果里直接带账号信息（userId/userName/userNickname），留作归档身份兜底
+              const uiHint = msg.result?._meta?.['codebuddy.ai/userinfo'] || msg.result?.userinfo || null;
+              if (uiHint) entry.cbUserInfo = uiHint;
+              const authFile = join(cfgDir, 'auth.info');
+              // 轮询等待真实凭据落盘（最长 25s）：优先 legacy auth.info，其次新版 CLI 的 XDG 共享会话存储
+              let ready = false;
+              for (let i = 0; i < 125; i += 1) {
+                try {
+                  const d = JSON.parse((await readFile(authFile, 'utf-8')).replace(/^\uFEFF/, ''));
+                  const tok = String(d?.auth?.accessToken || '').trim();
+                  if (tok && !tok.startsWith('http')) { ready = true; break; }
+                } catch { /* 尚未落盘 */ }
+                // 新版 CLI（≥2.164）写入 ~/.local/share/CodeBuddyExtension/.../auth/*.info（随 HOME，不随 CONFIG_DIR）
+                const shared = await findCodeBuddySharedAuth(targetHome);
+                if (shared) {
+                  const payload = { ...shared.data };
+                  if (!payload.allAccounts && payload.account) payload.allAccounts = [payload.account];
+                  payload.updatedAt = payload.updatedAt || new Date().toISOString();
+                  await mkdir(dirname(authFile), { recursive: true });
+                  await writeFile(authFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+                  entry.buf += `[ACP] ✓ 检测到官方共享会话存储，已镜像为 ${authFile}\n`;
+                  ready = true;
+                  break;
+                }
+                await new Promise((r) => setTimeout(r, 200));
+              }
+              if (!ready && entry.cbState) {
+                // 最后兜底：直接用 state 向官方兑换（CLI 轮询卡死时）
+                try {
+                  entry.buf += `[ACP] CLI 未落盘，改用 state 向官方服务直接兑换…\n`;
+                  const result = await fetchCodeBuddyAuthByState(worker, entry.cbState, 4, 2000);
+                  const acctFromApi = result.account || codeBuddyAccountFromHint(entry.cbUserInfo);
+                  const payload = {
+                    ...(acctFromApi ? { account: acctFromApi, accounts: [acctFromApi], allAccounts: [acctFromApi] } : {}),
+                    auth: result.auth,
+                    updatedAt: new Date().toISOString(),
+                  };
+                  await mkdir(dirname(authFile), { recursive: true });
+                  await writeFile(authFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+                  ready = true;
+                } catch { /* 交给后台 watchdog 继续 */ }
+              }
+              if (ready) {
+                entry.buf += `[ACP] ✓ 授权成功！凭据已写入 ${authFile}\n`;
+                await finalizeLoginAccount(entry);
+                entry.exited = true;
+                entry.code = 0;
+                clearQuotaCache(worker);
+                cleanupSessionResources(entry);
+              } else {
+                entry.buf += `[ACP] ⚠️ 授权已返回成功但暂未检测到落盘凭据，后台仍在自动检测；也可稍后点击「我已完成授权」重新检测\n`;
+              }
             }
           }
         } catch {
@@ -721,14 +994,18 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
     return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, url: entry.authUrl, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
   }
 
-  // ---------------- 分支 5：TraeCode 官方 GetLoginGuidance + ExchangeToken OAuth 流
+  // ---------------- 分支 5：TraeCode 官方 GetLoginGuidance + PKCE + ExchangeToken OAuth 流
   if (spec.mode === 'trae_oauth') {
     const traceId = randomUUID();
     entry.traeTraceId = traceId;
+    // Trae IDE 登录强制 PKCE（S256），缺失 code_challenge 会导致授权页报错（即"链接有误"根因）
+    const codeVerifier = randomBytes(48).toString('base64url');
+    entry.traeCodeVerifier = codeVerifier;
+    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
     const srv = http.createServer(async (req, res) => {
       try {
         const u = new URL(req.url || '/', 'http://127.0.0.1');
-        if (u.pathname === '/callback' || u.pathname === '/auth/callback') {
+        if (u.pathname === '/authorize' || u.pathname === '/callback' || u.pathname === '/auth/callback') {
           await exchangeTraeCallback(entry, `${u.pathname}?${u.searchParams.toString()}`);
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end('<!doctype html><meta charset="utf-8"><title>Trae 授权成功</title><body style="font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;padding:32px;border:1px solid #30363d;border-radius:12px;background:#161b22"><h2 style="color:#3fb950">✓ Trae OAuth 授权成功</h2><p>凭据已自动写入 Multi-Agent Hub，您可以关闭此页面。</p></div></body>');
@@ -748,7 +1025,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
         login_version: '1',
         auth_from: 'trae',
         login_channel: 'native_ide',
-        plugin_version: 'local',
+        plugin_version: TRAE_OAUTH.defaultAppVersion,
         auth_type: 'local',
         client_id: TRAE_OAUTH.clientId,
         redirect: '0',
@@ -764,6 +1041,8 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
         x_env: '',
         x_app_version: TRAE_OAUTH.defaultAppVersion,
         x_app_type: 'stable',
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
       });
       u.search = qs.toString();
       return u.toString();
@@ -771,26 +1050,35 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
     srv.listen(0, '127.0.0.1', async () => {
       const addr = srv.address();
       const port = typeof addr === 'object' && addr ? addr.port : 38911;
-      const callbackUrl = `http://127.0.0.1:${port}/callback`;
+      // 与 Trae IDE 一致使用 /authorize 作为回调路径
+      const callbackUrl = `http://127.0.0.1:${port}/authorize`;
       entry.redirectUri = callbackUrl;
-      entry.authUrl = buildTraeUrl('www.trae.cn', callbackUrl);
-      entry.secondaryUrl = buildTraeUrl('www.trae.ai', callbackUrl);
-      entry.buf = `[Trae OAuth] 已生成 Trae 国内版与国际版 OAuth 授权链接（回调 ${callbackUrl}）：\n国内版 (trae.cn): ${entry.authUrl}\n国际版 (trae.ai): ${entry.secondaryUrl}\n\n在浏览器完成登录后，若跳转到 http://127.0.0.1:${port}/callback?refreshToken=...，请复制地址栏完整链接粘贴到下方输入框并点击「提交完成认证」。\n`;
+      // 通过官方 GetLoginGuidance 动态探测登录主机，失败回退默认域名
+      const [cnHost, intlHost] = await Promise.all([
+        fetchTraeLoginHost(TRAE_OAUTH.guidanceUrlsCn, 'www.trae.cn'),
+        fetchTraeLoginHost(TRAE_OAUTH.guidanceUrlsIntl, 'www.trae.ai'),
+      ]);
+      entry.authUrl = buildTraeUrl(cnHost, callbackUrl);
+      entry.secondaryUrl = buildTraeUrl(intlHost, callbackUrl);
+      entry.buf = `[Trae OAuth] 已生成 Trae 国内版与国际版 OAuth 授权链接（已启用 PKCE，登录主机由 GetLoginGuidance 探测：${cnHost} / ${intlHost}，回调 ${callbackUrl}）：\n国内版 (${cnHost}): ${entry.authUrl}\n国际版 (${intlHost}): ${entry.secondaryUrl}\n\n在浏览器完成登录后，浏览器会跳转到 http://127.0.0.1:${port}/authorize?...（若您不在服务器本机打开会提示无法连接，属正常现象），请复制地址栏完整链接粘贴到下方输入框并点击「提交完成认证」。\n`;
     });
     return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
   }
 
-  // ---------------- 分支 6：ZCode 官方 CLI Polling OAuth 流 (bigmodel / zai)
+  // ---------------- 分支 6：ZCode 官方 CLI Polling OAuth 流 (bigmodel 国内版 / zai 国际版)
   if (spec.mode === 'zcode_oauth') {
+    const provider = zcodeProviderOf(entry.region);
+    entry.zcodeProvider = provider;
+    const regionLabel = provider === 'zai' ? '国际版 Z.ai' : '国内版 智谱 BigModel';
     const pollToken = randomBytes(32).toString('hex');
     entry.zcodePollToken = pollToken;
-    entry.buf = '[ZCode OAuth] 正在初始化智谱 BigModel / ZCode 官方 OAuth 会话…\n';
+    entry.buf = `[ZCode OAuth] 正在初始化 ${regionLabel} 官方 OAuth 会话…\n`;
     (async () => {
       try {
         const res = await fetchJsonSmart(ZCODE_OAUTH.initUrl, {
           method: 'POST',
           headers: { Authorization: `Bearer ${pollToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: 'bigmodel' }),
+          body: JSON.stringify({ provider }),
         }, 12_000);
         const data = res.json?.data;
         if (!res.ok || res.json?.code !== 0 || !data?.flow_id || !data?.authorize_url) {
@@ -801,7 +1089,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
         const u = new URL(data.authorize_url);
         entry.oauthState = u.searchParams.get('state') || '';
         const intervalMs = Math.max(3000, (Number(data.poll_interval_sec) || 3) * 1000);
-        entry.buf += `[ZCode OAuth] 已获取智谱 BigModel 官方授权链接：\n${entry.authUrl}\n正在后台每 ${intervalMs / 1000}s 自动轮询授权状态…\n`;
+        entry.buf += `[ZCode OAuth] 已获取 ${regionLabel} 官方授权链接：\n${entry.authUrl}\n正在后台每 ${intervalMs / 1000}s 自动轮询授权状态…\n`;
         entry.pollTimer = setInterval(async () => {
           if (entry.exited) return;
           try {
@@ -810,7 +1098,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
             }, 10_000);
             const pd = pr.json?.data;
             if (pr.json?.code === 0 && pd?.status === 'ready') {
-              const bm = pd.bigmodel || {};
+              const bm = pd[provider] || pd.bigmodel || pd.zai || {};
               const accessToken = bm.access_token || bm.accessToken || '';
               const refreshToken = bm.refresh_token || bm.refreshToken || '';
               const zcodeJwtToken = pd.token || '';
@@ -821,8 +1109,8 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
                 displayName: String(usr.name || usr.email || usr.user_id || 'user'),
                 rawProfile: { ...usr, zcodeProfileSchemaVersion: 2 },
               };
-              await saveZcodeOAuthResult(targetHome, 'bigmodel', { accessToken, refreshToken, zcodeJwtToken, userInfo });
-              entry.buf += `\n[ZCode OAuth] ✓ 授权成功！账号 ${userInfo.username} 已加密写入 ${join(targetHome, '.zcode/v2/credentials.json')}\n`;
+              await saveZcodeOAuthResult(targetHome, provider, { accessToken, refreshToken, zcodeJwtToken, userInfo });
+              entry.buf += `\n[ZCode OAuth] ✓ ${regionLabel} 授权成功！账号 ${userInfo.username} 已加密写入 ${join(targetHome, '.zcode/v2/credentials.json')}\n`;
               await finalizeLoginAccount(entry);
               entry.exited = true;
               entry.code = 0;
@@ -836,9 +1124,11 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
           } catch { /* ignore transient poll errors */ }
         }, intervalMs);
       } catch (e) {
-        entry.authUrl = 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys';
+        entry.authUrl = provider === 'zai'
+          ? 'https://z.ai/manage-apikey/apikey-list'
+          : 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys';
         entry.needsCallbackInput = true;
-        entry.buf += `[ZCode OAuth] 在线初始化提示 (${e.message})，您可点击上方链接获取智谱 BigModel API Key 并粘贴到下方输入框直接保存。\n`;
+        entry.buf += `[ZCode OAuth] 在线初始化提示 (${e.message})，您可点击上方链接获取 ${regionLabel} API Key 并粘贴到下方输入框直接保存。\n`;
       }
     })();
     return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, note: spec.note, callbackHint: spec.callbackHint };
@@ -854,8 +1144,8 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
   return { ok: false, error: `未知的登录模式: ${spec.mode}` };
 }
 
-export function startLogin(worker, name = '') {
-  return launchWorkerSession(worker, { name: name || null });
+export function startLogin(worker, name = '', opts = {}) {
+  return launchWorkerSession(worker, { name: name || null, region: opts.region || '' });
 }
 
 /** 沙箱添加账号：以隔离 HOME 启动登录流程，授权后凭据落在沙箱内，供快照成档案 */
@@ -884,6 +1174,7 @@ export function pollLogin(loginId) {
     ok: true,
     worker: e.worker,
     mode: e.mode,
+    region: e.region || null,
     output: cleanOut.slice(-1600),
     url: e.authUrl || extractedUrl,
     secondaryUrl: e.secondaryUrl || null,
@@ -891,6 +1182,7 @@ export function pollLogin(loginId) {
     needsCallbackInput: !!e.needsCallbackInput,
     callbackHint: e.callbackHint || '',
     accountName: e.savedAccountName || null,
+    apiKeyOnly: !!e.apiKeyOnly,
     exited: e.exited,
     exitCode: e.code,
   };
@@ -921,31 +1213,52 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         return await exchangeAntigravityCode(e, input, prefName);
       }
 
-      // 2. MiMoCode: 小米 MiMo 加密授权码 u / 回调链接 / 直接 API Key
+      // 2. MiMoCode: 小米 MiMo 加密授权码 u / 回调链接（入账号库）/ 直接 API Key（仅通道配置，不入账号库）
       if (e.worker === 'mimocode') {
         if (!input) return { ok: false, error: '请粘贴小米 MiMo 授权 Code、回调链接或 API Key' };
+        if (/^sk-[A-Za-z0-9_-]{12,}$/.test(input)) {
+          // API Key 是通道配置而非账号身份：先归档保护当前生效凭据，再直接合并进线上配置，
+          // 不触发账号归档，避免「自添加 API Key 被当作账号加入列表」
+          try { await autoSyncLiveAccount('mimocode'); } catch { /* ignore */ }
+          const liveFile = join(HOME, '.local', 'share', 'mimocode', 'auth.json');
+          await mkdir(dirname(liveFile), { recursive: true });
+          let liveData = {};
+          try { liveData = JSON.parse((await readFile(liveFile, 'utf-8')).replace(/^\uFEFF/, '')); } catch { liveData = {}; }
+          liveData.xiaomi = { type: 'api', key: input };
+          await writeFile(liveFile, JSON.stringify(liveData, null, 2) + '\n', { mode: 0o600 });
+          e.apiKeyOnly = true;
+          e.buf += `\n[MiMo] ✓ API Key 已直接写入 ${liveFile}（通道配置，不加入账号列表）\n`;
+          clearQuotaCache('mimocode');
+          cleanupSessionResources(e);
+          e.code = 0;
+          e.exited = true;
+          return {
+            ok: true,
+            worker: 'mimocode',
+            accountName: null,
+            apiKeyOnly: true,
+            note: 'MiMo API Key 已更新并立即生效（作为通道配置，不作为账号加入列表）',
+          };
+        }
         const authFile = join(e.targetHome, '.local', 'share', 'mimocode', 'auth.json');
         await mkdir(dirname(authFile), { recursive: true });
         let authData = {};
         try { authData = JSON.parse(await readFile(authFile, 'utf-8')); } catch { authData = {}; }
-        if (/^sk-[A-Za-z0-9_-]{12,}$/.test(input)) {
-          authData.xiaomi = { type: 'api', key: input };
-        } else {
-          if (!e.mimoPrivateKeyDer) return { ok: false, error: '当前会话缺少 X25519 私钥，请重新发起登录' };
-          const dec = decryptMimoCode(e.mimoPrivateKeyDer, input);
-          if (!dec || !dec.sk) throw new Error('解密后未包含有效的 MiMo 密钥 (sk)');
-          authData.xiaomi = {
-            type: 'api',
-            key: dec.sk,
-            metadata: {
-              ...(dec.uid ? { uid: dec.uid } : {}),
-              ...(dec.url ? { base_url: dec.url } : {}),
-            },
-          };
-        }
+        if (!e.mimoPrivateKeyDer) return { ok: false, error: '当前会话缺少 X25519 私钥，请重新发起登录' };
+        const dec = decryptMimoCode(e.mimoPrivateKeyDer, input);
+        if (!dec || !dec.sk) throw new Error('解密后未包含有效的 MiMo 密钥 (sk)');
+        authData.xiaomi = {
+          type: 'api',
+          key: dec.sk,
+          metadata: {
+            ...(dec.uid ? { uid: dec.uid } : {}),
+            ...(dec.url ? { base_url: dec.url } : {}),
+          },
+        };
         await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[MiMo OAuth] ✓ 小米 MiMo 凭据已成功解密并写入 ${authFile}\n`;
         const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
         const accName = acc?.name || e.savedAccountName || '';
         clearQuotaCache('mimocode');
         cleanupSessionResources(e);
@@ -964,9 +1277,10 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         return await exchangeTraeCallback(e, input, prefName);
       }
 
-      // 4. ZCode: 智谱 BigModel / Z.ai OAuth 回调链接或 Coding Plan API Key
+      // 4. ZCode: 智谱 BigModel 国内版 / Z.ai 国际版 OAuth 回调链接或 Coding Plan API Key
       if (e.worker === 'zcode') {
         if (!input) return { ok: false, error: '请粘贴智谱 BigModel / Z.ai API Key 或回调链接' };
+        const zprov = e.zcodeProvider || zcodeProviderOf(e.region);
         if (input.includes('code=') || input.includes('authCode=')) {
           const u = new URL(input.startsWith('http') || input.startsWith('zcode:') ? input : `http://localhost/?${input.replace(/^[?#]/, '')}`);
           const code = u.searchParams.get('authCode') || u.searchParams.get('code') || '';
@@ -975,22 +1289,23 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
           const r = await fetchJsonSmart(ZCODE_OAUTH.tokenUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider: 'bigmodel', code, redirect_uri: redirectUri, state }),
+            body: JSON.stringify({ provider: zprov, code, redirect_uri: redirectUri, state }),
           }, 15_000);
           if (!r.ok || r.json?.code !== 0 || !r.json?.data?.token) {
             throw new Error(r.json?.msg || `ZCode Token 交换失败 (${r.status})`);
           }
-          const bm = r.json.data.bigmodel || {};
-          await saveZcodeOAuthResult(e.targetHome, 'bigmodel', {
+          const bm = r.json.data[zprov] || r.json.data.bigmodel || r.json.data.zai || {};
+          await saveZcodeOAuthResult(e.targetHome, zprov, {
             accessToken: bm.access_token || bm.accessToken || '',
             refreshToken: bm.refresh_token || bm.refreshToken || '',
             zcodeJwtToken: r.json.data.token,
           });
         } else {
-          await saveZcodeOAuthResult(e.targetHome, 'bigmodel', { apiKey: input });
+          await saveZcodeOAuthResult(e.targetHome, zprov, { apiKey: input });
         }
         e.buf += `\n[ZCode] ✓ ZCode 凭据已加密写入 ${join(e.targetHome, '.zcode/v2/credentials.json')}\n`;
         const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
         const accName = acc?.name || e.savedAccountName || '';
         clearQuotaCache('zcode');
         cleanupSessionResources(e);
@@ -1017,6 +1332,7 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         if (!res.ok) return res;
         e.buf += `\n[CodeArts] ✓ AK/SK 已保存到 ${join(e.targetHome, '.config/agenthub-codearts/codearts-auth.env')}\n`;
         const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
         const accName = acc?.name || e.savedAccountName || '';
         clearQuotaCache('codearts');
         cleanupSessionResources(e);
@@ -1036,9 +1352,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         let cfg = { region: 'cn' };
         try { cfg = JSON.parse(await readFile(mmxFile, 'utf-8')); } catch { /* ignore */ }
         cfg.api_key = input;
+        // MiniMax 官方不返回账户名：用用户备注名落盘，供账号识别与 auth status 展示
+        if (prefName && !cfg.account) cfg.account = prefName;
         await writeFile(mmxFile, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[MiniMax] ✓ API Key 已直接写入 ${mmxFile}\n`;
         const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
         const accName = acc?.name || e.savedAccountName || '';
         clearQuotaCache('minimaxcode');
         cleanupSessionResources(e);
@@ -1054,6 +1373,16 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
 
       // 7. CodeBuddy / CodeBuddy-CN: 支持直接粘贴 auth.info JSON 或 accessToken
       if ((e.worker === 'codebuddy' || e.worker === 'codebuddy-cn') && input) {
+        // 网页 URL 不是凭据：/started 页只是"浏览器授权已完成"提示页，绝不可当 accessToken 写入
+        if (/^https?:\/\//i.test(input)) {
+          let u = null;
+          try { u = new URL(input); } catch { u = null; }
+          const state = u ? (u.searchParams.get('state') || '') : '';
+          if (u && /\/started\b/i.test(u.pathname) && state) {
+            return await completeCodeBuddyByState(e, state, prefName);
+          }
+          return { ok: false, error: '该链接是网页地址而非凭据。若浏览器显示 started 成功页，说明授权已完成——请直接点击「我已完成授权」让系统自动检测落盘；或粘贴 auth.info JSON / accessToken 导入' };
+        }
         const dirName = e.worker === 'codebuddy-cn' ? '.codebuddy-cn' : '.codebuddy';
         const authInfoFile = join(e.targetHome, dirName, 'auth.info');
         await mkdir(dirname(authInfoFile), { recursive: true });
@@ -1063,9 +1392,15 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         } catch {
           payload = { auth: { accessToken: input.replace(/^Bearer\s+/i, '').trim() }, updatedAt: new Date().toISOString() };
         }
+        // 拒绝半成品：accessToken 缺失或是跳转 URL（未完成授权的占位）
+        const pastedTok = String(payload?.auth?.accessToken || '').trim();
+        if (!pastedTok || pastedTok.startsWith('http')) {
+          return { ok: false, error: '粘贴的内容不含有效 accessToken（若是 started 跳转链接，说明授权刚完成，请直接点「我已完成授权」检测落盘）' };
+        }
         await writeFile(authInfoFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[CodeBuddy] ✓ 凭据已写入 ${authInfoFile}\n`;
         const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试' };
         const accName = acc?.name || e.savedAccountName || '';
         clearQuotaCache(e.worker);
         cleanupSessionResources(e);
@@ -1087,6 +1422,7 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         try { await execFile('python3', [SECRET_HELPER, '--set', 'copilot-cli', 'https://github.com', input], { timeout: 6000 }); } catch { /* ignore */ }
         e.buf += `\n[Copilot] ✓ GitHub Copilot Token 已保存\n`;
         const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
         const accName = acc?.name || e.savedAccountName || '';
         clearQuotaCache('github-copilot');
         cleanupSessionResources(e);
@@ -1124,6 +1460,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
 export async function finishLogin(loginId, preferredName = '') {
   const e = sessions.get(loginId);
   if (!e) return { ok: false, error: '登录会话不存在或已过期' };
+  // API Key 直配通道（如 mimocode sk-）：已直接写入线上配置生效，不作为账号归档
+  if (e.apiKeyOnly) {
+    cleanupSessionResources(e);
+    sessions.delete(loginId);
+    return { ok: true, worker: e.worker, accountName: null, apiKeyOnly: true, note: 'API Key 已生效（通道配置，不作为账号入库）' };
+  }
   const acc = await finalizeLoginAccount(e, preferredName);
   const accountName = acc?.name || e.savedAccountName || null;
   if (!accountName && acc && acc.ok === false) {
@@ -1334,6 +1676,7 @@ export async function listModels() {
         credits: cat.credits || null,
         tag: cat.tag || null,
         aliases: shortAliases,
+        removableAliases: shortAliases,
         custom: false,
         isDefault: cat.id === defaultId,
       });
@@ -1417,6 +1760,12 @@ async function _removeCustomModel(worker, alias) {
   const prof = d.agents?.[worker];
   if (!prof || !prof.models || !(alias in prof.models)) return { ok: false, error: `仅可删除已保存的自定义模型别名（内置预设模型不可删除）` };
   delete prof.models[alias];
+  // 若被删别名正是当前 default 指向，回退到内置默认模型，避免 default 悬空
+  if (prof.models.default === alias) {
+    const catalogDefault = (CATALOG_MODELS[worker] || []).find((m) => m.default)?.id;
+    if (catalogDefault) prof.models.default = catalogDefault;
+    else delete prof.models.default;
+  }
   await saveAgents(d);
   return { ok: true, worker, alias };
 }
