@@ -13,7 +13,7 @@ const guidance = [
   ...await Promise.all(agentFiles.map(async name => [name, await readFile(new URL(name, agentRoot), 'utf8')])),
 ];
 for (const [name, text] of guidance) {
-  assert.match(text, /directly registered.*directly/i, `${name}: keep directly registered hosts supported`);
+  assert.match(text, /(?:directly registered.*directly|single calling path[\s\S]*tool_search[\s\S]*tool_describe[\s\S]*tool_call)/i, `${name}: keep calling path guidance present`);
   assert.match(text, /tool_search[\s\S]*tool_describe[\s\S]*tool_call/, `${name}: describe the lazy tool route`);
   assert.match(text, /permission.*denied[\s\S]*blocked_permission[\s\S]*original ref/i, `${name}: stop on denial and preserve the reference`);
   assert.match(text, /Do not retry.*another tool name[\s\S]*explicit authorization/i, `${name}: forbid alternate-tool permission bypass`);

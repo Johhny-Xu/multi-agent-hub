@@ -34,7 +34,7 @@ export const QUOTA_WORKERS = ['codebuddy', 'codebuddy-cn', 'github-copilot', 'mi
 // ---------------------------------------------------------------- utils
 /** @returns {Promise<object|null>} */
 async function readJsonSafe(path) {
-  try { return JSON.parse(await readFile(path, 'utf-8')); } catch { return null; }
+  try { return JSON.parse((await readFile(path, 'utf-8')).replace(/^\uFEFF/, '')); } catch { return null; }
 }
 
 function toFiniteNumber(value, fallback = 0) {

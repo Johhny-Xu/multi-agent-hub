@@ -173,7 +173,7 @@ async function _saveCodeArts(ak, sk) {
 
 // ---------------------------------------------------------------- 模型管理
 async function loadAgents() {
-  try { return JSON.parse(await readFile(AGENTS_JSON, 'utf-8')); } catch { return { agents: {} }; }
+  try { return JSON.parse((await readFile(AGENTS_JSON, 'utf-8')).replace(/^\uFEFF/, '')); } catch { return { agents: {} }; }
 }
 
 /** 生成新备份后清理 .bak-model-*，仅保留最新 BAK_MODEL_KEEP 份 */

@@ -673,7 +673,7 @@ export async function start(context) {
   let config = { ...DEFAULT_CONFIG, endpoints: DEFAULT_CONFIG.endpoints.map((e) => ({ ...e })) };
   let configDirty = false;
   try {
-    const saved = JSON.parse(await readFile(configPath, 'utf-8'));
+    const saved = JSON.parse((await readFile(configPath, 'utf-8')).replace(/^\uFEFF/, ''));
     if (saved && typeof saved === 'object') {
       if (Array.isArray(saved.endpoints) && saved.endpoints.length > 0) {
         const cleaned = saved.endpoints.filter((e) => e && e.id && e.id !== 'local');
@@ -1006,7 +1006,7 @@ export async function start(context) {
   /** @type {{total:{in:number,out:number,msgs:number,runs:number}, days:Record<string,{in:number,out:number,msgs:number,runs:number,agents:Record<string,{in:number,out:number,msgs:number,runs:number}>}>, agents:Record<string,{in:number,out:number,msgs:number,runs:number}>}} */
   let usage = { total: { in: 0, out: 0, msgs: 0, runs: 0 }, days: {}, agents: {} };
   try {
-    const saved = JSON.parse(await readFile(usagePath, 'utf-8'));
+    const saved = JSON.parse((await readFile(usagePath, 'utf-8')).replace(/^\uFEFF/, ''));
     if (saved && saved.total) usage = saved;
   } catch { /* 首次运行 */ }
   // 每个文件串行、原子替换；退出时等待最后一次写入，避免半份 JSON 和延迟保存丢失。
@@ -1077,7 +1077,7 @@ export async function start(context) {
   const saveConv = () => convWriter.schedule();
 
   try {
-    const saved = JSON.parse(await readFile(convPath, 'utf-8'));
+    const saved = JSON.parse((await readFile(convPath, 'utf-8')).replace(/^\uFEFF/, ''));
     if (saved && Array.isArray(saved.threads)) {
       conv.threads = saved.threads;
       let cleanedAny = false;

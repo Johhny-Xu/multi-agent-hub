@@ -1,0 +1,507 @@
+{
+  "meta": {
+    "finishedAt": "2026-10-11T18:11:26.186Z",
+    "hub": "http://127.0.0.1:8765",
+    "console": "http://127.0.0.1:8890",
+    "tokenLoaded": true
+  },
+  "workers": {
+    "antigravity": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "gemini-3.8-flash-medium",
+        "modelCount": 5,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default"
+        ],
+        "attachments": {}
+      },
+      "loginStatus": {
+        "ok": false,
+        "worker": "antigravity",
+        "action": "status",
+        "status": "manual_required",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 0,
+        "note": "首次探测命中冷缓存全量配额扫描(~22s)超过20s探测超时; 热缓存复测为200",
+        "warmProbeStatus": 200
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "codearts": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "huaweicloud-maas/GLM-5.2",
+        "modelCount": 4,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default"
+        ],
+        "attachments": {}
+      },
+      "loginStatus": {
+        "ok": false,
+        "worker": "codearts",
+        "action": "status",
+        "status": "manual_required",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "codebuddy": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "deepseek-v4.1-flash",
+        "modelCount": 4,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default",
+          "on",
+          "off"
+        ],
+        "attachments": {
+          "file": "stdin_json"
+        }
+      },
+      "loginStatus": {
+        "ok": true,
+        "worker": "codebuddy",
+        "action": "status",
+        "status": "preparing",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "codebuddy-cn": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "deepseek-v4.1-flash",
+        "modelCount": 1,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default",
+          "on",
+          "off"
+        ],
+        "attachments": {
+          "file": "stdin_json"
+        }
+      },
+      "loginStatus": {
+        "ok": true,
+        "worker": "codebuddy-cn",
+        "action": "status",
+        "status": "preparing",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "github-copilot": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "auto",
+        "modelCount": 1,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default"
+        ],
+        "attachments": {
+          "file": "prompt_path",
+          "image": "cli"
+        }
+      },
+      "loginStatus": {
+        "ok": false,
+        "worker": "github-copilot",
+        "action": "status",
+        "status": "unknown",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "mimocode": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "26f",
+        "modelCount": 6,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default"
+        ],
+        "attachments": {
+          "file": "cli",
+          "image": "cli"
+        }
+      },
+      "loginStatus": {
+        "ok": false,
+        "worker": "mimocode",
+        "action": "status",
+        "status": "unknown",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "minimaxcode": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "MiniMax-M3.1-Flash-Preview",
+        "modelCount": 2,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default",
+          "on"
+        ],
+        "attachments": {
+          "file": "messages_file",
+          "image": "messages_file"
+        }
+      },
+      "loginStatus": {
+        "ok": true,
+        "worker": "minimaxcode",
+        "action": "status",
+        "status": "authenticated",
+        "error": null,
+        "hasInstructions": false,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "traecode": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "GLM-5.3-FlashX",
+        "modelCount": 2,
+        "availability": "ready",
+        "stream": "gui_snapshot",
+        "thinking": [
+          "default"
+        ],
+        "attachments": {}
+      },
+      "loginStatus": {
+        "ok": false,
+        "worker": "traecode",
+        "action": "status",
+        "status": "unavailable",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    },
+    "zcode": {
+      "capabilities": {
+        "singleQueryOk": true,
+        "consistentWithFullQuery": true,
+        "defaultModel": "GLM-5.3-Flash",
+        "modelCount": 1,
+        "availability": "ready",
+        "stream": "stdout_progress",
+        "thinking": [
+          "default"
+        ],
+        "attachments": {
+          "file": "cli",
+          "image": "cli"
+        }
+      },
+      "loginStatus": {
+        "ok": false,
+        "worker": "zcode",
+        "action": "status",
+        "status": "manual_required",
+        "error": null,
+        "hasInstructions": true,
+        "fieldComplete": true
+      },
+      "consoleQuota": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      },
+      "consoleAccounts": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 8
+      },
+      "consoleModelsListRoute": {
+        "status": 404,
+        "exists": false
+      },
+      "consoleModels": {
+        "status": 200,
+        "workerFilterEffective": false,
+        "workersReturned": 9
+      }
+    }
+  },
+  "capabilitiesConsistency": {
+    "antigravity": true,
+    "codearts": true,
+    "codebuddy": true,
+    "codebuddy-cn": true,
+    "github-copilot": true,
+    "mimocode": true,
+    "minimaxcode": true,
+    "traecode": true,
+    "zcode": true
+  },
+  "bom": {
+    "pythonReadJson": {
+      "exitCode": 0,
+      "parsedOk": true,
+      "value": {
+        "ok": true,
+        "n": 42
+      },
+      "stderr": ""
+    },
+    "nodeStripRegex": {
+      "parsedOk": true
+    },
+    "nodeFilesPatched": {
+      "auth.mjs": 2,
+      "accounts.mjs": 2,
+      "server.mjs": 6,
+      "vendor-quota.mjs": 2
+    },
+    "noBomRegression": {
+      "plainOk": true
+    }
+  },
+  "classifyFailure": {
+    "cases": [
+      {
+        "expect": "authentication_required",
+        "got": "authentication_required",
+        "pass": true
+      },
+      {
+        "expect": "quota_exhausted",
+        "got": "quota_exhausted",
+        "pass": true
+      },
+      {
+        "expect": "rate_limited",
+        "got": "rate_limited",
+        "pass": true
+      },
+      {
+        "expect": "model_unavailable",
+        "got": "model_unavailable",
+        "pass": true
+      },
+      {
+        "expect": "region_restricted",
+        "got": "region_restricted",
+        "pass": true
+      },
+      {
+        "expect": "timeout",
+        "got": "timeout",
+        "pass": true
+      },
+      {
+        "expect": "empty_answer",
+        "got": "empty_answer",
+        "pass": true
+      },
+      {
+        "expect": "none",
+        "got": "none",
+        "pass": true
+      },
+      {
+        "expect": "none",
+        "got": "none",
+        "pass": true
+      }
+    ],
+    "passed": 9,
+    "total": 9,
+    "accuracyPct": 100,
+    "target7CategoriesAccuracy": 100
+  },
+  "summary": {
+    "workersChecked": 9,
+    "capabilitiesSingleAllOk": true,
+    "capabilitiesConsistentAll": true,
+    "loginStatusFieldCompleteAll": true,
+    "consoleModelsListRouteExists": false,
+    "bomAllPass": true,
+    "classifyFailureAccuracy": 100
+  }
+}
