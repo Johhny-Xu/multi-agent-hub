@@ -163,7 +163,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **安装包重构与本地就地更新**：重新打包生成 `.vsix`、`.carts`、`.cloudide` 三种发行格式并自动更新本地 CodeArts IDE 扩展实例。
 
 
-## [0.9.3] - 2026-10-10
+## [0.9.9.1] - 2026-10-10
 
 ### 华为 CodeArts 官方模型与凭据自动加载修复 (`codearts`)
 
@@ -216,7 +216,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - 最终 Windows 32/32 组、Linux 29/29 组回归通过，两端真实 SDK 0.1.21 协议验证通过。Linux 已同步 27 个源码文件和 CodeArts 原生组件；6 份受保护配置与 355 个旧任务结果逐字节校验未变。
 - 本轮修改属于 v0.9.9 发布后的跟进，既有标签和安装包保持原版本内容。
 
-## [0.9.2] - 2026-10-09
+## [0.9.9] - 2026-10-09
 
 Hub、安装包、共享 MCP 和 Codex / ZCode / CodeArts / Antigravity 插件统一为 0.9.9；DSH 独立包为 1.4.0。Windows 32/32 组、Linux 29/29 组全量回归通过，后续修复通过对应增量验证并同步 Linux Hub；原生客户端实测及账号限制见 [0.9.9 交付记录](docs/release-0.9.9.md)。
 
