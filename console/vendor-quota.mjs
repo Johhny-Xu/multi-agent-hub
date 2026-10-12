@@ -5,9 +5,10 @@
 // 零第三方依赖（Node 22 全局 fetch）。
 
 import { readFile } from 'node:fs/promises';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import tls from 'node:tls';
-import { homedir } from 'node:os';
+import { homedir, platform as osPlatform, userInfo as osUserInfo } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -145,6 +146,38 @@ export async function fetchJsonSmart(url, options = {}, timeoutMs = 15_000) {
   }
 }
 
+// ---------------------------------------------------------------- ZCode enc:v1 凭据加解密（与 ZCode 官方 credentialService 对齐）
+function zcodeCipherKey() {
+  let username = 'unknown';
+  try { username = osUserInfo().username; } catch { /* ignore */ }
+  const secret = process.env.ZCODE_CREDENTIAL_SECRET || `zcode-credential-fallback:${osPlatform()}:${HOME}:${username}`;
+  return createHash('sha256').update(secret).digest();
+}
+
+export function encryptZcodeCred(plain) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', zcodeCipherKey(), iv);
+  const enc = Buffer.concat([cipher.update(String(plain), 'utf-8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString('base64url')}.${tag.toString('base64url')}.${enc.toString('base64url')}`;
+}
+
+export function decryptZcodeCred(raw) {
+  if (typeof raw !== 'string' || !raw.startsWith('enc:v1:')) return raw;
+  const parts = raw.slice(7).split('.');
+  if (parts.length !== 3) return raw;
+  try {
+    const iv = Buffer.from(parts[0], 'base64url');
+    const tag = Buffer.from(parts[1], 'base64url');
+    const data = Buffer.from(parts[2], 'base64url');
+    const decipher = createDecipheriv('aes-256-gcm', zcodeCipherKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf-8');
+  } catch {
+    return raw;
+  }
+}
+
 // ---------------------------------------------------------------- token readers
 /** 令牌读取器：CLI OAuth 凭据文件是唯一事实来源 */
 const TOKEN_READERS = {
@@ -158,14 +191,19 @@ const TOKEN_READERS = {
   },
   'minimaxcode': async () => {
     const d = await readJsonSafe(join(HOME, '.mmx', 'config.json'));
-    return d?.oauth?.access_token || null;
+    return d?.oauth?.access_token || d?.api_key || d?.apiKey || null;
   },
   'antigravity': async () => {
     const d = await readJsonSafe(join(HOME, '.gemini', 'antigravity-cli', 'antigravity-oauth-token'));
     return d?.token?.access_token || null;
   },
   'github-copilot': async () => {
-    // 令牌在 gnome-keyring（Secret Service），经 python 助手读取
+    // 优先检查本地镜像凭据文件（支持多账号档案切换与 WebUI 登出状态），其次读取 gnome-keyring
+    try {
+      const mirror = (await readFile(join(HOME, '.config', 'github-copilot', 'copilot-token'), 'utf-8')).trim();
+      if (mirror === '__LOGGED_OUT__') return null;
+      if (mirror) return mirror;
+    } catch { /* fallback to keyring */ }
     const { execFile } = await import('node:child_process');
     const { promisify } = await import('node:util');
     const pExec = promisify(execFile);
@@ -180,12 +218,43 @@ const TOKEN_READERS = {
   },
   'zcode': async () => {
     const d = await readJsonSafe(join(HOME, '.zcode', 'v2', 'credentials.json'));
-    if (!d) return null;
-    // 优先当前激活 provider 的 coding-plan key，其次任意 key
-    const active = String(d['oauth:active_provider'] || '');
-    const keys = Object.keys(d).filter((k) => typeof d[k] === 'string' && k.endsWith(':api-key'));
-    const hit = keys.find((k) => active && k.includes(active)) || keys.find((k) => k.includes('zai')) || keys[0];
-    return hit ? d[hit] : (d['oauth:bigmodel:access_token'] || null);
+    if (!d || typeof d !== 'object') return null;
+    const decMap = {};
+    for (const [k, v] of Object.entries(d)) {
+      if (typeof v === 'string') decMap[k] = decryptZcodeCred(v);
+    }
+    const active = String(decMap['oauth:active_provider'] || '').trim();
+    const keys = Object.keys(decMap).filter((k) => k.endsWith(':api-key') && decMap[k]);
+    const hit = keys.find((k) => active && k.includes(active)) || keys.find((k) => k.includes('bigmodel')) || keys.find((k) => k.includes('zai')) || keys[0];
+    const oauthTok = decMap[`oauth:${active || 'bigmodel'}:access_token`] || decMap['oauth:bigmodel:access_token'] || decMap['oauth:zai:access_token'] || decMap['zcodejwttoken'] || null;
+    const apiKey = hit ? decMap[hit] : null;
+    if (!apiKey && !oauthTok) return null;
+    let userInfo = null;
+    try {
+      const rawUi = decMap[`oauth:${active || 'bigmodel'}:user_info`] || decMap['oauth:bigmodel:user_info'] || decMap['oauth:zai:user_info'];
+      if (rawUi) userInfo = JSON.parse(rawUi);
+    } catch { /* ignore */ }
+    return { token: apiKey || oauthTok, apiKey, oauthTok, activeProvider: active || 'bigmodel', userInfo };
+  },
+  'mimocode': async () => {
+    const d = await readJsonSafe(join(HOME, '.local', 'share', 'mimocode', 'auth.json'));
+    if (!d || typeof d !== 'object') return null;
+    const keys = Object.keys(d).filter((k) => d[k] && (d[k].key || d[k].access || d[k].token));
+    if (keys.length === 0) return null;
+    return { providers: keys, raw: d };
+  },
+  'codearts': async () => {
+    try {
+      const txt = await readFile(join(HOME, '.config', 'agenthub-codearts', 'codearts-auth.env'), 'utf-8');
+      const akMatch = txt.match(/^CODEARTS_CLI_AK=(.+)$/m);
+      const skMatch = txt.match(/^CODEARTS_CLI_SK=(.+)$/m);
+      const ak = akMatch ? akMatch[1].trim() : '';
+      const sk = skMatch ? skMatch[1].trim() : '';
+      if (!ak || !sk) return null;
+      return { ak, sk };
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -603,32 +672,66 @@ async function fetchTraeQuota(token) {
 }
 
 // ---------------------------------------------------------------- zcode
-async function fetchZcodeQuota(token) {
-  if (!token) return { message: 'ZCode 凭据不可用（~/.zcode/v2/credentials.json 缺失）。' };
-  // coding-plan api-key / bigmodel oauth token 均不适用于公开 monitor 接口（实测 401）
+async function fetchZcodeQuota(tokenObj) {
+  if (!tokenObj) return { message: 'ZCode 凭据不可用（未登录或 ~/.zcode/v2/credentials.json 缺失）。' };
+  const key = typeof tokenObj === 'object' ? (tokenObj.apiKey || tokenObj.token) : String(tokenObj);
+  const activeProv = typeof tokenObj === 'object' ? (tokenObj.activeProvider || 'bigmodel') : 'bigmodel';
+  const username = typeof tokenObj === 'object' ? (tokenObj.userInfo?.username || tokenObj.userInfo?.displayName || null) : null;
+  const planName = username ? `GLM Coding Plan (${username})` : 'GLM Coding Plan';
   const attempts = [
-    ['https://api.z.ai/api/monitor/usage/quota/limit', token],
+    ['https://open.bigmodel.cn/api/monitor/usage/quota/limit', key],
+    ['https://api.z.ai/api/monitor/usage/quota/limit', key],
   ];
-  for (const [url, key] of attempts) {
+  for (const [url, k] of attempts) {
+    if (!k) continue;
     try {
-      const res = await fetchJson(url, { headers: { Authorization: `Bearer ${key}` } });
-      if (res.ok && res.json?.success !== false && res.json?.code !== 401) {
-        const d = res.json?.data || res.json;
-        return { plan: 'GLM Coding Plan', quotas: { usage: { used: toFiniteNumber(d?.used, 0), total: toFiniteNumber(d?.total, 0), unlimited: false, resetAt: parseResetTime(d?.reset_time || d?.resetTime) } } };
+      const res = await fetchJson(url, { headers: { Authorization: k } }, 8000);
+      if (res.ok && (res.json?.success === true || res.json?.code === 0 || res.json?.code === 200) && res.json?.data) {
+        const d = res.json.data;
+        if (d.total_usage || d.limits || d.total !== undefined) {
+          const used = toFiniteNumber(d?.total_usage?.used ?? d?.used, 0);
+          const total = toFiniteNumber(d?.total_usage?.limit ?? d?.total, 100);
+          return {
+            plan: d.level ? `${planName} · ${d.level}` : planName,
+            quotas: {
+              usage: {
+                used,
+                total,
+                unlimited: false,
+                resetAt: parseResetTime(d?.next_refresh_at || d?.reset_time || d?.resetTime),
+              },
+            },
+          };
+        }
       }
     } catch { /* 下一个 */ }
   }
-  return { plan: 'GLM Coding Plan', message: 'coding-plan 凭据不适用于公开 monitor 接口；配额以 ZCode 桌面端显示为准。' };
+  const acctLabel = username ? `账号 ${username} (${activeProv})` : `通道 ${activeProv}`;
+  return { plan: planName, message: `凭据在线（${acctLabel}）；当前账号未返回公开 Coding Plan 配额，以客户端显示为准。` };
 }
 
 // ---------------------------------------------------------------- mimocode
-async function fetchMimoQuota() {
-  return { plan: 'Xiaomi MiMo', message: 'serviceToken 无公开配额端点（走 9router 通道，额度以小米客户端显示为准）。' };
+async function fetchMimoQuota(tokenObj) {
+  if (!tokenObj) return { message: 'MiMo 凭据不可用（未登录或 ~/.local/share/mimocode/auth.json 缺失）。' };
+  const provs = Array.isArray(tokenObj.providers) ? tokenObj.providers : ['xiaomi'];
+  const xm = tokenObj.raw?.xiaomi;
+  const uid = xm?.metadata?.uid ? ` · UID:${xm.metadata.uid}` : '';
+  return {
+    plan: `Xiaomi MiMo${uid}`,
+    message: `凭据在线（已配置通道: ${provs.join(', ')}）；官方暂无公开分模型配额端点。`,
+  };
 }
 
 // ---------------------------------------------------------------- codearts
-async function fetchCodeArtsQuota() {
-  return { plan: 'CodeArts Doer', message: 'AK/SK 计费体系暂无轻量配额接口；模型倍率见模型目录。' };
+async function fetchCodeArtsQuota(tokenObj) {
+  if (!tokenObj || !tokenObj.ak) return { message: 'CodeArts 凭据不可用（未登录或 ~/.config/agenthub-codearts/codearts-auth.env 缺失）。' };
+  const akMask = tokenObj.ak.length > 8
+    ? `${tokenObj.ak.slice(0, 4)}…${tokenObj.ak.slice(-4)}`
+    : `${tokenObj.ak.slice(0, 3)}…`;
+  return {
+    plan: `CodeArts Doer (${akMask})`,
+    message: `AK/SK 凭据已就绪（${akMask}）；计费倍率见模型目录。`,
+  };
 }
 
 // ---------------------------------------------------------------- public API

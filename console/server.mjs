@@ -2299,7 +2299,16 @@ export async function start(context) {
         return;
       }
       if (request.method === 'GET' && p === '/api/auth/poll') {
-        send(200, authMod.pollLogin(String(url.searchParams.get('loginId') || '')));
+        send(200, authMod.pollLogin(String(url.searchParams.get('loginId') || url.searchParams.get('id') || '')));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/auth/callback') {
+        const body = await readJson();
+        send(200, await authMod.submitLoginCallback(
+          String(body.loginId || ''),
+          String(body.input || body.code || body.url || ''),
+          { ak: body.ak, sk: body.sk },
+        ));
         return;
       }
       if (request.method === 'POST' && p === '/api/auth/finish') {

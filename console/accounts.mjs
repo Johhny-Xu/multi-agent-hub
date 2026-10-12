@@ -5,13 +5,18 @@
 
 import { readFile, writeFile, mkdir, readdir, copyFile, stat, chmod } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { clearQuotaCache } from './vendor-quota.mjs';
 import { getSandbox } from './auth.mjs';
 
+const execFile = promisify(execFileCb);
 const HOME = homedir();
 const ROOT = join(HOME, '.agenthub', 'accounts');
+const SECRET_HELPER = join(dirname(fileURLToPath(import.meta.url)), 'secret-get.py');
 
 const _writeLocks = new Map();
 /** 进程内异步互斥锁：同一 key 的临界区严格串行，消除并发读-改-写覆盖丢失（RMW lost update） */
@@ -33,7 +38,7 @@ const ACCOUNTS_WRITE_LOCK = 'accounts-write';
 
 /**
  * worker → 该账号身份对应的凭据文件（相对 HOME）。
- * 只收 OAuth 身份文件，不收会话/缓存；切换即换身份。
+ * 全部 9 个 worker 均支持档案保存、切换与沙箱添加账号。
  */
 export const WORKER_CRED_FILES = {
   'codebuddy': ['.codebuddy/auth.info'],
@@ -44,8 +49,37 @@ export const WORKER_CRED_FILES = {
   'zcode': ['.zcode/v2/credentials.json'],
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
   'mimocode': ['.local/share/mimocode/auth.json'],
-  // github-copilot：令牌在 gnome-keyring，文件切换不换身份，故不纳入
+  'github-copilot': ['.config/github-copilot/copilot-token'],
 };
+
+/** 同步 github-copilot 的 gnome-keyring 与本地镜像文件 */
+async function ensureCopilotMirrorFile() {
+  const mirrorPath = join(HOME, '.config', 'github-copilot', 'copilot-token');
+  try {
+    const { stdout } = await execFile('python3', [SECRET_HELPER, 'copilot-cli', 'https://github.com'], { timeout: 6000 });
+    const token = String(stdout || '').trim();
+    if (token) {
+      await mkdir(dirname(mirrorPath), { recursive: true });
+      await writeFile(mirrorPath, token, { mode: 0o600 });
+      return token;
+    }
+  } catch { /* ignore */ }
+  try {
+    const existing = (await readFile(mirrorPath, 'utf-8')).trim();
+    if (existing && existing !== '__LOGGED_OUT__') return existing;
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function syncCopilotKeyringFromMirror() {
+  const mirrorPath = join(HOME, '.config', 'github-copilot', 'copilot-token');
+  try {
+    const token = (await readFile(mirrorPath, 'utf-8')).trim();
+    if (token && token !== '__LOGGED_OUT__') {
+      await execFile('python3', [SECRET_HELPER, '--set', 'copilot-cli', 'https://github.com', token], { timeout: 6000 });
+    }
+  } catch { /* ignore */ }
+}
 
 const exists = async (p) => { try { await stat(p); return true; } catch { return false; } };
 
@@ -63,6 +97,7 @@ async function fingerprint(relPaths) {
 
 /** 列出所有 worker 的账号档案与当前生效状态 */
 export async function listAccounts() {
+  await ensureCopilotMirrorFile();
   const workers = {};
   for (const [worker, relFiles] of Object.entries(WORKER_CRED_FILES)) {
     const liveFp = await fingerprint(relFiles);
@@ -80,14 +115,21 @@ export async function listAccounts() {
         try {
           const liveTxt = await readFile(join(HOME, rel), 'utf-8');
           const profTxt = await readFile(join(dir, name, base), 'utf-8');
-          if (liveTxt === profTxt) { active = true; break; }
+          if (liveTxt === profTxt && liveTxt.trim() !== '__LOGGED_OUT__') { active = true; break; }
         } catch { /* 任一侧缺失则不算 active */ }
       }
       profiles.push({ name, savedAt: meta?.savedAt || null, note: meta?.note || null, active });
     }
+    let livePresent = await exists(join(HOME, relFiles[0]));
+    if (livePresent && worker === 'github-copilot') {
+      try {
+        const t = (await readFile(join(HOME, relFiles[0]), 'utf-8')).trim();
+        if (!t || t === '__LOGGED_OUT__') livePresent = false;
+      } catch { livePresent = false; }
+    }
     workers[worker] = {
       credFiles: relFiles,
-      livePresent: await exists(join(HOME, relFiles[0])),
+      livePresent,
       liveFingerprint: liveFp,
       profiles,
     };
@@ -99,8 +141,13 @@ export async function listAccounts() {
 async function _saveAccount(worker, name) {
   const relFiles = WORKER_CRED_FILES[worker];
   if (!relFiles) return { ok: false, error: `不支持的 worker: ${worker}` };
+  if (worker === 'github-copilot') await ensureCopilotMirrorFile();
   for (const rel of relFiles) {
-    if (!(await exists(join(HOME, rel)))) return { ok: false, error: `凭据文件不存在: ~/${rel}` };
+    if (!(await exists(join(HOME, rel)))) return { ok: false, error: `凭据文件不存在（请先登录）: ~/${rel}` };
+    if (worker === 'github-copilot') {
+      const txt = (await readFile(join(HOME, rel), 'utf-8')).trim();
+      if (!txt || txt === '__LOGGED_OUT__') return { ok: false, error: '当前未登录 GitHub Copilot，无法保存空档案' };
+    }
   }
   const dest = profileDir(worker, name);
   await mkdir(dest, { recursive: true });
@@ -112,10 +159,8 @@ async function _saveAccount(worker, name) {
   return { ok: true, worker, name, savedAt: new Date().toISOString() };
 }
 
-/** 凭据文件位于 HOME 下的 worker（可沙箱添加账号）；copilot 在 keyring、codebuddy 走 /login，不在此列 */
-const SANDBOX_CRED_FILES = {
-  'minimaxcode': ['.mmx/config.json'],
-};
+/** 全部 9 个 worker 均支持沙箱隔离添加新账号 */
+export const SANDBOX_CRED_FILES = { ...WORKER_CRED_FILES };
 
 /** 沙箱添加账号：把沙箱 HOME 里新生成的凭据快照成档案并立即切换 */
 async function _addFromSandbox(worker, name, loginId) {
@@ -123,15 +168,25 @@ async function _addFromSandbox(worker, name, loginId) {
   if (!rels) return { ok: false, error: `该 worker 暂不支持沙箱添加账号` };
   const sandbox = getSandbox(loginId);
   if (!sandbox) return { ok: false, error: '登录会话不存在或已过期' };
+  if (worker === 'github-copilot') {
+    // 若通过 keyring 完成了 copilot 登录，将最新 keyring token 同步进沙箱文件以供快照
+    const tok = await ensureCopilotMirrorFile();
+    if (tok) {
+      const sbFile = join(sandbox, rels[0]);
+      await mkdir(dirname(sbFile), { recursive: true });
+      await writeFile(sbFile, tok, { mode: 0o600 });
+    }
+  }
   const dest = profileDir(worker, name);
   await mkdir(dest, { recursive: true });
   for (const rel of rels) {
     const base = rel.split('/').pop();
     const srcFile = join(sandbox, rel);
     try {
-      await readFile(srcFile, 'utf-8');
+      const content = (await readFile(srcFile, 'utf-8')).trim();
+      if (!content) throw new Error('empty');
     } catch {
-      return { ok: false, error: `沙箱内未生成凭据（可能尚未完成授权）: ${rel}` };
+      return { ok: false, error: `沙箱内未生成凭据（请先在浏览器完成授权或提交认证码）: ${rel}` };
     }
     await copyFile(srcFile, join(dest, base));
   }
@@ -158,6 +213,9 @@ async function _switchAccount(worker, name) {
     await mkdir(join(HOME, rel, '..'), { recursive: true });
     await copyFile(join(src, base), liveAbs);
     await chmod(liveAbs, 0o600);
+  }
+  if (worker === 'github-copilot') {
+    await syncCopilotKeyringFromMirror();
   }
   await writeFile(join(backupDir, 'meta.json'), JSON.stringify({ note: `切换到 ${name} 前的自动备份`, at: new Date().toISOString() }, null, 2), 'utf-8');
   clearQuotaCache(worker);
