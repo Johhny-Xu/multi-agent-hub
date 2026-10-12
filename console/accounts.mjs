@@ -116,18 +116,10 @@ export async function findCodeBuddySharedAuth(baseHome = HOME) {
   return null;
 }
 
-/** 把 CodeBuddy 会话 JSON 同步写入 HOME 下的官方共享存储（让真实 CLI / 网页端跟随 hub 的账号切换） */
-async function syncCodeBuddySharedAuth(payloadText) {
-  const sharedDir = join(HOME, CODEBUDDY_SHARED_AUTH_REL);
-  let sharedName = 'Tencent-Cloud.coding-copilot.info';
-  try {
-    const ex = (await readdir(sharedDir)).filter((f) => f.endsWith('.info') && !/\d{4}-\d{2}-\d{2}T/.test(f));
-    if (ex.length) sharedName = ex.sort((a, b) => a.length - b.length)[0];
-  } catch { /* 目录不存在 */ }
-  await mkdir(sharedDir, { recursive: true });
-  await writeFile(join(sharedDir, sharedName), payloadText, { mode: 0o600 });
-}
-
+// 注意：绝不在账号切换/登录时回写真实 HOME 下的 CodeBuddy 共享会话存储（XDG auth/*.info）——
+// 那里是 WorkBuddy 桌面版的会话，hub 写它会把桌面版顶成别的账号。
+// 派发侧隔离由各 wrapper（~/.local/bin/codebuddy-intl / codebuddy-cn）的隔离 HOME 负责；
+// 本模块只【读】沙箱里的共享存储用于登录捕获（findCodeBuddySharedAuth），不写真实存储。
 
 async function fingerprint(relPaths, baseHome = HOME) {
   const hash = createHash('sha256');
@@ -633,13 +625,7 @@ async function _switchAccount(worker, name) {
   if (worker === 'github-copilot') {
     await syncCopilotKeyringFromMirror();
   }
-  if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
-    // CodeBuddy 官方 CN/国际版 CLI 共用 XDG 共享会话存储：切换账号时同步过去，CLI 与其网页端才能跟随
-    try {
-      const liveTxt = await readFile(join(HOME, relFiles[0]), 'utf-8');
-      await syncCodeBuddySharedAuth(liveTxt);
-    } catch { /* ignore */ }
-  }
+  // CodeBuddy 切换不写真实 XDG 共享会话存储（属 WorkBuddy 桌面版会话）；派发侧由 wrapper 隔离 HOME 承接账号
   await writeFile(join(ROOT, worker, '.active'), name, 'utf-8').catch(() => {});
   await writeFile(join(backupDir, 'meta.json'), JSON.stringify({ note: `切换到 ${name} 前的自动备份`, at: new Date().toISOString() }, null, 2), 'utf-8');
   clearQuotaCache(worker);

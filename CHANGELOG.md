@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
 - MiniMax 默认模型改为 `MiniMax-M3`（1M 上下文），512K 的 M3.1-Flash-Preview 可通过上下文胶囊一键切换。
+- **修复账号切换劫持 WorkBuddy 桌面会话的事故 ([`console/accounts.mjs`](console/accounts.mjs))**：回退"切换账号时同步写入 CodeBuddy XDG 共享会话存储"的逻辑——该文件是 WorkBuddy 桌面版的会话，hub 写入会把桌面版顶成其他账号。CodeBuddy 派发侧的账号隔离本由 wrapper 的独立 HOME 机制（`~/.codebuddy-cn-home` / `~/.codebuddy-intl-home`）承担，hub 只做沙箱内登录捕获（只读），永不写真实共享存储。
 - **修复会话未读红点老 bug ([`console/client/index.html`](console/client/index.html))**：打开某 agent 对话时此前只把"当前活跃会话"标为已读，同一 agent 的旧会话攒下的未读永远清不掉、每次刷新红点都重现；现改为整 agent 级标读（服务端清空其全部会话未读），底部导航与线程列表徽标同步清零。
 - **隐私与开源前清洗**：全仓（工作区 + 全部 git 历史）清除内网 IP、用户主目录路径、个人邮箱、手机号与账号 UID（`git filter-repo` 全量重写）；账号展示层不再暴露手机号——CodeBuddy CN 等卡片与配额区只显示账户名称/邮箱，档案命名也优先名称而非手机号；`scripts/audit_secrets.py` 新增个人邮箱、国内手机号（排除哈希子串误报）与长数字 ID 规则，工作区与历史扫描均归零。
 - **账号/上下文切换乐观 UI 提速 ([`console/client/index.html`](console/client/index.html))**：账号胶囊与 MiniMax 上下文档位胶囊点击立即变绿（实测 44ms），真实切换与配额刷新改后台执行、失败自动回滚重绘；砍掉切换后同步等待全 9 厂商配额强刷的阻塞链路（服务端本就对被切 worker 单独清缓存，其余走 60s 缓存）。
