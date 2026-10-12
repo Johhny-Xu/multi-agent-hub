@@ -23,7 +23,8 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 
 - `v0.9.0`：华为 CodeArts 双向接入与第九种 Worker 适配；四种客户端共用任务与结果协议。
 - `v0.9.1`：包含 CodeArts 双向接入与 README / SVG 更新，统一项目名称与多端规范。
-- `v0.9.2`：增加 Antigravity 原生插件及可选 SDK，完成五种原生客户端与九种 Worker 的生产发布与验收。
-- `v0.9.3`：CodeArts 官方凭据自动加载、TraeCode 网关终态校验与倍率对齐、子代理模型目录当季精简去重。
-- `v0.9.4`：WebUI 控制台升级为 CodeBuddy 三栏式布局，支持时段问候语、全局头像定制、全量会话聚合归档与二次确认一键删除、一键复制 Agent 接入配置及全环境剪贴板兼容；完成 MiniMaxCode 双向适配（Worker + MiniMax Plugin V1 / Claude Code / Agent Plugins 1.0 一包四吃）；切换为 Apache License 2.0 开源协议。
+- `v0.9.9`：增加 Antigravity 原生插件及可选 SDK，完成五种原生客户端与九种 Worker 的生产发布与验收。（原 changelog 误记为 0.9.2，已更正）
+- `v0.9.9.1`：CodeArts 官方凭据自动加载、TraeCode 网关终态校验与倍率对齐、子代理模型目录当季精简去重；修复 IDE 扩展四段版本号导致的扫描崩溃并恢复附件按钮。（原 changelog 误记为 0.9.3，已更正）
+- `v0.9.4`（console/WebUI 线里程碑，编号保留）：WebUI 控制台升级为 CodeBuddy 三栏式布局，支持时段问候语、全局头像定制、全量会话聚合归档与二次确认一键删除、一键复制 Agent 接入配置及全环境剪贴板兼容；完成 MiniMaxCode 双向适配（Worker + MiniMax Plugin V1 / Claude Code / Agent Plugins 1.0 一包四吃）；切换为 Apache License 2.0 开源协议。
+- `v0.9.9.2`：9 Worker 登录链路状态检测化重构（杜绝假成功）、CodeBuddy 新版 XDG 共享会话存储对齐与官方 state 兑换看门狗、Trae PKCE 授权链接修复、ZCode 国际/国内双区切换、MiMo API Key 通道与账号分离、MiniMax 账户名注入识别、模型别名逐个可删；全场组件版本统一，后续版本自 0.9.9.2 递增。
 
