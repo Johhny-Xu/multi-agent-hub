@@ -7367,122 +7367,546 @@
     return wrap;
   }
 
+  // 注入暗色毛玻璃 OAuth 登录弹窗与账号管理样式
+  if (!document.getElementById('uh-auth-modal-styles')) {
+    const st = document.createElement('style');
+    st.id = 'uh-auth-modal-styles';
+    st.textContent = `
+      .uh-acc-status-pill {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 10.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+      }
+      .uh-acc-status-pill.ok {
+        background: rgba(16, 185, 129, 0.14); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.32);
+      }
+      .uh-acc-status-pill.warn {
+        background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.32);
+      }
+      .uh-acc-save-drawer {
+        display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
+        border-radius: 8px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(99, 102, 241, 0.28);
+      }
+      .uh-acc-save-drawer.open { display: flex; }
+      .uh-auth-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(3, 7, 18, 0.76); backdrop-filter: blur(8px);
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+        animation: uhAuthFade .16s ease-out;
+      }
+      @keyframes uhAuthFade { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+      .uh-auth-modal {
+        width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto;
+        background: linear-gradient(165deg, rgba(22, 27, 38, 0.98), rgba(13, 17, 26, 0.99));
+        border: 1px solid rgba(99, 102, 241, 0.38); border-radius: 16px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.06);
+        color: #e6edf3; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px;
+      }
+      .uh-auth-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding-bottom: 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      }
+      .uh-auth-title {
+        display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #f8fafc;
+      }
+      .uh-auth-badge {
+        font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+        background: rgba(99, 102, 241, 0.18); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.35);
+      }
+      .uh-auth-close {
+        background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #cbd5e1; border-radius: 8px; width: 28px; height: 28px; cursor: pointer; font-size: 14px;
+      }
+      .uh-auth-close:hover { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.4); }
+      .uh-auth-note {
+        font-size: 12.5px; line-height: 1.55; color: #cbd5e1;
+        background: rgba(30, 41, 59, 0.55); border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 10px; padding: 10px 12px;
+      }
+      .uh-auth-step {
+        display: flex; flex-direction: column; gap: 8px;
+        background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(99, 102, 241, 0.24);
+        border-radius: 12px; padding: 12px 14px;
+      }
+      .uh-auth-step-label {
+        font-size: 11.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px;
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .uh-auth-url-row {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      .uh-auth-url-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 8px 14px; border-radius: 9px; font-size: 13px; font-weight: 600;
+        background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff !important;
+        text-decoration: none !important; border: 1px solid rgba(129, 140, 248, 0.5);
+        box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35); cursor: pointer; transition: all .15s ease;
+      }
+      .uh-auth-url-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+      .uh-auth-url-box {
+        width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px; color: #93c5fd; background: rgba(2, 6, 23, 0.7);
+        border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 7px; padding: 6px 8px;
+        word-break: break-all; max-height: 58px; overflow-y: auto; user-select: all;
+      }
+      .uh-auth-code-wrap {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35);
+        border-radius: 10px; padding: 10px 14px;
+      }
+      .uh-auth-code-val {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 22px; font-weight: 800; letter-spacing: 2px; color: #34d399; user-select: all;
+      }
+      .uh-auth-input-row {
+        display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      }
+      .uh-auth-input {
+        flex: 1; min-width: 200px; height: 34px; padding: 0 10px; border-radius: 8px;
+        background: rgba(2, 6, 23, 0.75); border: 1px solid rgba(148, 163, 184, 0.28);
+        color: #f8fafc; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .uh-auth-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25); }
+      .uh-auth-term {
+        margin: 0; padding: 10px 12px; border-radius: 8px;
+        background: rgba(2, 6, 23, 0.85); border: 1px solid rgba(148, 163, 184, 0.16);
+        color: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+        max-height: 140px; overflow-y: auto;
+      }
+      .uh-auth-foot {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding-top: 10px; border-top: 1px solid rgba(148, 163, 184, 0.14);
+      }
+      .uh-auth-status {
+        font-size: 12px; font-weight: 600; color: #93c5fd;
+      }
+      .uh-auth-status.ok { color: #34d399; }
+      .uh-auth-status.err { color: #f87171; }
+    `;
+    document.head.appendChild(st);
+  }
+
+  async function copyTextSafe(text, label = '内容') {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(`✓ 已复制${label}`);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      notify(`✓ 已复制${label}`);
+    }
+  }
+
+  function openOAuthModal(worker, { isSandboxAdd = false, defaultProfileName = '' } = {}) {
+    const existing = document.getElementById('uhAuthModalBackdrop');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'uhAuthModalBackdrop';
+    backdrop.className = 'uh-auth-backdrop';
+
+    const modal = document.createElement('div');
+    modal.className = 'uh-auth-modal';
+    modal.onclick = (e) => e.stopPropagation();
+
+    let currentLoginId = null;
+    let pollTimer = null;
+    let finished = false;
+    let sandboxName = defaultProfileName || `acc-${Date.now().toString().slice(-4)}`;
+
+    const cleanupModal = async (cancelBackend = false) => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (cancelBackend && currentLoginId && !finished) {
+        try { await jpost('/api/auth/finish', { loginId: currentLoginId }); } catch { /* ignore */ }
+      }
+      backdrop.remove();
+    };
+
+    // Header
+    const head = document.createElement('div'); head.className = 'uh-auth-head';
+    const titleWrap = document.createElement('div'); titleWrap.className = 'uh-auth-title';
+    const titleText = document.createElement('span');
+    titleText.textContent = isSandboxAdd ? `➕ ${worker} 添加新账号` : `🔐 ${worker} WebUI OAuth 登录`;
+    const badge = document.createElement('span'); badge.className = 'uh-auth-badge';
+    badge.textContent = isSandboxAdd ? '沙箱隔离 · 自动存档案' : '官方 OAuth / 凭据直连';
+    titleWrap.append(titleText, badge);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button'; closeBtn.className = 'uh-auth-close'; closeBtn.textContent = '✕';
+    closeBtn.title = '关闭窗口';
+    closeBtn.onclick = () => cleanupModal(true);
+    head.append(titleWrap, closeBtn);
+    modal.appendChild(head);
+
+    // 若为「+添加账号」，顶部展示档案名输入框与「启动沙箱登录」按钮
+    const sandboxBar = document.createElement('div');
+    sandboxBar.className = 'uh-auth-step';
+    sandboxBar.hidden = !isSandboxAdd;
+    if (isSandboxAdd) {
+      const sbLabel = document.createElement('div'); sbLabel.className = 'uh-auth-step-label';
+      sbLabel.textContent = '新账号档案名称（仅限字母、数字、-、_）';
+      const sbRow = document.createElement('div'); sbRow.className = 'uh-auth-input-row';
+      const sbInput = document.createElement('input'); sbInput.className = 'uh-auth-input';
+      sbInput.value = sandboxName;
+      sbInput.placeholder = '例如 work / team-2 / backup';
+      const sbRestartBtn = qaBtn('↻ 用此名称重新生成会话');
+      sbRestartBtn.onclick = () => {
+        const v = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+        if (!v) { notify('请输入有效的档案名称', true); return; }
+        sandboxName = v;
+        sbInput.value = v;
+        startSession();
+      };
+      sbInput.oninput = () => {
+        const v = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+        if (v) sandboxName = v;
+      };
+      sbRow.append(sbInput, sbRestartBtn);
+      sandboxBar.append(sbLabel, sbRow);
+      modal.appendChild(sandboxBar);
+    }
+
+    // 说明栏
+    const noteEl = document.createElement('div'); noteEl.className = 'uh-auth-note';
+    noteEl.textContent = '正在初始化官方 OAuth 登录会话…';
+    modal.appendChild(noteEl);
+
+    // Step 1: 授权链接区
+    const urlStep = document.createElement('div'); urlStep.className = 'uh-auth-step'; urlStep.hidden = true;
+    const urlLabel = document.createElement('div'); urlLabel.className = 'uh-auth-step-label';
+    urlLabel.innerHTML = '<span>步骤 1 · 打开官方授权页面</span>';
+    const urlBtnRow = document.createElement('div'); urlBtnRow.className = 'uh-auth-url-row';
+    const openLinkBtn = document.createElement('a');
+    openLinkBtn.className = 'uh-auth-url-btn';
+    openLinkBtn.target = '_blank';
+    openLinkBtn.rel = 'noopener noreferrer';
+    openLinkBtn.textContent = '🚀 打开官方授权页面';
+    const copyLinkBtn = qaBtn('📋 复制授权链接');
+    const secLinkBtn = document.createElement('a');
+    secLinkBtn.className = 'qa-btn';
+    secLinkBtn.target = '_blank';
+    secLinkBtn.rel = 'noopener noreferrer';
+    secLinkBtn.style.textDecoration = 'none';
+    secLinkBtn.hidden = true;
+    const urlBox = document.createElement('div'); urlBox.className = 'uh-auth-url-box';
+    urlBtnRow.append(openLinkBtn, copyLinkBtn, secLinkBtn);
+    urlStep.append(urlLabel, urlBtnRow, urlBox);
+    modal.appendChild(urlStep);
+
+    // Step 2: 设备码区（仅当有 deviceCode 时显示）
+    const codeStep = document.createElement('div'); codeStep.className = 'uh-auth-step'; codeStep.hidden = true;
+    const codeLabel = document.createElement('div'); codeLabel.className = 'uh-auth-step-label';
+    codeLabel.textContent = '步骤 2 · 在授权页输入一次性设备码 (Device Code)';
+    const codeWrap = document.createElement('div'); codeWrap.className = 'uh-auth-code-wrap';
+    const codeVal = document.createElement('span'); codeVal.className = 'uh-auth-code-val';
+    const copyCodeBtn = qaBtn('📋 一键复制设备码', 'qa-primary');
+    codeWrap.append(codeVal, copyCodeBtn);
+    codeStep.append(codeLabel, codeWrap);
+    modal.appendChild(codeStep);
+
+    // Step 3: 回调链接 / 授权码 / API Key 提交区（所有 worker 均可用）
+    const cbStep = document.createElement('div'); cbStep.className = 'uh-auth-step';
+    const cbLabel = document.createElement('div'); cbLabel.className = 'uh-auth-step-label';
+    cbLabel.textContent = worker === 'codearts'
+      ? '输入华为云 CodeArts AK / SK 凭据'
+      : '回调链接 / 授权码 Code / API Key 快捷认证';
+    const cbRow = document.createElement('div'); cbRow.className = 'uh-auth-input-row';
+
+    const cbInput = document.createElement('input');
+    cbInput.className = 'uh-auth-input';
+    cbInput.placeholder = worker === 'codearts' ? 'CODEARTS_CLI_AK' : '粘贴跳转后的回调链接 (http://localhost...)、授权 Code 或 API Key';
+    const skInput = document.createElement('input');
+    skInput.className = 'uh-auth-input';
+    skInput.type = 'password';
+    skInput.placeholder = 'CODEARTS_CLI_SK';
+    skInput.hidden = worker !== 'codearts';
+
+    const submitCbBtn = qaBtn('✓ 提交完成认证', 'qa-primary');
+    cbRow.append(cbInput, skInput, submitCbBtn);
+    cbStep.append(cbLabel, cbRow);
+    modal.appendChild(cbStep);
+
+    // Step 4: 实时终端输出区
+    const termStep = document.createElement('div'); termStep.className = 'uh-auth-step';
+    const termHead = document.createElement('div'); termHead.className = 'uh-auth-step-label';
+    const termTitle = document.createElement('span'); termTitle.textContent = '实时登录终端输出 (TUI / OAuth 日志)';
+    const sendEnterBtn = qaBtn('↵ 发送回车');
+    sendEnterBtn.title = '向后台登录终端发送回车键';
+    sendEnterBtn.onclick = async () => {
+      if (!currentLoginId) return;
+      await jpost('/api/auth/callback', { loginId: currentLoginId, input: '' });
+      notify('已向终端发送回车');
+    };
+    termHead.append(termTitle, sendEnterBtn);
+    const termPre = document.createElement('pre'); termPre.className = 'uh-auth-term';
+    termPre.textContent = '等待输出…';
+    termStep.append(termHead, termPre);
+    modal.appendChild(termStep);
+
+    // Footer
+    const foot = document.createElement('div'); foot.className = 'uh-auth-foot';
+    const statusEl = document.createElement('div'); statusEl.className = 'uh-auth-status';
+    statusEl.textContent = '⏳ 正在等待浏览器授权…';
+    const footBtns = document.createElement('div'); footBtns.className = 'qa-rowbtns';
+    const finishBtn = qaBtn('✓ 我已完成授权', 'qa-primary');
+    const cancelBtn = qaBtn('关闭');
+    cancelBtn.onclick = () => cleanupModal(true);
+    footBtns.append(finishBtn, cancelBtn);
+    foot.append(statusEl, footBtns);
+    modal.appendChild(foot);
+
+    backdrop.appendChild(modal);
+    backdrop.onclick = () => cleanupModal(true);
+    document.body.appendChild(backdrop);
+
+    async function completeSessionSuccess(customMsg) {
+      if (finished) return;
+      finished = true;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (isSandboxAdd && currentLoginId) {
+        statusEl.textContent = `⏳ 正在将沙箱凭据存为档案「${sandboxName}」并切换…`;
+        const fr = await jpost('/api/accounts/add/finish', { worker, name: sandboxName, loginId: currentLoginId });
+        if (!fr.ok) {
+          finished = false;
+          statusEl.className = 'uh-auth-status err';
+          statusEl.textContent = `⚠️ 尚未检测到落盘凭据：${fr.error || '请先完成授权或提交认证码'}`;
+          notify(fr.error || '尚未检测到凭据', true);
+          return;
+        }
+        statusEl.className = 'uh-auth-status ok';
+        statusEl.textContent = `✓ 新账号「${sandboxName}」已添加并切换生效！`;
+        notify(`✓ ${worker} 新账号「${sandboxName}」已添加并切换生效`);
+      } else {
+        statusEl.className = 'uh-auth-status ok';
+        statusEl.textContent = customMsg || `✓ ${worker} 授权已完成！正在刷新配额与账号状态…`;
+        notify(customMsg || `✓ ${worker} 登录成功，配额已自动刷新`);
+      }
+      await fetch('/api/quota/refresh').catch(() => {});
+      await load();
+      setTimeout(() => cleanupModal(false), 900);
+    }
+
+    submitCbBtn.onclick = async () => {
+      if (!currentLoginId) return;
+      const val = cbInput.value.trim();
+      const skVal = skInput.value.trim();
+      if (worker === 'codearts' && (!val || !skVal)) {
+        notify('请填写完整的 CODEARTS_CLI_AK 与 CODEARTS_CLI_SK', true);
+        return;
+      }
+      if (worker !== 'codearts' && !val) {
+        notify('请先粘贴回调链接、授权 Code 或 API Key', true);
+        return;
+      }
+      submitCbBtn.disabled = true;
+      statusEl.textContent = '⏳ 正在验证并写入凭据…';
+      try {
+        const r = await jpost('/api/auth/callback', {
+          loginId: currentLoginId,
+          input: val,
+          ak: worker === 'codearts' ? val : undefined,
+          sk: worker === 'codearts' ? skVal : undefined,
+        });
+        if (!r.ok) {
+          statusEl.className = 'uh-auth-status err';
+          statusEl.textContent = `✗ 认证失败: ${r.error || '?'}`;
+          notify(`认证失败: ${r.error || '?'}`, true);
+          return;
+        }
+        await completeSessionSuccess(r.note || `✓ ${worker} 认证成功！`);
+      } finally {
+        submitCbBtn.disabled = false;
+      }
+    };
+
+    finishBtn.onclick = async () => {
+      if (cbInput.value.trim()) {
+        await submitCbBtn.onclick();
+        return;
+      }
+      if (isSandboxAdd) {
+        await completeSessionSuccess();
+      } else {
+        if (currentLoginId) await jpost('/api/auth/finish', { loginId: currentLoginId }).catch(() => {});
+        await completeSessionSuccess(`✓ ${worker} 登录流程已结束，配额与账号状态已刷新`);
+      }
+    };
+
+    async function pollOnce() {
+      if (!currentLoginId || finished) return;
+      const p = await fetch(`/api/auth/poll?loginId=${encodeURIComponent(currentLoginId)}`).then((x) => x.json()).catch(() => null);
+      if (!p || !p.ok) return;
+      if (p.output) {
+        termPre.textContent = p.output;
+        termPre.scrollTop = termPre.scrollHeight;
+      }
+      if (p.callbackHint && worker !== 'codearts') {
+        cbInput.placeholder = p.callbackHint;
+      }
+      if (p.url) {
+        urlStep.hidden = false;
+        openLinkBtn.href = p.url;
+        urlBox.textContent = p.url;
+        copyLinkBtn.onclick = () => copyTextSafe(p.url, '授权链接');
+      }
+      if (p.secondaryUrl) {
+        secLinkBtn.hidden = false;
+        secLinkBtn.href = p.secondaryUrl;
+        secLinkBtn.textContent = '🌍 打开国际版授权页';
+      } else {
+        secLinkBtn.hidden = true;
+      }
+      if (p.deviceCode) {
+        codeStep.hidden = false;
+        codeVal.textContent = p.deviceCode;
+        copyCodeBtn.onclick = () => copyTextSafe(p.deviceCode, `设备码 ${p.deviceCode}`);
+      }
+      if (p.exited && !finished) {
+        if (p.exitCode === 0) {
+          await completeSessionSuccess();
+        } else {
+          statusEl.className = 'uh-auth-status err';
+          statusEl.textContent = `⚠️ 登录进程已结束 (code=${p.exitCode})，可检查日志或使用下方输入框完成认证`;
+        }
+      }
+    }
+
+    async function startSession() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      finished = false;
+      statusEl.className = 'uh-auth-status';
+      statusEl.textContent = '⏳ 正在启动官方 OAuth 会话…';
+      const endpoint = isSandboxAdd ? '/api/accounts/add' : '/api/auth/login';
+      const payload = isSandboxAdd ? { worker, name: sandboxName } : { worker };
+      const r = await jpost(endpoint, payload);
+      if (!r || !r.ok) {
+        noteEl.textContent = r?.note || r?.error || '启动登录会话失败';
+        statusEl.className = 'uh-auth-status err';
+        statusEl.textContent = `✗ ${r?.error || '启动失败'}`;
+        return;
+      }
+      currentLoginId = r.loginId;
+      noteEl.textContent = r.note || `${worker} OAuth 登录已启动`;
+      if (r.callbackHint && worker !== 'codearts') cbInput.placeholder = r.callbackHint;
+      statusEl.textContent = '⏳ 正在等待浏览器完成授权（或粘贴回调信息提交）…';
+      await pollOnce();
+      pollTimer = setInterval(pollOnce, 1500);
+    }
+
+    startSession();
+  }
+
   function authRow(worker, q, acc) {
     const wrap = document.createElement('div'); wrap.className = 'qa-section';
-    wrap.appendChild(sectionTitle('账号与登录'));
+    const head = document.createElement('div');
+    head.className = 'qa-section-title';
+    head.style.display = 'flex';
+    head.style.alignItems = 'center';
+    head.style.justifyContent = 'space-between';
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = '账号与登录';
+
+    const msgText = String((q && q.message) || '');
+    const isLoggedOutMsg = ['未登录', '缺失', '不可用', '未配置', '已过期'].some((w) => msgText.includes(w));
+    const isLoggedIn = (acc && acc.livePresent && !isLoggedOutMsg) || (q && q.quotas && Object.keys(q.quotas).length > 0);
+    const statusPill = document.createElement('span');
+    statusPill.className = 'uh-acc-status-pill ' + (isLoggedIn ? 'ok' : 'warn');
+    const activeProf = ((acc && acc.profiles) || []).find((p) => p.active);
+    statusPill.textContent = isLoggedIn
+      ? (activeProf ? `● 已登录 · ${activeProf.name}` : '● 已登录')
+      : '○ 未登录';
+    head.append(titleSpan, statusPill);
+    wrap.appendChild(head);
 
     const rowProfile = document.createElement('div'); rowProfile.className = 'qa-inline';
     const sel = document.createElement('select'); sel.className = 'qa-select';
     const profiles = (acc && acc.profiles) || [];
-    const blank = document.createElement('option'); blank.value = ''; blank.textContent = profiles.length ? '账号档案…' : '（暂无档案）';
+    const blank = document.createElement('option'); blank.value = ''; blank.textContent = profiles.length ? `账号档案 (${profiles.length})…` : '（暂无已存档案）';
     sel.appendChild(blank);
     for (const p of profiles) {
       const o = document.createElement('option'); o.value = p.name;
-      o.textContent = p.name + (p.active ? ' ✓当前' : '');
+      o.textContent = p.name + (p.active ? ' ✓当前生效' : '');
+      if (p.active) o.selected = true;
       sel.appendChild(o);
     }
     const saveBtn = qaBtn('存当前');
     const swBtn = qaBtn('切换');
-    saveBtn.onclick = async () => {
-      const name = window.prompt(`将 ${worker} 当前凭据存为账号档案，名称：`, '');
-      if (!name) return;
+
+    // 内联「存当前档案」抽屉（免除 window.prompt 阻塞）
+    const saveDrawer = document.createElement('div'); saveDrawer.className = 'uh-acc-save-drawer';
+    const saveInput = document.createElement('input');
+    saveInput.className = 'qa-input';
+    saveInput.placeholder = `输入 ${worker} 档案名 (如 main / work)`;
+    const saveDrawerBtns = document.createElement('div'); saveDrawerBtns.className = 'qa-rowbtns';
+    const confirmSaveBtn = qaBtn('✓ 保存档案', 'qa-primary');
+    const cancelSaveBtn = qaBtn('取消');
+    confirmSaveBtn.onclick = async () => {
+      const name = saveInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+      if (!name) { notify('请填写档案名称（字母、数字、-、_）', true); return; }
       const r = await jpost('/api/accounts/save', { worker, name });
-      notify(r.ok ? `已保存档案 ${name}` : `保存失败: ${r.error || '?'}`, !r.ok);
-      load();
+      notify(r.ok ? `✓ 已将 ${worker} 当前凭据存为档案「${name}」` : `保存失败: ${r.error || '?'}`, !r.ok);
+      if (r.ok) {
+        saveDrawer.classList.remove('open');
+        saveInput.value = '';
+        load();
+      }
     };
+    cancelSaveBtn.onclick = () => saveDrawer.classList.remove('open');
+    saveDrawerBtns.append(confirmSaveBtn, cancelSaveBtn);
+    saveDrawer.append(saveInput, saveDrawerBtns);
+
+    saveBtn.onclick = () => {
+      saveDrawer.classList.toggle('open');
+      if (saveDrawer.classList.contains('open')) {
+        if (!saveInput.value) saveInput.value = `acc-${profiles.length + 1}`;
+        setTimeout(() => { saveInput.focus(); saveInput.select(); }, 20);
+      }
+    };
+
     swBtn.onclick = async () => {
       if (!sel.value) { notify('请先在下拉框选择要切换到的账号档案', true); return; }
-      if (!window.confirm(`确认把 ${worker} 切换到档案「${sel.value}」？当前凭据会自动备份。`)) return;
-      const r = await jpost('/api/accounts/switch', { worker, name: sel.value });
-      notify(r.ok ? `已切换到 ${sel.value}（原凭据已备份）` : `切换失败: ${r.error || '?'}`, !r.ok);
-      load();
+      swBtn.disabled = true;
+      try {
+        const r = await jpost('/api/accounts/switch', { worker, name: sel.value });
+        notify(r.ok ? `✓ ${worker} 已切换到档案「${sel.value}」（原凭据已自动备份）` : `切换失败: ${r.error || '?'}`, !r.ok);
+        await load();
+      } finally {
+        swBtn.disabled = false;
+      }
     };
     rowProfile.append(sel, saveBtn, swBtn);
     wrap.appendChild(rowProfile);
+    wrap.appendChild(saveDrawer);
 
     const rowAuth = document.createElement('div'); rowAuth.className = 'qa-rowbtns qa-even';
-    const loginBtn = qaBtn('登录', 'qa-primary');
+    const loginBtn = qaBtn('🔐 OAuth 登录', 'qa-primary');
     const logoutBtn = qaBtn('退出');
     const addAccBtn = qaBtn('+添加账号');
-    loginBtn.onclick = async () => {
-      if (worker === 'codearts') { notify('CodeArts 请使用 AK/SK 表单保存凭据', true); return; }
-      const r = await jpost('/api/auth/login', { worker });
-      if (!r.ok) { notify(r.note || r.error || '该 worker 不支持 WebUI 发起登录', true); return; }
-      const box = window.open('', '_blank', 'width=560,height=480');
-      let done = false;
-      const timer = setInterval(async () => {
-        const p = await fetch(`/api/auth/poll?loginId=${r.loginId}`).then((x) => x.json()).catch(() => null);
-        if (!p || !p.ok) { clearInterval(timer); return; }
-        if (box && !box.closed) {
-          box.document.body.innerHTML = `<h3>${worker} 登录中…</h3>`
-            + (p.url ? `<p>打开 <a href="${p.url}" target="_blank">${p.url}</a></p>` : '')
-            + (p.deviceCode ? `<p>设备码: <b style="font-size:20px">${p.deviceCode}</b></p>` : '')
-            + `<pre style="white-space:pre-wrap;font-size:11px">${esc(p.output).slice(-600)}</pre>`
-            + `<p>在浏览器完成授权后，回到此处点击「我已完成」。</p>`
-            + `<button onclick="window.opener.__qaFinish && window.opener.__qaFinish()">我已完成</button>`;
-        }
-        if (p.exited && !done) { done = true; clearInterval(timer); load(); }
-      }, 2000);
-      window.__qaFinish = async () => {
-        clearInterval(timer);
-        await jpost('/api/auth/finish', { loginId: r.loginId });
-        if (box && !box.closed) box.close();
-        notify('登录流程已结束，若已在浏览器完成授权，配额将自动刷新。');
-        load();
-      };
-    };
+
+    loginBtn.onclick = () => openOAuthModal(worker, { isSandboxAdd: false });
+
     logoutBtn.onclick = async () => {
-      if (!window.confirm(`确认退出 ${worker} 登录？凭据将移入备份目录（不会删除）。`)) return;
-      const r = await jpost('/api/auth/logout', { worker });
-      notify(r.ok ? `已退出：${(r.moved || []).join(', ')}` : `失败: ${r.error || '?'}`, !r.ok);
-      load();
+      logoutBtn.disabled = true;
+      try {
+        const r = await jpost('/api/auth/logout', { worker });
+        notify(r.ok ? `✓ ${worker} 已退出登录（原凭据已备份至 .logged-out 目录）` : `退出提示: ${r.error || '?'}`, !r.ok);
+        await load();
+      } finally {
+        logoutBtn.disabled = false;
+      }
     };
-    addAccBtn.onclick = async () => {
-      const name = window.prompt(`为 ${worker} 添加新账号，档案名：`, '');
-      if (!name) return;
-      const r = await jpost('/api/accounts/add', { worker, name });
-      if (!r.ok) { notify(r.note || r.error || '该 worker 不支持沙箱添加账号', true); return; }
-      const box = window.open('', '_blank', 'width=560,height=480');
-      let done = false;
-      const timer = setInterval(async () => {
-        const p = await fetch(`/api/auth/poll?loginId=${r.loginId}`).then((x) => x.json()).catch(() => null);
-        if (!p || !p.ok) { clearInterval(timer); return; }
-        if (box && !box.closed) {
-          box.document.body.innerHTML = `<h3>添加账号 ${name}（沙箱隔离）</h3>`
-            + (p.url ? `<p>打开 <a href="${p.url}" target="_blank">${p.url}</a></p>` : '')
-            + (p.deviceCode ? `<p>设备码: <b style="font-size:20px">${p.deviceCode}</b></p>` : '')
-            + `<pre style="white-space:pre-wrap;font-size:11px">${esc(p.output).slice(-500)}</pre>`
-            + `<p>完成授权后点击下方按钮，新账号会自动存为档案并切换。</p>`
-            + `<button onclick="window.opener.__qaAddFinish && window.opener.__qaAddFinish()">授权完成</button>`;
-        }
-        if (p.exited && !done) { done = true; clearInterval(timer); }
-      }, 2000);
-      window.__qaAddFinish = async () => {
-        clearInterval(timer);
-        const fr = await jpost('/api/accounts/add/finish', { worker, name, loginId: r.loginId });
-        notify(fr.ok ? `新账号 ${name} 已添加并切换生效` : `失败: ${fr.error || '?'}`, !fr.ok);
-        if (box && !box.closed) box.close();
-        load();
-      };
+
+    addAccBtn.onclick = () => {
+      const nextIdx = profiles.length + 1;
+      openOAuthModal(worker, { isSandboxAdd: true, defaultProfileName: `acc-${nextIdx}` });
     };
+
     rowAuth.append(loginBtn, logoutBtn, addAccBtn);
     wrap.appendChild(rowAuth);
-
-    if (worker === 'codearts') {
-      const toggleBtn = qaBtn('🔑 配置 AK/SK');
-      const akwrap = document.createElement('div'); akwrap.className = 'qa-akwrap';
-      const ak = document.createElement('input'); ak.placeholder = 'CODEARTS_CLI_AK'; ak.className = 'qa-input'; ak.type = 'password';
-      const sk = document.createElement('input'); sk.placeholder = 'CODEARTS_CLI_SK'; sk.className = 'qa-input'; sk.type = 'password';
-      const save = qaBtn('保存 AK/SK', 'qa-primary');
-      save.onclick = async () => {
-        const r = await jpost('/api/auth/codearts', { ak: ak.value, sk: sk.value });
-        notify(r.ok ? 'CodeArts AK/SK 已保存' : `失败: ${r.error || '?'}`, !r.ok);
-        ak.value = sk.value = '';
-      };
-      toggleBtn.onclick = () => { akwrap.classList.toggle('open'); };
-      akwrap.append(ak, sk, save);
-      wrap.append(toggleBtn, akwrap);
-    }
     return wrap;
   }
 
