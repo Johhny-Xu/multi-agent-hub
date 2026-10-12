@@ -240,10 +240,11 @@ const TOKEN_READERS = {
     if (!tok || tok.startsWith('http')) return null;
     const pl = parseJwtPayloadSafe(tok);
     const acct = d.account || d.accounts?.[0] || d.allAccounts?.[0] || {};
-    const phone = acct.phoneNumber || pl?.preferred_username || '';
-    const nick = acct.nickname || pl?.nickname || '';
-    const uid = acct.uid || acct.uin || pl?.sub || '';
-    const account = (nick && phone && nick !== phone) ? `${nick} (${phone})` : (nick || phone || (uid ? `UID:${String(uid).slice(0, 8)}…` : null));
+    const nick = String(acct.nickname || pl?.nickname || '').trim();
+    const email = String(acct.email || pl?.email || '').trim();
+    const uid = String(acct.uid || acct.uin || pl?.sub || '').trim();
+    // 显示层不暴露手机号：只显示账户名称/邮箱
+    const account = (/^1\d{10}$/.test(nick) ? '' : nick) || email || (uid ? `UID:${uid.slice(0, 8)}…` : null);
     return { token: tok, account };
   },
   'minimaxcode': async () => {
