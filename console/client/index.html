@@ -2733,7 +2733,7 @@
   .empty-tip-card { border-radius: 12px; border: 1px dashed var(--mcode-border-strong); }
   .chip, .att-chip { border-radius: 999px; border: 1px solid var(--mcode-border); }
 
-  /* — 卡片头布局：单行精致排布，头像按钮移至右侧 — */
+  /* — 卡片头布局：单行精致排布，启停开关居右 — */
   .card-head {
     display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
   }
@@ -2743,22 +2743,6 @@
     flex-shrink: 1;
   }
   .card-head .pill { flex-shrink: 0; }
-  .card-head .btn-avatar-setting {
-    margin-left: auto; flex-shrink: 0;
-    font-size: 12px; font-weight: 500;
-    min-height: 24px; padding: 2px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--mcode-border);
-    background: var(--mcode-surface-muted);
-    color: var(--mcode-text-muted);
-    cursor: pointer; white-space: nowrap;
-    transition: all .16s ease;
-  }
-  .card-head .btn-avatar-setting:hover {
-    color: var(--mcode-text);
-    background: var(--mcode-surface-hover);
-    border-color: var(--mcode-border-strong);
-  }
   #modal-extra {
     color: var(--mcode-text-muted);
     font-size: 13px;
@@ -3132,13 +3116,11 @@
 .uh-title-stack{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 auto}
 .uh-title-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
 .card.uh-card .card-head h3.mono{margin:0;font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-.01em;white-space:nowrap;overflow:visible;text-overflow:clip;max-width:none !important}
-.uh-title-stack .role{font-size:11.5px;color:#94a3b8;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-title-stack .role{font-size:11.5px;color:#94a3b8;line-height:1.35;white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word}
 .uh-head-right{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding-top:2px}
 .uh-head-right .agent-toggle-wrap{margin-left:0;white-space:nowrap;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.16);border-radius:999px;padding:3px 8px 3px 5px}
 .uh-head-right .agent-toggle-text{white-space:nowrap;font-size:11px;color:#cbd5e1}
-.uh-head-right .btn-avatar-setting{margin-left:0;white-space:nowrap;height:24px;padding:0 9px;font-size:11px;border-radius:999px;background:rgba(30,41,59,.65);border:1px solid rgba(148,163,184,.22);color:#cbd5e1}
-.uh-head-right .btn-avatar-setting:hover{border-color:#60a5fa;color:#fff;background:rgba(59,130,246,.15)}
-.qa-plan{flex:0 1 auto;max-width:180px;background:linear-gradient(135deg,rgba(59,130,246,.2),rgba(34,211,238,.14));color:#93c5fd;text-shadow:0 1px 2px rgba(0,0,0,.25);border:1px solid rgba(59,130,246,.32);border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qa-plan{flex:0 1 auto;max-width:none;background:linear-gradient(135deg,rgba(59,130,246,.2),rgba(34,211,238,.14));color:#93c5fd;text-shadow:0 1px 2px rgba(0,0,0,.25);border:1px solid rgba(59,130,246,.32);border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:500;overflow:visible;text-overflow:clip;white-space:nowrap}
 .uh-quota-slot{display:flex;flex-direction:column;gap:6px;background:rgba(15,23,42,.52);border:1px solid rgba(148,163,184,.13);border-radius:10px;padding:9px 11px}
 .uh-quota-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:600;color:#7dd3fc}
 .uh-quota-head-left{display:inline-flex;align-items:center;gap:6px}
@@ -6249,10 +6231,7 @@
         headRight.appendChild(toggleWrap);
       }
 
-      var avatarBtn = btn('头像', 'btn-avatar-setting', function () {
-        promptChangeAvatar(a.name);
-      });
-      headRight.appendChild(avatarBtn);
+      // 「头像」按钮已移除——直接点左侧头像即可更换，避免重复入口
       head.appendChild(headRight);
       card.appendChild(head);
 
@@ -7486,6 +7465,7 @@
       .uh-card-acc-badge {
         font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
         background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);
+        flex-shrink: 0; max-width: none; overflow: visible; text-overflow: clip;
       }
       .uh-acc-save-drawer {
         display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
@@ -7963,9 +7943,9 @@
     statusPill.className = 'uh-acc-status-pill ' + (isLoggedIn ? 'ok' : 'warn');
     const profiles = (acc && acc.profiles) || [];
     const activeProf = profiles.find((p) => p.active);
-    statusPill.textContent = isLoggedIn
-      ? (activeProf ? `● 已登录 · ${activeProf.display || activeProf.name}` : '● 已登录')
-      : '○ 未登录';
+    // 状态只表达登录与否；当前账号身份由下方账号胶囊（绿色「当前」）统一展示，不再重复
+    statusPill.textContent = isLoggedIn ? '● 已登录' : '○ 未登录';
+    if (isLoggedIn && activeProf) statusPill.title = `当前生效账号：${activeProf.display || activeProf.name}`;
     head.append(titleSpan, statusPill);
     wrap.appendChild(head);
 
@@ -8111,20 +8091,29 @@
     if (!worker || !quotaData) return;
     const q = (quotaData.workers && quotaData.workers[worker]) || {};
     const acc = (accountData && accountData.workers && accountData.workers[worker]) || { profiles: [] };
+
+    const activeProf = (acc && acc.profiles && acc.profiles.find((p) => p.active)) || null;
+    const accDisp = (activeProf && (activeProf.display || activeProf.name)) || (q && q.account) || '';
+
     const planEl = card.querySelector(`[data-plan-for="${worker}"]`);
     if (planEl) {
-      const planText = String(q.plan || '').trim();
+      let planText = String(q.plan || '').trim();
+      // 套餐徽章不再重复账号身份：括号内为账号的部分剥掉（头部 👤 徽章已展示账号）；
+      // 剥离后若与卡片标题（worker 名）同义则不再展示，彻底消除同信息红框
+      if (planText && accDisp) {
+        const stripped = planText.replace(/\s*[（(][^()（）]*[)）]\s*$/, '').trim();
+        if (stripped) planText = stripped;
+      }
+      if (planText && planText.toLowerCase() === worker.toLowerCase()) planText = '';
       planEl.textContent = planText;
       planEl.hidden = !planText;
     }
 
-    const activeProf = (acc && acc.profiles && acc.profiles.find((p) => p.active)) || null;
     const accBadgeEl = card.querySelector(`[data-acc-badge-for="${worker}"]`);
     if (accBadgeEl) {
-      const disp = (activeProf && (activeProf.display || activeProf.name)) || (q && q.account) || '';
-      if (disp) {
-        accBadgeEl.textContent = `👤 ${disp}`;
-        accBadgeEl.title = `当前生效账号: ${disp}${activeProf && activeProf.identity ? ' (' + activeProf.identity + ')' : ''}`;
+      if (accDisp) {
+        accBadgeEl.textContent = `👤 ${accDisp}`;
+        accBadgeEl.title = `当前生效账号: ${accDisp}${activeProf && activeProf.identity ? ' (' + activeProf.identity + ')' : ''}`;
         accBadgeEl.hidden = false;
       } else {
         accBadgeEl.hidden = true;
