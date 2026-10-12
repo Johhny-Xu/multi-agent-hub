@@ -148,9 +148,10 @@ function decodeJwtPayload(token) {
 }
 
 export function cleanProfileLabel(raw) {
+  // 保留 Unicode 字母与数字（含中文），仅剥离文件系统不安全字符，避免 CJK 账号名被吞成纯数字
   const s = String(raw || '').trim()
     .replace(/@.*$/, '')
-    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/[^\p{L}\p{N}._-]/gu, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 40);
