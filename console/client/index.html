@@ -3109,63 +3109,88 @@
     color: var(--mcode-text-muted);
   }
 
-/* ===== 配额与账号面板（native quota + accounts） ===== */
-.qa-panel{margin:0 0 18px;padding:16px 18px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(148,163,184,.05)}
-.qa-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.qa-head b{font-size:14px;color:#e2e8f0}
-.qa-refresh{border:1px solid rgba(148,163,184,.3);background:transparent;color:#94a3b8;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;transition:opacity .2s ease}
-.qa-refresh:hover{color:#e2e8f0;border-color:#94a3b8}
-.qa-panel:has(.qa-grid.qa-loading) .qa-refresh{opacity:.7;pointer-events:none}
-.qa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px;transition:opacity .2s}
-.qa-card{min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:12px;background:linear-gradient(180deg,rgba(30,41,59,.55),rgba(15,23,42,.65));border:1px solid rgba(148,163,184,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 4px 14px rgba(0,0,0,.18);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
-.qa-card:hover{border-color:rgba(96,165,250,.45);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(147,197,253,.18),0 8px 22px rgba(0,0,0,.28)}
-.qa-card h4{margin:0;font-size:14px;font-weight:700;color:#f8fafc;display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
-.qa-plan{flex:0 1 auto;max-width:72%;background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(34,211,238,.12));color:#93c5fd;text-shadow:0 1px 2px rgba(0,0,0,.25);border:1px solid rgba(59,130,246,.28);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qa-card select,.qa-card input{width:100%;min-width:0;max-width:100%;box-sizing:border-box;background:rgba(15,23,42,.6);color:#e2e8f0;border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:5px 8px;font-size:12px;text-overflow:ellipsis;outline:none;transition:border-color .15s,box-shadow .15s}
-.qa-card select:hover,.qa-card input:hover{border-color:rgba(96,165,250,.5)}
-.qa-card select:focus,.qa-card input:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(59,130,246,.18)}
-.qa-card select option{background:#0f172a;color:#e2e8f0}
-.qa-row{margin:6px 0}
-.qa-qname{display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:2px;gap:8px;min-width:0}
-.qa-qname span:last-child{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600;color:#cbd5e1}
-.qa-bar{height:5px;border-radius:3px;background:rgba(148,163,184,.15);overflow:hidden}
-.qa-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width .4s cubic-bezier(.22, 1, .36, 1)}
+/* ===== 统一子代理与配额中枢大盘（Unified Agent + Quota + Account Studio UI） ===== */
+.qa-panel{margin:0 0 20px;padding:18px 20px 22px;border:1px solid rgba(148,163,184,.16);border-radius:16px;background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(15,23,42,.35));box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 10px 30px rgba(0,0,0,.22)}
+.qa-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(148,163,184,.12);gap:12px;flex-wrap:wrap}
+.qa-head-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.qa-head b{font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:8px}
+.qa-head-badge{font-size:11px;font-weight:500;color:#93c5fd;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:999px;padding:2px 10px}
+.qa-refresh{border:1px solid rgba(96,165,250,.35);background:linear-gradient(180deg,rgba(59,130,246,.18),rgba(37,99,235,.12));color:#bfdbfe;border-radius:9px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;transition:all .18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.qa-refresh:hover{color:#fff;border-color:#60a5fa;background:linear-gradient(180deg,rgba(59,130,246,.28),rgba(37,99,235,.2));transform:translateY(-1px)}
+.qa-refresh:active{transform:scale(.97)}
+.qa-panel:has(.uh-grid.qa-loading) .qa-refresh{opacity:.65;pointer-events:none}
+.uh-grid#agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;transition:opacity .2s ease}
+.uh-grid#agents.qa-loading{opacity:.65;pointer-events:none}
+.card.uh-card{min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:11px;padding:16px 18px;border-radius:14px;background:linear-gradient(165deg,rgba(30,41,59,.62) 0%,rgba(15,23,42,.82) 100%);border:1px solid rgba(148,163,184,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 6px 20px rgba(0,0,0,.22);transition:transform .2s cubic-bezier(.22,1,.36,1),box-shadow .2s ease,border-color .2s ease}
+.card.uh-card:hover{border-color:rgba(96,165,250,.45);transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(147,197,253,.2),0 12px 28px rgba(0,0,0,.34)}
+.card.uh-card.disabled-card{opacity:.62;background:rgba(15,23,42,.45);border-style:dashed}
+.card.uh-card .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid rgba(148,163,184,.13);flex-wrap:nowrap}
+.uh-head-left{display:flex;align-items:center;gap:11px;min-width:0;flex:1 1 auto}
+.uh-head-left .platform-avatar{width:38px;height:38px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.15);cursor:pointer;transition:transform .15s ease}
+.uh-head-left .platform-avatar:hover{transform:scale(1.05)}
+.uh-title-stack{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 auto}
+.uh-title-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.card.uh-card .card-head h3.mono{margin:0;font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-.01em;white-space:nowrap;overflow:visible;text-overflow:clip;max-width:none !important}
+.uh-title-stack .role{font-size:11.5px;color:#94a3b8;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uh-head-right{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding-top:2px}
+.uh-head-right .agent-toggle-wrap{margin-left:0;white-space:nowrap;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.16);border-radius:999px;padding:3px 8px 3px 5px}
+.uh-head-right .agent-toggle-text{white-space:nowrap;font-size:11px;color:#cbd5e1}
+.uh-head-right .btn-avatar-setting{margin-left:0;white-space:nowrap;height:24px;padding:0 9px;font-size:11px;border-radius:999px;background:rgba(30,41,59,.65);border:1px solid rgba(148,163,184,.22);color:#cbd5e1}
+.uh-head-right .btn-avatar-setting:hover{border-color:#60a5fa;color:#fff;background:rgba(59,130,246,.15)}
+.qa-plan{flex:0 1 auto;max-width:180px;background:linear-gradient(135deg,rgba(59,130,246,.2),rgba(34,211,238,.14));color:#93c5fd;text-shadow:0 1px 2px rgba(0,0,0,.25);border:1px solid rgba(59,130,246,.32);border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uh-quota-slot{display:flex;flex-direction:column;gap:6px;background:rgba(15,23,42,.52);border:1px solid rgba(148,163,184,.13);border-radius:10px;padding:9px 11px}
+.uh-quota-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:600;color:#7dd3fc}
+.uh-quota-head-left{display:inline-flex;align-items:center;gap:6px}
+.qa-row{margin:4px 0}
+.qa-qname{display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px;gap:8px;min-width:0}
+.qa-qname span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cbd5e1}
+.qa-qname span:last-child{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600;color:#e2e8f0}
+.qa-bar{height:6px;border-radius:999px;background:rgba(148,163,184,.16);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.3)}
+.qa-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width .4s cubic-bezier(.22, 1, .36, 1)}
 .qa-bar i.warn{background:linear-gradient(90deg,#f59e0b,#f97316)}
 .qa-bar i.full{background:linear-gradient(90deg,#ef4444,#dc2626)}
-.qa-quotas{max-height:165px;overflow-y:auto;padding:4px 4px 4px 0;margin:0}
-.qa-quotas::-webkit-scrollbar{width:5px}
+.qa-quotas{max-height:150px;overflow-y:auto;padding-right:3px;margin:0}
+.qa-quotas::-webkit-scrollbar{width:4px}
 .qa-quotas::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);border-radius:3px}
-.qa-quotas .qa-row{margin:5px 0}
-.qa-msg{font-size:11px;color:#94a3b8;line-height:1.5;word-break:break-all;background:rgba(15,23,42,.45);border:1px dashed rgba(148,163,184,.18);border-radius:8px;padding:8px 10px;min-height:44px;display:flex;align-items:center}
-.qa-section{display:flex;flex-direction:column;gap:6px;min-width:0;border-top:1px dashed rgba(148,163,184,.14);padding-top:8px}
-.qa-section-title{font-size:11px;font-weight:600;color:#7dd3fc;letter-spacing:.02em}
+.qa-msg{font-size:11px;color:#94a3b8;line-height:1.45;word-break:break-word;padding:2px 0;display:flex;align-items:center;gap:6px}
+.uh-chips-wrap{display:flex;flex-direction:column;gap:6px}
+.uh-chips-wrap .chips{gap:5px;max-height:76px;overflow-y:auto;padding-right:2px}
+.uh-chips-wrap .chips::-webkit-scrollbar{width:4px}
+.uh-chips-wrap .chips::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:3px}
+.uh-chips-wrap .chip{font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.2);color:#cbd5e1;cursor:pointer;transition:all .14s ease}
+.uh-chips-wrap .chip:hover{border-color:#60a5fa;color:#fff;background:rgba(59,130,246,.14)}
+.uh-chips-wrap .chip.is-default{border-color:rgba(59,130,246,.55);background:rgba(59,130,246,.18);color:#93c5fd;font-weight:600}
+.qa-section{display:flex;flex-direction:column;gap:6px;min-width:0;border-top:1px dashed rgba(148,163,184,.14);padding-top:9px}
+.qa-section-title{font-size:11px;font-weight:600;color:#7dd3fc;letter-spacing:.02em;display:flex;align-items:center;justify-content:space-between}
+.card.uh-card select,.card.uh-card input.qa-input{width:100%;min-width:0;max-width:100%;box-sizing:border-box;background:rgba(15,23,42,.65);color:#e2e8f0;border:1px solid rgba(148,163,184,.24);border-radius:8px;padding:5px 8px;font-size:11.5px;text-overflow:ellipsis;outline:none;transition:border-color .15s,box-shadow .15s}
+.card.uh-card select:hover,.card.uh-card input.qa-input:hover{border-color:rgba(96,165,250,.5)}
+.card.uh-card select:focus,.card.uh-card input.qa-input:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(59,130,246,.18)}
+.card.uh-card select option{background:#0f172a;color:#e2e8f0}
 .qa-rowbtns{display:flex;gap:6px;flex-wrap:wrap;row-gap:6px;min-width:0}
 .qa-rowbtns .qa-btn{padding:4px 9px}
-.qa-rowbtns.qa-even .qa-btn{flex:1 1 0}
+.qa-rowbtns.qa-even .qa-btn{flex:1 1 0;text-align:center;justify-content:center}
 .qa-inline{display:flex;gap:6px;align-items:center;min-width:0}
-.qa-inline select{flex:1 1 130px;min-width:0}
+.qa-inline select{flex:1 1 120px;min-width:0}
 .qa-inline .qa-btn{flex:0 0 auto}
-.qa-btn{border:1px solid rgba(148,163,184,.3);background:rgba(148,163,184,.06);color:#cbd5e1;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s,background .15s,transform .12s ease}
-.qa-btn:hover{border-color:#60a5fa;color:#60a5fa;background:rgba(59,130,246,.08)}
+.qa-btn{border:1px solid rgba(148,163,184,.28);background:rgba(30,41,59,.55);color:#cbd5e1;border-radius:8px;padding:4px 10px;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s,background .15s,transform .12s ease}
+.qa-btn:hover{border-color:#60a5fa;color:#fff;background:rgba(59,130,246,.14)}
 .qa-btn:active{transform:scale(.97)}
-.qa-btn.qa-primary{border-color:rgba(59,130,246,.45);color:#93c5fd;background:linear-gradient(180deg,rgba(59,130,246,.28),rgba(37,99,235,.22))}
-.qa-btn.qa-primary:hover{border-color:#60a5fa;color:#bfdbfe;background:rgba(59,130,246,.22)}
-.qa-akwrap{display:none;flex-direction:column;gap:6px;background:rgba(15,23,42,.45);border:1px dashed rgba(148,163,184,.18);border-radius:8px;padding:8px}
+.qa-btn.qa-primary{border-color:rgba(59,130,246,.48);color:#bfdbfe;background:linear-gradient(180deg,rgba(59,130,246,.28),rgba(37,99,235,.22))}
+.qa-btn.qa-primary:hover{border-color:#60a5fa;color:#fff;background:linear-gradient(180deg,rgba(59,130,246,.38),rgba(37,99,235,.3))}
+.qa-akwrap{display:none;flex-direction:column;gap:6px;background:rgba(15,23,42,.55);border:1px dashed rgba(148,163,184,.22);border-radius:8px;padding:8px}
 .qa-akwrap.open{display:flex}
-.qa-grid.qa-loading{opacity:.6;pointer-events:none}
-.qa-head-right{display:flex;align-items:center;gap:8px;min-width:0}
-.qa-updated{font-size:11px;color:#64748b;white-space:nowrap}
-.qa-title-wrap{display:flex;align-items:center;gap:6px;min-width:0}
-.qa-status-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;display:inline-block;background:#22c55e;box-shadow:0 0 4px rgba(34,197,94,.55)}
-.qa-status-dot.warn{background:#f59e0b;box-shadow:0 0 4px rgba(245,158,11,.55)}
+.qa-head-right{display:flex;align-items:center;gap:10px;min-width:0}
+.qa-updated{font-size:11.5px;color:#94a3b8;white-space:nowrap;font-variant-numeric:tabular-nums}
+.qa-status-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;display:inline-block;background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.65)}
+.qa-status-dot.warn{background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.65)}
 /* ===== 阶段六 全局微交互与窄屏加固 ===== */
 .composer:focus-within{box-shadow:0 0 0 3px var(--mcode-focus-ring),0 0 24px rgba(59,130,246,.16),0 12px 36px rgba(0,0,0,.55)}
 .platform-item{transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease}
 .platform-item:hover{background:rgba(59,130,246,.06)}
 @media (max-width:768px){
-  .qa-grid{grid-template-columns:1fr}
+  .uh-grid#agents{grid-template-columns:1fr}
   body{overflow-x:hidden}
-  .chat-head,.chat-head-left,.chat-head-right,.toolbar{flex-wrap:wrap;row-gap:6px}
+  .chat-head,.chat-head-left,.chat-head-right,.toolbar,.card.uh-card .card-head{flex-wrap:wrap;row-gap:6px}
   .qa-panel{padding:12px}
 }
 </style>
@@ -3416,10 +3441,10 @@
       <section class="tabpanel" id="panel-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
         <div class="kpi-row" id="kpis" aria-label="枢纽概览" style="display:none"></div>
         <div class="qa-panel" id="qaPanel">
-          <div class="qa-head"><b>配额与账号 <span style="font-size:11px;color:#64748b">OAuth 直读 · 非反代</span></b><span class="qa-head-right"><span class="qa-updated" id="qaUpdated"></span><button class="qa-refresh" id="qaRefreshBtn" type="button">刷新配额</button></span></div>
-          <div class="qa-grid" id="qaGrid"><div class="qa-msg">加载中…</div></div>
+          <div class="qa-head"><div class="qa-head-title"><b>子代理与配额中枢</b><span class="qa-head-badge">9 Workers · OAuth 直读 · 模型与多账号管理</span></div><span class="qa-head-right"><span class="qa-updated" id="qaUpdated"></span><button class="qa-refresh" id="qaRefreshBtn" type="button">↻ 刷新配额</button></span></div>
+          <div class="qa-grid" id="qaGrid" hidden></div>
+          <div class="grid uh-grid" id="agents"></div>
         </div>
-        <div class="grid" id="agents"></div>
         <div class="inflight" id="inflight-box-wrap" style="display:none">
           <h2 style="font-size:16px;font-weight:500;margin:8px 0 0">异步任务（本控制台派发）</h2>
           <div id="inflight-list"></div>
@@ -6101,29 +6126,47 @@
       return;
     }
     snap.agents.forEach(function (a) {
-      var card = el('div', 'card');
+      var card = el('div', 'card uh-card');
+      card.setAttribute('data-worker', a.name);
       var head = el('div', 'card-head');
+
+      var headLeft = el('div', 'uh-head-left');
       var vis = getAgentVisual(a.name);
       var av = el('div', 'platform-avatar');
       av.style.background = vis.bg;
       av.textContent = vis.code;
+      av.title = '点击更换 ' + a.name + ' 头像';
+      av.addEventListener('click', function () { promptChangeAvatar(a.name); });
       applyAvatar(av, a.name);
-      head.appendChild(av);
+      headLeft.appendChild(av);
 
-      head.appendChild(el('h3', 'mono', a.name));
+      var titleStack = el('div', 'uh-title-stack');
+      var titleLine = el('div', 'uh-title-line');
+      titleLine.appendChild(el('h3', 'mono', a.name));
       if (a.disabled) {
         card.classList.add('disabled-card');
-        head.appendChild(el('span', 'pill err', '已禁用'));
+        titleLine.appendChild(el('span', 'pill err', '已禁用'));
       } else if (a.activation === 'online' || (!a.activation && a.online)) {
-        head.appendChild(el('span', 'pill ok', '在线'));
+        titleLine.appendChild(el('span', 'pill ok', '在线'));
       } else if (a.dispatchable || a.activation === 'standby' || a.ready) {
-        head.appendChild(el('span', 'pill', '就绪'));
+        titleLine.appendChild(el('span', 'pill', '就绪'));
       } else {
-        head.appendChild(el('span', 'pill warn', '离线'));
+        titleLine.appendChild(el('span', 'pill warn', '离线'));
       }
-      if (a.name === SELF) head.appendChild(el('span', 'pill acc', '本控制台'));
+      if (a.name === SELF) titleLine.appendChild(el('span', 'pill acc', '本控制台'));
+      var planBadge = el('span', 'qa-plan');
+      planBadge.setAttribute('data-plan-for', a.name);
+      planBadge.hidden = true;
+      titleLine.appendChild(planBadge);
+      titleStack.appendChild(titleLine);
 
-      // 激活/停用 Switch (非本控制台)
+      var roleEl = el('div', 'role', a.role || '未声明角色');
+      roleEl.title = a.role || '';
+      titleStack.appendChild(roleEl);
+      headLeft.appendChild(titleStack);
+      head.appendChild(headLeft);
+
+      var headRight = el('div', 'uh-head-right');
       if (a.name !== SELF) {
         var isEnabled = !a.disabled;
         var toggleWrap = el('label', 'agent-toggle-wrap');
@@ -6151,33 +6194,70 @@
         toggleWrap.appendChild(toggleInput);
         toggleWrap.appendChild(toggleSlider);
         toggleWrap.appendChild(toggleText);
-        head.appendChild(toggleWrap);
+        headRight.appendChild(toggleWrap);
       }
 
-      // 待机·可直派去掉，把头像设置按钮移到这里
       var avatarBtn = btn('头像', 'btn-avatar-setting', function () {
         promptChangeAvatar(a.name);
       });
-      head.appendChild(avatarBtn);
+      headRight.appendChild(avatarBtn);
+      head.appendChild(headRight);
       card.appendChild(head);
-      card.appendChild(el('div', 'role', a.role || '未声明角色'));
-      // 已精简：卡片内不再展示底层的 CLI 路径、model_arg、心跳提示与默认模型，界面保持紧凑清晰
+
+      // 内嵌配额进度槽位
+      var quotaSlot = el('div', 'uh-quota-slot');
+      quotaSlot.setAttribute('data-quota-slot', a.name);
+      quotaSlot.innerHTML = '<div class="qa-msg"><span class="qa-status-dot"></span><span>实时配额同步中…</span></div>';
+      card.appendChild(quotaSlot);
+
+      // 可选模型胶囊标签（点击联动下方下拉框，双击快速设为默认）
       if (a.models && a.models.length) {
         var validChips = a.models.filter(function (mm) { return mm.alias !== '默认' && mm.alias !== 'default'; });
         if (validChips.length) {
+          var chipsWrap = el('div', 'uh-chips-wrap');
           var chips = el('div', 'chips');
           validChips.forEach(function (m) {
-            var c = el('span', 'chip mono', m.alias);
-            c.title = m.alias + ' → ' + m.id;
+            var isDef = a.defaultModel && (m.id === a.defaultModel || m.alias === a.defaultModel);
+            var c = el('span', 'chip mono' + (isDef ? ' is-default' : ''), (isDef ? '★ ' : '') + m.alias);
+            c.setAttribute('data-chip-alias', m.alias);
+            c.setAttribute('data-chip-id', m.id);
+            c.title = m.alias + ' → ' + m.id + '（单击选中，双击设为默认模型）';
+            c.addEventListener('click', function () {
+              var sel = card.querySelector('.uh-model-slot select.qa-select');
+              if (sel) sel.value = m.alias;
+            });
+            c.addEventListener('dblclick', function () {
+              fetch('/api/models/default', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ worker: a.name, alias: m.alias }) })
+                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                  toast(r.ok ? (a.name + ' 默认模型已切换为 ' + m.alias) : ('失败: ' + (r.error || '?')), !r.ok);
+                  if (typeof window.__ahReloadQuotas === 'function') window.__ahReloadQuotas();
+                  pollUpdates();
+                });
+            });
             chips.appendChild(c);
           });
-          card.appendChild(chips);
+          chipsWrap.appendChild(chips);
+          card.appendChild(chipsWrap);
         }
       }
+
+      // 模型配置与多账号切换内嵌槽位
+      var modelSlot = el('div', 'uh-model-slot');
+      modelSlot.setAttribute('data-model-slot', a.name);
+      card.appendChild(modelSlot);
+
+      var authSlot = el('div', 'uh-auth-slot');
+      authSlot.setAttribute('data-auth-slot', a.name);
+      card.appendChild(authSlot);
+
       var mine = snap.tasks.filter(function (t) { return (t.to === a.name || t.claimedBy === a.name) && (t.status === 'open' || t.status === 'in_progress'); }).length;
       if (mine) card.appendChild(el('div', 'meta', '进行中 / 指派中任务: ' + mine));
       host.appendChild(card);
     });
+    if (typeof window.__ahHydrateUnifiedCards === 'function') {
+      window.__ahHydrateUnifiedCards();
+    }
   }
 
   function renderTasks(snap) {
@@ -6944,6 +7024,7 @@
   loadQuotas();
   loadAvatars();
   window.__ahToast = toast;
+  window.__ahLoadSnapshot = loadSnapshot;
 })();
 </script>
 
@@ -7011,6 +7092,7 @@
       const alias = sel.value; if (!alias) return;
       const r = await jpost('/api/models/default', { worker, alias });
       notify(r.ok ? `${worker} 默认模型已切换（实时生效）` : `失败: ${r.error || '?'}`, !r.ok);
+      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
       load();
     };
     const addBtn = qaBtn('+自定义');
@@ -7021,6 +7103,7 @@
       if (!id) return;
       const r = await jpost('/api/models/custom', { worker, alias, id });
       notify(r.ok ? `已添加自定义模型 ${alias}` : `失败: ${r.error || '?'}`, !r.ok);
+      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
       load();
     };
     const rmBtn = qaBtn('删');
@@ -7030,6 +7113,7 @@
       if (!window.confirm(`删除 ${worker} 的模型别名「${alias}」？`)) return;
       const r = await jpost('/api/models/remove', { worker, alias });
       notify(r.ok ? `已删除 ${alias}` : `失败: ${r.error || '?'}`, !r.ok);
+      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
       load();
     };
     btns.append(setBtn, addBtn, rmBtn);
@@ -7156,33 +7240,69 @@
     return wrap;
   }
 
-  function workerCard(worker, q, acc, mw) {
-    const card = document.createElement('div'); card.className = 'qa-card';
-    const h = document.createElement('h4');
-    const titleWrap = document.createElement('span'); titleWrap.className = 'qa-title-wrap';
-    const msgText = String((q && q.message) || '');
-    const badMsg = ['不可达', '未登录', '失败', '过期'].some((w) => msgText.includes(w));
-    const hasQuotas = !!(q && q.quotas && Object.keys(q.quotas).length);
-    const dot = document.createElement('span');
-    dot.className = 'qa-status-dot ' + (hasQuotas || !badMsg ? 'ok' : 'warn');
-    dot.title = hasQuotas ? '配额正常' : (badMsg ? '通道异常' : '正常');
-    const t = document.createElement('span'); t.textContent = worker;
-    titleWrap.append(dot, t);
-    const plan = document.createElement('span'); plan.className = 'qa-plan'; plan.textContent = (q && q.plan) || '';
-    h.append(titleWrap, plan); card.appendChild(h);
-    const quotas = q.quotas && Object.keys(q.quotas).length ? q.quotas : null;
-    if (quotas) {
-      const qwrap = document.createElement('div'); qwrap.className = 'qa-quotas';
-      for (const [name, qq] of Object.entries(quotas)) qwrap.appendChild(bar(name, qq));
-      card.appendChild(qwrap);
+  function hydrateWorkerSlots(card) {
+    const worker = card.getAttribute('data-worker');
+    if (!worker || !quotaData) return;
+    const q = (quotaData.workers && quotaData.workers[worker]) || {};
+    const acc = (accountData && accountData.workers && accountData.workers[worker]) || { profiles: [] };
+    const planEl = card.querySelector(`[data-plan-for="${worker}"]`);
+    if (planEl) {
+      const planText = String(q.plan || '').trim();
+      planEl.textContent = planText;
+      planEl.hidden = !planText;
     }
-    else { const m = document.createElement('div'); m.className = 'qa-msg'; m.textContent = q.message || '暂无配额数据'; card.appendChild(m); }
 
-    const modelsWrap = modelRow(worker);
-    if (modelsWrap.childNodes.length) card.appendChild(modelsWrap);
-    card.appendChild(authRow(worker, q, acc));
-    return card;
+    const quotaSlot = card.querySelector(`[data-quota-slot="${worker}"]`);
+    if (quotaSlot) {
+      quotaSlot.textContent = '';
+      const msgText = String(q.message || '');
+      const badMsg = ['不可达', '未登录', '失败', '过期'].some((w) => msgText.includes(w));
+      const quotas = q.quotas && Object.keys(q.quotas).length ? q.quotas : null;
+      const head = document.createElement('div');
+      head.className = 'qa-section-title';
+      head.style.display = 'flex';
+      head.style.alignItems = 'center';
+      head.style.justifyContent = 'space-between';
+      head.style.marginBottom = '6px';
+      const titleLeft = document.createElement('span');
+      titleLeft.textContent = '配额与通道状态';
+      const dot = document.createElement('span');
+      dot.className = 'qa-status-dot ' + (quotas || !badMsg ? 'ok' : 'warn');
+      dot.title = quotas ? '配额正常' : (badMsg ? '通道异常' : '正常');
+      head.append(titleLeft, dot);
+      quotaSlot.appendChild(head);
+      if (quotas) {
+        const qwrap = document.createElement('div'); qwrap.className = 'qa-quotas';
+        for (const [name, qq] of Object.entries(quotas)) qwrap.appendChild(bar(name, qq));
+        quotaSlot.appendChild(qwrap);
+      } else {
+        const m = document.createElement('div'); m.className = 'qa-msg';
+        m.textContent = q.message || '暂无配额数据';
+        quotaSlot.appendChild(m);
+      }
+    }
+
+    const modelSlot = card.querySelector(`[data-model-slot="${worker}"]`);
+    if (modelSlot) {
+      modelSlot.textContent = '';
+      const modelsWrap = modelRow(worker);
+      if (modelsWrap.childNodes.length) modelSlot.appendChild(modelsWrap);
+    }
+
+    const authSlot = card.querySelector(`[data-auth-slot="${worker}"]`);
+    if (authSlot) {
+      authSlot.textContent = '';
+      authSlot.appendChild(authRow(worker, q, acc));
+    }
   }
+
+  function hydrateAllUnifiedCards() {
+    const agentsEl = document.getElementById('agents');
+    if (!agentsEl) return;
+    agentsEl.querySelectorAll('.uh-card[data-worker]').forEach((card) => hydrateWorkerSlots(card));
+  }
+
+  window.__ahHydrateUnifiedCards = hydrateAllUnifiedCards;
 
   async function load() {
     try {
@@ -7192,15 +7312,14 @@
         fetch('/api/models').then((r) => r.json()),
       ]);
       quotaData = q; accountData = a; modelsData = m;
-      grid.textContent = '';
-      for (const w of Object.keys(q.workers || {})) {
-        grid.appendChild(workerCard(w, q.workers[w] || {}, (a.workers && a.workers[w]) || { profiles: [] }, (m.workers && m.workers[w]) || null));
-      }
+      hydrateAllUnifiedCards();
       stampUpdated();
     } catch (e) {
-      grid.textContent = '配额加载失败: ' + esc(e.message);
+      if (grid) grid.textContent = '配额加载失败: ' + esc(e.message);
     }
   }
+  window.__ahReloadQuotas = load;
+
   const qaUpdated = document.getElementById('qaUpdated');
   const stampUpdated = () => {
     if (!qaUpdated) return;
@@ -7209,15 +7328,16 @@
     qaUpdated.textContent = `更新于 ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
   };
   const refreshBtn = document.getElementById('qaRefreshBtn');
+  const agentsGrid = document.getElementById('agents');
   refreshBtn.addEventListener('click', async () => {
     if (refreshBtn.disabled) return;
     refreshBtn.disabled = true;
     const oldLabel = refreshBtn.textContent;
     refreshBtn.textContent = '↻ 刷新中…';
-    grid.classList.add('qa-loading');
+    if (agentsGrid) agentsGrid.classList.add('qa-loading');
     try { await fetch('/api/quota/refresh').then((r) => r.json()); } catch { /* ignore */ }
     try { await load(); } finally {
-      grid.classList.remove('qa-loading');
+      if (agentsGrid) agentsGrid.classList.remove('qa-loading');
       refreshBtn.disabled = false;
       refreshBtn.textContent = oldLabel;
     }
