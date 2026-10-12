@@ -4682,7 +4682,11 @@
     var mode = null;
     try { mode = localStorage.getItem('agent_hub_wb_mode'); } catch (e) {}
     if (mode !== 'open' && mode !== 'closed') mode = 'auto';
-    var showPanel = (mode === 'open') || (mode === 'auto' && total > 0);
+    // 手机窄屏（≤640px）auto 模式不自动弹出工作台——移动端它是全宽抽屉，会盖住整个对话区；
+    // 产物存在时由边缘把手 + 数量徽标提示，用户手动展开
+    var isNarrowScreen = false;
+    try { isNarrowScreen = window.matchMedia('(max-width: 640px)').matches; } catch (e) {}
+    var showPanel = (mode === 'open') || (mode === 'auto' && total > 0 && !isNarrowScreen);
     panel.hidden = !showPanel;
     edge.hidden = showPanel;
     if (edgeCnt) { edgeCnt.textContent = total > 0 ? String(total) : ''; edgeCnt.hidden = !(total > 0); }
