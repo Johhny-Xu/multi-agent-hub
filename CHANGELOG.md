@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **ZCode 国际/国内切换**：登录弹窗新增区域选择（国内版 BigModel / 国际版 Z.ai），后端按区域走官方 `provider: bigmodel|zai` 初始化、轮询与 `enc:v1:` 加密落盘，初始化失败按区域回退对应 API Key 获取页。
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
+- **MiniMax 上下文档位选择器 ([`console/client/index.html`](console/client/index.html) / [`console/auth.mjs`](console/auth.mjs))**：minimaxcode 卡片新增「上下文 512K | 1M」分段胶囊——实证 mmx CLI 的上下文窗口由模型内置表决定（`text chat` 无上下文参数），512K=`MiniMax-M3.1-Flash-Preview`（524288）、1M=`MiniMax-M3`（1e6），点击档位即切换默认模型，Hub 每次派发实时读取无需重启；同时将 M3.1 原先含糊的 `512K/1M` 标签修正为真实的 `512K 上下文`。
 - **模型别名可删除 ([`console/auth.mjs`](console/auth.mjs) / [`console/client/index.html`](console/client/index.html))**：内置模型行暴露 agents.json 中的别名徽章并可单个删除（修复"指向内置模型 id 的自定义别名永远无法删除"），删除当前 default 别名时自动回退内置默认模型。
 - **版本号统一**：console 服务与 WebUI 此前分叉停在 0.9.4（落后于主线 0.9.9.1），本版将 Hub 核心、console/WebUI、插件市场与全部集成/插件清单一律对齐到 **0.9.9.2**，结束双线并存。
 

@@ -3176,6 +3176,11 @@
 .uh-mp-badge.alias{color:#cbd5e1;background:rgba(148,163,184,.14);border:1px solid rgba(148,163,184,.25);font-family:var(--mono,monospace)}
 .uh-mp-badge.alias.removable{cursor:pointer}
 .uh-mp-badge.alias.removable:hover{color:#fca5a5;border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.12)}
+.uh-ctx-bar{display:flex;align-items:center;gap:6px;margin-top:6px}
+.uh-ctx-label{font-size:10.5px;color:#64748b;font-weight:600}
+.uh-ctx-pill{font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.3);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;transition:all .12s ease}
+.uh-ctx-pill:hover{border-color:rgba(96,165,250,.5);color:#93c5fd}
+.uh-ctx-pill.active{background:linear-gradient(90deg,rgba(59,130,246,.28),rgba(37,99,235,.18));border-color:rgba(96,165,250,.55);color:#93c5fd;cursor:default}
 .uh-mp-dropdown{display:none;position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:80;background:rgba(11,17,30,.98);backdrop-filter:blur(18px);border:1px solid rgba(96,165,250,.42);border-radius:12px;padding:7px;box-shadow:0 16px 40px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.08);flex-direction:column;gap:6px}
 .uh-mp-wrap.open .uh-mp-dropdown{display:flex}
 .uh-mp-search{width:100%;box-sizing:border-box;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.24);border-radius:8px;padding:5px 9px;font-size:11.5px;color:#f1f5f9;outline:none}
@@ -7306,6 +7311,36 @@
 
     mpWrap.append(trigger, dropdown);
     wrap.appendChild(mpWrap);
+
+    // 2.5 上下文档位分段选择器（仅当该 worker 有多档内置上下文的模型时出现，当前仅 MiniMax：512K=M3.1-Flash-Preview / 1M=M3）
+    const ctxGroups = new Map();
+    for (const m of allModels) {
+      if (!m.custom && m.ctx) {
+        if (!ctxGroups.has(m.ctx)) ctxGroups.set(m.ctx, []);
+        ctxGroups.get(m.ctx).push(m);
+      }
+    }
+    if (ctxGroups.size >= 2) {
+      const ctxBar = document.createElement('div'); ctxBar.className = 'uh-ctx-bar';
+      const ctxLabel = document.createElement('span'); ctxLabel.className = 'uh-ctx-label';
+      ctxLabel.textContent = '上下文';
+      ctxLabel.title = '选择上下文窗口档位（对应官方模型能力，切换即改默认模型）';
+      ctxBar.appendChild(ctxLabel);
+      const curCtx = (allModels.find((m) => m.id === curDefaultId || m.alias === curDefaultId) || {}).ctx || '';
+      for (const [ctxVal, models] of [...ctxGroups.entries()].sort((a, b) => parseInt(a[0]) - parseInt(b[0]))) {
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'uh-ctx-pill' + (ctxVal === curCtx ? ' active' : '');
+        pill.textContent = ctxVal;
+        const target = models.find((m) => m.isDefault) || models[0];
+        pill.title = `${ctxVal} 上下文 → ${target.name || target.id}`;
+        pill.onclick = () => {
+          if (ctxVal !== curCtx) switchDefault(target.id, `${target.name || target.id}（${ctxVal} 上下文）`);
+        };
+        ctxBar.appendChild(pill);
+      }
+      wrap.appendChild(ctxBar);
+    }
 
     // 3. 快捷模型胶囊栏（一键点击即切换默认模型，超 5 款可展开/收起）
     if (allModels.length > 0) {
