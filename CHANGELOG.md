@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **ZCode 国际/国内切换**：登录弹窗新增区域选择（国内版 BigModel / 国际版 Z.ai），后端按区域走官方 `provider: bigmodel|zai` 初始化、轮询与 `enc:v1:` 加密落盘，初始化失败按区域回退对应 API Key 获取页。
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
+- **手机端对话页修复 ([`console/client/index.html`](console/client/index.html))**：修复窄屏（≤640px）下工作台因 auto 模式"有产物即自动展开"而全宽覆盖对话区、导致手机上永远看不到对话的问题——窄屏时 auto 不再自动弹出，产物通过边缘把手徽标提示、手动展开；底部「对话 / 代理」导航栏与代理页在 390px 视口实测可正常进入与渲染。
 - **账号显示去重与可读性修复 ([`console/client/index.html`](console/client/index.html) / [`console/accounts.mjs`](console/accounts.mjs))**：
   - 账号档案名清洗 `cleanProfileLabel` 改为保留 Unicode 字母与数字（含中文），修复 CJK 账号名（如 Z.ai 的「旅行者****」）被吞成纯数字「7072」导致"登录成功却看不出新增了账号"的问题；
   - 卡片头部移除与"点头像"重复的「头像」按钮，启停开关独占右侧；套餐徽章不再重复括号内的账号身份（与 worker 同名时彻底隐藏），徽章文字不再截断；
