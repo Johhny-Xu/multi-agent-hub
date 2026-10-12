@@ -7109,13 +7109,27 @@
     const curDefaultId = mw.default || (allModels.find((m) => m.isDefault) || allModels[0] || {}).id || '';
     const curModel = allModels.find((m) => m.id === curDefaultId || m.alias === curDefaultId)
       || (curDefaultId ? { alias: curDefaultId, id: curDefaultId, name: curDefaultId, credits: null, tag: null } : { alias: '', id: '', name: '(系统默认)', credits: null, tag: null });
+    let ctxBarRef = null;
 
-    async function switchDefault(targetKey, displayName) {
-      if (!targetKey) return;
-      const r = await jpost('/api/models/default', { worker, alias: targetKey });
-      notify(r.ok ? `✓ ${worker} 默认模型已切换为 ${displayName || targetKey}` : `失败: ${r.error || '?'}`, !r.ok);
-      if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
-      load();
+    function switchDefault(targetKey, displayName) {
+      if (!targetKey || targetKey === curDefaultId) return;
+      // 乐观更新：立即刷新触发器文字与上下文胶囊选中态，后台再持久化
+      curNameEl.textContent = displayName || targetKey;
+      if (curIdEl) curIdEl.textContent = targetKey;
+      if (ctxBarRef) {
+        const targetModel = allModels.find((m) => m.id === targetKey || m.alias === targetKey);
+        const targetCtx = (targetModel && targetModel.ctx) || '';
+        for (const pill of ctxBarRef.querySelectorAll('.uh-ctx-pill')) {
+          pill.classList.toggle('active', !!targetCtx && pill.textContent === targetCtx);
+        }
+      }
+      jpost('/api/models/default', { worker, alias: targetKey })
+        .then((r) => {
+          notify(r.ok ? `✓ ${worker} 默认模型已切换为 ${displayName || targetKey}` : `失败: ${r.error || '?'}`, !r.ok);
+          if (typeof window.__ahLoadSnapshot === 'function') window.__ahLoadSnapshot();
+          load(); // 后台确认重绘；失败时以服务端状态回滚
+        })
+        .catch((e) => { notify(`失败: ${e.message || '?'}`, true); load(); });
     }
 
     // 1. 顶部标题栏：模型配置 + 数量徽章 + 「+自定义模型」按钮
@@ -7144,8 +7158,9 @@
     const starBadge = document.createElement('span'); starBadge.className = 'uh-mp-star'; starBadge.textContent = '★ 默认';
     const curNameEl = document.createElement('span'); curNameEl.className = 'uh-mp-cur-name'; curNameEl.textContent = curModel.name || curModel.id || '(未设置)';
     trigLeft.append(starBadge, curNameEl);
+    let curIdEl = null;
     if (curModel.id && curModel.name && curModel.id !== curModel.name) {
-      const curIdEl = document.createElement('span'); curIdEl.className = 'uh-mp-cur-id'; curIdEl.textContent = curModel.id;
+      curIdEl = document.createElement('span'); curIdEl.className = 'uh-mp-cur-id'; curIdEl.textContent = curModel.id;
       trigLeft.appendChild(curIdEl);
     }
 
@@ -7305,6 +7320,7 @@
     }
     if (ctxGroups.size >= 2) {
       const ctxBar = document.createElement('div'); ctxBar.className = 'uh-ctx-bar';
+      ctxBarRef = ctxBar;
       const ctxLabel = document.createElement('span'); ctxLabel.className = 'uh-ctx-label';
       ctxLabel.textContent = '上下文';
       ctxLabel.title = '选择上下文窗口档位（对应官方模型能力，切换即改默认模型）';
@@ -7318,7 +7334,11 @@
         const target = models.find((m) => m.isDefault) || models[0];
         pill.title = `${ctxVal} 上下文 → ${target.name || target.id}`;
         pill.onclick = () => {
-          if (ctxVal !== curCtx) switchDefault(target.id, `${target.name || target.id}（${ctxVal} 上下文）`);
+          if (ctxVal === curCtx) return;
+          // 乐观选中：点击立即变绿，后台持久化
+          for (const x of ctxBar.querySelectorAll('.uh-ctx-pill')) x.classList.remove('active');
+          pill.classList.add('active');
+          switchDefault(target.id, `${target.name || target.id}（${ctxVal} 上下文）`);
         };
         ctxBar.appendChild(pill);
       }
@@ -7960,12 +7980,49 @@
     wrap.appendChild(head);
 
     // 账号切换统一由下方胶囊芯片完成（下拉框与芯片 100% 重复，已移除）
-    async function doSwitchAccount(targetName) {
-      if (!targetName) return;
-      const r = await jpost('/api/accounts/switch', { worker, name: targetName });
-      notify(r.ok ? `✓ ${worker} 已切换至账号「${targetName}」` : `切换失败: ${r.error || '?'}`, !r.ok);
-      await fetch('/api/quota/refresh').catch(() => {});
-      await load();
+    let chipsWrapRef = null;
+    let liveActiveName = (activeProf && activeProf.name) || '';
+
+    function markChipActive(name) {
+      if (!chipsWrapRef) return;
+      liveActiveName = name;
+      for (const chip of chipsWrapRef.querySelectorAll('.uh-acc-chip[data-acc-name]')) {
+        const chipName = chip.getAttribute('data-acc-name');
+        const on = chipName === name;
+        chip.classList.toggle('active', on);
+        const prof = profiles.find((x) => x.name === chipName);
+        chip.title = on ? `当前激活: ${(prof && prof.display) || chipName}` : `点击立即切换至: ${(prof && prof.display) || chipName}`;
+        // 重新绑定：非当前芯片可点击切换，当前芯片不可点（原先激活的芯片没有 onclick，需补绑）
+        chip.onclick = on ? null : () => doSwitchAccount(chipName);
+        let badge = chip.querySelector('.uh-acc-chip-badge');
+        if (on && !badge) {
+          badge = document.createElement('span'); badge.className = 'uh-acc-chip-badge'; badge.textContent = '当前';
+          chip.insertBefore(badge, chip.querySelector('.uh-acc-chip-del'));
+        } else if (!on && badge) {
+          badge.remove();
+        }
+      }
+      // 头部账号徽章同步（乐观），后台 load() 会再核对
+      const card = wrap.closest('.uh-card');
+      const accBadgeEl = card && card.querySelector(`[data-acc-badge-for="${worker}"]`);
+      const prof = profiles.find((x) => x.name === name);
+      if (accBadgeEl && prof) accBadgeEl.textContent = `👤 ${prof.display || prof.name}`;
+    }
+
+    function doSwitchAccount(targetName) {
+      if (!targetName || targetName === liveActiveName) return;
+      // 乐观切换：点击立即变绿，后台再跑真实切换与配额刷新
+      markChipActive(targetName);
+      (async () => {
+        const r = await jpost('/api/accounts/switch', { worker, name: targetName }).catch((e) => ({ ok: false, error: e.message }));
+        if (!r || r.ok === false) {
+          notify(`切换失败: ${(r && r.error) || '?'}`, true);
+          load(); // 失败回滚：以服务端真实状态重绘
+          return;
+        }
+        notify(`✓ ${worker} 已切换至账号「${(profiles.find((x) => x.name === targetName) || {}).display || targetName}」`);
+        load(); // 后台确认刷新（服务端已清该 worker 配额缓存，其余走 60s 缓存，不再全量强刷）
+      })();
     }
 
     // 内联「存别名」抽屉
@@ -8002,10 +8059,12 @@
     if (profiles.length > 0 || isLoggedIn) {
       const chipsWrap = document.createElement('div');
       chipsWrap.className = 'uh-acc-chips-wrap';
+      chipsWrapRef = chipsWrap;
       for (const p of profiles) {
         const chip = document.createElement('div');
         chip.className = 'uh-acc-chip' + (p.active ? ' active' : '');
         chip.title = p.active ? `当前激活: ${p.display || p.name}` : `点击立即切换至: ${p.display || p.name}`;
+        chip.setAttribute('data-acc-name', p.name);
 
         const dot = document.createElement('span'); dot.className = 'uh-acc-chip-dot';
         const label = document.createElement('span'); label.textContent = p.display || p.name;
