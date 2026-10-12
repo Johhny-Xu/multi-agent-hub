@@ -7516,12 +7516,13 @@
     let currentLoginId = null;
     let pollTimer = null;
     let finished = false;
-    let sandboxName = defaultProfileName || `acc-${Date.now().toString().slice(-4)}`;
+    let submitting = false;
+    let customAccountName = defaultProfileName || '';
 
     const cleanupModal = async (cancelBackend = false) => {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       if (cancelBackend && currentLoginId && !finished) {
-        try { await jpost('/api/auth/finish', { loginId: currentLoginId }); } catch { /* ignore */ }
+        try { await jpost('/api/auth/finish', { loginId: currentLoginId, accountName: customAccountName }); } catch { /* ignore */ }
       }
       backdrop.remove();
     };
@@ -7530,9 +7531,9 @@
     const head = document.createElement('div'); head.className = 'uh-auth-head';
     const titleWrap = document.createElement('div'); titleWrap.className = 'uh-auth-title';
     const titleText = document.createElement('span');
-    titleText.textContent = isSandboxAdd ? `➕ ${worker} 添加新账号` : `🔐 ${worker} WebUI OAuth 登录`;
+    titleText.textContent = isSandboxAdd ? `➕ ${worker} 添加新账号` : `🔐 ${worker} OAuth 登录（自动添加账号）`;
     const badge = document.createElement('span'); badge.className = 'uh-auth-badge';
-    badge.textContent = isSandboxAdd ? '沙箱隔离 · 自动存档案' : '官方 OAuth / 凭据直连';
+    badge.textContent = '登录后自动归档至账号列表';
     titleWrap.append(titleText, badge);
 
     const closeBtn = document.createElement('button');
@@ -7542,37 +7543,25 @@
     head.append(titleWrap, closeBtn);
     modal.appendChild(head);
 
-    // 若为「+添加账号」，顶部展示档案名输入框与「启动沙箱登录」按钮
+    // 账号档案名称栏（选填：留空则自动识别邮箱/用户名/UID 并添加到账号列表）
     const sandboxBar = document.createElement('div');
     sandboxBar.className = 'uh-auth-step';
-    sandboxBar.hidden = !isSandboxAdd;
-    if (isSandboxAdd) {
-      const sbLabel = document.createElement('div'); sbLabel.className = 'uh-auth-step-label';
-      sbLabel.textContent = '新账号档案名称（仅限字母、数字、-、_）';
-      const sbRow = document.createElement('div'); sbRow.className = 'uh-auth-input-row';
-      const sbInput = document.createElement('input'); sbInput.className = 'uh-auth-input';
-      sbInput.value = sandboxName;
-      sbInput.placeholder = '例如 work / team-2 / backup';
-      const sbRestartBtn = qaBtn('↻ 用此名称重新生成会话');
-      sbRestartBtn.onclick = () => {
-        const v = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-        if (!v) { notify('请输入有效的档案名称', true); return; }
-        sandboxName = v;
-        sbInput.value = v;
-        startSession();
-      };
-      sbInput.oninput = () => {
-        const v = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-        if (v) sandboxName = v;
-      };
-      sbRow.append(sbInput, sbRestartBtn);
-      sandboxBar.append(sbLabel, sbRow);
-      modal.appendChild(sandboxBar);
-    }
+    const sbLabel = document.createElement('div'); sbLabel.className = 'uh-auth-step-label';
+    sbLabel.textContent = '账号备注名称（选填 · 留空将自动按登录邮箱 / 用户名添加到账号列表）';
+    const sbRow = document.createElement('div'); sbRow.className = 'uh-auth-input-row';
+    const sbInput = document.createElement('input'); sbInput.className = 'uh-auth-input';
+    sbInput.value = customAccountName;
+    sbInput.placeholder = '留空自动识别（如邮箱前缀 user2），也可自定义如 work / backup';
+    sbInput.oninput = () => {
+      customAccountName = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+    };
+    sbRow.appendChild(sbInput);
+    sandboxBar.append(sbLabel, sbRow);
+    modal.appendChild(sandboxBar);
 
     // 说明栏
     const noteEl = document.createElement('div'); noteEl.className = 'uh-auth-note';
-    noteEl.textContent = '正在初始化官方 OAuth 登录会话…';
+    noteEl.textContent = '正在初始化官方 OAuth 登录会话（原已登录账号将自动保留在账号列表中）…';
     modal.appendChild(noteEl);
 
     // Step 1: 授权链接区
@@ -7612,8 +7601,8 @@
     const cbStep = document.createElement('div'); cbStep.className = 'uh-auth-step';
     const cbLabel = document.createElement('div'); cbLabel.className = 'uh-auth-step-label';
     cbLabel.textContent = worker === 'codearts'
-      ? '输入华为云 CodeArts AK / SK 凭据'
-      : '回调链接 / 授权码 Code / API Key 快捷认证';
+      ? '输入华为云 CodeArts AK / SK 凭据（提交后自动添加至账号列表）'
+      : '回调链接 / 授权码 Code / API Key 认证（提交后自动添加至账号列表）';
     const cbRow = document.createElement('div'); cbRow.className = 'uh-auth-input-row';
 
     const cbInput = document.createElement('input');
@@ -7625,7 +7614,13 @@
     skInput.placeholder = 'CODEARTS_CLI_SK';
     skInput.hidden = worker !== 'codearts';
 
-    const submitCbBtn = qaBtn('✓ 提交完成认证', 'qa-primary');
+    const submitCbBtn = qaBtn('✓ 提交并自动添加账号', 'qa-primary');
+    cbInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        submitCbBtn.click();
+      }
+    });
     cbRow.append(cbInput, skInput, submitCbBtn);
     cbStep.append(cbLabel, cbRow);
     modal.appendChild(cbStep);
@@ -7663,35 +7658,41 @@
     backdrop.onclick = () => cleanupModal(true);
     document.body.appendChild(backdrop);
 
-    async function completeSessionSuccess(customMsg) {
+    async function completeSessionSuccess(customMsg, detectedAccountName = '') {
       if (finished) return;
       finished = true;
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      if (isSandboxAdd && currentLoginId) {
-        statusEl.textContent = `⏳ 正在将沙箱凭据存为档案「${sandboxName}」并切换…`;
-        const fr = await jpost('/api/accounts/add/finish', { worker, name: sandboxName, loginId: currentLoginId });
+      let accName = detectedAccountName || customAccountName || '';
+
+      if (isSandboxAdd && currentLoginId && !detectedAccountName) {
+        statusEl.textContent = `⏳ 正在将新登录凭据添加至账号列表并切换…`;
+        const fr = await jpost('/api/accounts/add/finish', { worker, name: customAccountName, loginId: currentLoginId });
         if (!fr.ok) {
           finished = false;
           statusEl.className = 'uh-auth-status err';
-          statusEl.textContent = `⚠️ 尚未检测到落盘凭据：${fr.error || '请先完成授权或提交认证码'}`;
+          statusEl.textContent = `⚠️ 尚未检测到落盘凭据：${fr.error || '请先完成授权或粘贴回调链接提交'}`;
           notify(fr.error || '尚未检测到凭据', true);
           return;
         }
-        statusEl.className = 'uh-auth-status ok';
-        statusEl.textContent = `✓ 新账号「${sandboxName}」已添加并切换生效！`;
-        notify(`✓ ${worker} 新账号「${sandboxName}」已添加并切换生效`);
-      } else {
-        statusEl.className = 'uh-auth-status ok';
-        statusEl.textContent = customMsg || `✓ ${worker} 授权已完成！正在刷新配额与账号状态…`;
-        notify(customMsg || `✓ ${worker} 登录成功，配额已自动刷新`);
+        accName = fr.name || accName;
+      } else if (!isSandboxAdd && currentLoginId && !detectedAccountName) {
+        const fr = await jpost('/api/auth/finish', { loginId: currentLoginId, accountName: customAccountName }).catch(() => ({}));
+        if (fr && fr.accountName) accName = fr.accountName;
       }
+
+      statusEl.className = 'uh-auth-status ok';
+      const finalMsg = customMsg || (accName
+        ? `✓ ${worker} 登录成功！已自动添加并切换至账号「${accName}」`
+        : `✓ ${worker} 登录成功，账号已自动添加并刷新配额`);
+      statusEl.textContent = finalMsg;
+      notify(finalMsg);
       await fetch('/api/quota/refresh').catch(() => {});
       await load();
-      setTimeout(() => cleanupModal(false), 900);
+      setTimeout(() => cleanupModal(false), 800);
     }
 
     submitCbBtn.onclick = async () => {
-      if (!currentLoginId) return;
+      if (!currentLoginId || submitting || finished) return;
       const val = cbInput.value.trim();
       const skVal = skInput.value.trim();
       if (worker === 'codearts' && (!val || !skVal)) {
@@ -7702,12 +7703,16 @@
         notify('请先粘贴回调链接、授权 Code 或 API Key', true);
         return;
       }
+      submitting = true;
       submitCbBtn.disabled = true;
-      statusEl.textContent = '⏳ 正在验证并写入凭据…';
+      finishBtn.disabled = true;
+      statusEl.className = 'uh-auth-status';
+      statusEl.textContent = '⏳ 正在向官方服务验证凭据并自动添加账号…';
       try {
         const r = await jpost('/api/auth/callback', {
           loginId: currentLoginId,
           input: val,
+          accountName: customAccountName,
           ak: worker === 'codearts' ? val : undefined,
           sk: worker === 'codearts' ? skVal : undefined,
         });
@@ -7717,29 +7722,29 @@
           notify(`认证失败: ${r.error || '?'}`, true);
           return;
         }
-        await completeSessionSuccess(r.note || `✓ ${worker} 认证成功！`);
+        await completeSessionSuccess(r.note || '', r.accountName || '');
       } finally {
-        submitCbBtn.disabled = false;
+        submitting = false;
+        if (!finished) {
+          submitCbBtn.disabled = false;
+          finishBtn.disabled = false;
+        }
       }
     };
 
     finishBtn.onclick = async () => {
+      if (submitting || finished) return;
       if (cbInput.value.trim()) {
         await submitCbBtn.onclick();
         return;
       }
-      if (isSandboxAdd) {
-        await completeSessionSuccess();
-      } else {
-        if (currentLoginId) await jpost('/api/auth/finish', { loginId: currentLoginId }).catch(() => {});
-        await completeSessionSuccess(`✓ ${worker} 登录流程已结束，配额与账号状态已刷新`);
-      }
+      await completeSessionSuccess();
     };
 
     async function pollOnce() {
-      if (!currentLoginId || finished) return;
+      if (!currentLoginId || finished || submitting) return;
       const p = await fetch(`/api/auth/poll?loginId=${encodeURIComponent(currentLoginId)}`).then((x) => x.json()).catch(() => null);
-      if (!p || !p.ok) return;
+      if (!p || !p.ok || finished || submitting) return;
       if (p.output) {
         termPre.textContent = p.output;
         termPre.scrollTop = termPre.scrollHeight;
@@ -7765,9 +7770,9 @@
         codeVal.textContent = p.deviceCode;
         copyCodeBtn.onclick = () => copyTextSafe(p.deviceCode, `设备码 ${p.deviceCode}`);
       }
-      if (p.exited && !finished) {
+      if (p.exited && !finished && !submitting) {
         if (p.exitCode === 0) {
-          await completeSessionSuccess();
+          await completeSessionSuccess('', p.accountName || '');
         } else {
           statusEl.className = 'uh-auth-status err';
           statusEl.textContent = `⚠️ 登录进程已结束 (code=${p.exitCode})，可检查日志或使用下方输入框完成认证`;
@@ -7778,10 +7783,11 @@
     async function startSession() {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       finished = false;
+      submitting = false;
       statusEl.className = 'uh-auth-status';
       statusEl.textContent = '⏳ 正在启动官方 OAuth 会话…';
       const endpoint = isSandboxAdd ? '/api/accounts/add' : '/api/auth/login';
-      const payload = isSandboxAdd ? { worker, name: sandboxName } : { worker };
+      const payload = { worker, name: customAccountName };
       const r = await jpost(endpoint, payload);
       if (!r || !r.ok) {
         noteEl.textContent = r?.note || r?.error || '启动登录会话失败';
@@ -7790,9 +7796,9 @@
         return;
       }
       currentLoginId = r.loginId;
-      noteEl.textContent = r.note || `${worker} OAuth 登录已启动`;
+      noteEl.textContent = (r.note || `${worker} OAuth 登录已启动`) + '（登录完成后将自动加入账号列表并切换生效）';
       if (r.callbackHint && worker !== 'codearts') cbInput.placeholder = r.callbackHint;
-      statusEl.textContent = '⏳ 正在等待浏览器完成授权（或粘贴回调信息提交）…';
+      statusEl.textContent = '⏳ 正在等待浏览器完成授权（或粘贴回调链接提交）…';
       await pollOnce();
       pollTimer = setInterval(pollOnce, 1500);
     }
@@ -7815,7 +7821,8 @@
     const isLoggedIn = (acc && acc.livePresent && !isLoggedOutMsg) || (q && q.quotas && Object.keys(q.quotas).length > 0);
     const statusPill = document.createElement('span');
     statusPill.className = 'uh-acc-status-pill ' + (isLoggedIn ? 'ok' : 'warn');
-    const activeProf = ((acc && acc.profiles) || []).find((p) => p.active);
+    const profiles = (acc && acc.profiles) || [];
+    const activeProf = profiles.find((p) => p.active);
     statusPill.textContent = isLoggedIn
       ? (activeProf ? `● 已登录 · ${activeProf.name}` : '● 已登录')
       : '○ 未登录';
@@ -7824,8 +7831,10 @@
 
     const rowProfile = document.createElement('div'); rowProfile.className = 'qa-inline';
     const sel = document.createElement('select'); sel.className = 'qa-select';
-    const profiles = (acc && acc.profiles) || [];
-    const blank = document.createElement('option'); blank.value = ''; blank.textContent = profiles.length ? `账号档案 (${profiles.length})…` : '（暂无已存档案）';
+    sel.title = '选择已保存的账号档案即可一键切换';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = profiles.length ? `已存账号 (${profiles.length}) — 选择即切换…` : '（暂无已存账号，点击下方 OAuth 登录自动添加）';
     sel.appendChild(blank);
     for (const p of profiles) {
       const o = document.createElement('option'); o.value = p.name;
@@ -7833,22 +7842,46 @@
       if (p.active) o.selected = true;
       sel.appendChild(o);
     }
-    const saveBtn = qaBtn('存当前');
+    const saveBtn = qaBtn('存别名');
+    saveBtn.title = '为当前已登录账号自定义一个别名档案';
     const swBtn = qaBtn('切换');
 
-    // 内联「存当前档案」抽屉（免除 window.prompt 阻塞）
+    async function doSwitchAccount(targetName) {
+      if (!targetName) { notify('请先在下拉框选择要切换到的账号', true); return; }
+      swBtn.disabled = true;
+      sel.disabled = true;
+      try {
+        const r = await jpost('/api/accounts/switch', { worker, name: targetName });
+        notify(r.ok ? `✓ ${worker} 已切换至账号「${targetName}」` : `切换失败: ${r.error || '?'}`, !r.ok);
+        await fetch('/api/quota/refresh').catch(() => {});
+        await load();
+      } finally {
+        swBtn.disabled = false;
+        sel.disabled = false;
+      }
+    }
+
+    // 下拉框直接选择另一个账号时自动切换
+    sel.onchange = () => {
+      if (sel.value && (!activeProf || sel.value !== activeProf.name)) {
+        doSwitchAccount(sel.value);
+      }
+    };
+    swBtn.onclick = () => doSwitchAccount(sel.value);
+
+    // 内联「存别名」抽屉
     const saveDrawer = document.createElement('div'); saveDrawer.className = 'uh-acc-save-drawer';
     const saveInput = document.createElement('input');
     saveInput.className = 'qa-input';
-    saveInput.placeholder = `输入 ${worker} 档案名 (如 main / work)`;
+    saveInput.placeholder = `输入 ${worker} 账号自定义名称 (如 main / work)`;
     const saveDrawerBtns = document.createElement('div'); saveDrawerBtns.className = 'qa-rowbtns';
-    const confirmSaveBtn = qaBtn('✓ 保存档案', 'qa-primary');
+    const confirmSaveBtn = qaBtn('✓ 保存名称', 'qa-primary');
     const cancelSaveBtn = qaBtn('取消');
     confirmSaveBtn.onclick = async () => {
       const name = saveInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-      if (!name) { notify('请填写档案名称（字母、数字、-、_）', true); return; }
+      if (!name) { notify('请填写账号名称（字母、数字、-、_）', true); return; }
       const r = await jpost('/api/accounts/save', { worker, name });
-      notify(r.ok ? `✓ 已将 ${worker} 当前凭据存为档案「${name}」` : `保存失败: ${r.error || '?'}`, !r.ok);
+      notify(r.ok ? `✓ 已将 ${worker} 当前凭据保存为账号「${r.name || name}」` : `保存失败: ${r.error || '?'}`, !r.ok);
       if (r.ok) {
         saveDrawer.classList.remove('open');
         saveInput.value = '';
@@ -7862,50 +7895,38 @@
     saveBtn.onclick = () => {
       saveDrawer.classList.toggle('open');
       if (saveDrawer.classList.contains('open')) {
-        if (!saveInput.value) saveInput.value = `acc-${profiles.length + 1}`;
+        if (!saveInput.value) saveInput.value = activeProf ? activeProf.name : `acc-${profiles.length + 1}`;
         setTimeout(() => { saveInput.focus(); saveInput.select(); }, 20);
       }
     };
 
-    swBtn.onclick = async () => {
-      if (!sel.value) { notify('请先在下拉框选择要切换到的账号档案', true); return; }
-      swBtn.disabled = true;
-      try {
-        const r = await jpost('/api/accounts/switch', { worker, name: sel.value });
-        notify(r.ok ? `✓ ${worker} 已切换到档案「${sel.value}」（原凭据已自动备份）` : `切换失败: ${r.error || '?'}`, !r.ok);
-        await load();
-      } finally {
-        swBtn.disabled = false;
-      }
-    };
-    rowProfile.append(sel, saveBtn, swBtn);
+    rowProfile.append(sel, swBtn, saveBtn);
     wrap.appendChild(rowProfile);
     wrap.appendChild(saveDrawer);
 
     const rowAuth = document.createElement('div'); rowAuth.className = 'qa-rowbtns qa-even';
     const loginBtn = qaBtn('🔐 OAuth 登录', 'qa-primary');
+    loginBtn.title = '打开官方 OAuth 登录窗口，登录成功后自动添加账号并切换生效';
+    const addAccBtn = qaBtn('+添加新账号');
+    addAccBtn.title = '在隔离沙箱中登录另一个新账号，自动加入账号列表且不覆盖旧账号';
     const logoutBtn = qaBtn('退出');
-    const addAccBtn = qaBtn('+添加账号');
 
     loginBtn.onclick = () => openOAuthModal(worker, { isSandboxAdd: false });
+
+    addAccBtn.onclick = () => openOAuthModal(worker, { isSandboxAdd: true, defaultProfileName: '' });
 
     logoutBtn.onclick = async () => {
       logoutBtn.disabled = true;
       try {
         const r = await jpost('/api/auth/logout', { worker });
-        notify(r.ok ? `✓ ${worker} 已退出登录（原凭据已备份至 .logged-out 目录）` : `退出提示: ${r.error || '?'}`, !r.ok);
+        notify(r.ok ? `✓ ${worker} 已退出当前账号（原账号仍保留在下拉列表中可随时切回）` : `退出提示: ${r.error || '?'}`, !r.ok);
         await load();
       } finally {
         logoutBtn.disabled = false;
       }
     };
 
-    addAccBtn.onclick = () => {
-      const nextIdx = profiles.length + 1;
-      openOAuthModal(worker, { isSandboxAdd: true, defaultProfileName: `acc-${nextIdx}` });
-    };
-
-    rowAuth.append(loginBtn, logoutBtn, addAccBtn);
+    rowAuth.append(loginBtn, addAccBtn, logoutBtn);
     wrap.appendChild(rowAuth);
     return wrap;
   }

@@ -14,13 +14,14 @@
 import { spawn, execFile as execFileCb } from 'node:child_process';
 import { createDecipheriv, createDiffieHellman, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { readFile, writeFile, mkdir, rename, readdir, rm, chmod } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, readdir, rm, chmod, stat } from 'node:fs/promises';
 import http from 'node:http';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { clearQuotaCache, fetchJsonSmart, encryptZcodeCred } from './vendor-quota.mjs';
+import { autoSyncLiveAccount, addFromSandbox } from './accounts.mjs';
 
 const execFile = promisify(execFileCb);
 const HOME = homedir();
@@ -244,22 +245,87 @@ function cleanupSessionResources(entry) {
   }
 }
 
-async function exchangeAntigravityCode(entry, codeStr) {
+/** 缓存最近 10 分钟内已成功向 Google 兑换过的单次授权码，彻底防止双击/重复提交触发 invalid_grant */
+const recentExchangedCodes = new Map();
+
+/**
+ * 登录完成后自动将该账号归档至 ~/.agenthub/accounts/<worker>/<name> 并设为当前生效
+ * @param {any} entry
+ * @param {string} [preferredName]
+ */
+async function finalizeLoginAccount(entry, preferredName = '') {
+  if (!entry) return null;
+  const pref = String(preferredName || entry.name || '').trim();
+  try {
+    const r = entry.sandbox
+      ? await addFromSandbox(entry.worker, pref, entry.id)
+      : await autoSyncLiveAccount(entry.worker, pref);
+    if (r && r.ok && r.name) {
+      entry.savedAccountName = r.name;
+      entry.buf += `[账号管理] ✓ 已自动添加并切换至账号「${r.name}」\n`;
+    }
+    return r;
+  } catch {
+    return null;
+  }
+}
+
+async function exchangeAntigravityCode(entry, codeStr, preferredName = '') {
+  const targetFile = join(entry.targetHome, '.gemini', 'antigravity-cli', 'antigravity-oauth-token');
+  if (entry.exited && entry.code === 0) {
+    const acc = await finalizeLoginAccount(entry, preferredName);
+    const accName = acc?.name || entry.savedAccountName || '';
+    return {
+      ok: true,
+      worker: 'antigravity',
+      accountName: accName,
+      note: accName ? `Antigravity 认证已完成，已自动添加并切换至账号「${accName}」` : 'Antigravity Google OAuth 认证已完成并落盘',
+    };
+  }
+
   let code = String(codeStr || '').trim();
+  let redirectUriFromInput = '';
   if (code.includes('code=')) {
     try {
-      const u = new URL(code.startsWith('http') ? code : `http://localhost/?${code.replace(/^[?#]/, '')}`);
+      const isFullUrl = /^https?:\/\//i.test(code);
+      const u = new URL(isFullUrl ? code : `http://localhost/oauth-callback?${code.replace(/^[?#]/, '')}`);
       code = u.searchParams.get('code') || code;
+      if (isFullUrl) {
+        redirectUriFromInput = `${u.protocol}//${u.host}${u.pathname}`;
+      }
     } catch { /* ignore */ }
+  } else if (code.includes('%2F') || code.includes('%2f')) {
+    try { code = decodeURIComponent(code); } catch { /* ignore */ }
   }
   if (!code) throw new Error('未检测到有效的 Google OAuth 授权码 (code)');
+
+  // 若该单次授权码刚在 10 分钟内兑换成功过，直接复用兑换结果，避免 Google 返回 invalid_grant
+  const cached = recentExchangedCodes.get(code);
+  if (cached && (Date.now() - cached.at < 600_000)) {
+    await mkdir(dirname(targetFile), { recursive: true });
+    await writeFile(targetFile, JSON.stringify(cached.payload, null, 2) + '\n', { mode: 0o600 });
+    entry.exited = true;
+    entry.code = 0;
+    cleanupSessionResources(entry);
+    clearQuotaCache('antigravity');
+    const acc = await finalizeLoginAccount(entry, preferredName);
+    const accName = acc?.name || entry.savedAccountName || '';
+    return {
+      ok: true,
+      worker: 'antigravity',
+      accountName: accName,
+      note: accName ? `Antigravity 认证成功，已自动添加账号「${accName}」` : 'Antigravity Google OAuth 认证已完成',
+    };
+  }
+
   entry.buf += `\n[OAuth] 正在向 Google 换取访问令牌…\n`;
+  const redirectUri = redirectUriFromInput || entry.redirectUri || `http://localhost:${ANTIGRAVITY_OAUTH.defaultPort}/oauth-callback`;
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: ANTIGRAVITY_OAUTH.clientId,
     client_secret: process.env.ANTIGRAVITY_OAUTH_CLIENT_SECRET || Buffer.from(ANTIGRAVITY_OAUTH.installedVerifierB64, 'base64').toString('utf8'),
     code,
-    redirect_uri: entry.redirectUri || `http://localhost:${ANTIGRAVITY_OAUTH.defaultPort}/oauth-callback`,
+    redirect_uri: redirectUri,
   }).toString();
   const res = await fetchJsonSmart(ANTIGRAVITY_OAUTH.tokenUrl, {
     method: 'POST',
@@ -267,6 +333,27 @@ async function exchangeAntigravityCode(entry, codeStr) {
     body,
   }, 20_000);
   if (!res.ok || !res.json?.access_token) {
+    // 若本地回调服务刚刚已完成兑换落盘（90 秒内更新过），视为已成功并直接归档账号
+    if (String(res.text || '').includes('invalid_grant')) {
+      try {
+        const st = await stat(targetFile);
+        if (Date.now() - st.mtimeMs < 90_000) {
+          entry.exited = true;
+          entry.code = 0;
+          cleanupSessionResources(entry);
+          clearQuotaCache('antigravity');
+          const acc = await finalizeLoginAccount(entry, preferredName);
+          const accName = acc?.name || entry.savedAccountName || '';
+          return {
+            ok: true,
+            worker: 'antigravity',
+            accountName: accName,
+            note: accName ? `Antigravity 认证成功，已自动添加账号「${accName}」` : 'Antigravity 认证已完成',
+          };
+        }
+      } catch { /* ignore */ }
+      throw new Error('该 Google 授权码已被使用或已过期（Google 授权码仅限单次兑换）。请点击上方「🚀 打开官方授权页面」重新获取最新回调链接');
+    }
     throw new Error(`Google Token 交换失败 (${res.status}): ${res.text?.slice(0, 200) || 'unknown'}`);
   }
   const tok = res.json;
@@ -281,7 +368,11 @@ async function exchangeAntigravityCode(entry, codeStr) {
     auth_method: 'oauth',
     ...(tok.id_token ? { id_token: tok.id_token } : {}),
   };
-  const targetFile = join(entry.targetHome, '.gemini', 'antigravity-cli', 'antigravity-oauth-token');
+  recentExchangedCodes.set(code, { payload, at: Date.now() });
+  if (recentExchangedCodes.size > 50) {
+    const firstKey = recentExchangedCodes.keys().next().value;
+    if (firstKey) recentExchangedCodes.delete(firstKey);
+  }
   await mkdir(dirname(targetFile), { recursive: true });
   await writeFile(targetFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
   entry.buf += `[OAuth] ✓ Antigravity OAuth 令牌已成功写入 ${targetFile}\n`;
@@ -289,10 +380,17 @@ async function exchangeAntigravityCode(entry, codeStr) {
   entry.code = 0;
   cleanupSessionResources(entry);
   clearQuotaCache('antigravity');
-  return { ok: true, worker: 'antigravity', note: 'Antigravity Google OAuth 认证已完成并落盘' };
+  const acc = await finalizeLoginAccount(entry, preferredName);
+  const accName = acc?.name || entry.savedAccountName || '';
+  return {
+    ok: true,
+    worker: 'antigravity',
+    accountName: accName,
+    note: accName ? `Antigravity 认证成功，已自动添加并切换至账号「${accName}」` : 'Antigravity Google OAuth 认证已完成并落盘',
+  };
 }
 
-async function exchangeTraeCallback(entry, rawInput) {
+async function exchangeTraeCallback(entry, rawInput, preferredName = '') {
   const input = String(rawInput || '').trim();
   if (!input) throw new Error('请输入 Trae 回调链接或 JWT Token');
   let accessToken = '';
@@ -344,7 +442,14 @@ async function exchangeTraeCallback(entry, rawInput) {
   entry.code = 0;
   cleanupSessionResources(entry);
   clearQuotaCache('traecode');
-  return { ok: true, worker: 'traecode', note: 'Trae 凭据已保存并生效' };
+  const acc = await finalizeLoginAccount(entry, preferredName);
+  const accName = acc?.name || entry.savedAccountName || '';
+  return {
+    ok: true,
+    worker: 'traecode',
+    accountName: accName,
+    note: accName ? `Trae 认证成功，已自动添加并切换至账号「${accName}」` : 'Trae 凭据已保存并生效',
+  };
 }
 
 async function saveZcodeOAuthResult(targetHome, provider, tokenData) {
@@ -377,6 +482,8 @@ async function saveZcodeOAuthResult(targetHome, provider, tokenData) {
 function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
   const spec = LOGIN_COMMANDS[worker];
   if (!spec) return { ok: false, error: `不支持的 worker: ${worker}` };
+  // 启动新登录前自动将当前已生效凭据归档保存，避免新账号登录覆盖丢失原账号
+  autoSyncLiveAccount(worker).catch(() => {});
   const targetHome = sandbox || HOME;
   if (sandbox) mkdirSync(sandbox, { recursive: true });
   const id = `${sandbox ? 'add' : 'login'}-${Date.now()}-${++seq}`;
@@ -384,7 +491,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
   const entry = {
     id,
     worker,
-    name,
+    name: name || null,
     sandbox,
     targetHome,
     mode: spec.mode,
@@ -394,6 +501,8 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
     authUrl: null,
     secondaryUrl: null,
     deviceCode: null,
+    savedAccountName: null,
+    inflightCallback: null,
     proc: null,
     server: null,
     pollTimer: null,
@@ -427,8 +536,6 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
     child.stdout.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
     child.stderr.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
     child.on('exit', async (code) => {
-      entry.exited = true;
-      entry.code = code;
       if (worker === 'github-copilot' && code === 0) {
         try {
           const { stdout } = await execFile('python3', [SECRET_HELPER, 'copilot-cli', 'https://github.com'], { timeout: 6000 });
@@ -440,6 +547,11 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
           }
         } catch { /* ignore */ }
       }
+      if (code === 0) {
+        await finalizeLoginAccount(entry);
+      }
+      entry.exited = true;
+      entry.code = code;
       clearQuotaCache(worker);
       cleanupSessionResources(entry);
     });
@@ -472,7 +584,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
     entry.proc = child;
     entry.buf = `[ACP] 正在请求 ${worker} (${envMode}) OAuth 授权链接…\n`;
     let lineBuf = '';
-    child.stdout.on('data', (chunk) => {
+    child.stdout.on('data', async (chunk) => {
       const text = chunk.toString();
       lineBuf += text;
       const lines = lineBuf.split('\n');
@@ -490,6 +602,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
               entry.buf += `[ACP] 授权返回错误: ${JSON.stringify(msg.error)}\n`;
             } else {
               entry.buf += `[ACP] ✓ 授权成功！凭据已自动写入 ${join(cfgDir, 'auth.info')}\n`;
+              await finalizeLoginAccount(entry);
               entry.exited = true;
               entry.code = 0;
               clearQuotaCache(worker);
@@ -503,8 +616,9 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
       trim(entry);
     });
     child.stderr.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
-    child.on('exit', (code) => {
+    child.on('exit', async (code) => {
       if (!entry.exited) {
+        if (code === 0) await finalizeLoginAccount(entry);
         entry.exited = true;
         entry.code = code;
         clearQuotaCache(worker);
@@ -704,6 +818,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
               };
               await saveZcodeOAuthResult(targetHome, 'bigmodel', { accessToken, refreshToken, zcodeJwtToken, userInfo });
               entry.buf += `\n[ZCode OAuth] ✓ 授权成功！账号 ${userInfo.username} 已加密写入 ${join(targetHome, '.zcode/v2/credentials.json')}\n`;
+              await finalizeLoginAccount(entry);
               entry.exited = true;
               entry.code = 0;
               cleanupSessionResources(entry);
@@ -734,14 +849,14 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
   return { ok: false, error: `未知的登录模式: ${spec.mode}` };
 }
 
-export function startLogin(worker) {
-  return launchWorkerSession(worker);
+export function startLogin(worker, name = '') {
+  return launchWorkerSession(worker, { name: name || null });
 }
 
 /** 沙箱添加账号：以隔离 HOME 启动登录流程，授权后凭据落在沙箱内，供快照成档案 */
 export function startLoginSandbox(worker, name) {
-  const sandbox = join(HOME, '.agenthub', 'sandbox', `${worker}-${name}-${Date.now()}`);
-  return launchWorkerSession(worker, { sandbox, name });
+  const sandbox = join(HOME, '.agenthub', 'sandbox', `${worker}-${name || 'auto'}-${Date.now()}`);
+  return launchWorkerSession(worker, { sandbox, name: name || null });
 }
 
 /** 取登录会话的沙箱目录（供 addFromSandbox 快照） */
@@ -770,6 +885,7 @@ export function pollLogin(loginId) {
     deviceCode: e.deviceCode || (deviceMatch ? deviceMatch[1] : null),
     needsCallbackInput: !!e.needsCallbackInput,
     callbackHint: e.callbackHint || '',
+    accountName: e.savedAccountName || null,
     exited: e.exited,
     exitCode: e.code,
   };
@@ -779,182 +895,244 @@ export function pollLogin(loginId) {
  * WebUI 提交回调 URL / 授权码 / API Key / TUI 交互输入
  * @param {string} loginId
  * @param {string} rawInput
- * @param {{ ak?: string, sk?: string }} [extra]
+ * @param {{ ak?: string, sk?: string, accountName?: string }} [extra]
  */
 export async function submitLoginCallback(loginId, rawInput, extra = {}) {
   const e = sessions.get(loginId);
   if (!e) return { ok: false, error: '登录会话不存在或已过期，请重新点击登录' };
-  const input = String(rawInput || '').trim();
+  if (extra.accountName) e.name = String(extra.accountName).trim();
 
-  try {
-    // 1. Antigravity: Google OAuth 回调 URL 或 code
-    if (e.worker === 'antigravity') {
-      return await exchangeAntigravityCode(e, input);
-    }
+  // Singleflight：同一登录会话若正在执行回调兑换，直接复用 Promise，防止双击/并发提交单次授权码
+  if (e.inflightCallback) {
+    return await e.inflightCallback;
+  }
 
-    // 2. MiMoCode: 小米 MiMo 加密授权码 u / 回调链接 / 直接 API Key
-    if (e.worker === 'mimocode') {
-      if (!input) return { ok: false, error: '请粘贴小米 MiMo 授权 Code、回调链接或 API Key' };
-      const authFile = join(e.targetHome, '.local', 'share', 'mimocode', 'auth.json');
-      await mkdir(dirname(authFile), { recursive: true });
-      let authData = {};
-      try { authData = JSON.parse(await readFile(authFile, 'utf-8')); } catch { authData = {}; }
-      if (/^sk-[A-Za-z0-9_-]{12,}$/.test(input)) {
-        authData.xiaomi = { type: 'api', key: input };
-      } else {
-        if (!e.mimoPrivateKeyDer) return { ok: false, error: '当前会话缺少 X25519 私钥，请重新发起登录' };
-        const dec = decryptMimoCode(e.mimoPrivateKeyDer, input);
-        if (!dec || !dec.sk) throw new Error('解密后未包含有效的 MiMo 密钥 (sk)');
-        authData.xiaomi = {
-          type: 'api',
-          key: dec.sk,
-          metadata: {
-            ...(dec.uid ? { uid: dec.uid } : {}),
-            ...(dec.url ? { base_url: dec.url } : {}),
-          },
+  const runCallback = async () => {
+    const input = String(rawInput || '').trim();
+    const prefName = String(extra.accountName || e.name || '').trim();
+    try {
+      // 1. Antigravity: Google OAuth 回调 URL 或 code
+      if (e.worker === 'antigravity') {
+        return await exchangeAntigravityCode(e, input, prefName);
+      }
+
+      // 2. MiMoCode: 小米 MiMo 加密授权码 u / 回调链接 / 直接 API Key
+      if (e.worker === 'mimocode') {
+        if (!input) return { ok: false, error: '请粘贴小米 MiMo 授权 Code、回调链接或 API Key' };
+        const authFile = join(e.targetHome, '.local', 'share', 'mimocode', 'auth.json');
+        await mkdir(dirname(authFile), { recursive: true });
+        let authData = {};
+        try { authData = JSON.parse(await readFile(authFile, 'utf-8')); } catch { authData = {}; }
+        if (/^sk-[A-Za-z0-9_-]{12,}$/.test(input)) {
+          authData.xiaomi = { type: 'api', key: input };
+        } else {
+          if (!e.mimoPrivateKeyDer) return { ok: false, error: '当前会话缺少 X25519 私钥，请重新发起登录' };
+          const dec = decryptMimoCode(e.mimoPrivateKeyDer, input);
+          if (!dec || !dec.sk) throw new Error('解密后未包含有效的 MiMo 密钥 (sk)');
+          authData.xiaomi = {
+            type: 'api',
+            key: dec.sk,
+            metadata: {
+              ...(dec.uid ? { uid: dec.uid } : {}),
+              ...(dec.url ? { base_url: dec.url } : {}),
+            },
+          };
+        }
+        await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
+        e.buf += `\n[MiMo OAuth] ✓ 小米 MiMo 凭据已成功解密并写入 ${authFile}\n`;
+        e.exited = true;
+        e.code = 0;
+        cleanupSessionResources(e);
+        clearQuotaCache('mimocode');
+        const acc = await finalizeLoginAccount(e, prefName);
+        const accName = acc?.name || e.savedAccountName || '';
+        return {
+          ok: true,
+          worker: 'mimocode',
+          accountName: accName,
+          note: accName ? `小米 MiMo 认证成功，已自动添加并切换至账号「${accName}」` : '小米 MiMo 凭据已验证并落盘',
         };
       }
-      await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
-      e.buf += `\n[MiMo OAuth] ✓ 小米 MiMo 凭据已成功解密并写入 ${authFile}\n`;
-      e.exited = true;
-      e.code = 0;
-      cleanupSessionResources(e);
-      clearQuotaCache('mimocode');
-      return { ok: true, worker: 'mimocode', note: '小米 MiMo 凭据已验证并落盘' };
-    }
 
-    // 3. TraeCode: 回调链接或 JWT Token
-    if (e.worker === 'traecode') {
-      return await exchangeTraeCallback(e, input);
-    }
+      // 3. TraeCode: 回调链接或 JWT Token
+      if (e.worker === 'traecode') {
+        return await exchangeTraeCallback(e, input, prefName);
+      }
 
-    // 4. ZCode: 智谱 BigModel / Z.ai OAuth 回调链接或 Coding Plan API Key
-    if (e.worker === 'zcode') {
-      if (!input) return { ok: false, error: '请粘贴智谱 BigModel / Z.ai API Key 或回调链接' };
-      if (input.includes('code=') || input.includes('authCode=')) {
-        const u = new URL(input.startsWith('http') || input.startsWith('zcode:') ? input : `http://localhost/?${input.replace(/^[?#]/, '')}`);
-        const code = u.searchParams.get('authCode') || u.searchParams.get('code') || '';
-        const state = u.searchParams.get('state') || e.oauthState || '';
-        const redirectUri = 'https://zcode.z.ai/app/oauth/login?redirect=zcode%3A%2F%2Foauth%2Fcallback&app_version=3.15.0';
-        const r = await fetchJsonSmart(ZCODE_OAUTH.tokenUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: 'bigmodel', code, redirect_uri: redirectUri, state }),
-        }, 15_000);
-        if (!r.ok || r.json?.code !== 0 || !r.json?.data?.token) {
-          throw new Error(r.json?.msg || `ZCode Token 交换失败 (${r.status})`);
+      // 4. ZCode: 智谱 BigModel / Z.ai OAuth 回调链接或 Coding Plan API Key
+      if (e.worker === 'zcode') {
+        if (!input) return { ok: false, error: '请粘贴智谱 BigModel / Z.ai API Key 或回调链接' };
+        if (input.includes('code=') || input.includes('authCode=')) {
+          const u = new URL(input.startsWith('http') || input.startsWith('zcode:') ? input : `http://localhost/?${input.replace(/^[?#]/, '')}`);
+          const code = u.searchParams.get('authCode') || u.searchParams.get('code') || '';
+          const state = u.searchParams.get('state') || e.oauthState || '';
+          const redirectUri = 'https://zcode.z.ai/app/oauth/login?redirect=zcode%3A%2F%2Foauth%2Fcallback&app_version=3.15.0';
+          const r = await fetchJsonSmart(ZCODE_OAUTH.tokenUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'bigmodel', code, redirect_uri: redirectUri, state }),
+          }, 15_000);
+          if (!r.ok || r.json?.code !== 0 || !r.json?.data?.token) {
+            throw new Error(r.json?.msg || `ZCode Token 交换失败 (${r.status})`);
+          }
+          const bm = r.json.data.bigmodel || {};
+          await saveZcodeOAuthResult(e.targetHome, 'bigmodel', {
+            accessToken: bm.access_token || bm.accessToken || '',
+            refreshToken: bm.refresh_token || bm.refreshToken || '',
+            zcodeJwtToken: r.json.data.token,
+          });
+        } else {
+          await saveZcodeOAuthResult(e.targetHome, 'bigmodel', { apiKey: input });
         }
-        const bm = r.json.data.bigmodel || {};
-        await saveZcodeOAuthResult(e.targetHome, 'bigmodel', {
-          accessToken: bm.access_token || bm.accessToken || '',
-          refreshToken: bm.refresh_token || bm.refreshToken || '',
-          zcodeJwtToken: r.json.data.token,
-        });
-      } else {
-        await saveZcodeOAuthResult(e.targetHome, 'bigmodel', { apiKey: input });
+        e.buf += `\n[ZCode] ✓ ZCode 凭据已加密写入 ${join(e.targetHome, '.zcode/v2/credentials.json')}\n`;
+        e.exited = true;
+        e.code = 0;
+        cleanupSessionResources(e);
+        const acc = await finalizeLoginAccount(e, prefName);
+        const accName = acc?.name || e.savedAccountName || '';
+        return {
+          ok: true,
+          worker: 'zcode',
+          accountName: accName,
+          note: accName ? `ZCode 认证成功，已自动添加并切换至账号「${accName}」` : 'ZCode 凭据已加密保存并生效',
+        };
       }
-      e.buf += `\n[ZCode] ✓ ZCode 凭据已加密写入 ${join(e.targetHome, '.zcode/v2/credentials.json')}\n`;
-      e.exited = true;
-      e.code = 0;
-      cleanupSessionResources(e);
-      return { ok: true, worker: 'zcode', note: 'ZCode 凭据已加密保存并生效' };
-    }
 
-    // 5. CodeArts: AK/SK
-    if (e.worker === 'codearts') {
-      let ak = String(extra.ak || '').trim();
-      let sk = String(extra.sk || '').trim();
-      if ((!ak || !sk) && input.includes(':')) {
-        const idx = input.indexOf(':');
-        ak = input.slice(0, idx).trim();
-        sk = input.slice(idx + 1).trim();
+      // 5. CodeArts: AK/SK
+      if (e.worker === 'codearts') {
+        let ak = String(extra.ak || '').trim();
+        let sk = String(extra.sk || '').trim();
+        if ((!ak || !sk) && input.includes(':')) {
+          const idx = input.indexOf(':');
+          ak = input.slice(0, idx).trim();
+          sk = input.slice(idx + 1).trim();
+        }
+        const res = await _saveCodeArtsToHome(e.targetHome, ak, sk);
+        if (!res.ok) return res;
+        e.buf += `\n[CodeArts] ✓ AK/SK 已保存到 ${join(e.targetHome, '.config/agenthub-codearts/codearts-auth.env')}\n`;
+        e.exited = true;
+        e.code = 0;
+        cleanupSessionResources(e);
+        const acc = await finalizeLoginAccount(e, prefName);
+        const accName = acc?.name || e.savedAccountName || '';
+        return {
+          ...res,
+          accountName: accName,
+          note: accName ? `CodeArts 认证成功，已自动添加并切换至账号「${accName}」` : res.note,
+        };
       }
-      const res = await _saveCodeArtsToHome(e.targetHome, ak, sk);
-      if (!res.ok) return res;
-      e.buf += `\n[CodeArts] ✓ AK/SK 已保存到 ${join(e.targetHome, '.config/agenthub-codearts/codearts-auth.env')}\n`;
-      e.exited = true;
-      e.code = 0;
-      cleanupSessionResources(e);
-      return res;
-    }
 
-    // 6. MiniMaxCode: 支持直接粘贴 sk-... API Key 或向 PTY 发送输入
-    if (e.worker === 'minimaxcode' && /^sk-[A-Za-z0-9_-]{10,}$/.test(input)) {
-      const mmxFile = join(e.targetHome, '.mmx', 'config.json');
-      await mkdir(dirname(mmxFile), { recursive: true });
-      let cfg = { region: 'cn' };
-      try { cfg = JSON.parse(await readFile(mmxFile, 'utf-8')); } catch { /* ignore */ }
-      cfg.api_key = input;
-      await writeFile(mmxFile, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
-      e.buf += `\n[MiniMax] ✓ API Key 已直接写入 ${mmxFile}\n`;
-      e.exited = true;
-      e.code = 0;
-      cleanupSessionResources(e);
-      clearQuotaCache('minimaxcode');
-      return { ok: true, worker: 'minimaxcode', note: 'MiniMax API Key 已保存并生效' };
-    }
-
-    // 7. CodeBuddy / CodeBuddy-CN: 支持直接粘贴 auth.info JSON 或 accessToken
-    if ((e.worker === 'codebuddy' || e.worker === 'codebuddy-cn') && input) {
-      const dirName = e.worker === 'codebuddy-cn' ? '.codebuddy-cn' : '.codebuddy';
-      const authInfoFile = join(e.targetHome, dirName, 'auth.info');
-      await mkdir(dirname(authInfoFile), { recursive: true });
-      let payload;
-      try {
-        payload = JSON.parse(input);
-      } catch {
-        payload = { auth: { accessToken: input.replace(/^Bearer\s+/i, '').trim() }, updatedAt: new Date().toISOString() };
+      // 6. MiniMaxCode: 支持直接粘贴 sk-... API Key 或向 PTY 发送输入
+      if (e.worker === 'minimaxcode' && /^sk-[A-Za-z0-9_-]{10,}$/.test(input)) {
+        const mmxFile = join(e.targetHome, '.mmx', 'config.json');
+        await mkdir(dirname(mmxFile), { recursive: true });
+        let cfg = { region: 'cn' };
+        try { cfg = JSON.parse(await readFile(mmxFile, 'utf-8')); } catch { /* ignore */ }
+        cfg.api_key = input;
+        await writeFile(mmxFile, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+        e.buf += `\n[MiniMax] ✓ API Key 已直接写入 ${mmxFile}\n`;
+        e.exited = true;
+        e.code = 0;
+        cleanupSessionResources(e);
+        clearQuotaCache('minimaxcode');
+        const acc = await finalizeLoginAccount(e, prefName);
+        const accName = acc?.name || e.savedAccountName || '';
+        return {
+          ok: true,
+          worker: 'minimaxcode',
+          accountName: accName,
+          note: accName ? `MiniMax 认证成功，已自动添加并切换至账号「${accName}」` : 'MiniMax API Key 已保存并生效',
+        };
       }
-      await writeFile(authInfoFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
-      e.buf += `\n[CodeBuddy] ✓ 凭据已写入 ${authInfoFile}\n`;
-      e.exited = true;
-      e.code = 0;
-      cleanupSessionResources(e);
-      clearQuotaCache(e.worker);
-      return { ok: true, worker: e.worker, note: `${e.worker} 凭据已保存并生效` };
-    }
 
-    // 8. GitHub Copilot: 支持直接粘贴 gho_ / ghu_ / github_pat_ Token
-    if (e.worker === 'github-copilot' && /^(gh[opusr]_|github_pat_)[A-Za-z0-9_]{10,}$/.test(input)) {
-      const mirror = join(e.targetHome, '.config', 'github-copilot', 'copilot-token');
-      await mkdir(dirname(mirror), { recursive: true });
-      await writeFile(mirror, input, { mode: 0o600 });
-      if (!e.sandbox) {
-        try { await execFile('python3', [SECRET_HELPER, '--set', 'copilot-cli', 'https://github.com', input], { timeout: 6000 }); } catch { /* ignore */ }
+      // 7. CodeBuddy / CodeBuddy-CN: 支持直接粘贴 auth.info JSON 或 accessToken
+      if ((e.worker === 'codebuddy' || e.worker === 'codebuddy-cn') && input) {
+        const dirName = e.worker === 'codebuddy-cn' ? '.codebuddy-cn' : '.codebuddy';
+        const authInfoFile = join(e.targetHome, dirName, 'auth.info');
+        await mkdir(dirname(authInfoFile), { recursive: true });
+        let payload;
+        try {
+          payload = JSON.parse(input);
+        } catch {
+          payload = { auth: { accessToken: input.replace(/^Bearer\s+/i, '').trim() }, updatedAt: new Date().toISOString() };
+        }
+        await writeFile(authInfoFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+        e.buf += `\n[CodeBuddy] ✓ 凭据已写入 ${authInfoFile}\n`;
+        e.exited = true;
+        e.code = 0;
+        cleanupSessionResources(e);
+        clearQuotaCache(e.worker);
+        const acc = await finalizeLoginAccount(e, prefName);
+        const accName = acc?.name || e.savedAccountName || '';
+        return {
+          ok: true,
+          worker: e.worker,
+          accountName: accName,
+          note: accName ? `${e.worker} 认证成功，已自动添加并切换至账号「${accName}」` : `${e.worker} 凭据已保存并生效`,
+        };
       }
-      e.buf += `\n[Copilot] ✓ GitHub Copilot Token 已保存\n`;
-      e.exited = true;
-      e.code = 0;
-      cleanupSessionResources(e);
-      clearQuotaCache('github-copilot');
-      return { ok: true, worker: 'github-copilot', note: 'GitHub Copilot Token 已保存并生效' };
-    }
 
-    // 9. 通用 PTY 终端交互输入（如向正在运行的 CLI 发送回车或文本）
-    if (e.proc && e.proc.stdin && !e.exited) {
-      e.proc.stdin.write(input + '\n');
-      return { ok: true, worker: e.worker, note: '已发送到登录终端' };
-    }
+      // 8. GitHub Copilot: 支持直接粘贴 gho_ / ghu_ / github_pat_ Token
+      if (e.worker === 'github-copilot' && /^(gh[opusr]_|github_pat_)[A-Za-z0-9_]{10,}$/.test(input)) {
+        const mirror = join(e.targetHome, '.config', 'github-copilot', 'copilot-token');
+        await mkdir(dirname(mirror), { recursive: true });
+        await writeFile(mirror, input, { mode: 0o600 });
+        if (!e.sandbox) {
+          try { await execFile('python3', [SECRET_HELPER, '--set', 'copilot-cli', 'https://github.com', input], { timeout: 6000 }); } catch { /* ignore */ }
+        }
+        e.buf += `\n[Copilot] ✓ GitHub Copilot Token 已保存\n`;
+        e.exited = true;
+        e.code = 0;
+        cleanupSessionResources(e);
+        clearQuotaCache('github-copilot');
+        const acc = await finalizeLoginAccount(e, prefName);
+        const accName = acc?.name || e.savedAccountName || '';
+        return {
+          ok: true,
+          worker: 'github-copilot',
+          accountName: accName,
+          note: accName ? `GitHub Copilot 认证成功，已自动添加并切换至账号「${accName}」` : 'GitHub Copilot Token 已保存并生效',
+        };
+      }
 
-    return { ok: false, error: '当前会话不支持该输入或已结束' };
-  } catch (err) {
-    return { ok: false, error: err.message || '认证处理失败' };
+      // 9. 通用 PTY 终端交互输入（如向正在运行的 CLI 发送回车或文本）
+      if (e.proc && e.proc.stdin && !e.exited) {
+        e.proc.stdin.write(input + '\n');
+        return { ok: true, worker: e.worker, note: '已发送到登录终端' };
+      }
+
+      return { ok: false, error: '当前会话不支持该输入或已结束' };
+    } catch (err) {
+      return { ok: false, error: err.message || '认证处理失败' };
+    }
+  };
+
+  const p = runCallback();
+  e.inflightCallback = p;
+  try {
+    return await p;
+  } finally {
+    if (e.inflightCallback === p) e.inflightCallback = null;
   }
 }
 
-export function finishLogin(loginId) {
+export async function finishLogin(loginId, preferredName = '') {
   const e = sessions.get(loginId);
   if (!e) return { ok: false, error: '登录会话不存在或已过期' };
+  const acc = await finalizeLoginAccount(e, preferredName);
+  const accountName = acc?.name || e.savedAccountName || null;
   clearQuotaCache(e.worker);
   cleanupSessionResources(e);
   sessions.delete(loginId);
-  return { ok: true };
+  return { ok: true, worker: e.worker, accountName };
 }
 
 // ---------------------------------------------------------------- 退出登录（全部 9 个 Worker）
 export async function logout(worker) {
   const files = LOGOUT_FILES[worker];
   if (!files) return { ok: false, error: `该 worker 无可退出的凭据文件: ${worker}` };
+  // 退出登录前先将当前有效凭据自动归档至账号列表，方便随时从下拉框一键切回
+  try { await autoSyncLiveAccount(worker); } catch { /* ignore */ }
   const destDir = join(HOME, '.agenthub', 'accounts', worker, `.logged-out-${Date.now()}`);
   await mkdir(destDir, { recursive: true });
   const moved = [];
@@ -987,7 +1165,7 @@ export async function logout(worker) {
 
   clearQuotaCache(worker);
   if (moved.length === 0) return { ok: false, error: '未找到任何生效凭据（当前可能已处于退出状态）' };
-  return { ok: true, worker, moved, backup: destDir, note: '凭据已安全移入备份目录并清空配额缓存（可随时恢复）' };
+  return { ok: true, worker, moved, backup: destDir, note: '已退出当前账号（原账号已保存在账号档案列表中，可随时切换恢复）' };
 }
 
 // ---------------------------------------------------------------- CodeArts AK/SK
@@ -1004,7 +1182,11 @@ async function _saveCodeArtsToHome(targetHome, ak, sk) {
 }
 
 async function _saveCodeArts(ak, sk) {
-  return _saveCodeArtsToHome(HOME, ak, sk);
+  const res = await _saveCodeArtsToHome(HOME, ak, sk);
+  if (res.ok) {
+    try { await autoSyncLiveAccount('codearts'); } catch { /* ignore */ }
+  }
+  return res;
 }
 
 // ---------------------------------------------------------------- 模型管理

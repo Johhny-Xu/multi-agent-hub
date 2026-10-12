@@ -2285,7 +2285,8 @@ export async function start(context) {
       }
       if (request.method === 'POST' && p === '/api/accounts/save') {
         const body = await readJson();
-        send(200, await accountsMod.saveAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        send(200, await accountsMod.saveAccount(safeName(body.worker, 'worker'), optName));
         return;
       }
       if (request.method === 'POST' && p === '/api/accounts/switch') {
@@ -2293,9 +2294,15 @@ export async function start(context) {
         send(200, await accountsMod.switchAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
         return;
       }
+      if (request.method === 'POST' && p === '/api/accounts/delete') {
+        const body = await readJson();
+        send(200, await accountsMod.deleteAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        return;
+      }
       if (request.method === 'POST' && p === '/api/auth/login') {
         const body = await readJson();
-        send(200, authMod.startLogin(safeName(body.worker, 'worker')));
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        send(200, authMod.startLogin(safeName(body.worker, 'worker'), optName));
         return;
       }
       if (request.method === 'GET' && p === '/api/auth/poll') {
@@ -2307,13 +2314,13 @@ export async function start(context) {
         send(200, await authMod.submitLoginCallback(
           String(body.loginId || ''),
           String(body.input || body.code || body.url || ''),
-          { ak: body.ak, sk: body.sk },
+          { ak: body.ak, sk: body.sk, accountName: String(body.accountName || body.name || '') },
         ));
         return;
       }
       if (request.method === 'POST' && p === '/api/auth/finish') {
         const body = await readJson();
-        send(200, authMod.finishLogin(String(body.loginId || '')));
+        send(200, await authMod.finishLogin(String(body.loginId || ''), String(body.accountName || body.name || '')));
         return;
       }
       if (request.method === 'POST' && p === '/api/auth/logout') {
@@ -2323,12 +2330,14 @@ export async function start(context) {
       }
       if (request.method === 'POST' && p === '/api/accounts/add') {
         const body = await readJson();
-        send(200, authMod.startLoginSandbox(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        send(200, authMod.startLoginSandbox(safeName(body.worker, 'worker'), optName));
         return;
       }
       if (request.method === 'POST' && p === '/api/accounts/add/finish') {
         const body = await readJson();
-        send(200, await accountsMod.addFromSandbox(safeName(body.worker, 'worker'), safeName(body.name, 'name'), String(body.loginId || '')));
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        send(200, await accountsMod.addFromSandbox(safeName(body.worker, 'worker'), optName, String(body.loginId || '')));
         return;
       }
       if (request.method === 'POST' && p === '/api/auth/codearts') {
