@@ -4290,7 +4290,9 @@
       chat.sessions = r.sessions || [];
       var t = chat.threads.find(function (x) { return x.agent === name; });
       if (t && (t.unread || t.totalUnread)) {
-        api('/api/chat/read', { agent: name, sessionId: chat.activeSessionId }).then(function () {
+        // 修复老 bug：打开 agent 时按整 agent 标读（服务端清空其全部会话的未读），
+        // 否则旧会话攒下的未读永远清不掉，每次刷新红点都会出现
+        api('/api/chat/read', { agent: name }).then(function () {
           t.unread = 0; t.totalUnread = 0;
           renderPlatformList();
         }).catch(function () {});
