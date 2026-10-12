@@ -21,7 +21,7 @@ import * as authMod from './auth.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '0.9.4';
+const VERSION = '0.9.9.2';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -2303,7 +2303,8 @@ export async function start(context) {
       if (request.method === 'POST' && p === '/api/auth/login') {
         const body = await readJson();
         const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
-        send(200, authMod.startLogin(safeName(body.worker, 'worker'), optName));
+        const region = body.region === 'intl' || body.region === 'cn' ? body.region : '';
+        send(200, authMod.startLogin(safeName(body.worker, 'worker'), optName, { region }));
         return;
       }
       if (request.method === 'GET' && p === '/api/auth/poll') {

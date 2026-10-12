@@ -3174,6 +3174,8 @@
 .uh-mp-badge.credits{color:#67e8f9;background:rgba(6,182,212,.14);border:1px solid rgba(6,182,212,.3)}
 .uh-mp-badge.tag{color:#6ee7b7;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.3)}
 .uh-mp-badge.alias{color:#cbd5e1;background:rgba(148,163,184,.14);border:1px solid rgba(148,163,184,.25);font-family:var(--mono,monospace)}
+.uh-mp-badge.alias.removable{cursor:pointer}
+.uh-mp-badge.alias.removable:hover{color:#fca5a5;border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.12)}
 .uh-mp-dropdown{display:none;position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:80;background:rgba(11,17,30,.98);backdrop-filter:blur(18px);border:1px solid rgba(96,165,250,.42);border-radius:12px;padding:7px;box-shadow:0 16px 40px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.08);flex-direction:column;gap:6px}
 .uh-mp-wrap.open .uh-mp-dropdown{display:flex}
 .uh-mp-search{width:100%;box-sizing:border-box;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.24);border-radius:8px;padding:5px 9px;font-size:11.5px;color:#f1f5f9;outline:none}
@@ -3507,7 +3509,7 @@
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v0.9.4</span>
+            <span class="footer-version">v0.9.9.2</span>
           </div>
         </footer>
       </section>
@@ -6036,7 +6038,7 @@
         sa.mcp,
         '',
         '【服务说明与工具】',
-        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '0.9.4'),
+        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '0.9.9.2'),
         '',
         '把上面 URL 作为 HTTP MCP server 注册给本机 AI 会话后，即可像原生子代理一样直接指挥 traecode / workbuddy / zcode / qwen-work 等全部注册代理，长内容以本机文件形式交付，不进会话上下文。',
         '',
@@ -6148,7 +6150,7 @@
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '0.9.4';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '0.9.9.2';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
@@ -7212,9 +7214,23 @@
         nameEl.textContent = (isAct ? '★ ' : '') + (m.name || m.id);
         titleRow.appendChild(nameEl);
         if (Array.isArray(m.aliases) && m.aliases.length) {
-          for (const al of m.aliases.slice(0, 2)) {
+          for (const al of m.aliases.slice(0, 3)) {
             if (al !== m.id && al !== m.name) {
-              const ab = document.createElement('span'); ab.className = 'uh-mp-badge alias'; ab.textContent = al;
+              const ab = document.createElement('span');
+              const removable = Array.isArray(m.removableAliases) && m.removableAliases.includes(al);
+              ab.className = 'uh-mp-badge alias' + (removable ? ' removable' : '');
+              ab.textContent = removable ? `${al} ×` : al;
+              if (removable) {
+                ab.title = `点击删除别名 ${al}（仅移除该别名映射，不影响内置模型）`;
+                ab.onclick = async (ev) => {
+                  ev.stopPropagation();
+                  if (!window.confirm(`删除 ${worker} 的模型别名「${al}」？（内置模型本身保留）`)) return;
+                  const r = await jpost('/api/models/remove', { worker, alias: al });
+                  notify(r.ok ? `已删除别名 ${al}` : `失败: ${r.error || '?'}`, !r.ok);
+                  if (typeof window.__ahLoadSnapshot === 'function') await window.__ahLoadSnapshot();
+                  load();
+                };
+              }
               titleRow.appendChild(ab);
             }
           }
@@ -7555,7 +7571,8 @@
     }
   }
 
-  function openOAuthModal(worker, { isSandboxAdd = false, defaultProfileName = '' } = {}) {
+  // workerAuthState: { isLoggedIn, activeDisplay } 用于在弹窗内提示重复授权风险
+  function openOAuthModal(worker, { defaultProfileName = '', workerAuthState = null } = {}) {
     const existing = document.getElementById('uhAuthModalBackdrop');
     if (existing) existing.remove();
 
@@ -7572,6 +7589,7 @@
     let finished = false;
     let submitting = false;
     let customAccountName = defaultProfileName || '';
+    let region = 'cn'; // 仅 zcode 使用：cn=智谱 BigModel 国内版 / intl=Z.ai 国际版
 
     const cleanupModal = async (cancelBackend = false) => {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -7585,9 +7603,9 @@
     const head = document.createElement('div'); head.className = 'uh-auth-head';
     const titleWrap = document.createElement('div'); titleWrap.className = 'uh-auth-title';
     const titleText = document.createElement('span');
-    titleText.textContent = isSandboxAdd ? `➕ ${worker} 添加新账号` : `🔐 ${worker} OAuth 登录（自动添加账号）`;
+    titleText.textContent = `🔐 ${worker} 登录 / 添加账号`;
     const badge = document.createElement('span'); badge.className = 'uh-auth-badge';
-    badge.textContent = '登录后自动归档至账号列表';
+    badge.textContent = '新登录自动加入账号列表，原账号保留可切回';
     titleWrap.append(titleText, badge);
 
     const closeBtn = document.createElement('button');
@@ -7612,6 +7630,36 @@
     sbRow.appendChild(sbInput);
     sandboxBar.append(sbLabel, sbRow);
     modal.appendChild(sandboxBar);
+
+    // CodeBuddy 单会话策略提醒：重新 OAuth 会踢掉同账号网页端会话
+    if ((worker === 'codebuddy' || worker === 'codebuddy-cn') && workerAuthState && workerAuthState.isLoggedIn) {
+      const warnEl = document.createElement('div');
+      warnEl.className = 'uh-auth-note';
+      warnEl.style.color = '#fbbf24';
+      const who = workerAuthState.activeDisplay ? `「${workerAuthState.activeDisplay}」` : '当前账号';
+      warnEl.textContent = `⚠️ ${worker} 当前已登录 ${who}。官方单会话策略：重新完成 OAuth 会使同账号的网页端 / 其他设备会话下线。若只是恢复使用请直接关闭本窗口；确需更换或添加账号再继续授权。`;
+      modal.appendChild(warnEl);
+    }
+
+    // ZCode 区域切换（国内 BigModel / 国际 Z.ai）
+    if (worker === 'zcode') {
+      const regStep = document.createElement('div'); regStep.className = 'uh-auth-step';
+      const regLabel = document.createElement('div'); regLabel.className = 'uh-auth-step-label';
+      regLabel.textContent = '版本区域（国内与国际账号体系相互独立，请选择要登录的一侧）';
+      const regRow = document.createElement('div'); regRow.className = 'uh-auth-input-row';
+      const cnBtn = qaBtn('🇨🇳 国内版 BigModel', 'qa-primary');
+      const intlBtn = qaBtn('🌍 国际版 Z.ai');
+      const syncRegionBtns = () => {
+        cnBtn.className = region === 'cn' ? 'qa-btn qa-primary' : 'qa-btn';
+        intlBtn.className = region === 'intl' ? 'qa-btn qa-primary' : 'qa-btn';
+      };
+      cnBtn.onclick = () => { if (region !== 'cn' && !submitting) { region = 'cn'; syncRegionBtns(); startSession(); } };
+      intlBtn.onclick = () => { if (region !== 'intl' && !submitting) { region = 'intl'; syncRegionBtns(); startSession(); } };
+      syncRegionBtns();
+      regRow.append(cnBtn, intlBtn);
+      regStep.append(regLabel, regRow);
+      modal.appendChild(regStep);
+    }
 
     // 说明栏
     const noteEl = document.createElement('div'); noteEl.className = 'uh-auth-note';
@@ -7656,7 +7704,7 @@
     const cbLabel = document.createElement('div'); cbLabel.className = 'uh-auth-step-label';
     cbLabel.textContent = worker === 'codearts'
       ? '输入华为云 CodeArts AK / SK 凭据（提交后自动添加至账号列表）'
-      : '回调链接 / 授权码 Code / API Key 认证（提交后自动添加至账号列表）';
+      : '回调链接 / 授权码 Code / API Key 认证（OAuth 授权成功后自动加入账号列表）';
     const cbRow = document.createElement('div'); cbRow.className = 'uh-auth-input-row';
 
     const cbInput = document.createElement('input');
@@ -7668,7 +7716,7 @@
     skInput.placeholder = 'CODEARTS_CLI_SK';
     skInput.hidden = worker !== 'codearts';
 
-    const submitCbBtn = qaBtn('✓ 提交并自动添加账号', 'qa-primary');
+    const submitCbBtn = qaBtn('✓ 提交并完成认证', 'qa-primary');
     cbInput.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') {
         ev.preventDefault();
@@ -7702,6 +7750,7 @@
     statusEl.textContent = '⏳ 正在等待浏览器授权…';
     const footBtns = document.createElement('div'); footBtns.className = 'qa-rowbtns';
     const finishBtn = qaBtn('✓ 我已完成授权', 'qa-primary');
+    finishBtn.title = '点击后立即检测授权是否已生效（未检测到会继续等待，不会产生假成功）';
     const cancelBtn = qaBtn('关闭');
     cancelBtn.onclick = () => cleanupModal(true);
     footBtns.append(finishBtn, cancelBtn);
@@ -7712,30 +7761,30 @@
     backdrop.onclick = () => cleanupModal(true);
     document.body.appendChild(backdrop);
 
+    // 统一以「状态检测」收口：只有后端真实检测到新凭据落盘才判定成功，绝不按按钮直接伪造成功
     async function completeSessionSuccess(customMsg, detectedAccountName = '') {
       if (finished) return;
-      finished = true;
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      let accName = detectedAccountName || customAccountName || '';
+      let accName = detectedAccountName || '';
+      let apiKeyOnlyNote = '';
 
-      if (isSandboxAdd && currentLoginId && !detectedAccountName) {
-        statusEl.textContent = `⏳ 正在将新登录凭据添加至账号列表并切换…`;
-        const fr = await jpost('/api/accounts/add/finish', { worker, name: customAccountName, loginId: currentLoginId });
-        if (!fr.ok) {
-          finished = false;
+      if (currentLoginId && !detectedAccountName) {
+        statusEl.className = 'uh-auth-status';
+        statusEl.textContent = '⏳ 正在检测授权落盘状态…';
+        const fr = await jpost('/api/auth/finish', { loginId: currentLoginId, accountName: customAccountName }).catch(() => null);
+        if (!fr || fr.ok === false) {
           statusEl.className = 'uh-auth-status err';
-          statusEl.textContent = `⚠️ 尚未检测到落盘凭据：${fr.error || '请先完成授权或粘贴回调链接提交'}`;
-          notify(fr.error || '尚未检测到凭据', true);
+          statusEl.textContent = `⚠️ 尚未检测到新登录凭据：${(fr && fr.error) || '请先在浏览器完成授权'}（后台仍在自动检测，完成授权后会自动收口）`;
+          notify('尚未检测到新凭据，完成授权后系统会自动识别', true);
           return;
         }
-        accName = fr.name || accName;
-      } else if (!isSandboxAdd && currentLoginId && !detectedAccountName) {
-        const fr = await jpost('/api/auth/finish', { loginId: currentLoginId, accountName: customAccountName }).catch(() => ({}));
-        if (fr && fr.accountName) accName = fr.accountName;
+        accName = fr.accountName || customAccountName || '';
+        if (fr.apiKeyOnly) apiKeyOnlyNote = fr.note || '';
       }
 
+      finished = true;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       statusEl.className = 'uh-auth-status ok';
-      const finalMsg = customMsg || (accName
+      const finalMsg = customMsg || apiKeyOnlyNote || (accName
         ? `✓ ${worker} 登录成功！已自动添加并切换至账号「${accName}」`
         : `✓ ${worker} 登录成功，账号已自动添加并刷新配额`);
       statusEl.textContent = finalMsg;
@@ -7792,7 +7841,9 @@
         await submitCbBtn.onclick();
         return;
       }
-      await completeSessionSuccess();
+      // 「我已完成授权」= 触发一次状态检测：由后端核验凭据是否真实落盘，未检测到则继续等待
+      finishBtn.disabled = true;
+      try { await completeSessionSuccess(); } finally { if (!finished) finishBtn.disabled = false; }
     };
 
     async function pollOnce() {
@@ -7840,9 +7891,9 @@
       submitting = false;
       statusEl.className = 'uh-auth-status';
       statusEl.textContent = '⏳ 正在启动官方 OAuth 会话…';
-      const endpoint = isSandboxAdd ? '/api/accounts/add' : '/api/auth/login';
       const payload = { worker, name: customAccountName };
-      const r = await jpost(endpoint, payload);
+      if (worker === 'zcode') payload.region = region;
+      const r = await jpost('/api/auth/login', payload);
       if (!r || !r.ok) {
         noteEl.textContent = r?.note || r?.error || '启动登录会话失败';
         statusEl.className = 'uh-auth-status err';
@@ -7995,15 +8046,14 @@
     wrap.appendChild(saveDrawer);
 
     const rowAuth = document.createElement('div'); rowAuth.className = 'qa-rowbtns qa-even';
-    const loginBtn = qaBtn('🔐 OAuth 登录', 'qa-primary');
-    loginBtn.title = '打开官方 OAuth 登录窗口，登录成功后自动添加账号并切换生效';
-    const addAccBtn = qaBtn('+添加新账号');
-    addAccBtn.title = '在隔离沙箱中登录另一个新账号，自动加入账号列表且不覆盖旧账号';
+    // 统一登录入口：登录与添加账号本是同一流程（沙箱隔离 + 自动归档 + 自动切换），不再并列两个易混淆按钮
+    const loginBtn = qaBtn(isLoggedIn ? '🔐 登录 / 添加账号' : '🔐 OAuth 登录', 'qa-primary');
+    loginBtn.title = '打开官方授权登录窗口：已存账号自动保留，新登录账号自动加入列表并切换生效';
     const logoutBtn = qaBtn('退出');
 
-    loginBtn.onclick = () => openOAuthModal(worker, { isSandboxAdd: false });
-
-    addAccBtn.onclick = () => openOAuthModal(worker, { isSandboxAdd: true, defaultProfileName: '' });
+    loginBtn.onclick = () => openOAuthModal(worker, {
+      workerAuthState: { isLoggedIn, activeDisplay: activeProf ? (activeProf.display || activeProf.name) : '' },
+    });
 
     logoutBtn.onclick = async () => {
       logoutBtn.disabled = true;
@@ -8016,7 +8066,7 @@
       }
     };
 
-    rowAuth.append(loginBtn, addAccBtn, logoutBtn);
+    rowAuth.append(loginBtn, logoutBtn);
     wrap.appendChild(rowAuth);
     return wrap;
   }
