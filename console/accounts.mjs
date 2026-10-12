@@ -122,7 +122,7 @@ export function cleanProfileLabel(raw) {
  * 从凭据文件中提取可读的账号标识名称与唯一身份 ID（绝不暴露密钥明文）
  * @param {string} worker
  * @param {string} [baseHome]
- * @returns {Promise<{ label: string, identity: string }>}
+ * @returns {Promise<{ label: string, identity: string, display: string }>}
  */
 export async function detectAccountInfo(worker, baseHome = HOME) {
   const relFiles = WORKER_CRED_FILES[worker] || [];
@@ -132,19 +132,24 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
     if (worker === 'antigravity') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       const claims = decodeJwtPayload(raw?.id_token || '');
-      const email = claims?.email || '';
-      const sub = claims?.sub || '';
-      const label = cleanProfileLabel(email || claims?.name || (sub ? `google-${String(sub).slice(-6)}` : '')) || `google-${shortFp}`;
-      return { label, identity: email || sub || fp };
+      const email = String(claims?.email || raw?.email || '').trim();
+      const sub = String(claims?.sub || '').trim();
+      const label = cleanProfileLabel(email || claims?.name || (sub ? `google-${sub.slice(-6)}` : '')) || `google-${shortFp}`;
+      return { label, identity: email || sub || fp, display: email || claims?.name || label };
     }
     if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       const acct = raw?.account || raw?.user || {};
-      const uid = String(acct.uid || acct.uin || acct.oneidAccountId || '').trim();
-      const nick = cleanProfileLabel(acct.email || acct.nickname || '');
+      const jwtClaims = decodeJwtPayload(raw?.auth?.accessToken || '') || {};
+      const emailOrPhone = String(acct.email || jwtClaims.email || acct.phoneNumber || jwtClaims.preferred_username || '').trim();
+      const rawNick = String(acct.nickname || jwtClaims.nickname || jwtClaims.name || '').trim();
+      const uid = String(acct.uid || acct.uin || acct.oneidAccountId || jwtClaims.sub || '').trim();
       const prefix = worker === 'codebuddy-cn' ? 'cb-cn' : 'cb';
-      const label = nick || (uid ? `${prefix}-${uid.slice(0, 8)}` : `${prefix}-${shortFp}`);
-      return { label, identity: uid || fp };
+      const label = cleanProfileLabel(emailOrPhone || rawNick) || (uid ? `${prefix}-${cleanProfileLabel(uid).slice(0, 8)}` : `${prefix}-${shortFp}`);
+      const display = (rawNick && emailOrPhone && rawNick !== emailOrPhone)
+        ? `${rawNick} (${emailOrPhone})`
+        : (emailOrPhone || rawNick || label);
+      return { label, identity: uid || emailOrPhone || fp, display };
     }
     if (worker === 'zcode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
@@ -157,39 +162,53 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       let ui = null;
       try { if (uiRaw) ui = JSON.parse(uiRaw); } catch { ui = null; }
       const uname = cleanProfileLabel(ui?.username || ui?.displayName || ui?.id || '');
-      return { label: uname || `zcode-${shortFp}`, identity: String(ui?.id || ui?.username || fp) };
+      const label = uname || `zcode-${shortFp}`;
+      const display = String(ui?.displayName || ui?.username || label);
+      return { label, identity: String(ui?.id || ui?.username || fp), display };
     }
     if (worker === 'traecode') {
       const tok = (await readFile(join(baseHome, relFiles[0]), 'utf-8')).trim();
       const claims = decodeJwtPayload(tok) || {};
-      const uname = cleanProfileLabel(claims.email || claims.username || claims.name || (claims.user_id ? `trae-${String(claims.user_id).slice(-6)}` : ''));
-      return { label: uname || `trae-${shortFp}`, identity: String(claims.user_id || claims.sub || fp) };
+      const uid = String(claims.data?.user_id || claims.data?.id || claims.user_id || claims.sub || '').trim();
+      const uname = cleanProfileLabel(claims.email || claims.username || claims.name || (uid ? `trae-${uid.slice(-8)}` : ''));
+      const label = uname || `trae-${shortFp}`;
+      const display = claims.email || claims.username || (uid ? `UID:${uid}` : label);
+      return { label, identity: uid || fp, display };
     }
     if (worker === 'minimaxcode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       const reg = cleanProfileLabel(raw?.region || raw?.oauth?.region || 'cn') || 'cn';
       const uname = cleanProfileLabel(raw?.email || raw?.user?.email || raw?.user?.name || '');
-      return { label: uname || `mmx-${reg}-${shortFp}`, identity: fp };
+      const label = uname || `mmx-${reg}-${shortFp}`;
+      return { label, identity: fp, display: raw?.email || raw?.user?.email || label };
     }
     if (worker === 'mimocode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       const uid = raw?.xiaomi?.metadata?.uid;
-      if (uid) return { label: `mimo-${cleanProfileLabel(String(uid)).slice(0, 10)}`, identity: String(uid) };
+      if (uid) {
+        const label = `mimo-${cleanProfileLabel(String(uid)).slice(0, 12)}`;
+        return { label, identity: String(uid), display: `小米 UID:${uid}` };
+      }
       const firstProvider = Object.keys(raw || {}).find((k) => raw[k] && (raw[k].key || raw[k].access || raw[k].token)) || 'mimo';
-      return { label: `${cleanProfileLabel(firstProvider)}-${shortFp}`, identity: fp };
+      const label = `${cleanProfileLabel(firstProvider)}-${shortFp}`;
+      return { label, identity: fp, display: `${firstProvider} (${shortFp})` };
     }
     if (worker === 'github-copilot') {
-      return { label: `copilot-${shortFp}`, identity: fp };
+      const label = `copilot-${shortFp}`;
+      return { label, identity: fp, display: label };
     }
     if (worker === 'codearts') {
       const txt = await readFile(join(baseHome, relFiles[0]), 'utf-8');
       const m = txt.match(/^CODEARTS_CLI_AK=(.+)$/m);
       const ak = m ? m[1].trim() : '';
       const shortAk = cleanProfileLabel(ak.slice(0, 8)) || shortFp;
-      return { label: `ak-${shortAk}`, identity: ak || fp };
+      const label = `ak-${shortAk}`;
+      const display = ak.length > 8 ? `AK:${ak.slice(0, 4)}…${ak.slice(-4)}` : label;
+      return { label, identity: ak || fp, display };
     }
   } catch { /* fallback below */ }
-  return { label: `${cleanProfileLabel(worker).slice(0, 8)}-${shortFp}`, identity: fp };
+  const fallbackLabel = `${cleanProfileLabel(worker).slice(0, 8)}-${shortFp}`;
+  return { label: fallbackLabel, identity: fp, display: fallbackLabel };
 }
 
 /** 检查指定 HOME 下某 worker 是否存在有效凭据 */
@@ -233,10 +252,11 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
   let names = [];
   try { names = (await readdir(dir)).filter((n) => !n.startsWith('.')); } catch { names = []; }
 
-  const { label: detectedLabel, identity } = await detectAccountInfo(worker, HOME);
+  const { label: detectedLabel, identity, display } = await detectAccountInfo(worker, HOME);
   const cleanPref = cleanProfileLabel(preferredName);
 
   // 1. 检查是否已有档案与当前生效凭据完全一致
+  const matchingNames = [];
   for (const name of names) {
     let allMatch = true;
     for (const rel of relFiles) {
@@ -250,11 +270,34 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
         break;
       }
     }
-    if (allMatch) {
-      // 如果用户明确指定了新档案名且不同于现有匹配档案，另存一份
-      if (cleanPref && cleanPref !== name) break;
-      return { ok: true, worker, name, identity, autoAdded: false };
+    if (allMatch) matchingNames.push(name);
+  }
+
+  if (matchingNames.length > 0 && (!cleanPref || matchingNames.includes(cleanPref))) {
+    let chosen = cleanPref && matchingNames.includes(cleanPref) ? cleanPref : '';
+    if (!chosen) {
+      try {
+        const actMarker = (await readFile(join(dir, '.active'), 'utf-8')).trim();
+        if (actMarker && matchingNames.includes(actMarker)) chosen = actMarker;
+      } catch { /* ignore */ }
     }
+    if (!chosen) {
+      chosen = matchingNames.find((n) => n === detectedLabel) || matchingNames[0];
+    }
+    // 自动补全旧档案缺失的 identity / display 元数据
+    try {
+      const metaPath = join(dir, chosen, 'meta.json');
+      let meta = {};
+      try { meta = JSON.parse((await readFile(metaPath, 'utf-8')).replace(/^\uFEFF/, '')); } catch { meta = {}; }
+      if (!meta.identity || !meta.display) {
+        meta.identity = meta.identity || identity;
+        meta.display = meta.display || display;
+        meta.savedAt = meta.savedAt || new Date().toISOString();
+        await writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+      }
+    } catch { /* ignore */ }
+    await writeFile(join(dir, '.active'), chosen, 'utf-8').catch(() => {});
+    return { ok: true, worker, name: chosen, identity, display, autoAdded: false };
   }
 
   // 2. 检查是否同一账号身份 (identity) 刷新了 OAuth Token（若是且未强制指定别的名称，则原地更新该档案）
@@ -290,10 +333,11 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
   }
   await writeFile(
     join(dest, 'meta.json'),
-    JSON.stringify({ savedAt: new Date().toISOString(), files: relFiles, identity, autoAdded: true }, null, 2),
+    JSON.stringify({ savedAt: new Date().toISOString(), files: relFiles, identity, display, autoAdded: true }, null, 2),
     'utf-8',
   );
-  return { ok: true, worker, name: targetName, identity, autoAdded: true };
+  await writeFile(join(dir, '.active'), targetName, 'utf-8').catch(() => {});
+  return { ok: true, worker, name: targetName, identity, display, autoAdded: true };
 }
 
 /** 列出所有 worker 的账号档案与当前生效状态（自动将未归档的已登录凭据纳入账号列表） */
@@ -303,41 +347,72 @@ export async function listAccounts() {
     const workers = {};
     for (const [worker, relFiles] of Object.entries(WORKER_CRED_FILES)) {
       const livePresent = await isLiveCredValid(worker, relFiles, HOME);
+      let syncedActiveName = '';
       if (livePresent) {
-        try { await _autoSyncLiveAccount(worker); } catch { /* ignore */ }
+        try {
+          const sr = await _autoSyncLiveAccount(worker);
+          if (sr?.ok && sr.name) syncedActiveName = sr.name;
+        } catch { /* ignore */ }
       }
       const liveFp = await fingerprint(relFiles);
-      /** @type {Array<{name:string, savedAt:string|null, note:string|null, identity:string|null, active:boolean}>} */
-      const profiles = [];
       const dir = join(ROOT, worker);
+      if (!syncedActiveName) {
+        try { syncedActiveName = (await readFile(join(dir, '.active'), 'utf-8')).trim(); } catch { syncedActiveName = ''; }
+      }
+      /** @type {Array<{name:string, savedAt:string|null, note:string|null, identity:string|null, display:string|null, active:boolean}>} */
+      const rawProfiles = [];
       let names = [];
       try { names = (await readdir(dir)).filter((n) => !n.startsWith('.')); } catch { names = []; }
       for (const name of names.sort()) {
         let meta = null;
         try { meta = JSON.parse((await readFile(join(dir, name, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, '')); } catch { meta = null; }
-        let active = false;
+        let matchesLive = false;
         if (livePresent) {
+          matchesLive = true;
           for (const rel of relFiles) {
             const base = rel.split('/').pop();
             try {
               const liveTxt = await readFile(join(HOME, rel), 'utf-8');
               const profTxt = await readFile(join(dir, name, base), 'utf-8');
-              if (liveTxt === profTxt && liveTxt.trim() !== '__LOGGED_OUT__') { active = true; break; }
-            } catch { /* 任一侧缺失则不算 active */ }
+              if (liveTxt !== profTxt || liveTxt.trim() === '__LOGGED_OUT__') { matchesLive = false; break; }
+            } catch {
+              matchesLive = false;
+              break;
+            }
           }
         }
-        profiles.push({
+        rawProfiles.push({
           name,
           savedAt: meta?.savedAt || null,
           note: meta?.note || null,
           identity: meta?.identity || null,
-          active,
+          display: meta?.display || meta?.identity || name,
+          matchesLive,
         });
       }
+
+      // 确保同一时刻最多只有 1 个档案标记为 active（优先匹配 .active 记录的档案名）
+      const matchingList = rawProfiles.filter((p) => p.matchesLive);
+      let activeWinner = '';
+      if (matchingList.length === 1) {
+        activeWinner = matchingList[0].name;
+      } else if (matchingList.length > 1) {
+        const preferred = matchingList.find((p) => p.name === syncedActiveName);
+        activeWinner = preferred ? preferred.name : matchingList[0].name;
+      }
+
+      const profiles = rawProfiles.map(({ matchesLive, ...rest }) => ({
+        ...rest,
+        active: rest.name === activeWinner,
+      }));
+      // 将当前生效账号排在第一位，方便用户在列表与卡片上一眼看到
+      profiles.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || a.name.localeCompare(b.name));
+
       workers[worker] = {
         credFiles: relFiles,
         livePresent,
         liveFingerprint: liveFp,
+        activeAccount: activeWinner || null,
         profiles,
       };
     }
@@ -353,7 +428,7 @@ async function _saveAccount(worker, name) {
   const valid = await isLiveCredValid(worker, relFiles, HOME);
   if (!valid) return { ok: false, error: `当前未检测到 ${worker} 的有效登录凭据，请先完成 OAuth 登录` };
 
-  const { label, identity } = await detectAccountInfo(worker, HOME);
+  const { label, identity, display } = await detectAccountInfo(worker, HOME);
   const finalName = cleanProfileLabel(name) || label;
   const dest = profileDir(worker, finalName);
   await mkdir(dest, { recursive: true });
@@ -363,10 +438,11 @@ async function _saveAccount(worker, name) {
   }
   await writeFile(
     join(dest, 'meta.json'),
-    JSON.stringify({ savedAt: new Date().toISOString(), files: relFiles, identity }, null, 2),
+    JSON.stringify({ savedAt: new Date().toISOString(), files: relFiles, identity, display }, null, 2),
     'utf-8',
   );
-  return { ok: true, worker, name: finalName, identity, savedAt: new Date().toISOString() };
+  await writeFile(join(ROOT, worker, '.active'), finalName, 'utf-8').catch(() => {});
+  return { ok: true, worker, name: finalName, identity, display, savedAt: new Date().toISOString() };
 }
 
 /** 全部 9 个 worker 均支持沙箱隔离添加新账号 */
@@ -395,11 +471,46 @@ async function _addFromSandbox(worker, name, loginId) {
       const content = (await readFile(srcFile, 'utf-8')).trim();
       if (!content || content === '__LOGGED_OUT__') throw new Error('empty');
     } catch {
-      return { ok: false, error: `尚未检测到新登录凭据（请先在浏览器完成授权或粘贴回调信息提交）` };
+      return { ok: false, error: `尚未检测到新登录凭据（若授权后浏览器跳转到了 localhost 回调地址，请复制浏览器地址栏完整链接粘贴到上方输入框并点击「提交」）` };
     }
   }
-  const { label: detectedLabel, identity } = await detectAccountInfo(worker, srcHome);
-  const finalName = cleanProfileLabel(name) || detectedLabel || `acc-${Date.now().toString().slice(-4)}`;
+
+  const dir = join(ROOT, worker);
+  await mkdir(dir, { recursive: true });
+  let existingNames = [];
+  try { existingNames = (await readdir(dir)).filter((n) => !n.startsWith('.')); } catch { existingNames = []; }
+
+  const { label: detectedLabel, identity, display } = await detectAccountInfo(worker, srcHome);
+  const cleanPref = cleanProfileLabel(name);
+  let finalName = cleanPref || '';
+
+  if (!finalName && identity) {
+    for (const existing of existingNames) {
+      try {
+        const meta = JSON.parse((await readFile(join(dir, existing, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, ''));
+        if (meta?.identity && meta.identity === identity) {
+          finalName = existing;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (!finalName) {
+    const baseName = detectedLabel || `acc-${existingNames.length + 1}`;
+    let candidate = baseName;
+    let idx = 2;
+    while (existingNames.includes(candidate)) {
+      // 若同名档案身份相同则直接复用，否则加数字后缀避免覆盖旧账号
+      try {
+        const meta = JSON.parse((await readFile(join(dir, candidate, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, ''));
+        if (meta?.identity && meta.identity === identity) break;
+      } catch { /* ignore */ }
+      candidate = `${baseName}-${idx++}`;
+    }
+    finalName = candidate;
+  }
+
   const dest = profileDir(worker, finalName);
   await mkdir(dest, { recursive: true });
   for (const rel of rels) {
@@ -408,11 +519,11 @@ async function _addFromSandbox(worker, name, loginId) {
   }
   await writeFile(
     join(dest, 'meta.json'),
-    JSON.stringify({ savedAt: new Date().toISOString(), via: 'oauth-add', identity }, null, 2),
+    JSON.stringify({ savedAt: new Date().toISOString(), via: 'oauth-add', identity, display }, null, 2),
     'utf-8',
   );
   const sw = await _switchAccount(worker, finalName);
-  return { ok: true, worker, name: finalName, identity, switched: sw.ok === true, note: `新账号「${finalName}」已自动添加并切换生效` };
+  return { ok: true, worker, name: finalName, identity, display, switched: sw.ok === true, note: `新账号「${finalName}」已自动添加并切换生效` };
 }
 
 /** 切换到指定档案：先把当前未保存凭据自动归档并备份，再复制目标档案文件到生效位 */
@@ -440,6 +551,7 @@ async function _switchAccount(worker, name) {
   if (worker === 'github-copilot') {
     await syncCopilotKeyringFromMirror();
   }
+  await writeFile(join(ROOT, worker, '.active'), name, 'utf-8').catch(() => {});
   await writeFile(join(backupDir, 'meta.json'), JSON.stringify({ note: `切换到 ${name} 前的自动备份`, at: new Date().toISOString() }, null, 2), 'utf-8');
   clearQuotaCache(worker);
   return { ok: true, worker, switchedTo: name, backup: backupDir, note: `已切换至账号「${name}」` };

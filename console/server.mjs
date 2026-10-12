@@ -22,6 +22,7 @@ import * as authMod from './auth.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
 const VERSION = '0.9.4';
+const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
 // 2. config.json: selfAgent, selfRole
@@ -2259,7 +2260,7 @@ export async function start(context) {
           'cache-control': 'no-store',
           connection: 'keep-alive',
         });
-        response.write(`data: ${JSON.stringify({ type: 'hello', version: VERSION })}\n\n`);
+        response.write(`data: ${JSON.stringify({ type: 'hello', version: VERSION, buildId: BUILD_ID })}\n\n`);
         sseClients.add(response);
         tuneWatcher();
         void watcherTick();

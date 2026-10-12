@@ -6199,6 +6199,10 @@
       planBadge.setAttribute('data-plan-for', a.name);
       planBadge.hidden = true;
       titleLine.appendChild(planBadge);
+      var accBadge = el('span', 'uh-card-acc-badge');
+      accBadge.setAttribute('data-acc-badge-for', a.name);
+      accBadge.hidden = true;
+      titleLine.appendChild(accBadge);
       titleStack.appendChild(titleLine);
 
       var roleEl = el('div', 'role', a.role || '未声明角色');
@@ -6461,7 +6465,15 @@
     es.onmessage = function (e) {
       try {
         var d = JSON.parse(e.data);
-        if (d.type === 'changed') refreshSoon();
+        if (d.type === 'hello') {
+          if (d.buildId) {
+            if (window.__ahBuildId && window.__ahBuildId !== d.buildId) {
+              window.location.reload();
+              return;
+            }
+            window.__ahBuildId = d.buildId;
+          }
+        } else if (d.type === 'changed') refreshSoon();
         else if (d.type === 'chat') onChatEvent(d);
         else if (d.type === 'inbox') { loadThreads(); }
       } catch (err) { /* keepalive */ }
@@ -7382,6 +7394,48 @@
       .uh-acc-status-pill.warn {
         background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.32);
       }
+      .uh-acc-chips-wrap {
+        display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 8px;
+      }
+      .uh-acc-chip {
+        display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+        background: rgba(15, 23, 42, 0.72); border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px; font-size: 11.5px; color: #cbd5e1; cursor: pointer;
+        transition: all .15s ease; user-select: none;
+      }
+      .uh-acc-chip:hover {
+        border-color: #6366f1; background: rgba(99, 102, 241, 0.16); color: #f8fafc; transform: translateY(-1px);
+      }
+      .uh-acc-chip.active {
+        background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.45);
+        color: #34d399; font-weight: 600; cursor: default; transform: none;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+      }
+      .uh-acc-chip-dot {
+        width: 7px; height: 7px; border-radius: 50%; background: #64748b; flex-shrink: 0;
+      }
+      .uh-acc-chip.active .uh-acc-chip-dot {
+        background: #10b981; box-shadow: 0 0 6px #10b981;
+      }
+      .uh-acc-chip-sub {
+        font-size: 10px; opacity: 0.75; font-weight: 400; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .uh-acc-chip-badge {
+        font-size: 10px; padding: 1px 5px; border-radius: 4px;
+        background: rgba(16, 185, 129, 0.22); color: #34d399; font-weight: 600;
+      }
+      .uh-acc-chip-del {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 15px; height: 15px; border-radius: 4px; margin-left: 2px;
+        color: #94a3b8; font-size: 11px; cursor: pointer; transition: all .12s ease;
+      }
+      .uh-acc-chip-del:hover {
+        background: rgba(239, 68, 68, 0.28); color: #fca5a5;
+      }
+      .uh-card-acc-badge {
+        font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+        background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);
+      }
       .uh-acc-save-drawer {
         display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
         border-radius: 8px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(99, 102, 241, 0.28);
@@ -7824,7 +7878,7 @@
     const profiles = (acc && acc.profiles) || [];
     const activeProf = profiles.find((p) => p.active);
     statusPill.textContent = isLoggedIn
-      ? (activeProf ? `● 已登录 · ${activeProf.name}` : '● 已登录')
+      ? (activeProf ? `● 已登录 · ${activeProf.display || activeProf.name}` : '● 已登录')
       : '○ 未登录';
     head.append(titleSpan, statusPill);
     wrap.appendChild(head);
@@ -7838,7 +7892,7 @@
     sel.appendChild(blank);
     for (const p of profiles) {
       const o = document.createElement('option'); o.value = p.name;
-      o.textContent = p.name + (p.active ? ' ✓当前生效' : '');
+      o.textContent = (p.display || p.name) + (p.active ? ' ✓当前生效' : '');
       if (p.active) o.selected = true;
       sel.appendChild(o);
     }
@@ -7859,6 +7913,42 @@
         swBtn.disabled = false;
         sel.disabled = false;
       }
+    }
+
+    if (profiles.length > 0) {
+      const chipsWrap = document.createElement('div');
+      chipsWrap.className = 'uh-acc-chips-wrap';
+      for (const p of profiles) {
+        const chip = document.createElement('div');
+        chip.className = 'uh-acc-chip' + (p.active ? ' active' : '');
+        chip.title = p.active ? `当前激活: ${p.display || p.name}` : `点击立即切换至: ${p.display || p.name}`;
+
+        const dot = document.createElement('span'); dot.className = 'uh-acc-chip-dot';
+        const label = document.createElement('span'); label.textContent = p.display || p.name;
+        chip.append(dot, label);
+
+        if (p.active) {
+          const badge = document.createElement('span'); badge.className = 'uh-acc-chip-badge'; badge.textContent = '当前';
+          chip.append(badge);
+        } else {
+          chip.onclick = () => doSwitchAccount(p.name);
+        }
+
+        const delBtn = document.createElement('span');
+        delBtn.className = 'uh-acc-chip-del';
+        delBtn.textContent = '×';
+        delBtn.title = `删除已存账号「${p.name}」`;
+        delBtn.onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm(`确定删除 ${worker} 的已存账号「${p.name}」吗？`)) return;
+          const res = await jpost('/api/accounts/delete', { worker, name: p.name });
+          notify(res.ok ? `✓ 已删除账号「${p.name}」` : `删除失败: ${res.error || '?'}`, !res.ok);
+          await load();
+        };
+        chip.append(delBtn);
+        chipsWrap.appendChild(chip);
+      }
+      wrap.appendChild(chipsWrap);
     }
 
     // 下拉框直接选择另一个账号时自动切换
@@ -7941,6 +8031,19 @@
       const planText = String(q.plan || '').trim();
       planEl.textContent = planText;
       planEl.hidden = !planText;
+    }
+
+    const activeProf = (acc && acc.profiles && acc.profiles.find((p) => p.active)) || null;
+    const accBadgeEl = card.querySelector(`[data-acc-badge-for="${worker}"]`);
+    if (accBadgeEl) {
+      const disp = (activeProf && (activeProf.display || activeProf.name)) || (q && q.account) || '';
+      if (disp) {
+        accBadgeEl.textContent = `👤 ${disp}`;
+        accBadgeEl.title = `当前生效账号: ${disp}${activeProf && activeProf.identity ? ' (' + activeProf.identity + ')' : ''}`;
+        accBadgeEl.hidden = false;
+      } else {
+        accBadgeEl.hidden = true;
+      }
     }
 
     const quotaSlot = card.querySelector(`[data-quota-slot="${worker}"]`);

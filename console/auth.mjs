@@ -256,6 +256,9 @@ const recentExchangedCodes = new Map();
 async function finalizeLoginAccount(entry, preferredName = '') {
   if (!entry) return null;
   const pref = String(preferredName || entry.name || '').trim();
+  if (entry.savedAccountName && (!pref || pref === entry.savedAccountName)) {
+    return { ok: true, worker: entry.worker, name: entry.savedAccountName };
+  }
   try {
     const r = entry.sandbox
       ? await addFromSandbox(entry.worker, pref, entry.id)
@@ -265,8 +268,8 @@ async function finalizeLoginAccount(entry, preferredName = '') {
       entry.buf += `[账号管理] ✓ 已自动添加并切换至账号「${r.name}」\n`;
     }
     return r;
-  } catch {
-    return null;
+  } catch (err) {
+    return { ok: false, error: err?.message || '自动归档账号失败' };
   }
 }
 
@@ -304,17 +307,17 @@ async function exchangeAntigravityCode(entry, codeStr, preferredName = '') {
   if (cached && (Date.now() - cached.at < 600_000)) {
     await mkdir(dirname(targetFile), { recursive: true });
     await writeFile(targetFile, JSON.stringify(cached.payload, null, 2) + '\n', { mode: 0o600 });
-    entry.exited = true;
-    entry.code = 0;
-    cleanupSessionResources(entry);
-    clearQuotaCache('antigravity');
     const acc = await finalizeLoginAccount(entry, preferredName);
     const accName = acc?.name || entry.savedAccountName || '';
+    clearQuotaCache('antigravity');
+    cleanupSessionResources(entry);
+    entry.code = 0;
+    entry.exited = true;
     return {
       ok: true,
       worker: 'antigravity',
       accountName: accName,
-      note: accName ? `Antigravity 认证成功，已自动添加账号「${accName}」` : 'Antigravity Google OAuth 认证已完成',
+      note: accName ? `Antigravity 认证成功，已自动添加并切换至账号「${accName}」` : 'Antigravity Google OAuth 认证已完成',
     };
   }
 
@@ -338,17 +341,17 @@ async function exchangeAntigravityCode(entry, codeStr, preferredName = '') {
       try {
         const st = await stat(targetFile);
         if (Date.now() - st.mtimeMs < 90_000) {
-          entry.exited = true;
-          entry.code = 0;
-          cleanupSessionResources(entry);
-          clearQuotaCache('antigravity');
           const acc = await finalizeLoginAccount(entry, preferredName);
           const accName = acc?.name || entry.savedAccountName || '';
+          clearQuotaCache('antigravity');
+          cleanupSessionResources(entry);
+          entry.code = 0;
+          entry.exited = true;
           return {
             ok: true,
             worker: 'antigravity',
             accountName: accName,
-            note: accName ? `Antigravity 认证成功，已自动添加账号「${accName}」` : 'Antigravity 认证已完成',
+            note: accName ? `Antigravity 认证成功，已自动添加并切换至账号「${accName}」` : 'Antigravity 认证已完成',
           };
         }
       } catch { /* ignore */ }
@@ -376,12 +379,12 @@ async function exchangeAntigravityCode(entry, codeStr, preferredName = '') {
   await mkdir(dirname(targetFile), { recursive: true });
   await writeFile(targetFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
   entry.buf += `[OAuth] ✓ Antigravity OAuth 令牌已成功写入 ${targetFile}\n`;
-  entry.exited = true;
-  entry.code = 0;
-  cleanupSessionResources(entry);
-  clearQuotaCache('antigravity');
   const acc = await finalizeLoginAccount(entry, preferredName);
   const accName = acc?.name || entry.savedAccountName || '';
+  clearQuotaCache('antigravity');
+  cleanupSessionResources(entry);
+  entry.code = 0;
+  entry.exited = true;
   return {
     ok: true,
     worker: 'antigravity',
@@ -438,12 +441,12 @@ async function exchangeTraeCallback(entry, rawInput, preferredName = '') {
   await mkdir(dirname(targetFile), { recursive: true });
   await writeFile(targetFile, accessToken + '\n', { mode: 0o600 });
   entry.buf += `[OAuth] ✓ Trae 凭据已写入 ${targetFile}\n`;
-  entry.exited = true;
-  entry.code = 0;
-  cleanupSessionResources(entry);
-  clearQuotaCache('traecode');
   const acc = await finalizeLoginAccount(entry, preferredName);
   const accName = acc?.name || entry.savedAccountName || '';
+  clearQuotaCache('traecode');
+  cleanupSessionResources(entry);
+  entry.code = 0;
+  entry.exited = true;
   return {
     ok: true,
     worker: 'traecode',
@@ -484,15 +487,17 @@ function launchWorkerSession(worker, { sandbox = null, name = null } = {}) {
   if (!spec) return { ok: false, error: `不支持的 worker: ${worker}` };
   // 启动新登录前自动将当前已生效凭据归档保存，避免新账号登录覆盖丢失原账号
   autoSyncLiveAccount(worker).catch(() => {});
-  const targetHome = sandbox || HOME;
-  if (sandbox) mkdirSync(sandbox, { recursive: true });
+  // 统一使用独立沙箱目录承接新登录凭据，确保中途取消或未完成授权时绝不污染现有生效账号
+  const effectiveSandbox = sandbox || join(HOME, '.agenthub', 'sandbox', `${worker}-${name || 'oauth'}-${Date.now()}`);
+  mkdirSync(effectiveSandbox, { recursive: true });
+  const targetHome = effectiveSandbox;
   const id = `${sandbox ? 'add' : 'login'}-${Date.now()}-${++seq}`;
   /** @type {any} */
   const entry = {
     id,
     worker,
     name: name || null,
-    sandbox,
+    sandbox: effectiveSandbox,
     targetHome,
     mode: spec.mode,
     note: spec.note,
@@ -940,12 +945,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         }
         await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[MiMo OAuth] ✓ 小米 MiMo 凭据已成功解密并写入 ${authFile}\n`;
-        e.exited = true;
-        e.code = 0;
-        cleanupSessionResources(e);
-        clearQuotaCache('mimocode');
         const acc = await finalizeLoginAccount(e, prefName);
         const accName = acc?.name || e.savedAccountName || '';
+        clearQuotaCache('mimocode');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
         return {
           ok: true,
           worker: 'mimocode',
@@ -985,11 +990,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
           await saveZcodeOAuthResult(e.targetHome, 'bigmodel', { apiKey: input });
         }
         e.buf += `\n[ZCode] ✓ ZCode 凭据已加密写入 ${join(e.targetHome, '.zcode/v2/credentials.json')}\n`;
-        e.exited = true;
-        e.code = 0;
-        cleanupSessionResources(e);
         const acc = await finalizeLoginAccount(e, prefName);
         const accName = acc?.name || e.savedAccountName || '';
+        clearQuotaCache('zcode');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
         return {
           ok: true,
           worker: 'zcode',
@@ -1010,11 +1016,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         const res = await _saveCodeArtsToHome(e.targetHome, ak, sk);
         if (!res.ok) return res;
         e.buf += `\n[CodeArts] ✓ AK/SK 已保存到 ${join(e.targetHome, '.config/agenthub-codearts/codearts-auth.env')}\n`;
-        e.exited = true;
-        e.code = 0;
-        cleanupSessionResources(e);
         const acc = await finalizeLoginAccount(e, prefName);
         const accName = acc?.name || e.savedAccountName || '';
+        clearQuotaCache('codearts');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
         return {
           ...res,
           accountName: accName,
@@ -1031,12 +1038,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         cfg.api_key = input;
         await writeFile(mmxFile, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[MiniMax] ✓ API Key 已直接写入 ${mmxFile}\n`;
-        e.exited = true;
-        e.code = 0;
-        cleanupSessionResources(e);
-        clearQuotaCache('minimaxcode');
         const acc = await finalizeLoginAccount(e, prefName);
         const accName = acc?.name || e.savedAccountName || '';
+        clearQuotaCache('minimaxcode');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
         return {
           ok: true,
           worker: 'minimaxcode',
@@ -1058,12 +1065,12 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         }
         await writeFile(authInfoFile, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[CodeBuddy] ✓ 凭据已写入 ${authInfoFile}\n`;
-        e.exited = true;
-        e.code = 0;
-        cleanupSessionResources(e);
-        clearQuotaCache(e.worker);
         const acc = await finalizeLoginAccount(e, prefName);
         const accName = acc?.name || e.savedAccountName || '';
+        clearQuotaCache(e.worker);
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
         return {
           ok: true,
           worker: e.worker,
@@ -1077,16 +1084,14 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         const mirror = join(e.targetHome, '.config', 'github-copilot', 'copilot-token');
         await mkdir(dirname(mirror), { recursive: true });
         await writeFile(mirror, input, { mode: 0o600 });
-        if (!e.sandbox) {
-          try { await execFile('python3', [SECRET_HELPER, '--set', 'copilot-cli', 'https://github.com', input], { timeout: 6000 }); } catch { /* ignore */ }
-        }
+        try { await execFile('python3', [SECRET_HELPER, '--set', 'copilot-cli', 'https://github.com', input], { timeout: 6000 }); } catch { /* ignore */ }
         e.buf += `\n[Copilot] ✓ GitHub Copilot Token 已保存\n`;
-        e.exited = true;
-        e.code = 0;
-        cleanupSessionResources(e);
-        clearQuotaCache('github-copilot');
         const acc = await finalizeLoginAccount(e, prefName);
         const accName = acc?.name || e.savedAccountName || '';
+        clearQuotaCache('github-copilot');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
         return {
           ok: true,
           worker: 'github-copilot',
@@ -1121,6 +1126,9 @@ export async function finishLogin(loginId, preferredName = '') {
   if (!e) return { ok: false, error: '登录会话不存在或已过期' };
   const acc = await finalizeLoginAccount(e, preferredName);
   const accountName = acc?.name || e.savedAccountName || null;
+  if (!accountName && acc && acc.ok === false) {
+    return { ok: false, worker: e.worker, error: acc.error || '尚未检测到新登录凭据，请先完成授权或粘贴回调链接提交' };
+  }
   clearQuotaCache(e.worker);
   cleanupSessionResources(e);
   sessions.delete(loginId);
