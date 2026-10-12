@@ -7466,6 +7466,12 @@
       .uh-acc-chip-del:hover {
         background: rgba(239, 68, 68, 0.28); color: #fca5a5;
       }
+      .uh-acc-chip-save {
+        border-style: dashed; color: #94a3b8; font-weight: 500;
+      }
+      .uh-acc-chip-save:hover {
+        border-color: #10b981; color: #34d399; background: rgba(16, 185, 129, 0.1);
+      }
       .uh-card-acc-badge {
         font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
         background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);
@@ -7953,39 +7959,47 @@
     head.append(titleSpan, statusPill);
     wrap.appendChild(head);
 
-    const rowProfile = document.createElement('div'); rowProfile.className = 'qa-inline';
-    const sel = document.createElement('select'); sel.className = 'qa-select';
-    sel.title = '选择已保存的账号档案即可一键切换';
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = profiles.length ? `已存账号 (${profiles.length}) — 选择即切换…` : '（暂无已存账号，点击下方 OAuth 登录自动添加）';
-    sel.appendChild(blank);
-    for (const p of profiles) {
-      const o = document.createElement('option'); o.value = p.name;
-      o.textContent = (p.display || p.name) + (p.active ? ' ✓当前生效' : '');
-      if (p.active) o.selected = true;
-      sel.appendChild(o);
-    }
-    const saveBtn = qaBtn('存别名');
-    saveBtn.title = '为当前已登录账号自定义一个别名档案';
-    const swBtn = qaBtn('切换');
-
+    // 账号切换统一由下方胶囊芯片完成（下拉框与芯片 100% 重复，已移除）
     async function doSwitchAccount(targetName) {
-      if (!targetName) { notify('请先在下拉框选择要切换到的账号', true); return; }
-      swBtn.disabled = true;
-      sel.disabled = true;
-      try {
-        const r = await jpost('/api/accounts/switch', { worker, name: targetName });
-        notify(r.ok ? `✓ ${worker} 已切换至账号「${targetName}」` : `切换失败: ${r.error || '?'}`, !r.ok);
-        await fetch('/api/quota/refresh').catch(() => {});
-        await load();
-      } finally {
-        swBtn.disabled = false;
-        sel.disabled = false;
+      if (!targetName) return;
+      const r = await jpost('/api/accounts/switch', { worker, name: targetName });
+      notify(r.ok ? `✓ ${worker} 已切换至账号「${targetName}」` : `切换失败: ${r.error || '?'}`, !r.ok);
+      await fetch('/api/quota/refresh').catch(() => {});
+      await load();
+    }
+
+    // 内联「存别名」抽屉
+    const saveDrawer = document.createElement('div'); saveDrawer.className = 'uh-acc-save-drawer';
+    const saveInput = document.createElement('input');
+    saveInput.className = 'qa-input';
+    saveInput.placeholder = `输入 ${worker} 账号自定义名称 (如 main / work)`;
+    const saveDrawerBtns = document.createElement('div'); saveDrawerBtns.className = 'qa-rowbtns';
+    const confirmSaveBtn = qaBtn('✓ 保存名称', 'qa-primary');
+    const cancelSaveBtn = qaBtn('取消');
+    confirmSaveBtn.onclick = async () => {
+      const name = saveInput.value.trim().replace(/[^\p{L}\p{N}._-]/gu, '-');
+      if (!name) { notify('请填写账号名称（文字、数字、-、_）', true); return; }
+      const r = await jpost('/api/accounts/save', { worker, name });
+      notify(r.ok ? `✓ 已将 ${worker} 当前凭据保存为账号「${r.name || name}」` : `保存失败: ${r.error || '?'}`, !r.ok);
+      if (r.ok) {
+        saveDrawer.classList.remove('open');
+        saveInput.value = '';
+        load();
+      }
+    };
+    cancelSaveBtn.onclick = () => saveDrawer.classList.remove('open');
+    saveDrawerBtns.append(confirmSaveBtn, cancelSaveBtn);
+    saveDrawer.append(saveInput, saveDrawerBtns);
+
+    function toggleSaveDrawer() {
+      saveDrawer.classList.toggle('open');
+      if (saveDrawer.classList.contains('open')) {
+        if (!saveInput.value) saveInput.value = activeProf ? activeProf.name : `acc-${profiles.length + 1}`;
+        setTimeout(() => { saveInput.focus(); saveInput.select(); }, 20);
       }
     }
 
-    if (profiles.length > 0) {
+    if (profiles.length > 0 || isLoggedIn) {
       const chipsWrap = document.createElement('div');
       chipsWrap.className = 'uh-acc-chips-wrap';
       for (const p of profiles) {
@@ -8018,50 +8032,17 @@
         chip.append(delBtn);
         chipsWrap.appendChild(chip);
       }
+      // 行尾附「存别名」小胶囊，不再独占一行下拉框
+      if (isLoggedIn) {
+        const saveChip = document.createElement('div');
+        saveChip.className = 'uh-acc-chip uh-acc-chip-save';
+        saveChip.textContent = '＋ 存别名';
+        saveChip.title = '为当前已登录账号自定义一个别名档案';
+        saveChip.onclick = toggleSaveDrawer;
+        chipsWrap.appendChild(saveChip);
+      }
       wrap.appendChild(chipsWrap);
     }
-
-    // 下拉框直接选择另一个账号时自动切换
-    sel.onchange = () => {
-      if (sel.value && (!activeProf || sel.value !== activeProf.name)) {
-        doSwitchAccount(sel.value);
-      }
-    };
-    swBtn.onclick = () => doSwitchAccount(sel.value);
-
-    // 内联「存别名」抽屉
-    const saveDrawer = document.createElement('div'); saveDrawer.className = 'uh-acc-save-drawer';
-    const saveInput = document.createElement('input');
-    saveInput.className = 'qa-input';
-    saveInput.placeholder = `输入 ${worker} 账号自定义名称 (如 main / work)`;
-    const saveDrawerBtns = document.createElement('div'); saveDrawerBtns.className = 'qa-rowbtns';
-    const confirmSaveBtn = qaBtn('✓ 保存名称', 'qa-primary');
-    const cancelSaveBtn = qaBtn('取消');
-    confirmSaveBtn.onclick = async () => {
-      const name = saveInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-      if (!name) { notify('请填写账号名称（字母、数字、-、_）', true); return; }
-      const r = await jpost('/api/accounts/save', { worker, name });
-      notify(r.ok ? `✓ 已将 ${worker} 当前凭据保存为账号「${r.name || name}」` : `保存失败: ${r.error || '?'}`, !r.ok);
-      if (r.ok) {
-        saveDrawer.classList.remove('open');
-        saveInput.value = '';
-        load();
-      }
-    };
-    cancelSaveBtn.onclick = () => saveDrawer.classList.remove('open');
-    saveDrawerBtns.append(confirmSaveBtn, cancelSaveBtn);
-    saveDrawer.append(saveInput, saveDrawerBtns);
-
-    saveBtn.onclick = () => {
-      saveDrawer.classList.toggle('open');
-      if (saveDrawer.classList.contains('open')) {
-        if (!saveInput.value) saveInput.value = activeProf ? activeProf.name : `acc-${profiles.length + 1}`;
-        setTimeout(() => { saveInput.focus(); saveInput.select(); }, 20);
-      }
-    };
-
-    rowProfile.append(sel, swBtn, saveBtn);
-    wrap.appendChild(rowProfile);
     wrap.appendChild(saveDrawer);
 
     const rowAuth = document.createElement('div'); rowAuth.className = 'qa-rowbtns qa-even';
@@ -8102,11 +8083,17 @@
     const planEl = card.querySelector(`[data-plan-for="${worker}"]`);
     if (planEl) {
       let planText = String(q.plan || '').trim();
-      // 套餐徽章不再重复账号身份：括号内为账号的部分剥掉（头部 👤 徽章已展示账号）；
-      // 剥离后若与卡片标题（worker 名）同义则不再展示，彻底消除同信息红框
+      // 套餐徽章不再重复账号身份：先剥尾部括号式账号，再剥含身份 ID 的尾部 "· xxx" 段；
+      // 剥离后为空或与 worker 同义则隐藏，彻底消除同信息红框
       if (planText && accDisp) {
-        const stripped = planText.replace(/\s*[（(][^()（）]*[)）]\s*$/, '').trim();
-        if (stripped) planText = stripped;
+        const strippedParen = planText.replace(/\s*[（(][^()（）]*[)）]\s*$/, '').trim();
+        if (strippedParen) planText = strippedParen;
+        const identity = String((activeProf && activeProf.identity) || '').trim();
+        if (identity && planText.includes(identity)) {
+          const strippedMid = planText.replace(/\s*[·\-–—]\s*[^·\-–—]*$/, '').trim();
+          if (strippedMid && !strippedMid.includes(identity)) planText = strippedMid;
+          else planText = planText.replace(identity, '').replace(/\s*[·\-–—]\s*$/, '').trim();
+        }
       }
       if (planText && planText.toLowerCase() === worker.toLowerCase()) planText = '';
       planEl.textContent = planText;
