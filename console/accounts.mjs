@@ -178,21 +178,24 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       return { label, identity: email || sub || fp, display: email || claims?.name || label };
     }
     if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
-      const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
+      const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^﻿/, ''));
       // account / accounts[0] / allAccounts[0] 是三份同构副本，任取其一；国际版可能只有 JWT
       const acct = raw?.account || raw?.accounts?.[0] || raw?.allAccounts?.[0] || raw?.user || {};
       const rawTok = String(raw?.auth?.accessToken || '');
       // 国际版未完成登录时 accessToken 会是 https://...started?state=... 跳转 URL，不是 JWT
       const jwtClaims = (rawTok && !rawTok.startsWith('http') ? decodeJwtPayload(rawTok) : null) || {};
-      const emailOrPhone = String(acct.email || jwtClaims.email || acct.phoneNumber || jwtClaims.preferred_username || '').trim();
+      const email = String(acct.email || jwtClaims.email || '').trim();
+      const phone = String(acct.phoneNumber || jwtClaims.preferred_username || '').trim();
       const rawNick = String(acct.nickname || jwtClaims.nickname || jwtClaims.name || '').trim();
       const uid = String(acct.uid || acct.uin || acct.oneidAccountId || jwtClaims.sub || '').trim();
       const prefix = worker === 'codebuddy-cn' ? 'cb-cn' : 'cb';
-      const label = cleanProfileLabel(emailOrPhone || rawNick) || (uid ? `${prefix}-${cleanProfileLabel(uid).slice(0, 8)}` : `${prefix}-${shortFp}`);
-      const display = (rawNick && emailOrPhone && rawNick !== emailOrPhone)
-        ? `${rawNick} (${emailOrPhone})`
-        : (emailOrPhone || rawNick || (uid ? `UID:${uid.slice(0, 8)}…` : label));
-      return { label, identity: uid || emailOrPhone || fp, display };
+      // 显示层绝不暴露手机号：只显示账户名称/邮箱；档案名也优先名称而非手机号
+      const nickSafe = /^1\d{10}$/.test(rawNick) ? '' : rawNick;
+      const label = cleanProfileLabel(email || nickSafe) || (uid ? `${prefix}-${cleanProfileLabel(uid).slice(0, 8)}` : `${prefix}-${shortFp}`);
+      const display = (nickSafe && email && nickSafe !== email)
+        ? `${nickSafe} (${email})`
+        : (nickSafe || email || (uid ? `UID:${uid.slice(0, 8)}…` : label));
+      return { label, identity: uid || email || phone || fp, display };
     }
     if (worker === 'zcode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));

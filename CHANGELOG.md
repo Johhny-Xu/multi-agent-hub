@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
 - MiniMax 默认模型改为 `MiniMax-M3`（1M 上下文），512K 的 M3.1-Flash-Preview 可通过上下文胶囊一键切换。
+- **隐私与开源前清洗**：全仓（工作区 + 全部 git 历史）清除内网 IP、用户主目录路径、个人邮箱、手机号与账号 UID（`git filter-repo` 全量重写）；账号展示层不再暴露手机号——CodeBuddy CN 等卡片与配额区只显示账户名称/邮箱，档案命名也优先名称而非手机号；`scripts/audit_secrets.py` 新增个人邮箱、国内手机号（排除哈希子串误报）与长数字 ID 规则，工作区与历史扫描均归零。
 - **账号/上下文切换乐观 UI 提速 ([`console/client/index.html`](console/client/index.html))**：账号胶囊与 MiniMax 上下文档位胶囊点击立即变绿（实测 44ms），真实切换与配额刷新改后台执行、失败自动回滚重绘；砍掉切换后同步等待全 9 厂商配额强刷的阻塞链路（服务端本就对被切 worker 单独清缓存，其余走 60s 缓存）。
 - **账号区切换入口去重（全 9 卡片生效）**：移除与账号胶囊芯片完全重复的"已存账号下拉框 + 切换按钮"，「存别名」收为芯片行尾的虚线小胶囊；套餐徽章剥离规则升级为同时识别括号式与 `· UID:xxx` 分隔式账号片段（修复 mimocode 等卡片头部 UID 重复显示），9 张卡片的套餐徽章现在只展示纯套餐/档位信息。
 - **手机端对话页修复 ([`console/client/index.html`](console/client/index.html))**：修复窄屏（≤640px）下工作台因 auto 模式"有产物即自动展开"而全宽覆盖对话区、导致手机上永远看不到对话的问题——窄屏时 auto 不再自动弹出，产物通过边缘把手徽标提示、手动展开；底部「对话 / 代理」导航栏与代理页在 390px 视口实测可正常进入与渲染。
