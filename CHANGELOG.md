@@ -9,7 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
-## [0.9.4] - 2026-10-10
+## [0.9.4] - 2026-10-12
+
+### 全接口高并发压测、大负载加固、原生配额/多账号面板重塑与跨平台兼容 (`hub` / `console` / `drivers` / `mcp`)
+
+- **原生 9 厂商配额监控、多账号切换与「配额与账号」面板重塑 (`console`)**：
+  - 新增纯标准库零依赖模块 [`console/vendor-quota.mjs`](console/vendor-quota.mjs)（9 Worker 原生配额实时抓取与 60s TTL 缓存）、[`console/accounts.mjs`](console/accounts.mjs)（多账号档案保存、一键切换、删除）与 [`console/auth.mjs`](console/auth.mjs)（无头登录/登出与动态模型管理），彻底移除外部 9router 依赖及 `server.mjs` 中 336 行残留 `token_monitor` 死代码。
+  - 重构 [`console/client/index.html`](console/client/index.html) 配额与账号面板布局：`.qa-grid` 采用自适应网格 `repeat(auto-fill, minmax(310px, 1fr))` 配合 `.qa-card { min-width: 0; overflow: hidden }`，根治多列卡片下 `<select>` 与按钮跨卡溢出重叠；`codearts` AK/SK 输入收纳为点击展开的「🔑 配置 AK/SK」折叠抽屉；消除手动刷新时的整页坍缩闪烁（改为 `qa-loading` 柔和半透明过渡 + `更新于 HH:MM:SS` 时间戳 + 翠绿/琥珀健康状态圆点 + `.qa-bar i` `cubic-bezier` 丝滑进度条动画）；用控制台原生 Toast（`window.__ahToast`）全面替代 14 处 `window.alert` 阻塞弹窗，并补齐 `@media (max-width: 768px)` 窄屏单列响应式布局。
+- **高强度阶梯压力测试与并发锁加固（阶段三 ~ 阶段五，累计 >4,500 次压测请求 0 报错）**：
+  - **Singleflight 配额请求合并 ([`console/vendor-quota.mjs`](console/vendor-quota.mjs))**：引入 `inFlightAll` 与 `inFlightWorker` Promise 复用锁，60 并发刷新风暴下外部厂商 API 调用从 **540 次降至 9 次**，`/api/quotas` P95 延迟从 **12,041ms 降至 850.5ms（快 14.1 倍）**，`/api/quota` P95 从 **10,593ms 降至 1,612.5ms（快 6.5 倍）**（详见 [`docs/stage3-stress-report.json`](docs/stage3-stress-report.json)）。
+  - **配置文件写互斥锁与备份自动轮转 ([`console/auth.mjs`](console/auth.mjs) / [`console/accounts.mjs`](console/accounts.mjs))**：引入进程内 `withLock` 串行队列锁，修复并发修改 `agents.json` / `accounts.json` 的 Read-Modify-Write 竞态，10 路并发 `POST /api/models/custom` 落盘成功率从 **1/10（丢失 9 个）提升至 10/10（0 丢失）**，并自动轮转 `.bak-model-*` 仅保留最新 5 份。
+  - **Hub 360 并发洪峰与 `hub_capabilities` 缓存加固 ([`hub/agent_hub.py`](hub/agent_hub.py))**：将 `HubHTTPServer.request_queue_size` 从 Python 默认 `5` 提升至 `256`（消除高并发 SYN 队列溢出导致的 28.5s 尾延迟），并为 `tool_hub_capabilities` 增加路径与 `mtime_ns` 感知的 5s 内存缓存（文件变更或启停子代理秒级失效）；360 同波瞬时并发 × 3 波（1,080 请求）100% 成功，`GET /health` P95 从 **28,525ms 降至 1,252ms（快 22.8 倍）**，稳态 `hub_capabilities` 从 **170ms 降至 15ms（快 11.3 倍）**（详见 [`docs/stage4-5-load-report.json`](docs/stage4-5-load-report.json)）。
+  - **大任务负载、上传安全边界与 30 并发状态机验证**：100KB 任务提示词 + 18KB 结果全链路 **91ms** 字节级 100% 精确落盘；收紧 `console/server.mjs` `saveUpload` 单文件上限至 `1 MiB` 并将 `client.json` / `agents.json` / `accounts.json` 纳入凭据上传拦截名单；30 路并发状态机读写（10 任务 + 10 消息 + 10 笔记）验证 `StateFileLock` 零损坏、零丢失。
+- **ZCode 桌面驱动参数解析修复与跨平台 UTF-8 BOM 兼容加固（阶段六 & 七）**：
+  - 修复 [`drivers/zcode_dom.js`](drivers/zcode_dom.js) `process.argv` 解析器未识别 `--stream` 值参数导致 `--stream off` 的 `"off"` 覆盖真实提示词的阻塞性缺陷，将轮询上限提升至 `1800s`，并在新建会话（New Chat）点击完成后再采集 DOM 基线快照。
+  - 全链路 UTF-8 BOM（`\uFEFF`）容错加固：[`hub/agent_hub.py`](hub/agent_hub.py) `_read_json` 统一切换为 `encoding="utf-8-sig"`，Node 侧 `auth.mjs` / `accounts.mjs` / `server.mjs` / `vendor-quota.mjs` 统一剥离 `^\uFEFF`，兼容 Windows PowerShell / 记事本生成的带 BOM JSON 配置（详见 [`docs/stage6-compat-report.json`](docs/stage6-compat-report.json)）。
+  - 字节级同步全部 7 处 MCP 桥接副本（统一暴露 8 个 MCP 工具，含 `hub_set_status`），全量跑通 [`tests/run_regressions.py`](tests/run_regressions.py) **32/32 组回归测试套件**并重新构建全套分发 ZIP 与 IDE 扩展包。
 
 ### WebUI 控制台全景交互架构与会话管理升级 (`console`)
 

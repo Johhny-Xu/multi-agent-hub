@@ -29,8 +29,8 @@
 
 各客户端通过专属原生插件接入调度中枢：
 
-- **Antigravity 原生插件**：提供 `plugin.json`、9 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及包含 7 个桥接工具的 `mcp_config.json`。可选 Python SDK 锁定 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与 Python 串并行编排能力；注意已安装 wheel 不包含 `beta.run_workflow` API，且 SDK API 鉴权独立于 IDE/CLI 登录（缺少 SDK 鉴权时 SDK 编排模型调用受阻）。
-- **CodeArts 原生插件与驱动**：包含 9 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 7 个 MCP 工具。双向支持客户端调度与 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
+- **Antigravity 原生插件**：提供 `plugin.json`、9 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及包含 8 个桥接工具（含 `hub_set_status`）的 `mcp_config.json`。可选 Python SDK 锁定 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与 Python 串并行编排能力；注意已安装 wheel 不包含 `beta.run_workflow` API，且 SDK API 鉴权独立于 IDE/CLI 登录（缺少 SDK 鉴权时 SDK 编排模型调用受阻）。
+- **CodeArts 原生插件与驱动**：包含 9 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 8 个 MCP 工具。双向支持客户端调度与 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
   - **IDE 懒加载工具协议深度适配与单一路径约束**：支持 CodeArts IDE 动态工具注册体系；严格确立 `tool_search` 发现工具 → `tool_describe` 获取参数 Schema → `tool_call` 执行的**单一标准路径**；严禁在 Markdown 或纯文本推理中直出 XML 标签，杜绝引擎双重派发；任务单次派发后由客户端安全轮询。
   - **权限管控与终态轮询保障**：遇宿主权限拒绝（Permission Denied / auto-rejecting）时立即终止并返回 `blocked_permission` 与原始 ref，禁止换工具名或经父代理重试；在等待预算内以原 ref 持续轮询 `hub_fetch`，严格以符合验收条件的非空真实 worker 回答判定 `completed`，绝不以会话结束或工具调用成功冒充任务完成。
   - **Windows 官方 CLI 精准识别与环境隔离**：精准识别官方 `installers/bin/codearts.exe`，采用独立 `cli-data` 隔离目录与独立会话数据库，不再与 IDE GUI AgentKernel 混淆；继承外部认证并保持 TLS 校验；将“文件夹未被信任”准确归类为 `CODEARTS_PERMISSION_REQUIRED` 脱敏提示。
@@ -38,9 +38,9 @@
 
 | 验证项目 | 实际结果 | 状态说明 |
 | --- | --- | --- |
-| Windows 回归测试 | ✅ 通过 (32组) | 2026-10-10 跟进修复后完整复测通过，包含真实 SDK 0.1.21 协议验证；非全量付费模型实测证明 |
-| Linux 回归测试 | ✅ 通过 (29组) | 同一冻结源码完整复测通过，包含真实 SDK 0.1.21 协议验证；非全量付费模型实测证明 |
-| Linux 生产 Hub 0.9.4 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，已有配置、任务历史与鉴权平滑保留 |
+| Windows 回归测试 | ✅ 通过 (32组) | 2026-10-12 压测与加固后 32/32 组全量通过（见 `docs/refactor-validation.json`）；非全量付费模型实测证明 |
+| Linux 回归测试 & 压测 | ✅ 通过 (29组 + >4,500次压测) | 360 并发洪峰 0 报错（`/health` P95 1.25s）、60 并发配额 Singleflight 合并（P95 850ms）、100KB 大任务 + 30 并发状态机零损坏（见 `docs/stage3-stress-report.json`、`docs/stage4-5-load-report.json`、`docs/stage6-compat-report.json`） |
+| Linux 生产 Hub 0.9.4 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，内置原生 9 厂商配额监控与多账号切换，已有配置、任务历史与鉴权平滑保留 |
 | Linux Antigravity CLI 1.3.1 | ✅ 真实调用通过 | gemini-3.8-flash-medium 精确标记通过，插件模式校验通过（4技能/9代理/1MCP）；真实模型调用 `hub_status` 成功返回 9 种 worker，完整原生子代理 `hub-mimocode` 派发成功（返回 `ref=mimocode-79e2416c91`，`completed`，`answer=95`） |
 | Linux ZCode CLI 0.16.9 | ✅ 真实调用通过 | 原生 `agenthub-workers:mimocode` 子代理经插件派发，原 ref 续查返回 `73` |
 | Windows Codex / ZCode | ✅ 真实调用通过 | 两种原生子代理分别返回 `2117`、`2077`；初轮长标记回答不完整的记录也保留 |

@@ -53,7 +53,7 @@ export function resolveWorker(raw) {
 }
 
 function refRegex(worker) {
-  const prefix = worker === "traecode" ? "trae" : worker;
+  const prefix = worker === "traecode" ? "(?:traecode|trae)" : worker;
   return new RegExp("^" + prefix + "-[0-9a-f]+$", "i");
 }
 
@@ -188,7 +188,7 @@ function receipt(text, worker, expectedRef = null) {
   if (!header) return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
   const tag = header[1];
   const ref = tag.split("/").at(-1);
-  const validRef = expectedRef ? ref === expectedRef : refRegex(worker).test(ref);
+  const validRef = expectedRef ? ref === expectedRef : (refRegex(worker).test(ref) || /^[a-z0-9_-]+-[0-9a-f]{6,32}$/i.test(ref));
   const status = /(?:^|\s)status=([a-z]+)\b/i.exec(header[2])?.[1]?.toLowerCase();
   const headerExit = /(?:^|\s)exit=(-?\d+)\b/.exec(header[2]);
   const footerExit = /\n\(exit=(-?\d+)\)\s*$/.exec(cleaned);
@@ -198,7 +198,7 @@ function receipt(text, worker, expectedRef = null) {
     }
     if (status === "completed") {
       const ans = extractAnswer(cleaned);
-      if (/排队提醒|当前模型请求量较高|升级权益等待中/.test(ans)) {
+      if (/排队提醒|当前模型请求量较高|升级权益等待中|体验套餐可用额度已用完|套餐查询失败|额度已用完|可用额度已用完|积分不足|无可用额度/.test(ans)) {
         return { status: "failed", ref, answer: ans.slice(0, 500) };
       }
       return { status, ref, answer: ans };
@@ -207,10 +207,13 @@ function receipt(text, worker, expectedRef = null) {
   } else if (!expectedRef && headerExit && (tag === worker || tag.startsWith(worker + "/"))) {
     const isOk = Number(headerExit[1]) === 0;
     const ans = isOk ? extractAnswer(cleaned) : cleaned.slice(0, 500);
-    if (isOk && /排队提醒|当前模型请求量较高|升级权益等待中/.test(ans)) {
+    if (isOk && /排队提醒|当前模型请求量较高|升级权益等待中|体验套餐可用额度已用完|套餐查询失败|额度已用完|可用额度已用完|积分不足|无可用额度/.test(ans)) {
       return { status: "failed", ref: "", answer: ans.slice(0, 500) };
     }
     return { status: isOk ? "completed" : "failed", ref: "", answer: ans };
+  }
+  if (status === "running" && ref && /^[a-z0-9_-]+-[0-9a-f]{6,32}$/i.test(ref)) {
+    return { status: "running", ref, answer: "" };
   }
   return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
 }
@@ -319,6 +322,17 @@ export async function hubCapabilities(workerRaw, options = {}) {
     ...(worker ? { agent: worker } : {}), ...(options.model !== undefined ? { model: options.model } : {}),
     ...(options.refresh !== undefined ? { refresh: options.refresh } : {}),
   }, 30000));
+}
+
+export async function hubSetAgentStatus(workerRaw, enabled) {
+  const worker = resolveWorker(workerRaw);
+  if (!worker) throw new Error(`Unknown worker: ${workerRaw}`);
+  const result = await callTool("hub_set_agent_status", { agent: worker, enabled: !!enabled }, 30000);
+  try {
+    return JSON.parse(result);
+  } catch {
+    return { ok: true, text: result };
+  }
 }
 
 const LOGIN_STATUSES = new Set([

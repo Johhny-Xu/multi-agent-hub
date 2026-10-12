@@ -73,7 +73,7 @@ export async function listAccounts() {
     try { names = (await readdir(dir)).filter((n) => !n.startsWith('.')); } catch { names = []; }
     for (const name of names.sort()) {
       let meta = null;
-      try { meta = JSON.parse(await readFile(join(dir, name, 'meta.json'), 'utf-8')); } catch { meta = null; }
+      try { meta = JSON.parse((await readFile(join(dir, name, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, '')); } catch { meta = null; }
       let active = false;
       for (const rel of relFiles) {
         const base = rel.split('/').pop();

@@ -3,10 +3,10 @@
 // 工具：hub_ask / hub_dispatch / hub_fetch / hub_status / hub_login。
 // 由插件 mcpServers 注册：node ${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs
 import { createInterface } from "node:readline";
-import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef } from "./hub.mjs";
+import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef, hubSetAgentStatus } from "./hub.mjs";
 import { hubDiscover } from "./discovery.mjs";
 
-const SERVER = { name: "agenthub-hub-bridge", version: "0.9.4" };
+const SERVER = { name: "agenthub-hub-bridge", version: "0.9.9" };
 const TASK_OPTIONS = {
   model: { type: "string", description: "模型别名或具体 ID；省略则使用 Hub 配置的默认模型" },
   thinking: { type: "string", enum: ["default", "on", "off"], default: "default", description: "思考模式；不支持的模式在派发前拒绝，可先查 hub_capabilities" },
@@ -18,13 +18,13 @@ const TASK_OPTIONS = {
 const TOOLS = [
   {
     name: "hub_discover",
-    description: "只读扫描本机与局域网可达的 multi-agent-hub。初次连接或连接失败时调用；返回候选 Hub，不自动切换、不发送 token、不调用模型。没找到时提示使用安装目录 connect.cmd/connect.sh 手动配置，找到后由用户选择并配对。",
+    description: "只读扫描本机与局域网可达的 multi-agent-hub。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】初次连接或连接失败时调用；返回候选 Hub，不自动切换、不发送 token、不调用模型。没找到时提示使用安装目录 connect.cmd/connect.sh 手动配置，找到后由用户选择并配对。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "hub_ask",
     description:
-      "把任务派发给 multi-agent-hub 的一个 worker 并阻塞到出最终结果。worker 支持简称：agy/cb/cbcnintl/mimo/gcp/mmx/trae，或规范名 " +
+      "把任务派发给 multi-agent-hub 的一个 worker 并阻塞到出最终结果。【强制准则：必须严格遵循「tool_search → tool_describe → tool_call」单一调用路径，且每个任务只派发一次！严禁直接以工具名调用，绝对禁止在回答正文中同时内嵌 XML 标签（如 <multi-agent-hub_hub_ask>），避免宿主重复执行两次】worker 支持简称：agy/cb/cbcnintl/mimo/gcp/mmx/trae，或规范名 " +
       CANONICAL.join("/") +
       "。task 需自包含（worker 无本会话历史；minimaxcode 是纯聊天型无文件操作）。返回 JSON 文本：{ok,status,worker,ref,answer}。仅派发一次；running/unknown 时任务可能仍执行，使用原 ref 续查，避免重复派发。",
     inputSchema: {
@@ -41,12 +41,12 @@ const TOOLS = [
   },
   {
     name: "hub_status",
-    description: "列出 multi-agent-hub 注册代理与在线状态（原文文本）。",
+    description: "列出 multi-agent-hub 注册代理与在线状态（原文文本）。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "hub_capabilities",
-    description: "查询 worker 默认模型以及思考、流式和附件能力，不返回凭据。",
+    description: "查询 worker 默认模型以及思考、流式和附件能力，不返回凭据。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】",
     inputSchema: { type: "object", properties: {
       worker: { type: "string" }, model: { type: "string", description: "查询指定型号的实际选项" },
       refresh: { type: "boolean", description: "清除当前登录/型号失败记录并重新读取配置；不会自动调用模型" },
@@ -54,7 +54,7 @@ const TOOLS = [
   },
   {
     name: "hub_login",
-    description: "在 multi-agent-hub 宿主机发起或查询 worker 的官方登录。start 返回 login_url / user_code，由用户在浏览器完成授权；status 查询完成或过期；cancel 只取消本工具发起的登录流程。支持 worker 简称。不会索取密码、API Key 或回传凭据；不支持链接登录的 worker 返回 manual_required 及官方操作指引。",
+    description: "在 multi-agent-hub 宿主机发起或查询 worker 的官方登录。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】start 返回 login_url / user_code，由用户在浏览器完成授权；status 查询完成或过期；cancel 只取消本工具发起的登录流程。支持 worker 简称。不会索取密码、API Key 或回传凭据；不支持链接登录的 worker 返回 manual_required 及官方操作指引。",
     inputSchema: {
       type: "object",
       properties: {
@@ -68,7 +68,7 @@ const TOOLS = [
   {
     name: "hub_dispatch",
     description:
-      "异步 worker 秒回 ref，再用 hub_fetch 轮询；同步配置直接返回 status=completed/failed 及 answer。HTTP 受理等待最多 25s。worker 支持简称 agy/cb/cbcnintl/mimo/gcp/mmx/trae 或规范名。网络超时可能已受理，严禁仅因没拿到 ref 重复派发同一任务。",
+      "异步派发任务到 worker。【强制准则：必须严格遵循「tool_search → tool_describe → tool_call」单一调用路径，且每个任务只派发一次！严禁直接以工具名调用，绝对禁止在正文内嵌 XML 标签，避免宿主重复执行两次】异步 worker 秒回 ref，再用 hub_fetch 轮询；同步配置直接返回 status=completed/failed 及 answer。HTTP 受理等待最多 25s。worker 支持简称 agy/cb/cbcnintl/mimo/gcp/mmx/trae 或规范名。网络超时可能已受理，严禁仅因没拿到 ref 重复派发同一任务。",
     inputSchema: {
       type: "object",
       properties: {
@@ -83,13 +83,26 @@ const TOOLS = [
   },
   {
     name: "hub_fetch",
-    description: "按 ref 查询一次任务当前状态（非阻塞）：{status, answer}。running 时稍后再查；completed 时 answer 是最终回答；failed 是任务失败，unknown 是查询未能确认状态，应保留原 ref 续查。",
+    description: "按 ref 查询一次任务当前状态（非阻塞）：{status, answer}。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】running 时稍后再查；completed 时 answer 是最终回答；failed 是任务失败，unknown 是查询未能确认状态，应保留原 ref 续查。",
     inputSchema: {
       type: "object",
       properties: {
         ref: { type: "string", description: "派发时返回的任务 ref" },
       },
       required: ["ref"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "hub_set_status",
+    description: "设置子代理的启用/禁用开关（与 WebUI 控制台及全端双向同步）。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】当某 worker 额度耗尽或暂时不使用时，可将其禁用，避免无额度频繁调用。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        worker: { type: "string", description: "worker 名或简称，如 zcode, codebuddy 等" },
+        enabled: { type: "boolean", description: "是否启用 (true=启用, false=禁用)" },
+      },
+      required: ["worker", "enabled"],
       additionalProperties: false,
     },
   },
@@ -150,6 +163,7 @@ async function handleRequest(req) {
       protocolVersion: supported.includes(params?.protocolVersion) ? params.protocolVersion : "2025-11-25",
       capabilities: { tools: {} },
       serverInfo: SERVER,
+      instructions: "【CodeArts 宿主强制执行准则】\n1. 必须严格遵循「tool_search → tool_describe → tool_call」单一调用路径执行本 MCP 工具；\n2. 每个任务严格只派发一次，严禁单轮输出多个调用重复提交任务；\n3. 严禁直接以工具名调用，严禁同时在正文输出 XML 标签（如 <multi-agent-hub_*>）。",
     });
   }
   if (method === "ping") return ok(id, {});
@@ -197,6 +211,10 @@ async function handleRequest(req) {
       if (name === "hub_fetch") {
         const r = await fetchRef(args.ref);
         return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: r.status === "failed" || r.status === "unknown" });
+      }
+      if (name === "hub_set_status") {
+        const r = await hubSetAgentStatus(args.worker, args.enabled);
+        return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: !r.ok });
       }
       return err(id, -32602, `Unknown tool: ${name}`);
     } catch (e) {

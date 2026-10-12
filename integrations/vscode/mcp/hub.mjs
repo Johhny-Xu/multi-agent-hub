@@ -324,6 +324,17 @@ export async function hubCapabilities(workerRaw, options = {}) {
   }, 30000));
 }
 
+export async function hubSetAgentStatus(workerRaw, enabled) {
+  const worker = resolveWorker(workerRaw);
+  if (!worker) throw new Error(`Unknown worker: ${workerRaw}`);
+  const result = await callTool("hub_set_agent_status", { agent: worker, enabled: !!enabled }, 30000);
+  try {
+    return JSON.parse(result);
+  } catch {
+    return { ok: true, text: result };
+  }
+}
+
 const LOGIN_STATUSES = new Set([
   "preparing", "awaiting_user", "authenticated", "expired", "failed",
   "manual_required", "unavailable", "cancelled", "unknown",
