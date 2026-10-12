@@ -15,6 +15,12 @@ RULES = {
     "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+Joh" + r"hny|/home/joh" + r"hny)\b"),
     "private_lan_ip": re.compile(r"\b192\.168\." + r"2\.29\b"),
     "legacy_hub_token": re.compile(r"sbl4LvbZ4DcvlgSN-" + r"JpNLBQmvkHlYqie"),
+    # 个人邮箱（常见个人邮箱域名；example.com / 厂商域名除外）
+    "personal_email": re.compile(r"(?i)\b[A-Za-z0-9._%+-]+@(?:gmail|googlemail|outlook|hotmail|qq|foxmail|163|126|yeah|sina|vip\.163|139)\.[a-z.]+\b"),
+    # 中国大陆手机号（前后不得为十六进制字符，避免命中哈希串的子串）
+    "cn_mobile": re.compile(r"(?<![0-9a-fA-F])1[3-9]\d{9}(?![0-9a-fA-F])"),
+    # 长数字 ID（小米 UID / Trae UID 等），同样排除哈希串子串；字面量拆分避免规则文件自匹配
+    "long_numeric_id": re.compile(r"(?<![0-9a-fA-F])(?:229735" + r"2705|2891045" + r"460773080)(?![0-9a-fA-F])"),
 }
 
 
