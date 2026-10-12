@@ -1601,8 +1601,8 @@ const CATALOG_MODELS = {
   ],
   minimaxcode: [
     // mmx CLI 的上下文窗口由模型决定（text chat 无上下文参数）：M3.1-Flash-Preview=512K，M3=1M
-    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K 上下文', ctx: '512K', default: true },
-    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', ctx: '1M' },
+    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K 上下文', ctx: '512K' },
+    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', ctx: '1M', default: true },
   ],
   zcode: [
     { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },
