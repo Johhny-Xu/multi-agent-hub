@@ -7641,7 +7641,7 @@
     const cleanupModal = async (cancelBackend = false) => {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       if (cancelBackend && currentLoginId && !finished) {
-        try { await jpost('/api/auth/finish', { loginId: currentLoginId, accountName: customAccountName }); } catch { /* ignore */ }
+        try { await jpost('/api/auth/cancel', { loginId: currentLoginId }); } catch { /* ignore */ }
       }
       backdrop.remove();
     };
@@ -7672,7 +7672,7 @@
     sbInput.value = customAccountName;
     sbInput.placeholder = '留空自动识别（如邮箱前缀 user01），也可自定义如 work / backup';
     sbInput.oninput = () => {
-      customAccountName = sbInput.value.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+      customAccountName = sbInput.value.trim().replace(/[^\p{L}\p{N}._-]/gu, '-');
     };
     sbRow.appendChild(sbInput);
     sandboxBar.append(sbLabel, sbRow);
@@ -7934,6 +7934,11 @@
 
     async function startSession() {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (currentLoginId && !finished) {
+        const prevId = currentLoginId;
+        currentLoginId = null;
+        jpost('/api/auth/cancel', { loginId: prevId }).catch(() => {});
+      }
       finished = false;
       submitting = false;
       statusEl.className = 'uh-auth-status';

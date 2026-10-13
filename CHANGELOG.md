@@ -21,25 +21,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - 实证新版 CLI（≥2.164）会话真实落盘位置为 XDG 共享存储 `~/.local/share/CodeBuddyExtension/Data/Public/auth/<authentication-id>.info`（随 HOME 而非 `CODEBUDDY_CONFIG_DIR`，且 CN/国际版共用同一文件）：ACP 成功回包后同时轮询 legacy 路径与共享存储并自动镜像归档，修复"授权成功但检测不到凭据"；
   - 补齐官方 `GET /v2/plugin/auth/token?state=` 与 `GET /v2/plugin/account` 兑换链路（国际 `www.codebuddy.ai` / 国内 `copilot.tencent.com`，prefixPath `/plugin`），授权链接到达即启动后台看门狗并行轮询，CLI 自身轮询卡死时由 Hub 直接完成落盘；
   - 账户身份识别覆盖 `account` / `accounts[0]` / `allAccounts[0]` 三份副本与 JWT payload（CN 版 email 恒为空，按 uid/uin/手机号识别；ACP 结果自带 userinfo 作兜底）；未完成授权的半成品（accessToken 为 started 跳转 URL）一律判为未登录，不再被误归档；
-  - 切换账号时同步写入官方共享会话存储，真实 CLI 与其本地网页端即时跟随 hub 的账号切换；登录弹窗对 CodeBuddy 明示"重复授权会使同账号网页端会话下线"的单会话策略提醒，并提供不影响网页端的凭据导入通道。
+  - 登录弹窗对 CodeBuddy 明示"重复授权会使同账号网页端会话下线"的单会话策略提醒，并提供不影响网页端的凭据导入通道。
 - **Trae 官方 OAuth 修复（授权页报错"链接有误"）**：与 Trae IDE `loginUrlBuilder` 逐参数对齐——补齐强制 PKCE（`code_challenge` + `code_challenge_method=S256`）、回调路径改用官方 `/authorize`、登录主机改由 `GetLoginGuidance` 动态探测（国内/国际双区）；回调解析新增 `userJwt` 直通与 `authCodeInfo→AuthCode+CodeVerifier` 走 IDE 原生 `/trae/api/v3/oauth/ExchangeToken` 兑换。
 - **ZCode 国际/国内切换**：登录弹窗新增区域选择（国内版 BigModel / 国际版 Z.ai），后端按区域走官方 `provider: bigmodel|zai` 初始化、轮询与 `enc:v1:` 加密落盘，初始化失败按区域回退对应 API Key 获取页。
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
-- MiniMax 默认模型改为 `MiniMax-M3`（1M 上下文），512K 的 M3.1-Flash-Preview 可通过上下文胶囊一键切换。
+- MiniMax 默认模型改为 `MiniMax-M3`（1M 上下文），512K 的 M3.1-Flash-Preview 可通过上下文胶囊一键切换（同步对齐 `console/server.mjs` 内置 `MODEL_CATALOG.minimaxcode` 与 `console/auth.mjs`）。
 - **修复账号切换劫持 WorkBuddy 桌面会话的事故 ([`console/accounts.mjs`](console/accounts.mjs))**：回退"切换账号时同步写入 CodeBuddy XDG 共享会话存储"的逻辑——该文件是 WorkBuddy 桌面版的会话，hub 写入会把桌面版顶成其他账号。CodeBuddy 派发侧的账号隔离本由 wrapper 的独立 HOME 机制（`~/.codebuddy-cn-home` / `~/.codebuddy-intl-home`）承担，hub 只做沙箱内登录捕获（只读），永不写真实共享存储。
 - **修复会话未读红点老 bug ([`console/client/index.html`](console/client/index.html))**：打开某 agent 对话时此前只把"当前活跃会话"标为已读，同一 agent 的旧会话攒下的未读永远清不掉、每次刷新红点都重现；现改为整 agent 级标读（服务端清空其全部会话未读），底部导航与线程列表徽标同步清零。
 - **隐私与开源前清洗**：全仓（工作区 + 全部 git 历史）清除内网 IP、用户主目录路径、个人邮箱、手机号与账号 UID（`git filter-repo` 全量重写）；账号展示层不再暴露手机号——CodeBuddy CN 等卡片与配额区只显示账户名称/邮箱，档案命名也优先名称而非手机号；`scripts/audit_secrets.py` 新增个人邮箱、国内手机号（排除哈希子串误报）与长数字 ID 规则，工作区与历史扫描均归零。
 - **账号/上下文切换乐观 UI 提速 ([`console/client/index.html`](console/client/index.html))**：账号胶囊与 MiniMax 上下文档位胶囊点击立即变绿（实测 44ms），真实切换与配额刷新改后台执行、失败自动回滚重绘；砍掉切换后同步等待全 9 厂商配额强刷的阻塞链路（服务端本就对被切 worker 单独清缓存，其余走 60s 缓存）。
 - **账号区切换入口去重（全 9 卡片生效）**：移除与账号胶囊芯片完全重复的"已存账号下拉框 + 切换按钮"，「存别名」收为芯片行尾的虚线小胶囊；套餐徽章剥离规则升级为同时识别括号式与 `· UID:xxx` 分隔式账号片段（修复 mimocode 等卡片头部 UID 重复显示），9 张卡片的套餐徽章现在只展示纯套餐/档位信息。
 - **手机端对话页修复 ([`console/client/index.html`](console/client/index.html))**：修复窄屏（≤640px）下工作台因 auto 模式"有产物即自动展开"而全宽覆盖对话区、导致手机上永远看不到对话的问题——窄屏时 auto 不再自动弹出，产物通过边缘把手徽标提示、手动展开；底部「对话 / 代理」导航栏与代理页在 390px 视口实测可正常进入与渲染。
-- **账号显示去重与可读性修复 ([`console/client/index.html`](console/client/index.html) / [`console/accounts.mjs`](console/accounts.mjs))**：
-  - 账号档案名清洗 `cleanProfileLabel` 改为保留 Unicode 字母与数字（含中文），修复 CJK 账号名（如 Z.ai 的「旅行者****」）被吞成纯数字「7072」导致"登录成功却看不出新增了账号"的问题；
+- **账号显示去重与 Unicode/中文账号名全链路打通 ([`console/client/index.html`](console/client/index.html) / [`console/accounts.mjs`](console/accounts.mjs) / [`console/server.mjs`](console/server.mjs))**：
+  - 账号档案名清洗 `cleanProfileLabel`、前端登录弹窗备注名输入过滤与后端 `safeProfileName` 参数校验全部统一为 `/^[\p{L}\p{N}._-]{1,64}$/u`（保留中文/Unicode 字母数字，拒绝 `.` 与 `..`），彻底修复 CJK 账号名（如 Z.ai「旅行者****」）在归档、切换、删除或自定义备注时被吞字或报 400 `name 含非法字符` 的问题；同时清理 `console/accounts.mjs` 残留的字面量 UTF-8 BOM 字符，统一使用 `\uFEFF` 转义；
   - 卡片头部移除与"点头像"重复的「头像」按钮，启停开关独占右侧；套餐徽章不再重复括号内的账号身份（与 worker 同名时彻底隐藏），徽章文字不再截断；
   - 「账号与登录」状态徽章只表达"已登录/未登录"，当前账号统一由绿色高亮胶囊展示，消除同一账号信息在同一卡片上三处重复的问题；角色描述行改为完整换行显示。
+- **登录会话取消回收与服务秒级优雅退出 ([`console/auth.mjs`](console/auth.mjs) / [`console/server.mjs`](console/server.mjs) / [`console/client/index.html`](console/client/index.html))**：
+  - 新增 `POST /api/auth/cancel`、`cancelLogin(loginId)` 与 `cancelAllLogins()`：关闭登录弹窗或切换 ZCode 区域时立即终止未完成的 PTY/ACP 子进程（`SIGTERM` + 300ms `SIGKILL` 兜底）、关闭本地 OAuth 回调监听连接、中断 CodeBuddy state 看门狗轮询并清理 `~/.agenthub/sandbox/` 临时沙箱目录；
+  - 所有后台轮询/超时定时器标记 `.unref()`，并在 `server.mjs` `dispose()` 中调用 `authMod.cancelAllLogins()` 与 `closeAllConnections()`，根治 `systemctl --user restart agent-hub-console.service` 因活跃连接或残留子进程阻塞 90 秒超时的问题。
 - **MiniMax 上下文档位选择器 ([`console/client/index.html`](console/client/index.html) / [`console/auth.mjs`](console/auth.mjs))**：minimaxcode 卡片新增「上下文 512K | 1M」分段胶囊——实证 mmx CLI 的上下文窗口由模型内置表决定（`text chat` 无上下文参数），512K=`MiniMax-M3.1-Flash-Preview`（524288）、1M=`MiniMax-M3`（1e6），点击档位即切换默认模型，Hub 每次派发实时读取无需重启；同时将 M3.1 原先含糊的 `512K/1M` 标签修正为真实的 `512K 上下文`。
 - **模型别名可删除 ([`console/auth.mjs`](console/auth.mjs) / [`console/client/index.html`](console/client/index.html))**：内置模型行暴露 agents.json 中的别名徽章并可单个删除（修复"指向内置模型 id 的自定义别名永远无法删除"），删除当前 default 别名时自动回退内置默认模型。
-- **版本号统一**：console 服务与 WebUI 此前分叉停在 0.9.4（落后于主线 0.9.9.1），本版将 Hub 核心、console/WebUI、插件市场与全部集成/插件清单一律对齐到 **0.9.9.2**，结束双线并存。
+- **版本号与发布产物全面统一**：将 Hub 核心、console/WebUI、README/SVG 架构图、VS Code / CodeArts / CloudIDE 扩展包（`multi-agent-hub-0.9.9.2.{vsix,carts,cloudide}`）及全套 32 项回归测试一律对齐到 **0.9.9.2**，结束双线并存。
 
 ---
 

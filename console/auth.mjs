@@ -282,11 +282,17 @@ function cleanupSessionResources(entry) {
   if (entry.pollTimer) { clearInterval(entry.pollTimer); entry.pollTimer = null; }
   if (entry.timeoutTimer) { clearTimeout(entry.timeoutTimer); entry.timeoutTimer = null; }
   if (entry.server) {
-    try { entry.server.close(); } catch { /* ignore */ }
+    try { entry.server.closeAllConnections?.(); entry.server.close(); } catch { /* ignore */ }
     entry.server = null;
   }
   if (entry.proc) {
-    try { entry.proc.kill('SIGTERM'); } catch { /* ignore */ }
+    const p = entry.proc;
+    entry.proc = null;
+    try { p.kill('SIGTERM'); } catch { /* ignore */ }
+    const killTimer = setTimeout(() => {
+      try { if (p.exitCode === null) p.kill('SIGKILL'); } catch { /* ignore */ }
+    }, 300);
+    killTimer.unref?.();
   }
 }
 
@@ -584,7 +590,7 @@ const CODEBUDDY_AUTH_ENDPOINTS = {
   'codebuddy-cn': 'https://copilot.tencent.com',
 };
 
-async function fetchCodeBuddyAuthByState(worker, state, maxAttempts = 20, intervalMs = 3000) {
+async function fetchCodeBuddyAuthByState(worker, state, maxAttempts = 20, intervalMs = 3000, shouldAbort = null) {
   const base = CODEBUDDY_AUTH_ENDPOINTS[worker] || CODEBUDDY_AUTH_ENDPOINTS.codebuddy;
   const headers = {
     Accept: 'application/json',
@@ -595,6 +601,9 @@ async function fetchCodeBuddyAuthByState(worker, state, maxAttempts = 20, interv
   };
   let lastErr = '无响应';
   for (let i = 0; i < maxAttempts; i += 1) {
+    if (typeof shouldAbort === 'function' && shouldAbort()) {
+      throw new Error('登录会话已结束或已取消');
+    }
     try {
       const r = await fetchJsonSmart(`${base}/v2/plugin/auth/token?state=${encodeURIComponent(state)}`, { headers }, 10_000);
       const data = r.json?.data?.data ?? r.json?.data ?? null;
@@ -617,7 +626,7 @@ async function fetchCodeBuddyAuthByState(worker, state, maxAttempts = 20, interv
     } catch (err) {
       lastErr = err.message;
     }
-    await new Promise((r) => { setTimeout(r, intervalMs); });
+    await new Promise((r) => { const t = setTimeout(r, intervalMs); t.unref?.(); });
   }
   throw new Error(`CodeBuddy 官方 token 兑换未完成（${lastErr}）`);
 }
@@ -636,7 +645,7 @@ async function completeCodeBuddyByState(e, state, prefName) {
   e.buf += `\n[CodeBuddy] 检测到 started 授权完成页链接，正在用 state 向官方服务换取凭据…\n`;
   let result;
   try {
-    result = await fetchCodeBuddyAuthByState(e.worker, state, 3, 2000);
+    result = await fetchCodeBuddyAuthByState(e.worker, state, 3, 2000, () => e.exited);
   } catch (err) {
     return { ok: false, worker: e.worker, error: `${err.message}。授权若已完成，后台会持续自动检测并收口；也可稍后点击「我已完成授权」重试` };
   }
@@ -675,8 +684,8 @@ function startCodeBuddyCompletionWatchdog(e, state) {
   e.cbWatchdog = true;
   (async () => {
     try {
-      const result = await fetchCodeBuddyAuthByState(e.worker, state, 170, 3000);
-      if (e.exited) return; // CLI 已完成，无需兜底
+      const result = await fetchCodeBuddyAuthByState(e.worker, state, 170, 3000, () => e.exited);
+      if (e.exited) return; // CLI 已完成或已取消，无需兜底
       e.buf += `\n[CodeBuddy] ✓ 后台兜底轮询拿到官方凭据（CLI 未完成，由 Hub 直接完成）\n`;
       const dirName = e.worker === 'codebuddy-cn' ? '.codebuddy-cn' : '.codebuddy';
       const authInfoFile = join(e.targetHome, dirName, 'auth.info');
@@ -692,7 +701,7 @@ function startCodeBuddyCompletionWatchdog(e, state) {
       e.code = 0;
       clearQuotaCache(e.worker);
       cleanupSessionResources(e);
-    } catch { /* 超时放弃：用户仍可粘贴 started 链接手动兑换 */ }
+    } catch { /* 超时或取消放弃：用户仍可粘贴 started 链接手动兑换 */ }
   })();
 }
 
@@ -743,6 +752,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
       cleanupSessionResources(entry);
     }
   }, 600_000);
+  entry.timeoutTimer.unref?.();
 
   // ---------------- 分支 1：Python PTY 设备码流 (minimaxcode / github-copilot)
   if (spec.mode === 'pty_device' && spec.cmd) {
@@ -1123,6 +1133,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
             }
           } catch { /* ignore transient poll errors */ }
         }, intervalMs);
+        entry.pollTimer.unref?.();
       } catch (e) {
         entry.authUrl = provider === 'zai'
           ? 'https://z.ai/manage-apikey/apikey-list'
@@ -1457,12 +1468,21 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
   }
 }
 
+const SANDBOX_ROOT = join(HOME, '.agenthub', 'sandbox');
+async function removeSandboxDir(sandboxPath) {
+  if (sandboxPath && sandboxPath.startsWith(SANDBOX_ROOT)) {
+    await rm(sandboxPath, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export async function finishLogin(loginId, preferredName = '') {
   const e = sessions.get(loginId);
   if (!e) return { ok: false, error: '登录会话不存在或已过期' };
   // API Key 直配通道（如 mimocode sk-）：已直接写入线上配置生效，不作为账号归档
   if (e.apiKeyOnly) {
+    e.exited = true;
     cleanupSessionResources(e);
+    await removeSandboxDir(e.sandbox);
     sessions.delete(loginId);
     return { ok: true, worker: e.worker, accountName: null, apiKeyOnly: true, note: 'API Key 已生效（通道配置，不作为账号入库）' };
   }
@@ -1471,10 +1491,39 @@ export async function finishLogin(loginId, preferredName = '') {
   if (!accountName && acc && acc.ok === false) {
     return { ok: false, worker: e.worker, error: acc.error || '尚未检测到新登录凭据，请先完成授权或粘贴回调链接提交' };
   }
+  e.exited = true;
   clearQuotaCache(e.worker);
   cleanupSessionResources(e);
+  await removeSandboxDir(e.sandbox);
   sessions.delete(loginId);
   return { ok: true, worker: e.worker, accountName };
+}
+
+/** 取消未完成的登录会话：终止 PTY/ACP 子进程、关闭回调监听与轮询定时器、清理沙箱临时目录 */
+export async function cancelLogin(loginId) {
+  const e = sessions.get(loginId);
+  if (!e) return { ok: true, cancelled: false, note: '会话已结束' };
+  e.exited = true;
+  if (e.code === null) e.code = -1;
+  cleanupSessionResources(e);
+  await removeSandboxDir(e.sandbox);
+  sessions.delete(loginId);
+  return {
+    ok: true,
+    cancelled: !e.savedAccountName && !e.apiKeyOnly,
+    worker: e.worker,
+    accountName: e.savedAccountName || null,
+  };
+}
+
+/** 服务退出时清理所有活跃登录会话的子进程、回调端口与定时器 */
+export function cancelAllLogins() {
+  for (const [id, e] of sessions.entries()) {
+    e.exited = true;
+    cleanupSessionResources(e);
+    removeSandboxDir(e.sandbox).catch(() => {});
+    sessions.delete(id);
+  }
 }
 
 // ---------------------------------------------------------------- 退出登录（全部 9 个 Worker）

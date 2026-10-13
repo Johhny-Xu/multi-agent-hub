@@ -510,6 +510,22 @@ test('clearing a recent failure is explicit, model-scoped, and never dispatches 
   } finally { capabilitiesOverride = null; await stop(); }
 });
 
+test('auth login supports Unicode profile names and /api/auth/cancel cleans up session', async () => {
+  await boot();
+  try {
+    const started = await api('/api/auth/login', { worker: 'mimocode', name: '旅行者****' });
+    assert.equal(started.status, 200);
+    assert.equal(started.body.ok, true);
+    assert.ok(started.body.loginId);
+    const cancelled = await api('/api/auth/cancel', { loginId: started.body.loginId });
+    assert.equal(cancelled.status, 200);
+    assert.equal(cancelled.body.ok, true);
+    assert.equal(cancelled.body.cancelled, true);
+    const polled = await api(`/api/auth/poll?loginId=${encodeURIComponent(started.body.loginId)}`);
+    assert.equal(polled.body.ok, false);
+  } finally { await stop(); }
+});
+
 test.after(async () => {
   await stop();
   await new Promise((r) => hub.close(r));

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.4 重点攻坚 MiniMaxCode 适配与前端优化</title>
-  <desc id="roadmap-desc">v0.9.4 当前重点为攻坚 MiniMaxCode 适配与 WebUI 前端优化：全新三栏式控制台、时段问候、会话归档复原删除、MiniMax-M3.1-Flash-Preview 与 M3 旗舰深度适配。</desc>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.9.2 重点攻坚 MiniMaxCode 适配与前端优化</title>
+  <desc id="roadmap-desc">v0.9.9.2 当前重点为攻坚 MiniMaxCode 适配与 WebUI 前端优化：全新三栏式控制台、时段问候、会话归档复原删除、MiniMax-M3.1-Flash-Preview 与 M3 旗舰深度适配。</desc>
   <defs>
     <style>
       .title { font-size:34px; font-weight:700; fill:#0f172a; }
@@ -22,13 +22,13 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-11　·　当前版本 v0.9.4　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
+  <text x="64" y="108" class="meta">更新：2026-10-11　·　当前版本 v0.9.9.2　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.4 · 当前重点</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.9.2 · 当前重点</text>
     <rect x="938" y="151" width="246" height="36" rx="18" fill="#dbeafe"/>
     <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">版本攻坚 · 前端优化</text>
     <text x="96" y="227" class="focus">MiniMax 双向适配与前端优化</text>
@@ -85,7 +85,7 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v0.9.4</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v0.9.9.2</text>
     <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">MiniMax 适配</text>
     <text x="1024" y="675" class="stage">WebUI 体验革命</text>
   </g>

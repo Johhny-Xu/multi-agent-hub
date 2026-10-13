@@ -170,7 +170,7 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       return { label, identity: email || sub || fp, display: email || claims?.name || label };
     }
     if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
-      const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^﻿/, ''));
+      const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       // account / accounts[0] / allAccounts[0] 是三份同构副本，任取其一；国际版可能只有 JWT
       const acct = raw?.account || raw?.accounts?.[0] || raw?.allAccounts?.[0] || raw?.user || {};
       const rawTok = String(raw?.auth?.accessToken || '');

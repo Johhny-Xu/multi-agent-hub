@@ -54,7 +54,7 @@ server 名为 `hub-bridge`；宿主会给工具名添加插件命名空间。
 
 ### 1. MiniMax Code / MiniMax Agent 加载方式
 - **MiniMax Plugin V1（桌面端导入 / 官方 Marketplace 提交）**：
-  - 直接导入独立插件包 `agenthub-workers-0.9.4-minimax-plugin.zip`（ZIP 根目录直接包含 `.minimax-plugin/plugin.json`），或在 GitHub 提交表单中指定仓库子目录 `plugins/agenthub-workers`。
+  - 直接导入独立插件包 `agenthub-workers-0.9.9.2-minimax-plugin.zip`（ZIP 根目录直接包含 `.minimax-plugin/plugin.json`），或在 GitHub 提交表单中指定仓库子目录 `plugins/agenthub-workers`。
 - **MiniMax Code CLI (`mcode`) 本地加载**：
   - 使用 `mcode --plugin-dir /path/to/plugins/agenthub-workers` 或通过仓库根目录一键安装脚本 `install.cmd` / `./install.sh` 自动注册。
 

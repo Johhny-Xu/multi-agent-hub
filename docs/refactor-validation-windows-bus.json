@@ -4,12 +4,12 @@
   "timezone": "Asia/Shanghai",
   "platform": "Windows",
   "python_version": "3.14.5",
-  "duration_seconds": 6.052,
+  "duration_seconds": 5.878,
   "live_vendor_inference_performed": false,
-  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-uqlypx_5",
+  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-793t7w3d",
   "active_agent_config_or_state_modified": false,
   "source_sha256": {
-    "hub/agent_hub.py": "14101aad4624d9dc3951b1e0a068b8ab1a2cc15c9c54cb3551e7edc1fa8b5205",
+    "hub/agent_hub.py": "cfddb197355255f0db5020f6b5aaaf788b4df876b3d956b46fc5c5ebd2de53b0",
     "hub/async_worker.py": "5bc96200869076ff4abe97119fa1ecc4fdce292c1cdca932c23b9d9725326e10",
     "hub/command_runtime.py": "8aea57229342072da67c8d8c3a3f1710e74a118a42d73c0a81b766c5fbae5d1a",
     "plugins/agenthub-workers/mcp/hub.mjs": "db78cf50ae462d6988cc8d9a31a01d146d29a082aca35c4bf9b8a35a2613f3e1",
@@ -41,12 +41,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "codebuddy-24983e3f6c",
-          "updated_at": 1791742668.993036,
+          "ref": "codebuddy-a93b32f87b",
+          "updated_at": 1791869613.399266,
           "progress": null,
           "exit_code": 0,
           "text": "{\"synthetic\": true, \"kind\": \"cwd\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--agent\", \"standard\", \"--output-format\", \"json\"]}",
-          "probe_elapsed_seconds": 0.651
+          "probe_elapsed_seconds": 0.655
         },
         "task_metadata": {
           "cmd": [
@@ -66,7 +66,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "2ab1c8de162548a4a6a88dfc64870c300d49fecfa8137de8289009fd251ccc27",
+          "profile_signature": "6f09f0a3757f380cb7ffc67458e322030771b4b46fba699e9216fe5f5334f891",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -94,12 +94,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "codebuddy-cn-c026cdbca5",
-          "updated_at": 1791742669.0167906,
+          "ref": "codebuddy-cn-07cc580fe8",
+          "updated_at": 1791869613.4080622,
           "progress": null,
           "exit_code": 0,
           "text": "{\"synthetic\": true, \"kind\": \"workdir\", \"cwd\": \"<isolated-temp>\\\\synthetic-auth-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--agent\", \"standard\", \"--output-format\", \"json\", \"--add-dir\", \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\"]}",
-          "probe_elapsed_seconds": 0.621
+          "probe_elapsed_seconds": 0.625
         },
         "task_metadata": {
           "cmd": [
@@ -121,7 +121,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "07ed67eaaa89d6ae133cef6a03da6a0297b551904da4b763d306367d43473d6d",
+          "profile_signature": "f4d2de598c28c0b6d6b5b882cdfb661962defa5d9e83d9f1202142c7f42189f6",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -150,11 +150,11 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "mimocode-a0b4db7233",
-          "updated_at": 1791742669.0696883,
+          "ref": "mimocode-5c394933e0",
+          "updated_at": 1791869613.457515,
           "text": "CLI 任务超时 (>0.1s), 已回收子进程树",
           "progress": null,
-          "probe_elapsed_seconds": 0.599
+          "probe_elapsed_seconds": 0.602
         },
         "task_metadata": {
           "cmd": [
@@ -172,7 +172,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "3f456c6e1ada91975dbd8c2f24adb1271414a9e5d2e07d6cb341c772fce277c9",
+          "profile_signature": "8465b19f35d19727e9b29d43aec4cb6bd0f5b65765bead7811a25e802d6d28c7",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -198,12 +198,12 @@
         "stream": false,
         "attachments": [],
         "model": "",
-        "ref": "minimaxcode-d9d2fdc416",
-        "updated_at": 1791742669.065569,
+        "ref": "minimaxcode-31904afa45",
+        "updated_at": 1791869613.464584,
         "progress": null,
         "exit_code": 7,
         "text": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}",
-        "probe_elapsed_seconds": 0.576
+        "probe_elapsed_seconds": 0.58
       },
       "source": [
         "hub/async_worker.py:439",
@@ -224,8 +224,8 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "github-copilot-f9b81f8b27",
-          "updated_at": 1791742669.059483,
+          "ref": "github-copilot-20da76df07",
+          "updated_at": 1791869613.4393692,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK",
@@ -251,8 +251,8 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "github-copilot-00c4a1c6af",
-          "updated_at": 1791742669.5968862,
+          "ref": "github-copilot-ae4c5bc836",
+          "updated_at": 1791869613.932244,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK"
@@ -271,8 +271,8 @@
         "ok": false,
         "worker": "minimaxcode",
         "status": "failed",
-        "ref": "minimaxcode-bb36930941",
-        "answer": "[minimaxcode-bb36930941] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
+        "ref": "minimaxcode-09d4bb18c2",
+        "answer": "[minimaxcode-09d4bb18c2] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
       },
       "source": [
         "plugins/agenthub-workers/mcp/hub.mjs",
@@ -292,15 +292,15 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "antigravity-6b0915082f",
-          "updated_at": 1791742668.9681058,
+          "ref": "antigravity-7e28adf435",
+          "updated_at": 1791869613.3595603,
           "text": "执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。",
           "progress": null,
-          "probe_elapsed_seconds": 0.526
+          "probe_elapsed_seconds": 0.528
         },
         "bridge": {
           "status": "failed",
-          "answer": "[antigravity-6b0915082f] agent=antigravity status=error\n执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。"
+          "answer": "[antigravity-7e28adf435] agent=antigravity status=error\n执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。"
         }
       },
       "source": [
@@ -315,7 +315,7 @@
         "ok": true,
         "worker": "zcode",
         "status": "running",
-        "ref": "zcode-681aec79fc"
+        "ref": "zcode-1ad0a08768"
       },
       "source": [
         "plugins/agenthub-workers/mcp/hub.mjs:179",
@@ -329,14 +329,14 @@
       "expected": "Actual closed-port driver failure remains an error with diagnostic text",
       "observed": {
         "direct_driver_exit": 1,
-        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:49719\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 49719\n}\n\nNode.js v24.17.0\n",
+        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:50703\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 50703\n}\n\nNode.js v24.17.0\n",
         "async_result": {
           "agent": "zcode",
           "status": "error",
           "task": "SYNTHETIC_CLOSED_CDP_TEST_ONLY",
-          "ref": "zcode-b7f7a8f2fe",
-          "updated_at": 1791742673.6496146,
-          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:49719\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 49719\n}\n\nNode.js v24.17.0",
+          "ref": "zcode-921f4fb4ec",
+          "updated_at": 1791869617.727305,
+          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:50703\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 50703\n}\n\nNode.js v24.17.0",
           "progress": null
         },
         "forced_cdp_target": "reserved non-listening loopback port",
@@ -360,7 +360,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa001",
-            "updated_at": 1791742673.8227804
+            "updated_at": 1791869617.9937387
           }
         },
         "async_worker": {
@@ -370,7 +370,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa002",
-            "updated_at": 1791742674.049269
+            "updated_at": 1791869618.2196188
           }
         }
       },
