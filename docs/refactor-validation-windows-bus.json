@@ -4,9 +4,9 @@
   "timezone": "Asia/Shanghai",
   "platform": "Windows",
   "python_version": "3.14.5",
-  "duration_seconds": 5.878,
+  "duration_seconds": 5.926,
   "live_vendor_inference_performed": false,
-  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-793t7w3d",
+  "isolated_temp_evidence_directory": "%TEMP%/agenthub-windows-bus-89gnduy3",
   "active_agent_config_or_state_modified": false,
   "source_sha256": {
     "hub/agent_hub.py": "cfddb197355255f0db5020f6b5aaaf788b4df876b3d956b46fc5c5ebd2de53b0",
@@ -41,12 +41,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "codebuddy-a93b32f87b",
-          "updated_at": 1791869613.399266,
+          "ref": "codebuddy-fa34d4093c",
+          "updated_at": 1791871392.2503192,
           "progress": null,
           "exit_code": 0,
           "text": "{\"synthetic\": true, \"kind\": \"cwd\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--agent\", \"standard\", \"--output-format\", \"json\"]}",
-          "probe_elapsed_seconds": 0.655
+          "probe_elapsed_seconds": 0.675
         },
         "task_metadata": {
           "cmd": [
@@ -66,7 +66,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "6f09f0a3757f380cb7ffc67458e322030771b4b46fba699e9216fe5f5334f891",
+          "profile_signature": "52c24c0eef0fb83a34a0a0b35d3c444f5b5b13b3fd37762f52042a4a87abdefa",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -94,12 +94,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "codebuddy-cn-07cc580fe8",
-          "updated_at": 1791869613.4080622,
+          "ref": "codebuddy-cn-a84bcd11f6",
+          "updated_at": 1791871392.2823539,
           "progress": null,
           "exit_code": 0,
           "text": "{\"synthetic\": true, \"kind\": \"workdir\", \"cwd\": \"<isolated-temp>\\\\synthetic-auth-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--agent\", \"standard\", \"--output-format\", \"json\", \"--add-dir\", \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\"]}",
-          "probe_elapsed_seconds": 0.625
+          "probe_elapsed_seconds": 0.643
         },
         "task_metadata": {
           "cmd": [
@@ -121,7 +121,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "f4d2de598c28c0b6d6b5b882cdfb661962defa5d9e83d9f1202142c7f42189f6",
+          "profile_signature": "2af573ce9a1d1e79b900eb52d46be8bb016695e257a5db8f111c0c6371405824",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -150,11 +150,11 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "mimocode-5c394933e0",
-          "updated_at": 1791869613.457515,
+          "ref": "mimocode-926dd8d18d",
+          "updated_at": 1791871392.2968934,
           "text": "CLI 任务超时 (>0.1s), 已回收子进程树",
           "progress": null,
-          "probe_elapsed_seconds": 0.602
+          "probe_elapsed_seconds": 0.621
         },
         "task_metadata": {
           "cmd": [
@@ -172,7 +172,7 @@
           "attachment_parent": "<isolated-temp>\\state\\attachments",
           "input_file": null,
           "availability_state": "<isolated-temp>\\state",
-          "profile_signature": "8465b19f35d19727e9b29d43aec4cb6bd0f5b65765bead7811a25e802d6d28c7",
+          "profile_signature": "594f2a77537167eddd09a0a654db1419a826554ab57f0fb112d1220fc4108250",
           "public_options": {
             "thinking": "default",
             "stream": false,
@@ -198,12 +198,12 @@
         "stream": false,
         "attachments": [],
         "model": "",
-        "ref": "minimaxcode-31904afa45",
-        "updated_at": 1791869613.464584,
+        "ref": "minimaxcode-e3580249b6",
+        "updated_at": 1791871392.3377333,
         "progress": null,
         "exit_code": 7,
         "text": "{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\\\u76ee\\u6807 workspace\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}",
-        "probe_elapsed_seconds": 0.58
+        "probe_elapsed_seconds": 0.596
       },
       "source": [
         "hub/async_worker.py:439",
@@ -224,12 +224,12 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "github-copilot-20da76df07",
-          "updated_at": 1791869613.4393692,
+          "ref": "github-copilot-d23786bb80",
+          "updated_at": 1791871392.3277817,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK",
-          "probe_elapsed_seconds": 0.553
+          "probe_elapsed_seconds": 0.572
         }
       },
       "source": [
@@ -251,8 +251,8 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "github-copilot-ae4c5bc836",
-          "updated_at": 1791869613.932244,
+          "ref": "github-copilot-efc9dc4598",
+          "updated_at": 1791871392.7694447,
           "progress": null,
           "exit_code": 0,
           "text": "SYNTHETIC_CMD_OK"
@@ -271,8 +271,8 @@
         "ok": false,
         "worker": "minimaxcode",
         "status": "failed",
-        "ref": "minimaxcode-09d4bb18c2",
-        "answer": "[minimaxcode-09d4bb18c2] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
+        "ref": "minimaxcode-09635baeb4",
+        "answer": "[minimaxcode-09635baeb4] agent=minimaxcode status=error\n{\"synthetic\": true, \"kind\": \"fail\", \"cwd\": \"<isolated-temp>\\\\inherited-cwd\", \"argv\": [\"SYNTHETIC_LOCAL_TEST_ONLY\", \"--output\", \"json\"]}\n(exit=7)"
       },
       "source": [
         "plugins/agenthub-workers/mcp/hub.mjs",
@@ -292,15 +292,15 @@
           "stream": false,
           "attachments": [],
           "model": "",
-          "ref": "antigravity-7e28adf435",
-          "updated_at": 1791869613.3595603,
+          "ref": "antigravity-a7608fcc33",
+          "updated_at": 1791871392.2344167,
           "text": "执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。",
           "progress": null,
           "probe_elapsed_seconds": 0.528
         },
         "bridge": {
           "status": "failed",
-          "answer": "[antigravity-7e28adf435] agent=antigravity status=error\n执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。"
+          "answer": "[antigravity-a7608fcc33] agent=antigravity status=error\n执行出错: [WinError 216] 该版本的 %1 与你运行的 Windows 版本不兼容。请查看计算机的系统信息，然后联系软件发布者。"
         }
       },
       "source": [
@@ -315,7 +315,7 @@
         "ok": true,
         "worker": "zcode",
         "status": "running",
-        "ref": "zcode-1ad0a08768"
+        "ref": "zcode-2c9a514d48"
       },
       "source": [
         "plugins/agenthub-workers/mcp/hub.mjs:179",
@@ -329,14 +329,14 @@
       "expected": "Actual closed-port driver failure remains an error with diagnostic text",
       "observed": {
         "direct_driver_exit": 1,
-        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:50703\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 50703\n}\n\nNode.js v24.17.0\n",
+        "direct_driver_stderr": "node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:61605\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 61605\n}\n\nNode.js v24.17.0\n",
         "async_result": {
           "agent": "zcode",
           "status": "error",
           "task": "SYNTHETIC_CLOSED_CDP_TEST_ONLY",
-          "ref": "zcode-921f4fb4ec",
-          "updated_at": 1791869617.727305,
-          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:50703\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 50703\n}\n\nNode.js v24.17.0",
+          "ref": "zcode-1cbd0c623d",
+          "updated_at": 1791871396.6122785,
+          "text": "执行出错: 子进程失败 (exit=1): node:internal/process/promises:394\n    triggerUncaughtException(err, true /* fromPromise */);\n    ^\n\nError: connect ECONNREFUSED 127.0.0.1:61605\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1706:16) {\n  errno: -4078,\n  code: 'ECONNREFUSED',\n  syscall: 'connect',\n  address: '127.0.0.1',\n  port: 61605\n}\n\nNode.js v24.17.0",
           "progress": null
         },
         "forced_cdp_target": "reserved non-listening loopback port",
@@ -360,7 +360,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa001",
-            "updated_at": 1791869617.9937387
+            "updated_at": 1791871396.8443038
           }
         },
         "async_worker": {
@@ -370,7 +370,7 @@
             "status": "completed",
             "text": "new",
             "ref": "atomic-aaa002",
-            "updated_at": 1791869618.2196188
+            "updated_at": 1791871397.066199
           }
         }
       },
