@@ -27,6 +27,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
 - MiniMax 默认模型改为 `MiniMax-M3`（1M 上下文），512K 的 M3.1-Flash-Preview 可通过上下文胶囊一键切换（同步对齐 `console/server.mjs` 内置 `MODEL_CATALOG.minimaxcode` 与 `console/auth.mjs`）。
+- **对话页七项视觉与体验改造 ([`console/client/index.html`](console/client/index.html))**：
+  - 移除对话头代理胶囊上的状态徽章（"可直通"类）；平台树一键展开/收起图标改为对角双向箭头；
+  - 归档查看器的平台筛选与排序两个下拉合并为单漏斗图标菜单（视图：按项目/时间线；排序方式：更新时间/创建时间，按项目视图带分组标题）；
+  - 发送旁模型胶囊改为 `agent名/模型名`（如 `antigravity/Gemini 3.8 Flash Medium`），原始模型 id（如 `huaweicloud-maas/*`）不再外露并移除四角星图标；底部动作行下移至卡片底边，圆角与卡片对齐；
+  - 状态栏内容相对输入框居中，模型块只显示目录展示名（agent 名不再与模型胶囊重复）；
+  - 修复 `modelsData is not defined` 跨闭包引用导致快照加载崩溃、页面降级的缺陷（模型名解析改用对话块本地 `state.snap.modelCatalog`）。
 - **对话页头部信息密度优化 ([`console/client/index.html`](console/client/index.html))**：「+ 新建对话」「清空」「导出」三个按钮统一收进「⋯」溢出菜单（导出的三种格式同步拍平为一层菜单项），头部右侧仅保留「工作台」独立按钮；桌面与手机端实测菜单开合、布局与全部菜单项功能正常。
 - **修复账号切换劫持 WorkBuddy 桌面会话的事故 ([`console/accounts.mjs`](console/accounts.mjs))**：回退"切换账号时同步写入 CodeBuddy XDG 共享会话存储"的逻辑——该文件是 WorkBuddy 桌面版的会话，hub 写入会把桌面版顶成其他账号。CodeBuddy 派发侧的账号隔离本由 wrapper 的独立 HOME 机制（`~/.codebuddy-cn-home` / `~/.codebuddy-intl-home`）承担，hub 只做沙箱内登录捕获（只读），永不写真实共享存储。
 - **修复会话未读红点老 bug ([`console/client/index.html`](console/client/index.html))**：打开某 agent 对话时此前只把"当前活跃会话"标为已读，同一 agent 的旧会话攒下的未读永远清不掉、每次刷新红点都重现；现改为整 agent 级标读（服务端清空其全部会话未读），底部导航与线程列表徽标同步清零。
