@@ -3080,16 +3080,6 @@
   }
   .cb-status-seg:hover { background: var(--mcode-surface-hover); }
   .cb-status-model, .cb-status-sys-toggle { color: var(--mcode-accent); font-weight: 500; }
-  .cb-status-gear {
-    margin-left: auto;
-    opacity: 0.65;
-    font-size: 11px;
-    padding: 2px 7px;
-  }
-  .cb-status-gear:hover {
-    opacity: 1;
-    background: var(--mcode-surface-hover);
-  }
 
   /* — 状态栏自定义项弹出面板 — */
   .sb-config-panel {
@@ -5878,9 +5868,6 @@ section.tabpanel.active {
                   <span class="cb-status-sep">·</span>
                   <span class="cb-status-seg" id="sb-today" data-sb="today">…</span>
                   <span id="sb-quota-wrap" hidden><span class="cb-status-sep">·</span><span class="cb-status-seg" id="sb-quota" data-sb="quota"></span></span>
-                  <span class="cb-status-seg cb-status-gear" id="sb-gear" data-sb="gear" title="自定义状态栏显示项">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                  </span>
                 </div>
                 <!-- 状态栏自定义项弹出面板 -->
                 <div class="sb-config-panel" id="status-bar-config-panel" hidden>
@@ -8621,7 +8608,6 @@ section.tabpanel.active {
   };
 
   var SB_ITEMS = [
-    { key: 'agent', label: '子代理平台', desc: '显示当前选定子代理名称' },
     { key: 'model', label: '当前模型', desc: '显示当前模型名称及运行参数' },
     { key: 'speed', label: '生成速度', desc: '实时生成吞吐速率 (t/s)' },
     { key: 'ctx', label: '上下文占用', desc: '进度条、Token 计数与占用比例' },
@@ -8632,7 +8618,6 @@ section.tabpanel.active {
   ];
 
   var SB_DEFAULT_PREFS = {
-    agent: true,
     model: true,
     speed: true,
     ctx: true,
