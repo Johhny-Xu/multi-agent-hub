@@ -1036,6 +1036,14 @@
     color: #ef4444 !important;
     transform: scale(1.1);
   }
+  .session-pin-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 4px;
+    cursor: pointer; color: var(--mcode-text-subtle); opacity: 0.7; transition: all .15s ease;
+  }
+  .session-tree-item:hover .session-pin-icon { opacity: 1; color: var(--mcode-text); }
+  .session-pin-icon:hover { background: rgba(96, 165, 250, 0.18); color: var(--mcode-accent) !important; transform: scale(1.1); }
+  .session-pin-icon.pinned { opacity: 1; color: var(--mcode-accent); }
   .session-tree-new-btn {
     display: flex;
     align-items: center;
@@ -1173,20 +1181,43 @@
     overflow: hidden;
   }
   .workbench {
-    width: 340px;
-    min-width: 300px;
-    max-width: 420px;
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    pointer-events: none;
+    border-left: none;
     flex-shrink: 0;
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-left: 1px solid var(--mcode-border);
     background: var(--mcode-bg-secondary);
     overflow: hidden;
     position: relative;
+    /* 与侧栏展开一致的宽度+透明度过渡 */
+    transition: width .22s cubic-bezier(0.4, 0, 0.2, 1), opacity .18s ease, transform .22s ease;
   }
-  .workbench[hidden] {
-    display: none !important;
+  .workbench.open {
+    width: 340px;
+    min-width: 300px;
+    max-width: 420px;
+    opacity: 1;
+    pointer-events: auto;
+    border-left: 1px solid var(--mcode-border);
+  }
+  /* 工作台展开时头部「工作台」按钮平滑消失（⋯ 随之平滑左移，不瞬移） */
+  .btn-head-workbench {
+    transition: width .22s cubic-bezier(0.4, 0, 0.2, 1), opacity .18s ease, padding .22s ease, border-color .18s ease;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  #panel-chat.wb-open .btn-head-workbench {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-color: transparent;
+    pointer-events: none;
   }
   .wb-head {
     display: flex;
@@ -1551,40 +1582,6 @@
     color: var(--mcode-text-subtle);
     line-height: 1.5;
     max-width: 240px;
-  }
-  .wb-edge-tab, #wb-edge-tab {
-    position: absolute;
-    right: 0;
-    top: 64px;
-    z-index: 40;
-    padding: 6px 8px;
-    border: 1px solid var(--mcode-border);
-    border-right: none;
-    border-radius: 8px 0 0 8px;
-    background: var(--mcode-surface);
-    color: var(--mcode-text-muted);
-    cursor: pointer;
-    font-size: 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.15);
-    transition: all .15s ease;
-  }
-  .wb-edge-tab:hover, #wb-edge-tab:hover {
-    background: var(--mcode-surface-hover);
-    color: var(--mcode-accent);
-  }
-  .wb-edge-count {
-    display: inline-block;
-    min-width: 14px;
-    text-align: center;
-    border-radius: 8px;
-    background: var(--mcode-accent);
-    color: #fff;
-    font-size: 9.5px;
-    padding: 0 4px;
-    font-weight: 600;
   }
   .usage-bar {
     padding: 6px 18px; border-bottom: 1px solid var(--mcode-border); font-size: 11.5px;
@@ -1979,7 +1976,18 @@
   }
   .pill-caret { font-size: 10px; color: var(--mcode-text-muted); flex-shrink: 0; }
   .session-selector-pill.inline { position: relative; background: transparent; border: none; padding: 0; height: auto; max-width: none; display: inline-flex; align-items: center; gap: 4px; }
-  .session-selector-pill .overlay-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; padding: 0 !important; max-width: none !important; }
+  .endpoint-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 30px; padding: 0 11px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; color: var(--gem-text);
+    background: var(--gem-bg-card); border: 1px solid var(--gem-border);
+    cursor: pointer; transition: all .16s ease; white-space: nowrap;
+  }
+  .endpoint-pill:hover { border-color: var(--gem-border-strong); background: var(--gem-surface-low); }
+  .endpoint-menu { left: auto; right: 0; top: calc(100% + 6px); min-width: 210px; }
+  .endpoint-menu .ep-host { font-size: 10.5px; color: var(--mcode-text-subtle); }
+  .session-picker-menu { left: 0; right: auto; top: calc(100% + 8px); min-width: 230px; max-height: 340px; overflow-y: auto; }
+  .session-picker-menu .sp-count { font-size: 10.5px; color: var(--mcode-text-subtle); margin-left: auto; padding-left: 8px; }
   .agent-picker-menu { left: 0; right: auto; top: calc(100% + 6px); min-width: 210px; max-height: 320px; overflow-y: auto; }
   .agent-picker-menu .export-menu-item { padding: 7px 10px; }
   .agent-picker-menu .agent-avatar-sm { width: 20px; height: 20px; font-size: 9px; }
@@ -2982,6 +2990,10 @@
       width: 100% !important;
       z-index: 45 !important;
       border-left: none !important;
+      transform: translateX(24px) !important;
+    }
+    .workbench.open {
+      transform: translateX(0) !important;
     }
 
     /* 7. 代理页面：单列卡片整屏自适应 */
@@ -5570,6 +5582,7 @@ section.tabpanel.active {
   color: var(--gem-text); cursor: pointer; transition: all .16s ease;
 }
 .theme-toggle-btn:hover { border-color: var(--gem-primary); background: var(--gem-primary-container); color: var(--gem-on-primary-container); transform: translateY(-1px); }
+.theme-toggle-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -5591,7 +5604,14 @@ section.tabpanel.active {
     </button>
     <span class="dot" id="conn-dot" title="连接状态"></span>
     <label class="visually-hidden" for="endpoint" style="display:none">枢纽端点</label>
-    <select id="endpoint" aria-label="枢纽端点"></select>
+    <div class="endpoint-pill-wrap" id="endpoint-wrap" style="position:relative">
+      <button type="button" class="endpoint-pill" id="endpoint-btn" aria-label="枢纽端点（点击切换）">
+        <span id="endpoint-label">服务器</span>
+        <span class="pill-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="export-dropdown-menu endpoint-menu" id="endpoint-menu" hidden></div>
+      <select id="endpoint" style="display:none" aria-hidden="true" tabindex="-1"></select>
+    </div>
   </div>
 </header>
 
@@ -5643,6 +5663,13 @@ section.tabpanel.active {
                   </button>
                 </div>
                 <div class="platform-header-actions">
+                  <!-- 会话筛选与排序（单漏斗图标） -->
+                  <div class="sess-filter-wrap" id="sess-filter-wrap" style="position:relative">
+                    <button id="btn-session-filter" class="icon-toggle-btn" type="button" title="会话筛选与排序">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    </button>
+                    <div class="export-dropdown-menu sess-filter-menu" id="sess-filter-menu" hidden></div>
+                  </div>
                   <button id="btn-view-archives" class="icon-toggle-btn" type="button" title="查看归档会话">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect width="22" height="5" x="1" y="3"/><line x1="10" x2="14" y1="12" y2="12"/></svg>
                   </button>
@@ -5676,7 +5703,8 @@ section.tabpanel.active {
                   <div class="session-selector-pill inline" id="session-selector-pill" title="点击切换对话">
                     <span class="current-session-name" id="current-session-name">新会话</span>
                     <span class="pill-caret" aria-hidden="true">▾</span>
-                    <select id="chat-session-select" class="overlay-select" aria-label="切换对话"></select>
+                    <select id="chat-session-select" style="display:none" aria-hidden="true" tabindex="-1"></select>
+                    <div class="export-dropdown-menu session-picker-menu" id="session-picker-menu" hidden></div>
                   </div>
                   <div class="export-dropdown-menu agent-picker-menu" id="agent-picker-menu" hidden></div>
                 </div>
@@ -5850,7 +5878,7 @@ section.tabpanel.active {
               </div>
             </div>
             </div>
-          <aside class="workbench" id="workbench" hidden>
+          <aside class="workbench" id="workbench">
             <!-- 顶栏 -->
             <div class="wb-head">
               <div class="wb-head-left">
@@ -5915,10 +5943,6 @@ section.tabpanel.active {
               </div>
             </div>
           </aside>
-          <button type="button" class="wb-edge-tab" id="wb-edge-tab" hidden title="展开工作台">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/> <polyline points="2 12 12 17 22 12"/></svg>
-            <span class="wb-edge-count" id="wb-edge-count" hidden></span>
-          </button>
           </div>
         </div>
       </section>
@@ -6587,6 +6611,25 @@ section.tabpanel.active {
     return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   }
 
+  // ---- 会话置顶与排序/筛选状态（localStorage 记忆） ----
+  var chatSessSortMode = localStorage.getItem('agent_hub_sess_sort') || 'updated'; // 'updated' | 'created'
+  var chatSessFilter = localStorage.getItem('agent_hub_sess_filter') || 'all';     // 'all' | 'active'(仅有消息)
+  function getPinnedSessions(agent) {
+    try {
+      var all = JSON.parse(localStorage.getItem('agent_hub_pinned_sessions') || '{}');
+      return Array.isArray(all[agent]) ? all[agent] : [];
+    } catch (e) { return []; }
+  }
+  function togglePinSession(agent, sid) {
+    var all = {};
+    try { all = JSON.parse(localStorage.getItem('agent_hub_pinned_sessions') || '{}'); } catch (e) { all = {}; }
+    var arr = Array.isArray(all[agent]) ? all[agent] : [];
+    if (arr.indexOf(sid) >= 0) arr = arr.filter(function (x) { return x !== sid; });
+    else arr.unshift(sid);
+    all[agent] = arr;
+    try { localStorage.setItem('agent_hub_pinned_sessions', JSON.stringify(all)); } catch (e) {}
+  }
+
   function renderPlatformList() {
     var host = $('#thread-list');
     if (!host) return;
@@ -6673,9 +6716,19 @@ section.tabpanel.active {
 
       // 展开的会话子树
       if (isExpanded && sessions.length) {
+        // 置顶会话排在当前 agent 顶部（本地记忆，pinned 优先）
+        var pinnedArr = getPinnedSessions(name);
+        var sortedSessions = sessions.slice().sort(function (a, b) {
+          var pa = pinnedArr.indexOf(a.id), pb = pinnedArr.indexOf(b.id);
+          if (pa !== -1 || pb !== -1) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+          if (chatSessSortMode === 'created') return (b.created || 0) - (a.created || 0);
+          return (b.updated || 0) - (a.updated || 0);
+        });
+        if (chatSessFilter === 'active') sortedSessions = sortedSessions.filter(function (s) { return (s.msgCount || 0) > 0; });
         var tree = el('div', 'platform-session-tree');
-        sessions.slice(0, 8).forEach(function (s) {
+        sortedSessions.slice(0, 8).forEach(function (s) {
           var isSessActive = isActive && (chat.activeSessionId === s.id);
+          var isPinned = pinnedArr.indexOf(s.id) !== -1;
           var sItem = el('div', 'session-tree-item' + (isSessActive ? ' active' : ''));
           var titleEl = el('span', 'session-tree-title', s.title || '会话');
           sItem.appendChild(titleEl);
@@ -6684,6 +6737,16 @@ section.tabpanel.active {
           if (s.msgCount !== undefined) {
             rightBox.appendChild(el('span', 'session-tree-meta', s.msgCount + '条'));
           }
+          // 置顶按钮（置顶到当前 agent 会话列表顶部）
+          var pinBtn = el('span', 'session-pin-icon' + (isPinned ? ' pinned' : ''));
+          pinBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="' + (isPinned ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3z"/></svg>';
+          pinBtn.title = isPinned ? '取消置顶' : '置顶到当前平台顶部';
+          pinBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            togglePinSession(name, s.id);
+            renderPlatformList();
+          });
+          rightBox.appendChild(pinBtn);
           var archiveBtn = el('span', 'session-archive-icon');
           archiveBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect width="22" height="5" x="1" y="3"/><line x1="10" x2="14" y1="12" y2="12"/></svg>';
           archiveBtn.title = '归档此会话';
@@ -7349,7 +7412,13 @@ section.tabpanel.active {
   function openWbPreview(item) {
     wbState.previewItem = item;
     var panel = $('#workbench');
-    if (panel) panel.hidden = false;
+    if (panel) {
+      // 预览产物即展开工作台（持久为 open，显隐由 .open 类驱动）
+      try { localStorage.setItem('agent_hub_wb_mode', 'open'); } catch (e) {}
+      panel.classList.add('open');
+      var pc = $('#panel-chat');
+      if (pc) pc.classList.add('wb-open');
+    }
     var previewPane = $('#wb-preview-pane');
     if (previewPane) previewPane.hidden = false;
 
@@ -7417,9 +7486,9 @@ section.tabpanel.active {
   }
 
   function renderWorkbench() {
-    var panel = $('#workbench'), edge = $('#wb-edge-tab'), cnt = $('#wb-count'), edgeCnt = $('#wb-edge-count');
+    var panel = $('#workbench'), cnt = $('#wb-count');
     var headBadge = $('#head-wb-badge');
-    if (!panel || !edge) return;
+    if (!panel) return;
     var data = wbCollect();
     var totalArtifacts = data.artifacts.length;
     var totalMedia = data.images.length + data.files.length;
@@ -7432,10 +7501,10 @@ section.tabpanel.active {
     var isNarrowScreen = false;
     try { isNarrowScreen = window.matchMedia('(max-width: 640px)').matches; } catch (e) {}
     var showPanel = (mode === 'open') || (mode === 'auto' && total > 0 && !isNarrowScreen);
-    panel.hidden = !showPanel;
-    edge.hidden = showPanel;
-
-    if (edgeCnt) { edgeCnt.textContent = total > 0 ? String(total) : ''; edgeCnt.hidden = !(total > 0); }
+    // 显隐走 .open 类（宽度+透明度动画，与侧栏展开一致）；工作台展开时头部按钮自动平滑消失
+    panel.classList.toggle('open', showPanel);
+    var panelChat = $('#panel-chat');
+    if (panelChat) panelChat.classList.toggle('wb-open', showPanel);
     if (headBadge) { headBadge.textContent = total > 0 ? String(total) : '0'; headBadge.hidden = !(total > 0); }
     if (cnt) cnt.textContent = total + ' 项';
 
@@ -9036,6 +9105,14 @@ section.tabpanel.active {
       if (snap && e.id === snap.endpoint.id) op.selected = true;
       epSel.appendChild(op);
     });
+    // 自定义端点胶囊标签同步（本机/服务器）
+    var epLabel = $('#endpoint-label');
+    if (epLabel && snap && snap.endpoint) {
+      var curEp = eps.find(function (e) { return e.id === snap.endpoint.id; }) || snap.endpoint;
+      var curHost = String(curEp.host || '');
+      epLabel.textContent = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/i.test(curHost) ? '本机' : '服务器';
+      epLabel.title = (curEp.label || '') + (curEp.host ? ' · ' + curEp.host : '');
+    }
     var dot = $('#conn-dot');
     dot.className = 'dot' + (snap ? (snap.ok ? ' ok' : ' err') : '');
     dot.title = snap ? (snap.ok ? '枢纽在线 · ' + snap.latencyMs + 'ms' : '枢纽不可达') : '加载中';
@@ -9295,6 +9372,58 @@ section.tabpanel.active {
   $('#endpoint').addEventListener('change', function (ev) {
     api('/api/endpoint', { id: ev.currentTarget.value }).then(loadSnapshot).catch(function (e) { toast(e.message, true); });
   });
+
+  // 端点选择：自定义菜单（与 agent 选择器同风格）
+  var epBtn = $('#endpoint-btn');
+  var epMenu = $('#endpoint-menu');
+  var epHiddenSel = $('#endpoint');
+  if (epBtn && epMenu && epHiddenSel) {
+    var renderEndpointMenu = function () {
+      epMenu.textContent = '';
+      var eps = (state.snap && state.snap.endpoints) || [];
+      var curId = state.snap && state.snap.endpoint && state.snap.endpoint.id;
+      eps.forEach(function (e) {
+        var host = String(e.host || '');
+        var isLocal = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/i.test(host);
+        var item = document.createElement('button');
+        item.type = 'button'; item.className = 'export-menu-item';
+        var txt = document.createElement('span');
+        txt.style.cssText = 'flex:1;min-width:0;text-align:left';
+        var nm = document.createElement('div');
+        nm.style.cssText = 'font-size:12px;font-weight:600;color:var(--mcode-text)';
+        nm.textContent = isLocal ? '本机' : '服务器';
+        var hs = document.createElement('div');
+        hs.className = 'ep-host';
+        hs.textContent = (e.label || '') + (e.host ? ' · ' + e.host : '');
+        txt.append(nm, hs);
+        item.appendChild(txt);
+        if (e.id === curId) {
+          var ck = document.createElement('span');
+          ck.textContent = '✓'; ck.style.cssText = 'color:#34d399;font-weight:700;font-size:12px';
+          item.appendChild(ck);
+        }
+        item.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          epMenu.hidden = true;
+          if (e.id !== curId) {
+            epHiddenSel.value = e.id;
+            epHiddenSel.dispatchEvent(new Event('change'));
+          }
+        });
+        epMenu.appendChild(item);
+      });
+      if (!eps.length) epMenu.appendChild(el('div', 'qa-msg', '暂无可用端点'));
+    };
+    epBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (epMenu.hidden) renderEndpointMenu();
+      epMenu.hidden = !epMenu.hidden;
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#endpoint-wrap')) epMenu.hidden = true;
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') epMenu.hidden = true; });
+  }
   $('#btn-new-task').addEventListener('click', function (ev) { postTask(ev.currentTarget); });
   $('#btn-new-note').addEventListener('click', function (ev) { writeNote(ev.currentTarget); });
   $('#task-filter').addEventListener('change', function (ev) {
@@ -9643,6 +9772,68 @@ section.tabpanel.active {
   if (viewArchivesBtn) viewArchivesBtn.addEventListener('click', function () {
     openArchivesViewer();
   });
+
+  // 会话筛选与排序漏斗菜单（排序方式：更新时间/创建时间；筛选：全部/仅有消息）
+  var sessFilterBtn = $('#btn-session-filter');
+  var sessFilterMenu = $('#sess-filter-menu');
+  if (sessFilterBtn && sessFilterMenu) {
+    function renderSessFilterMenu() {
+      sessFilterMenu.textContent = '';
+      function secLabel(t) {
+        var d = el('div');
+        d.textContent = t;
+        d.style.cssText = 'font-size:10.5px;color:var(--mcode-text-subtle);padding:6px 10px 2px;font-weight:600';
+        return d;
+      }
+      function mItem(label, active, fn) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'export-menu-item';
+        var t = document.createElement('span');
+        t.style.cssText = 'flex:1;text-align:left;font-size:12px;color:var(--mcode-text)';
+        t.textContent = label;
+        var c = document.createElement('span');
+        c.style.cssText = 'width:14px;text-align:center;color:#34d399;font-weight:700;font-size:12px';
+        c.textContent = active ? '✓' : '';
+        b.append(t, c);
+        b.onclick = function () { fn(); renderSessFilterMenu(); sessFilterMenu.hidden = true; };
+        return b;
+      }
+      sessFilterMenu.appendChild(secLabel('排序方式'));
+      sessFilterMenu.appendChild(mItem('更新时间', chatSessSortMode === 'updated', function () {
+        chatSessSortMode = 'updated';
+        try { localStorage.setItem('agent_hub_sess_sort', 'updated'); } catch (e) {}
+        renderPlatformList();
+      }));
+      sessFilterMenu.appendChild(mItem('创建时间', chatSessSortMode === 'created', function () {
+        chatSessSortMode = 'created';
+        try { localStorage.setItem('agent_hub_sess_sort', 'created'); } catch (e) {}
+        renderPlatformList();
+      }));
+      sessFilterMenu.appendChild(el('div', 'head-more-sep'));
+      sessFilterMenu.appendChild(secLabel('筛选'));
+      sessFilterMenu.appendChild(mItem('全部会话', chatSessFilter === 'all', function () {
+        chatSessFilter = 'all';
+        try { localStorage.setItem('agent_hub_sess_filter', 'all'); } catch (e) {}
+        renderPlatformList();
+      }));
+      sessFilterMenu.appendChild(mItem('仅有消息', chatSessFilter === 'active', function () {
+        chatSessFilter = 'active';
+        try { localStorage.setItem('agent_hub_sess_filter', 'active'); } catch (e) {}
+        renderPlatformList();
+      }));
+    }
+    renderSessFilterMenu();
+    sessFilterBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      sessFilterMenu.hidden = !sessFilterMenu.hidden;
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#sess-filter-wrap')) sessFilterMenu.hidden = true;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') sessFilterMenu.hidden = true;
+    });
+  }
 
   function openArchivesViewer() {
     api('/api/chat/archives').then(function (res) {
@@ -9993,6 +10184,50 @@ section.tabpanel.active {
     }
   });
 
+  // 会话选择：自定义菜单（与 agent 选择器同风格）
+  var sessPillEl = $('#session-selector-pill');
+  var sessPickerMenu = $('#session-picker-menu');
+  var sessHiddenSel = $('#chat-session-select');
+  if (sessPillEl && sessPickerMenu) {
+    var renderSessionPicker = function () {
+      sessPickerMenu.textContent = '';
+      var sessions = chat.sessions || [];
+      if (!sessions.length) {
+        sessPickerMenu.appendChild(el('div', 'qa-msg', '暂无会话'));
+        return;
+      }
+      sessions.forEach(function (sess) {
+        var item = document.createElement('button');
+        item.type = 'button'; item.className = 'export-menu-item';
+        var t = el('span', 'sp-title', sess.title || '新会话');
+        t.style.cssText = 'flex:1;min-width:0;text-align:left;font-size:12px;color:var(--mcode-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        item.appendChild(t);
+        var cnt = el('span', 'sp-count', (sess.msgCount || 0) + '条');
+        item.appendChild(cnt);
+        if (sess.id === chat.activeSessionId) {
+          var ck = document.createElement('span');
+          ck.textContent = '✓'; ck.style.cssText = 'color:#34d399;font-weight:700;font-size:12px';
+          item.appendChild(ck);
+        }
+        item.addEventListener('click', function (e) {
+          e.stopPropagation();
+          sessPickerMenu.hidden = true;
+          if (sess.id !== chat.activeSessionId && chat.activeAgent) selectPlatform(chat.activeAgent, sess.id);
+        });
+        sessPickerMenu.appendChild(item);
+      });
+    };
+    sessPillEl.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (sessPickerMenu.hidden) renderSessionPicker();
+      sessPickerMenu.hidden = !sessPickerMenu.hidden;
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#session-selector-pill')) sessPickerMenu.hidden = true;
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') sessPickerMenu.hidden = true; });
+  }
+
   // 一体胶囊：点头像打开子代理切换菜单
   var agentAvatarBtn = $('#current-avatar-sm');
   var agentPickerMenu = $('#agent-picker-menu');
@@ -10188,15 +10423,10 @@ section.tabpanel.active {
     try { localStorage.setItem('agent_hub_wb_mode', 'closed'); } catch (e) {}
     renderWorkbench();
   });
-  var wbEdgeTab = $('#wb-edge-tab');
-  if (wbEdgeTab) wbEdgeTab.addEventListener('click', function () {
-    try { localStorage.setItem('agent_hub_wb_mode', 'open'); } catch (e) {}
-    renderWorkbench();
-  });
   var wbToggleBtn = $('#btn-workbench-toggle');
   if (wbToggleBtn) wbToggleBtn.addEventListener('click', function () {
     var panel = $('#workbench');
-    var isHidden = !panel || panel.hidden;
+    var isHidden = !panel || !panel.classList.contains('open');
     try { localStorage.setItem('agent_hub_wb_mode', isHidden ? 'open' : 'closed'); } catch (e) {}
     renderWorkbench();
   });
@@ -10806,6 +11036,26 @@ section.tabpanel.active {
       }
       .uh-auth-status.ok { color: #34d399; }
       .uh-auth-status.err { color: #f87171; }
+      /* 浅色主题适配：弹窗跟随主题色系，不再硬编码深色 */
+      [data-theme="light"] .uh-auth-backdrop { background: rgba(15, 23, 42, 0.38); }
+      [data-theme="light"] .uh-auth-modal { background: #ffffff; border-color: var(--gem-border); box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18); color: #0f172a; }
+      [data-theme="light"] .uh-auth-title { color: #0f172a; }
+      [data-theme="light"] .uh-auth-note { background: #f1f5f9; border-color: rgba(15, 23, 42, 0.1); color: #475569; }
+      [data-theme="light"] .uh-auth-step { background: #f8fafc; border-color: rgba(15, 23, 42, 0.08); }
+      [data-theme="light"] .uh-auth-step-label { color: #64748b; }
+      [data-theme="light"] .uh-auth-url-box { background: #f1f5f9; border-color: rgba(37, 99, 235, 0.25); color: #1d4ed8; }
+      [data-theme="light"] .uh-auth-input { background: #ffffff; border-color: rgba(15, 23, 42, 0.16); color: #0f172a; }
+      [data-theme="light"] .uh-auth-input::placeholder { color: #94a3b8; }
+      [data-theme="light"] .uh-auth-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18); }
+      [data-theme="light"] .uh-auth-term { background: #f8fafc; border-color: rgba(15, 23, 42, 0.08); color: #334155; }
+      [data-theme="light"] .uh-auth-code-wrap { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); }
+      [data-theme="light"] .uh-auth-code-val { color: #059669; }
+      [data-theme="light"] .uh-auth-status { color: #2563eb; }
+      [data-theme="light"] .uh-auth-status.ok { color: #059669; }
+      [data-theme="light"] .uh-auth-status.err { color: #dc2626; }
+      [data-theme="light"] .uh-auth-close { background: #f1f5f9; border-color: rgba(15, 23, 42, 0.1); color: #475569; }
+      [data-theme="light"] .uh-auth-foot { border-top-color: rgba(15, 23, 42, 0.1); }
+      [data-theme="light"] .uh-auth-head { border-bottom-color: rgba(15, 23, 42, 0.08); }
     `;
     document.head.appendChild(st);
   }
