@@ -1958,6 +1958,33 @@
     gap: 8px;
     min-width: 0;
   }
+  /* 一体胶囊：头像(切子代理) + 当前会话名(切对话) */
+  .current-agent-pill.unified-pill {
+    position: relative;
+    background: var(--mcode-surface-muted);
+    border: 1px solid var(--mcode-border);
+    border-radius: 999px;
+    height: 34px;
+    padding: 0 9px 0 4px;
+    gap: 7px;
+    transition: all .15s ease;
+  }
+  .current-agent-pill.unified-pill:hover { border-color: var(--mcode-border-strong); background: var(--mcode-surface-hover); }
+  .agent-avatar-btn { cursor: pointer; border: none; padding: 0; }
+  .agent-avatar-btn:hover { box-shadow: 0 0 0 2px var(--mcode-accent); }
+  .unified-pill-divider { width: 1px; height: 18px; background: var(--mcode-border); flex-shrink: 0; }
+  .current-session-name {
+    font-size: 12.5px; font-weight: 600; color: var(--mcode-text);
+    max-width: 175px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pill-caret { font-size: 10px; color: var(--mcode-text-muted); flex-shrink: 0; }
+  .session-selector-pill.inline { position: relative; background: transparent; border: none; padding: 0; height: auto; max-width: none; display: inline-flex; align-items: center; gap: 4px; }
+  .session-selector-pill .overlay-select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; padding: 0 !important; max-width: none !important; }
+  .agent-picker-menu { left: 0; right: auto; top: calc(100% + 6px); min-width: 210px; max-height: 320px; overflow-y: auto; }
+  .agent-picker-menu .export-menu-item { padding: 7px 10px; }
+  .agent-picker-menu .agent-avatar-sm { width: 20px; height: 20px; font-size: 9px; }
+  .agent-picker-menu .apk-name { font-size: 12.5px; font-weight: 600; color: var(--mcode-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .agent-picker-menu .apk-status { font-size: 10px; color: var(--mcode-text-subtle); }
   .agent-avatar-sm {
     width: 28px;
     height: 28px;
@@ -1970,18 +1997,6 @@
     font-size: 11px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     flex-shrink: 0;
-  }
-  .agent-meta-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-  .agent-id-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--mcode-text);
-    white-space: nowrap;
   }
   .chat-head-right {
     display: flex;
@@ -2839,34 +2854,27 @@
       white-space: nowrap !important;
       flex-shrink: 0 !important;
     }
-    .current-agent-pill {
+    .current-agent-pill.unified-pill {
       min-width: 0 !important;
-      padding: 2px 8px !important;
+      padding: 0 8px 0 3px !important;
       gap: 5px !important;
       flex: 0 1 auto !important;
       overflow: hidden !important;
+      height: 30px !important;
     }
     .current-agent-pill .agent-avatar-sm {
-      width: 20px !important;
-      height: 20px !important;
+      width: 22px !important;
+      height: 22px !important;
       font-size: 10px !important;
       flex-shrink: 0 !important;
     }
-    .current-agent-pill .agent-id-name {
-      max-width: 90px !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      white-space: nowrap !important;
+    .current-session-name {
+      max-width: 34vw !important;
       font-size: 12px !important;
     }
-    .session-selector-pill {
-      margin-left: auto !important;
-      padding: 2px 6px !important;
-      min-height: 26px !important;
-      flex: 1 1 auto !important;
-      max-width: 160px !important;
-      display: flex !important;
-      align-items: center !important;
+    .session-selector-pill.inline {
+      flex: 0 1 auto !important;
+      min-width: 0 !important;
     }
     .session-selector-pill select {
       width: 100% !important;
@@ -5709,15 +5717,16 @@ section.tabpanel.active {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                 </button>
                 <button id="btn-chat-back" class="text" type="button" title="返回平台列表">← 平台</button>
-                <div class="current-agent-pill" id="current-agent-pill">
-                  <div class="agent-avatar-sm" id="current-avatar-sm">CB</div>
-                  <div class="agent-meta-group">
-                    <span class="agent-id-name" id="current-agent-name">codebuddy</span>
+                <!-- 一体胶囊：点头像切换子代理，点当前会话名切换对话 -->
+                <div class="current-agent-pill unified-pill" id="current-agent-pill">
+                  <button class="agent-avatar-sm agent-avatar-btn" id="current-avatar-sm" type="button" title="点击切换子代理">CB</button>
+                  <span class="unified-pill-divider" aria-hidden="true"></span>
+                  <div class="session-selector-pill inline" id="session-selector-pill" title="点击切换对话">
+                    <span class="current-session-name" id="current-session-name">新会话</span>
+                    <span class="pill-caret" aria-hidden="true">▾</span>
+                    <select id="chat-session-select" class="overlay-select" aria-label="切换对话"></select>
                   </div>
-                </div>
-                <div class="session-selector-pill" id="session-selector-pill" title="切换当前平台历史会话">
-                  <span class="clock-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                  <select id="chat-session-select" aria-label="切换历史会话"></select>
+                  <div class="export-dropdown-menu agent-picker-menu" id="agent-picker-menu" hidden></div>
                 </div>
               </div>
 
@@ -6915,6 +6924,14 @@ section.tabpanel.active {
         if (s.id === chat.activeSessionId) op.selected = true;
         sessSelect.appendChild(op);
       });
+      // 一体胶囊同步当前会话名
+      var curSessNameEl = $('#current-session-name');
+      if (curSessNameEl) {
+        var curSess = sessions.find(function (s) { return s.id === chat.activeSessionId; });
+        var nm = (curSess && curSess.title) || (t && t.title) || '新会话';
+        curSessNameEl.textContent = nm;
+        curSessNameEl.title = nm;
+      }
     }
 
     var msgs = (t && Array.isArray(t.messages)) ? t.messages : [];
@@ -10048,6 +10065,54 @@ section.tabpanel.active {
       selectPlatform(chat.activeAgent, sid);
     }
   });
+
+  // 一体胶囊：点头像打开子代理切换菜单
+  var agentAvatarBtn = $('#current-avatar-sm');
+  var agentPickerMenu = $('#agent-picker-menu');
+  if (agentAvatarBtn && agentPickerMenu) {
+    var renderAgentPicker = function () {
+      agentPickerMenu.textContent = '';
+      var agents = (state.snap && state.snap.agents) || [];
+      agents.forEach(function (a) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'export-menu-item';
+        var vis = getAgentVisual(a.name);
+        var av = el('span', 'agent-avatar-sm');
+        av.style.background = vis.bg;
+        av.textContent = vis.code;
+        applyAvatar(av, a.name);
+        var nm = el('span', 'apk-name', a.name);
+        item.append(av, nm);
+        if (a.name === chat.activeAgent) {
+          var ck = document.createElement('span');
+          ck.textContent = '✓';
+          ck.style.cssText = 'color:#34d399;font-weight:700;font-size:12px';
+          item.appendChild(ck);
+        }
+        item.addEventListener('click', function (e) {
+          e.stopPropagation();
+          agentPickerMenu.hidden = true;
+          if (a.name !== chat.activeAgent) selectPlatform(a.name);
+        });
+        agentPickerMenu.appendChild(item);
+      });
+      if (!agents.length) {
+        agentPickerMenu.appendChild(el('div', 'qa-msg', '暂无子代理'));
+      }
+    };
+    agentAvatarBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (agentPickerMenu.hidden) renderAgentPicker();
+      agentPickerMenu.hidden = !agentPickerMenu.hidden;
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#current-agent-pill')) agentPickerMenu.hidden = true;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') agentPickerMenu.hidden = true;
+    });
+  }
 
   // 新建对话
   function createNewChatSession() {
