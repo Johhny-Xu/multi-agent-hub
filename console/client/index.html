@@ -1611,6 +1611,7 @@
     color: var(--mcode-text-subtle);
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     padding: 0 4px;
     border-radius: 6px;
@@ -1629,10 +1630,6 @@
   .cb-status-seg {
     display: inline-flex;
     align-items: center;
-  }
-  .cb-status-seg.cb-status-agent {
-    color: var(--mcode-accent);
-    font-weight: 600;
   }
   .cb-status-seg[data-sb] {
     cursor: pointer;
@@ -1986,26 +1983,6 @@
     color: var(--mcode-text);
     white-space: nowrap;
   }
-  .agent-status-badge {
-    font-size: 11px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: rgba(16, 185, 129, 0.12);
-    color: var(--mcode-success);
-    border: 1px solid rgba(16, 185, 129, 0.28);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-  }
-  .agent-status-badge::before {
-    content: '';
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-
   .chat-head-right {
     display: flex;
     align-items: center;
@@ -2266,8 +2243,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding-top: 6px;
+    margin: 0 -14px -10px;
+    padding: 8px 14px 10px;
     border-top: 1px solid rgba(240, 246, 252, 0.06);
+    border-radius: 0 0 16px 16px;
+    background: rgba(255, 255, 255, 0.02);
     flex-wrap: wrap;
   }
   .composer-bar-left, .composer-bar-right {
@@ -2878,9 +2858,6 @@
       text-overflow: ellipsis !important;
       white-space: nowrap !important;
       font-size: 12px !important;
-    }
-    .current-agent-pill .agent-status-badge {
-      display: none !important;
     }
     .session-selector-pill {
       margin-left: auto !important;
@@ -5710,8 +5687,8 @@ section.tabpanel.active {
                     <span>会话</span>
                   </button>
                   <button id="btn-toggle-all-tree" class="icon-toggle-btn btn-toggle-all-tree" type="button" title="一键展开/收起所有平台会话">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z"/>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>
                     </svg>
                   </button>
                 </div>
@@ -5746,7 +5723,6 @@ section.tabpanel.active {
                   <div class="agent-avatar-sm" id="current-avatar-sm">CB</div>
                   <div class="agent-meta-group">
                     <span class="agent-id-name" id="current-agent-name">codebuddy</span>
-                    <span class="agent-status-badge" id="current-agent-status">在线</span>
                   </div>
                 </div>
                 <div class="session-selector-pill" id="session-selector-pill" title="切换当前平台历史会话">
@@ -5819,6 +5795,8 @@ section.tabpanel.active {
               <div class="att-strip" id="att-strip" hidden></div>
               <div class="composer" id="chat-composer">
                 <textarea id="chat-input" rows="1" placeholder="给子代理派发任务，Enter 发送，Shift+Enter 换行；支持拖拽或粘贴图片/文件"></textarea>
+                <div id="composer-capabilities" role="status" style="font-size:12px;padding:4px 12px;color:var(--mcode-text-muted)"></div>
+                <button id="btn-capability-refresh" type="button" hidden title="完成登录或处理供应商问题后清除近期失败提示；不会验证登录或调用模型">清除近期失败提示</button>
                 <div class="composer-bottom-bar">
                   <div class="composer-bar-left">
                     <button id="btn-attach" class="att-btn" type="button" title="按选定模型能力上传图片或文件（派发附件总计 ≤1 MiB）">
@@ -5835,11 +5813,6 @@ section.tabpanel.active {
                   <div class="composer-bar-right">
                     <div class="model-picker-container" id="model-picker-container">
                       <button type="button" class="model-picker-wrap" id="model-picker-wrap" title="点击展开模型与运行参数面板">
-                        <span class="model-picker-icon" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/>
-                          </svg>
-                        </span>
                         <span class="model-summary-text" id="model-summary-text">正在加载模型…</span>
                         <span class="model-picker-arrow" aria-hidden="true">▾</span>
                       </button>
@@ -5889,14 +5862,10 @@ section.tabpanel.active {
                     </button>
                   </div>
                 </div>
-                <div id="composer-capabilities" role="status" style="font-size:12px;padding:4px 12px;color:var(--mcode-text-muted)"></div>
-                <button id="btn-capability-refresh" type="button" hidden title="完成登录或处理供应商问题后清除近期失败提示；不会验证登录或调用模型">清除近期失败提示</button>
               </div>
               <!-- 紧凑状态条 -->
               <div class="cb-status-bar-wrap" id="status-bar-wrap">
                 <div class="cb-status-bar" id="status-bar" title="点击自定义状态栏显示项">
-                  <span class="cb-status-seg cb-status-agent" id="sb-agent" data-sb="agent">…</span>
-                  <span class="cb-status-sep">·</span>
                   <span class="cb-status-seg cb-status-model" id="sb-model" data-sb="model" style="cursor:pointer">…</span>
                   <span class="cb-status-sep">·</span>
                   <span class="cb-status-seg" id="sb-speed" data-sb="speed">—</span>
@@ -6944,11 +6913,6 @@ section.tabpanel.active {
     if (avEl) { avEl.style.background = vis.bg; avEl.textContent = vis.code; applyAvatar(avEl, agentName); }
     var nmEl = $('#current-agent-name');
     if (nmEl) nmEl.textContent = agentName;
-    var stEl = $('#current-agent-status');
-    if (stEl) {
-      var snapAgent = state.snap && (state.snap.agents || []).find(function (x) { return x.name === agentName; });
-      stEl.textContent = snapAgent && snapAgent.activation === 'standby' ? '可直通' : (snapAgent && snapAgent.activation === 'online' ? '在线' : '待机就绪');
-    }
 
     // 历史会话下拉
     var sessSelect = $('#chat-session-select');
@@ -7799,25 +7763,47 @@ section.tabpanel.active {
     updateStatusBar();
   }
 
-  function getModelSummaryText(agent) {
+  // 模型 id → 目录展示名（绝不把 huaweicloud-maas/GLM-5.2 这类原始 id 直接展示给用户）
+  function getModelDisplayName(agent, modelId) {
+    if (!modelId) return '';
+    // 用对话块本地目录（state.snap.modelCatalog），勿跨闭包引用 modelsData
+    var list = [];
+    try { list = getModelCatalog(agent) || []; } catch (e) { list = []; }
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      if (m.id === modelId || m.alias === modelId || (Array.isArray(m.aliases) && m.aliases.indexOf(modelId) >= 0)) {
+        return m.name || m.alias || m.id;
+      }
+    }
+    // 未命中目录（自定义模型）：剥掉 provider 前缀兜底
+    var s = String(modelId);
+    var idx = s.lastIndexOf('/');
+    return idx >= 0 ? s.slice(idx + 1) : s;
+  }
+
+  function getModelSummaryText(agent, opts) {
     if (!agent) agent = chat.activeAgent || ($('#chat-target') ? $('#chat-target').value : '') || 'codebuddy';
     var p = getAgentPrefs(agent);
+    var name = getModelDisplayName(agent, p.model);
+    var withAgent = !!(opts && opts.withAgent);
     var parts = [];
-    if (p.model) parts.push(p.model);
+    if (withAgent) parts.push(agent + '/' + (name || '默认模型'));
+    else if (name) parts.push(name);
     if (p.effort) parts.push('思考: ' + p.effort);
-    return parts.join(' · ') || (p.model || '默认模型');
+    return parts.join(' · ') || (name || '默认模型');
   }
 
   function updateModelSummaryUI() {
     var agent = chat.activeAgent || ($('#chat-target') ? $('#chat-target').value : '') || 'codebuddy';
-    var summary = getModelSummaryText(agent);
+    // 发送旁模型胶囊：显示 agent名/模型名（如 codearts/GLM-5.2），不显示原始模型 id
+    var summary = getModelSummaryText(agent, { withAgent: true });
     var textEl = $('#model-summary-text');
     if (textEl) textEl.textContent = summary;
     var p = getAgentPrefs(agent);
     var sel = $('#chat-model');
     if (sel && p.model) sel.value = p.model;
     var sumFooter = $('#mp-summary');
-    if (sumFooter) sumFooter.textContent = '已选：' + summary;
+    if (sumFooter) sumFooter.textContent = '已选：' + getModelSummaryText(agent);
     var badge = $('#mp-agent-badge');
     if (badge) badge.textContent = agent;
     updateCapabilityUI(agent, p);
@@ -8689,7 +8675,6 @@ section.tabpanel.active {
     var prefs = getStatusBarPrefs();
 
     var order = [
-      { key: 'agent', el: $('#sb-agent') },
       { key: 'model', el: $('#sb-model') },
       { key: 'speed', el: $('#sb-speed') },
       { key: 'ctx', el: $('#sb-ctx') },
@@ -8842,9 +8827,7 @@ section.tabpanel.active {
     if (!bar) return;
     var agent = chat.activeAgent || 'antigravity';
 
-    var sbAgent = $('#sb-agent');
-    if (sbAgent) sbAgent.textContent = agent;
-
+    // agent 名已在发送旁模型胶囊（agent/模型名）中呈现，状态栏不再重复；模型块只显示目录展示名
     var sbModel = $('#sb-model');
     if (sbModel) {
       var summaryText = getModelSummaryText(agent);
@@ -9722,9 +9705,7 @@ section.tabpanel.active {
   function openArchivesViewer() {
     api('/api/chat/archives').then(function (res) {
       var allArchives = (res && res.archives) || [];
-      var filterAgent = '';
       var searchQuery = '';
-      var sortOrder = 'updated_desc'; // 'updated_desc' | 'updated_asc' | 'msgs_desc'
 
       // 获取所有有归档记录的代理列表
       var agentSet = {};
@@ -9764,60 +9745,70 @@ section.tabpanel.active {
         renderList();
       });
 
-      // 平台筛选
-      var agentSelect = document.createElement('select');
-      agentSelect.style.height = '28px';
-      agentSelect.style.padding = '0 6px';
-      agentSelect.style.fontSize = '12px';
-      agentSelect.style.borderRadius = '6px';
-      agentSelect.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
-      agentSelect.style.border = '1px solid var(--mcode-border)';
-      agentSelect.style.color = 'var(--mcode-text)';
-      var allOp = el('option', null, '全部平台 (' + allArchives.length + ')');
-      allOp.value = '';
-      agentSelect.appendChild(allOp);
-      agentList.forEach(function (ag) {
-        var count = allArchives.filter(function (x) { return x.agent === ag; }).length;
-        var op = el('option', null, ag + ' (' + count + ')');
-        op.value = ag;
-        agentSelect.appendChild(op);
-      });
-      agentSelect.addEventListener('change', function (e) {
-        filterAgent = e.target.value;
-        renderList();
-      });
+      // 平台筛选已并入漏斗菜单的「视图 · 按项目」分组
+      var agentSelect = null;
 
       // 排序选择
       var sortSelect = document.createElement('select');
-      sortSelect.style.height = '28px';
-      sortSelect.style.padding = '0 6px';
-      sortSelect.style.fontSize = '12px';
-      sortSelect.style.borderRadius = '6px';
-      sortSelect.style.background = 'var(--mcode-surface-muted, rgba(255,255,255,0.04))';
-      sortSelect.style.border = '1px solid var(--mcode-border)';
-      sortSelect.style.color = 'var(--mcode-text)';
-      [
-        { id: 'updated_desc', label: '按时间倒序' },
-        { id: 'updated_asc', label: '按时间正序' },
-        { id: 'msgs_desc', label: '按消息数最多' }
-      ].forEach(function (opt) {
-        var op = el('option', null, opt.label);
-        op.value = opt.id;
-        sortSelect.appendChild(op);
-      });
-      sortSelect.addEventListener('change', function (e) {
-        sortOrder = e.target.value;
-        renderList();
-      });
+      sortSelect.style.display = 'none';
 
-      var controlsGroup = el('div');
-      controlsGroup.style.display = 'flex';
-      controlsGroup.style.gap = '6px';
-      controlsGroup.appendChild(agentSelect);
-      controlsGroup.appendChild(sortSelect);
+      // 筛选+排序 单漏斗图标（菜单：视图 按项目/时间线 · 排序方式 更新时间/创建时间）
+      var viewMode = 'agent';   // 'agent'(按项目) | 'timeline'(时间线)
+      var sortMode = 'updated'; // 'updated'(更新时间) | 'created'(创建时间)
+      var filterWrap = el('div', 'export-dropdown-wrap');
+      filterWrap.style.position = 'relative';
+      var funnelBtn = document.createElement('button');
+      funnelBtn.type = 'button';
+      funnelBtn.className = 'archive-filter-btn icon-toggle-btn';
+      funnelBtn.title = '筛选与排序';
+      funnelBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>';
+      var filterMenu = el('div', 'export-dropdown-menu');
+      filterMenu.hidden = true;
+      filterMenu.style.minWidth = '190px';
+
+      function sectionLabel(text) {
+        var d = el('div');
+        d.textContent = text;
+        d.style.cssText = 'font-size:10.5px;color:var(--mcode-text-subtle);padding:6px 10px 2px;font-weight:600';
+        return d;
+      }
+      function menuItem(label, active, onClick) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'export-menu-item';
+        var t = document.createElement('span');
+        t.style.cssText = 'flex:1;text-align:left;font-size:12px;color:var(--mcode-text)';
+        t.textContent = label;
+        var c = document.createElement('span');
+        c.style.cssText = 'width:14px;text-align:center;color:#34d399;font-weight:700;font-size:12px';
+        c.textContent = active ? '✓' : '';
+        b.append(t, c);
+        b.onclick = function () { onClick(); renderFilterMenu(); filterMenu.hidden = true; };
+        return b;
+      }
+      function renderFilterMenu() {
+        filterMenu.textContent = '';
+        filterMenu.appendChild(sectionLabel('视图'));
+        filterMenu.appendChild(menuItem('按项目', viewMode === 'agent', function () { viewMode = 'agent'; renderList(); }));
+        filterMenu.appendChild(menuItem('时间线', viewMode === 'timeline', function () { viewMode = 'timeline'; renderList(); }));
+        filterMenu.appendChild(el('div', 'head-more-sep'));
+        filterMenu.appendChild(sectionLabel('排序方式'));
+        filterMenu.appendChild(menuItem('更新时间', sortMode === 'updated', function () { sortMode = 'updated'; renderList(); }));
+        filterMenu.appendChild(menuItem('创建时间', sortMode === 'created', function () { sortMode = 'created'; renderList(); }));
+      }
+      renderFilterMenu();
+      funnelBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        filterMenu.hidden = !filterMenu.hidden;
+      });
+      document.addEventListener('click', function (e) {
+        if (!filterWrap.contains(e.target)) filterMenu.hidden = true;
+      });
+      filterWrap.appendChild(funnelBtn);
+      filterWrap.appendChild(filterMenu);
 
       toolbar.appendChild(searchInput);
-      toolbar.appendChild(controlsGroup);
+      toolbar.appendChild(filterWrap);
       wrapper.appendChild(toolbar);
 
       // 列表容器
@@ -9833,7 +9824,6 @@ section.tabpanel.active {
       function renderList() {
         listContainer.textContent = '';
         var filtered = allArchives.filter(function (a) {
-          if (filterAgent && a.agent !== filterAgent) return false;
           if (searchQuery) {
             var matchTitle = String(a.title || '').toLowerCase().indexOf(searchQuery) >= 0;
             var matchAgent = String(a.agent || '').toLowerCase().indexOf(searchQuery) >= 0;
@@ -9843,13 +9833,12 @@ section.tabpanel.active {
           return true;
         });
 
-        if (sortOrder === 'updated_desc') {
-          filtered.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
-        } else if (sortOrder === 'updated_asc') {
-          filtered.sort(function (a, b) { return (a.updated || 0) - (b.updated || 0); });
-        } else if (sortOrder === 'msgs_desc') {
-          filtered.sort(function (a, b) { return (b.msgCount || 0) - (a.msgCount || 0); });
-        }
+        // 排序方式：更新时间 / 创建时间（均倒序）
+        filtered.sort(function (a, b) {
+          var av = sortMode === 'created' ? (a.created || a.updated || 0) : (a.updated || 0);
+          var bv = sortMode === 'created' ? (b.created || b.updated || 0) : (b.updated || 0);
+          return bv - av;
+        });
 
         if (!filtered.length) {
           var empty = el('div', 'empty', '无匹配的归档会话记录');
@@ -9858,7 +9847,7 @@ section.tabpanel.active {
           return;
         }
 
-        filtered.forEach(function (arch) {
+        function appendArchiveRow(arch) {
           var row = el('div', 'archive-item-row');
           row.style.display = 'flex';
           row.style.alignItems = 'center';
@@ -9944,7 +9933,26 @@ section.tabpanel.active {
           actions.appendChild(deleteBtn);
           row.appendChild(actions);
           listContainer.appendChild(row);
-        });
+        }
+
+        if (viewMode === 'agent') {
+          // 视图 · 按项目：按 agent 分组，组标题带数量
+          var groups = {};
+          filtered.forEach(function (a) {
+            var k = a.agent || '未知';
+            (groups[k] = groups[k] || []).push(a);
+          });
+          Object.keys(groups).sort().forEach(function (ag) {
+            var hdr = el('div');
+            hdr.textContent = '📁 ' + ag + ' (' + groups[ag].length + ')';
+            hdr.style.cssText = 'font-size:11.5px;font-weight:600;color:var(--mcode-text-subtle);padding:6px 2px 0;border-top:1px solid var(--mcode-border);margin-top:2px';
+            listContainer.appendChild(hdr);
+            groups[ag].forEach(appendArchiveRow);
+          });
+        } else {
+          // 视图 · 时间线：平铺
+          filtered.forEach(appendArchiveRow);
+        }
       }
 
       function renderHeadActions() {
