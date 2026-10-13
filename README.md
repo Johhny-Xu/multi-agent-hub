@@ -170,7 +170,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
   cd multi-agent-hub
   ```
 - **方式 B（下载 Release 打包）**：
-  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-0.9.4-both.zip` 并解压。
+  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-0.9.9.2-both.zip` 并解压。
 
 #### 步骤 2：一键执行安装并启动
 - **Windows**：直接双击根目录 **`install.cmd`**（或在终端运行 `.\install.cmd`）；
@@ -235,8 +235,8 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 原生宿主客户端 | 独立导入 / 按需单装方式 | 插件目录与详细说明 |
 | --- | --- | --- |
-| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-0.9.4.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
-| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-0.9.4-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
+| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-0.9.9.2.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
+| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-0.9.9.2-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **3. ZCode IDE / CLI** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts zcode`<br>• **IDE 发现页 / 本地配置**：在 ZCode 插件发现页添加本仓库，或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **4. OpenAI Codex** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`<br>• 自动注册本地插件市场并将 9 个子代理与工作流写入目标工作区 `.codex/agents/` | [`integrations/codex`](integrations/codex/README.md) |
 | **5. DeepSeek Harness (DSH)** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`<br>• **手动 Bundle 挂载**：`dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [`integrations/dsh`](integrations/dsh/README.md) |
@@ -248,11 +248,11 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 安装包 | 适用环境 | 包含内容 |
 | --- | --- | --- |
-| **agenthub-0.9.4-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
-| **agenthub-0.9.4-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
-| **agenthub-0.9.4-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
-| **agenthub-workers-0.9.4-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
-| **multi-agent-hub-0.9.4.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
+| **agenthub-0.9.9.2-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
+| **agenthub-0.9.9.2-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
+| **agenthub-0.9.9.2-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
+| **agenthub-workers-0.9.9.2-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
+| **multi-agent-hub-0.9.9.2.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
 
 - **运行依赖要求**：
   - **基础运行环境**：Python 3.8+（Codex 代理安装需 Python 3.11+）；Node.js 20+（用于 MCP 桥接与 Web 控制台）；
@@ -285,7 +285,7 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 - 🌟 **智能时段问候、头像定制与社区互动**：
   - 内置 7 大精细时段共 35 句暖心关怀问候语，每次进入或切换平台自适应随机呈现；
   - 点击头像即可选择本地图片实现跨平台全局头像替换并持久化同步；
-  - 底部优雅轻量页脚：左侧开源致意（“好好吃饭更重要哦”彩蛋）、中间 GitHub Star 一键直达、右侧当前版本号（`v0.9.4`）显式标注。
+  - 底部优雅轻量页脚：左侧开源致意（“好好吃饭更重要哦”彩蛋）、中间 GitHub Star 一键直达、右侧当前版本号（`v0.9.9.2`）显式标注。
 - 🎛️ **监控状态栏自定义面板与模型抽屉**：
   - 底部状态栏新增自定义指标控制面板，支持一键呼出多选面板，按需勾选或隐藏实时监控项（包括子代理、模型、网络延时、吞吐 TPS、会话 Token、平台额度等）；点击状态栏模型标签即可平滑呼出参数面板，支持分级思考强度（`low` / `medium` / `high` / `max`）调节。
 - 🏷️ **官方积分倍率与福利标识**：
@@ -309,7 +309,7 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 | **CodeBuddy** (国际版) | deepseek-v4.1-flash | 精简收敛至 18 款主流高可用模型；文件工具需实际权限，使用标准代理隔离上下文 |
 | **GitHub Copilot** | auto | 沿用官方 CLI 选型 |
 | **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 精炼收敛为 MiMo-V2.6 Flash/Pro/UltraSpeed 及 9router/trae 通道共 4 款高效选型 |
-| **MiniMax** | MiniMax-M3.1-Flash-Preview | 精简收敛为 M3.1 Flash（512K/1M）与 M3（1M 上下文）当季双旗舰；支持 9router 通道积分余额展示 |
+| **MiniMax** | MiniMax-M3 | 精简收敛为 M3（1M 上下文）与 M3.1 Flash（512K 上下文）当季双旗舰；支持 9router 通道积分余额展示 |
 | **TraeCode** | GLM-5.3-FlashX (0.31x) | 精简收敛至 20 款官方模型，精准标注 `0.06x ~ 1.50x` 官方积分倍率与 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 营销标识 |
 | **ZCode** | GLM-5.3-Flash | 显式思考切换与未验证正文流式默认禁用 |
 | **CodeArts** | GLM-5.2 (0.70x) | 完整保留 4 款企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）；支持 Linux CLI 自动加载 AK/SK、IDE 动态工具协议与独立数据隔离 |
@@ -334,9 +334,9 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 
 ## 版本演进与开发调试
 
-当前 0.9.4 版本重点攻坚 MiniMaxCode 深度适配与 WebUI 前端优化，平滑演进连接引导与全量会话归档管理：
+当前 0.9.9.2 版本重点攻坚全平台 WebUI OAuth 登录闭环、多账号隔离切换与稳定性加固：
 
-![multi-agent-hub 0.9.4 进度图：当前重点攻坚 MiniMaxCode 适配与前端优化，展示已有基础、后续优化、版本演进和实际验证范围](docs/roadmap.svg)
+![multi-agent-hub 0.9.9.2 进度图：当前重点攻坚 MiniMaxCode 适配与前端优化，展示已有基础、后续优化、版本演进和实际验证范围](docs/roadmap.svg)
 
 ### 离线回归与安全检查
 

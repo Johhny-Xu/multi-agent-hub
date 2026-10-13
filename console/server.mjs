@@ -147,8 +147,8 @@ const MODEL_CATALOG = {
     { id: '9router/trae', name: 'Trae (9router 通道)' },
   ],
   minimaxcode: [
-    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K/1M', default: true },
-    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文' },
+    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', default: true },
+    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K 上下文' },
   ],
   zcode: [
     { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },
@@ -2246,6 +2246,12 @@ export async function start(context) {
     const badReq = (msg) => { const e = new Error(msg); /** @ts-ignore */ e.status = 400; return e; };
     const nameRe = /^[\w.\-]{1,64}$/;
     const safeName = (v, name) => { const s = str(v, 64, name); if (!nameRe.test(s)) throw badReq(`${name} 含非法字符`); return s; };
+    const profileNameRe = /^[\p{L}\p{N}._-]{1,64}$/u;
+    const safeProfileName = (v, name) => {
+      const s = str(v, 64, name).trim();
+      if (!profileNameRe.test(s) || s === '.' || s === '..') throw badReq(`${name} 含非法字符`);
+      return s;
+    };
 
     const route = async () => {
       if ((request.method === 'GET' || request.method === 'HEAD') && (p === '/dashboard' || p === '/')) {
@@ -2286,23 +2292,23 @@ export async function start(context) {
       }
       if (request.method === 'POST' && p === '/api/accounts/save') {
         const body = await readJson();
-        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeProfileName(body.name.trim(), 'name') : '';
         send(200, await accountsMod.saveAccount(safeName(body.worker, 'worker'), optName));
         return;
       }
       if (request.method === 'POST' && p === '/api/accounts/switch') {
         const body = await readJson();
-        send(200, await accountsMod.switchAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        send(200, await accountsMod.switchAccount(safeName(body.worker, 'worker'), safeProfileName(body.name, 'name')));
         return;
       }
       if (request.method === 'POST' && p === '/api/accounts/delete') {
         const body = await readJson();
-        send(200, await accountsMod.deleteAccount(safeName(body.worker, 'worker'), safeName(body.name, 'name')));
+        send(200, await accountsMod.deleteAccount(safeName(body.worker, 'worker'), safeProfileName(body.name, 'name')));
         return;
       }
       if (request.method === 'POST' && p === '/api/auth/login') {
         const body = await readJson();
-        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeProfileName(body.name.trim(), 'name') : '';
         const region = body.region === 'intl' || body.region === 'cn' ? body.region : '';
         send(200, authMod.startLogin(safeName(body.worker, 'worker'), optName, { region }));
         return;
@@ -2325,6 +2331,11 @@ export async function start(context) {
         send(200, await authMod.finishLogin(String(body.loginId || ''), String(body.accountName || body.name || '')));
         return;
       }
+      if (request.method === 'POST' && p === '/api/auth/cancel') {
+        const body = await readJson();
+        send(200, await authMod.cancelLogin(String(body.loginId || '')));
+        return;
+      }
       if (request.method === 'POST' && p === '/api/auth/logout') {
         const body = await readJson();
         send(200, await authMod.logout(safeName(body.worker, 'worker')));
@@ -2332,13 +2343,13 @@ export async function start(context) {
       }
       if (request.method === 'POST' && p === '/api/accounts/add') {
         const body = await readJson();
-        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeProfileName(body.name.trim(), 'name') : '';
         send(200, authMod.startLoginSandbox(safeName(body.worker, 'worker'), optName));
         return;
       }
       if (request.method === 'POST' && p === '/api/accounts/add/finish') {
         const body = await readJson();
-        const optName = typeof body.name === 'string' && body.name.trim() ? safeName(body.name.trim(), 'name') : '';
+        const optName = typeof body.name === 'string' && body.name.trim() ? safeProfileName(body.name.trim(), 'name') : '';
         send(200, await accountsMod.addFromSandbox(safeName(body.worker, 'worker'), optName, String(body.loginId || '')));
         return;
       }
@@ -2968,6 +2979,7 @@ export async function start(context) {
     clearInterval(watcherTimer);
     clearInterval(watcherKick);
     clearInterval(resultsSweepTimer);
+    try { authMod.cancelAllLogins?.(); } catch { /* noop */ }
     for (const res of sseClients) { try { res.end(); } catch { /* noop */ } }
     sseClients.clear();
     disposal = new Promise((resolve, reject) => {
@@ -2976,7 +2988,9 @@ export async function start(context) {
           if (endpointFile && existsSync(endpointFile)) { /* 保留端口文件供发现, 内容含 pid 可判活 */ }
           error ? reject(error) : resolve();
         });
+        try { subServer.closeAllConnections?.(); } catch { /* noop */ }
       });
+      try { server.closeAllConnections?.(); } catch { /* noop */ }
     }).then(async () => {
       while (watcherBusy) await new Promise((r) => setTimeout(r, 20));
       await Promise.all([convWriter.flush(), usageWriter.flush()]);
