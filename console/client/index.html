@@ -4009,23 +4009,6 @@ header.top #endpoint {
 header.top #endpoint:hover {
   border-color: var(--gem-border-strong);
 }
-header.top #btn-refresh {
-  height: 30px;
-  padding: 0 13px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--gem-text);
-  background: var(--gem-bg-card);
-  border: 1px solid var(--gem-border);
-  transition: all .16s ease;
-}
-header.top #btn-refresh:hover {
-  border-color: var(--gem-primary);
-  background: var(--gem-primary-container);
-  color: var(--gem-on-primary-container);
-  transform: translateY(-1px);
-}
 
 /* 2. 最左侧导航窄栏与平台会话树 */
 .cb-activity-bar {
@@ -5580,41 +5563,13 @@ section.tabpanel.active {
 }
 
 /* Palette Switcher Pill Styling */
-.palette-switcher-wrap {
-  display: inline-flex;
-  align-items: center;
-  background: var(--gem-surface-low);
-  border: 1px solid var(--gem-border);
-  border-radius: 9999px;
-  padding: 2px 3px;
-  gap: 2px;
+.theme-toggle-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--gem-bg-card); border: 1px solid var(--gem-border);
+  color: var(--gem-text); cursor: pointer; transition: all .16s ease;
 }
-.palette-pill-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--gem-text-secondary);
-  border-radius: 9999px;
-  padding: 3px 10px;
-  font-size: 11.5px;
-  font-weight: 500;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all .16s cubic-bezier(0.22, 1, 0.36, 1);
-  white-space: nowrap;
-}
-.palette-pill-btn:hover {
-  background: var(--gem-surface-high);
-  color: var(--gem-text);
-}
-.palette-pill-btn.active {
-  background: var(--gem-primary-container);
-  color: var(--gem-on-primary-container);
-  border-color: transparent;
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-}
+.theme-toggle-btn:hover { border-color: var(--gem-primary); background: var(--gem-primary-container); color: var(--gem-on-primary-container); transform: translateY(-1px); }
 </style>
 </head>
 <body>
@@ -5630,16 +5585,13 @@ section.tabpanel.active {
     </div>
   </div>
   <div class="top-actions">
-    <div class="palette-switcher-wrap" id="palette-switcher" role="radiogroup" aria-label="主题配色切换">
-      <button type="button" class="palette-pill-btn active" data-pal="gemini" title="Google Gemini 星曜深色">星曜</button>
-      <button type="button" class="palette-pill-btn" data-pal="claude" title="Anthropic Claude 暖棕深色">暖棕</button>
-      <button type="button" class="palette-pill-btn" data-pal="linear" title="Linear 极夜深色">极夜</button>
-      <button type="button" class="palette-pill-btn" data-pal="light" title="Google Gemini 晨曦浅色">晨曦</button>
-    </div>
+    <button type="button" class="theme-toggle-btn" id="btn-theme-toggle" aria-label="切换深浅色系" title="切换为浅色系">
+      <svg class="theme-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <svg class="theme-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
     <span class="dot" id="conn-dot" title="连接状态"></span>
     <label class="visually-hidden" for="endpoint" style="display:none">枢纽端点</label>
     <select id="endpoint" aria-label="枢纽端点"></select>
-    <button id="btn-refresh" type="button" title="刷新控制台并检测各代理在线状态">刷新</button>
   </div>
 </header>
 
@@ -9075,8 +9027,12 @@ section.tabpanel.active {
     epSel.textContent = '';
     var eps = (snap && snap.endpoints) || [];
     eps.forEach(function (e) {
-      var op = el('option', null, e.label + ' · ' + e.host);
+      // 端点下拉只显示「本机/服务器」，主机详情放悬停提示
+      var host = String(e.host || '');
+      var isLocal = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/i.test(host);
+      var op = el('option', null, isLocal ? '本机' : '服务器');
       op.value = e.id;
+      op.title = (e.label || '') + (e.host ? ' · ' + e.host : '');
       if (snap && e.id === snap.endpoint.id) op.selected = true;
       epSel.appendChild(op);
     });
@@ -9335,35 +9291,6 @@ section.tabpanel.active {
     refreshTimer = setTimeout(loadSnapshot, 400);
   }
 
-  $('#btn-refresh').addEventListener('click', function (ev) {
-    withBusy(ev.currentTarget, function () {
-      return Promise.all([
-        loadSnapshot(),
-        api('/api/heartbeat-check', {}).catch(function () { return null; })
-      ]).then(function (results) {
-        var hb = results[1];
-        if (hb && hb.text) {
-          toast(hb.text);
-        } else {
-          var snap = state.snap;
-          if (snap && snap.agents) {
-            var online = snap.agents.filter(function (a) { return a.online; }).map(function (a) { return a.name; });
-            var offline = snap.agents.filter(function (a) { return !a.online; }).map(function (a) { return a.name; });
-            var fmt = function (arr) {
-              if (!arr.length) return '无';
-              if (arr.length <= 3) return arr.join(', ');
-              return arr.slice(0, 3).join(', ') + ' 等 ' + arr.length + ' 个';
-            };
-            toast('已刷新 · 在线: ' + fmt(online) + ' · 离线: ' + fmt(offline));
-          } else {
-            toast('已刷新');
-          }
-        }
-      }).catch(function (e) {
-        toast('刷新失败: ' + (e && e.message ? e.message : e), true);
-      });
-    });
-  });
   $('#banner-retry').addEventListener('click', function () { loadSnapshot(); });
   $('#endpoint').addEventListener('change', function (ev) {
     api('/api/endpoint', { id: ev.currentTarget.value }).then(loadSnapshot).catch(function (e) { toast(e.message, true); });
@@ -11556,36 +11483,26 @@ section.tabpanel.active {
   load();
   setInterval(load, 60000);
 
-  // Palette switcher logic
+  // 主题切换：太阳/月亮单按钮，仅保留深/浅两套色系
   const initPaletteSwitcher = () => {
-    const savedPalette = localStorage.getItem('agent_hub_palette') || 'gemini';
-    const applyPalette = (pal) => {
-      document.documentElement.setAttribute('data-palette', pal);
-      if (pal === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      }
-      localStorage.setItem('agent_hub_palette', pal);
-      const buttons = document.querySelectorAll('.palette-pill-btn');
-      buttons.forEach((btn) => {
-        if (btn.getAttribute('data-pal') === pal) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
-      });
+    const savedRaw = localStorage.getItem('agent_hub_palette') || 'gemini';
+    let darkMode = savedRaw !== 'light';
+    const btn = document.getElementById('btn-theme-toggle');
+    const sunIcon = btn ? btn.querySelector('.theme-icon-sun') : null;
+    const moonIcon = btn ? btn.querySelector('.theme-icon-moon') : null;
+    const apply = (dark) => {
+      darkMode = dark;
+      document.documentElement.setAttribute('data-palette', dark ? 'gemini' : 'light');
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      localStorage.setItem('agent_hub_palette', dark ? 'gemini' : 'light');
+      // 太阳按钮按一下变成月亮按钮：当前深色显示太阳，当前浅色显示月亮
+      if (sunIcon && moonIcon) { sunIcon.hidden = !dark; moonIcon.hidden = dark; }
+      // 悬停提示显示"另一个"非当前色系
+      if (btn) btn.title = dark ? '切换为浅色系' : '切换为深色系';
+      if (btn) btn.setAttribute('aria-pressed', dark ? 'false' : 'true');
     };
-    applyPalette(savedPalette);
-    const wrap = document.getElementById('palette-switcher');
-    if (wrap) {
-      wrap.addEventListener('click', (e) => {
-        const btn = e.target.closest('.palette-pill-btn');
-        if (!btn) return;
-        const pal = btn.getAttribute('data-pal');
-        if (pal) applyPalette(pal);
-      });
-    }
+    apply(darkMode);
+    if (btn) btn.addEventListener('click', () => apply(!darkMode));
   };
   initPaletteSwitcher();
 
