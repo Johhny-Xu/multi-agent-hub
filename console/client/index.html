@@ -8788,8 +8788,21 @@ section.tabpanel.active {
     if (panel && !panel.hidden) {
       closeStatusBarConfig();
     } else {
+      // 在点击位置上方开面板（水平方向以点击点为中心并做边界钳制）
+      if (e && typeof e.clientX === 'number') positionStatusBarConfig(e.clientX);
       openStatusBarConfig();
     }
+  }
+
+  function positionStatusBarConfig(clientX) {
+    var panel = $('#status-bar-config-panel');
+    var wrap = $('#status-bar-wrap');
+    if (!panel || !wrap) return;
+    var wrapRect = wrap.getBoundingClientRect();
+    var panelW = panel.offsetWidth || 290;
+    var x = clientX - wrapRect.left - panelW / 2;
+    x = Math.max(0, Math.min(x, Math.max(0, wrapRect.width - panelW)));
+    panel.style.left = Math.round(x) + 'px';
   }
 
   function handleSbConfigClickOutside(e) {
