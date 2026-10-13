@@ -638,6 +638,13 @@
     color: var(--mcode-text-subtle);
   }
 
+  /* 「⋯」更多操作菜单：分割线 */
+  .head-more-sep {
+    height: 1px;
+    background: var(--mcode-border, rgba(255, 255, 255, 0.08));
+    margin: 4px 2px;
+  }
+
   /* 外观与个性化设置卡片 */
   .settings-card {
     background: var(--gem-bg-card, #ffffff);
@@ -2909,15 +2916,21 @@
     .chat-head-right #session-selector-pill {
       display: none !important; /* 会话选择器移到第一行，避免占据第二行空间 */
     }
-    #btn-new-chat {
-      flex: 1.2 1 0 !important;
-      min-height: 28px !important;
-      padding: 3px 6px !important;
-      font-size: 12px !important;
-      white-space: nowrap !important;
-      justify-content: center !important;
+    /* 手机端：⋯ 与工作台并列，工作台占主位 */
+    .chat-head-right {
+      justify-content: flex-end !important;
     }
-    #btn-chat-clear, #btn-chat-export, #btn-workbench-toggle {
+    #btn-head-more {
+      flex: 0 0 auto !important;
+      min-height: 28px !important;
+      min-width: 34px !important;
+      padding: 3px 6px !important;
+      justify-content: center !important;
+      border: 1px solid var(--mcode-border) !important;
+      border-radius: 6px !important;
+      background: var(--mcode-surface-muted) !important;
+    }
+    #btn-workbench-toggle {
       flex: 1 1 0 !important;
       min-height: 28px !important;
       padding: 3px 4px !important;
@@ -2927,8 +2940,6 @@
       border: 1px solid var(--mcode-border) !important;
       border-radius: 6px !important;
       background: var(--mcode-surface-muted) !important;
-    }
-    #btn-workbench-toggle {
       color: var(--mcode-accent) !important;
     }
 
@@ -4251,23 +4262,6 @@ header.top #btn-refresh:hover {
   color: var(--gem-text);
   background: var(--gem-surface-high);
   border-color: var(--gem-border-strong);
-}
-#btn-new-chat {
-  height: 30px;
-  padding: 0 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--gem-btn-text) !important;
-  background: var(--gem-btn-bg) !important;
-  border: none !important;
-  box-shadow: 0 2px 8px var(--mcode-accent-glow);
-  transition: all .16s ease;
-}
-#btn-new-chat:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.08);
-  box-shadow: 0 4px 14px var(--mcode-accent-glow);
 }
 
 /* 4. 消息流与欢迎空状态（Interactive Starter Cards） */
@@ -5762,21 +5756,27 @@ section.tabpanel.active {
               </div>
 
               <div class="chat-head-right" id="chat-head-btns">
-                <button id="btn-new-chat" class="primary btn-sm-icon" type="button" title="在此平台新建对话">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                  <span>+ 新建对话</span>
-                </button>
-                <button id="btn-chat-clear" class="btn-head-action" type="button" title="清空当前会话历史记录">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                  <span>清空</span>
-                </button>
-                <div class="export-dropdown-wrap" id="export-dropdown-wrap">
-                  <button id="btn-chat-export" class="btn-head-action" type="button" title="导出当前会话">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                    <span>导出</span>
-                    <svg class="chevron-down-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                <!-- 更多操作收进「⋯」溢出菜单，提升对话信息密度；工作台保持独立按钮 -->
+                <div class="export-dropdown-wrap head-more-wrap" id="head-more-wrap">
+                  <button id="btn-head-more" class="btn-head-action" type="button" title="更多操作（新建 / 清空 / 导出）">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                   </button>
-                  <div class="export-dropdown-menu" id="export-dropdown-menu" hidden>
+                  <div class="export-dropdown-menu" id="head-more-menu" hidden>
+                    <button id="btn-new-chat" class="export-menu-item" type="button" title="在此平台新建对话">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                      <div class="export-menu-text">
+                        <div class="export-menu-title">新建对话</div>
+                        <div class="export-menu-desc">在当前平台开启一个新会话</div>
+                      </div>
+                    </button>
+                    <button id="btn-chat-clear" class="export-menu-item" type="button" title="清空当前会话历史记录">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      <div class="export-menu-text">
+                        <div class="export-menu-title">清空会话</div>
+                        <div class="export-menu-desc">清空当前会话的历史记录</div>
+                      </div>
+                    </button>
+                    <div class="head-more-sep"></div>
                     <button type="button" class="export-menu-item" id="btn-export-markdown">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                       <div class="export-menu-text">
@@ -10076,21 +10076,24 @@ section.tabpanel.active {
     }).catch(function (e) { toast(e.message, true); });
   });
 
-  // 导出当前对话（Antigravity 风格多格式导出）
-  var exportBtn = $('#btn-chat-export');
-  var exportMenu = $('#export-dropdown-menu');
-  if (exportBtn && exportMenu) {
-    exportBtn.addEventListener('click', function (e) {
+  // 「⋯」更多操作菜单（新建 / 清空 / 导出 统一收口，提升对话信息密度）
+  var headMoreBtn = $('#btn-head-more');
+  var headMoreMenu = $('#head-more-menu');
+  if (headMoreBtn && headMoreMenu) {
+    headMoreBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      exportMenu.hidden = !exportMenu.hidden;
+      headMoreMenu.hidden = !headMoreMenu.hidden;
     });
     document.addEventListener('click', function (e) {
-      if (!e.target.closest('#export-dropdown-wrap')) {
-        exportMenu.hidden = true;
+      if (!e.target.closest('#head-more-wrap')) {
+        headMoreMenu.hidden = true;
       }
     });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') exportMenu.hidden = true;
+      if (e.key === 'Escape') headMoreMenu.hidden = true;
+    });
+    headMoreMenu.addEventListener('click', function (e) {
+      if (e.target.closest('button')) headMoreMenu.hidden = true;
     });
   }
 
