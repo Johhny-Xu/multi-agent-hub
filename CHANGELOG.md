@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **MiMo API Key 不再误当账号**：粘贴 `sk-` Key 直接合并进线上 `auth.json` 立即生效、不入账号列表；仅 API Key 的凭据（无小米 OAuth uid 且无其他通道）永不自动归档为账号。
 - **MiniMax 账户名识别**：实证官方 CLI 不落盘账户名且无 userinfo API；登录/导入时把用户备注名注入官方保留字段 `oauth.account`（与 `mmx auth status` 的 Account 行同源），账号列表、卡片头标与配额信息同步展示。
 - MiniMax 默认模型改为 `MiniMax-M3`（1M 上下文），512K 的 M3.1-Flash-Preview 可通过上下文胶囊一键切换（同步对齐 `console/server.mjs` 内置 `MODEL_CATALOG.minimaxcode` 与 `console/auth.mjs`）。
+- **对话头一体胶囊重构**：代理名文本删除，新结构为「头像（点击切换子代理，弹出 9 子代理选择菜单）｜当前会话名（点击切换对话）」的一体胶囊；胶囊内会话名实时跟随当前会话标题。
 - 状态栏配置面板改为在点击位置上方弹出（以点击点水平居中并做容器边界钳制），不再固定左对齐。
 - 状态栏收尾：移除右端独立齿轮图标，整条状态栏即为可点整体（点击任何位置打开显示项配置，Esc/点外关闭）；配置面板移除已不存在的"子代理平台"死选项。
 - **对话页七项视觉与体验改造 ([`console/client/index.html`](console/client/index.html))**：
