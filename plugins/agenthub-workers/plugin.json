@@ -16,5 +16,6 @@
     "minimax-code",
     "zcode",
     "antigravity"
-  ]
+  ],
+  "icon": "icon.png"
 }
