@@ -1083,7 +1083,7 @@
   .platform-avatar {
     width: 34px;
     height: 34px;
-    border-radius: 50%;
+    border-radius: 9px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -1988,7 +1988,7 @@
   .current-agent-pill .agent-avatar-sm {
     width: 24px !important;
     height: 24px !important;
-    border-radius: 50% !important;
+    border-radius: 6px !important;
     flex-shrink: 0 !important;
   }
   .agent-avatar-btn { cursor: pointer; border: none; padding: 0; }
@@ -2020,7 +2020,7 @@
   .agent-avatar-sm {
     width: 28px;
     height: 28px;
-    border-radius: 50%;
+    border-radius: 7px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3864,13 +3864,13 @@
   flex-shrink: 0;
 }
 .platform-avatar {
-  border-radius: 10px;
+  border-radius: 9px;
 }
 .agent-avatar-sm {
-  border-radius: 8px;
+  border-radius: 7px;
 }
 .empty-avatar {
-  border-radius: 18px;
+  border-radius: 16px;
 }
 .avatar-brand-svg {
   width: 66%;
@@ -4745,11 +4745,11 @@ header.top #endpoint:hover {
   z-index: 40;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
   color: var(--gem-text);
   background: var(--gem-bg-card);
   border: 1px solid var(--gem-border-strong);
@@ -4903,7 +4903,7 @@ header.top #endpoint:hover {
 }
 .card.uh-card .card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 11px;
@@ -4920,7 +4920,7 @@ header.top #endpoint:hover {
 .uh-head-left .platform-avatar {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: var(--gem-shadow-card);
   cursor: pointer;
   transition: transform .15s ease;
@@ -4956,27 +4956,26 @@ header.top #endpoint:hover {
 .uh-card-acc-badge {
   display: none !important;
 }
+.card .role,
 .uh-title-stack .role {
-  font-size: 11.5px;
-  color: var(--gem-text-secondary);
-  line-height: 1.35;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  word-break: break-word;
+  display: none !important;
 }
 .uh-head-right {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   flex: 0 0 auto;
-  padding-top: 1px;
+  padding-top: 0;
 }
 .uh-chat-jump-btn {
-  height: 24px;
-  padding: 0 8px;
+  height: 26px !important;
+  min-height: 26px !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  line-height: 24px;
+  padding: 0 9px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--gem-on-primary-container);
   background: var(--gem-primary-container);
@@ -4985,6 +4984,7 @@ header.top #endpoint:hover {
   transition: all .15s ease;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   white-space: nowrap;
 }
@@ -4994,31 +4994,25 @@ header.top #endpoint:hover {
   filter: brightness(1.08);
 }
 .uh-head-right .agent-toggle-wrap {
-  margin-left: 0;
+  margin: 0 !important;
   white-space: nowrap;
   background: var(--gem-bg-card-inner);
   border: 1px solid var(--gem-border);
   border-radius: 999px;
-  padding: 2px 7px 2px 4px;
+  padding: 0 8px 0 5px;
+  height: 26px !important;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 .uh-head-right .agent-toggle-text {
   white-space: nowrap;
   font-size: 10.5px;
   color: var(--gem-text-secondary);
 }
-.qa-plan {
-  flex: 0 1 auto;
-  max-width: none;
-  background: var(--gem-primary-container);
-  color: var(--gem-on-primary-container);
-  border: 1px solid var(--gem-border-strong);
-  border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 10px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.qa-plan,
+[data-plan-for] {
+  display: none !important;
 }
 .uh-quota-slot {
   display: flex;
@@ -5709,7 +5703,7 @@ section.tabpanel.active {
 /* Palette Switcher Pill Styling & Smooth Morph Animation */
 .theme-toggle-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 32px; height: 32px; border-radius: 8px;
   background: var(--gem-bg-card); border: 1px solid var(--gem-border);
   color: var(--gem-text); cursor: pointer; transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative; overflow: hidden;
@@ -5936,8 +5930,8 @@ html:not([data-theme="light"]) .theme-icon-sun {
 
             <!-- 底部浮动 Composer 卡片 -->
             <div class="composer-floating-wrap">
-              <button type="button" class="scroll-bottom-pill" id="btn-scroll-bottom" hidden title="滚动到最新消息">
-                <span>↓ 回到底部</span>
+              <button type="button" class="scroll-bottom-pill" id="btn-scroll-bottom" hidden title="回到底部" aria-label="回到底部">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
               </button>
               <div class="att-strip" id="att-strip" hidden></div>
               <div class="composer" id="chat-composer">
@@ -7985,7 +7979,7 @@ html:not([data-theme="light"]) .theme-icon-sun {
     var parts = [];
     if (withAgent) parts.push(agent + '/' + (name || '默认模型'));
     else if (name) parts.push(name);
-    if (p.effort) parts.push('思考: ' + p.effort);
+    if (p.effort) parts.push(p.effort);
     return parts.join(' · ') || (name || '默认模型');
   }
 
@@ -8049,12 +8043,35 @@ html:not([data-theme="light"]) .theme-icon-sun {
     if (refreshButton) refreshButton.hidden = true;
   }
 
-  function openModelPanel() {
+  var currentModelPanelSide = null;
+
+  function openModelPanel(side) {
     var pop = $('#model-popover-panel');
     var wrap = $('#model-picker-wrap');
     if (!pop) return;
+    side = side || 'right';
+    currentModelPanelSide = side;
     pop.hidden = false;
     if (wrap) wrap.classList.add('open');
+    if (side === 'left') {
+      var cont = $('#model-picker-container');
+      var sb = $('#sb-model');
+      var comp = $('#chat-composer') || $('.composer-floating-wrap');
+      if (cont && (sb || comp)) {
+        var contRect = cont.getBoundingClientRect();
+        var compRect = comp ? comp.getBoundingClientRect() : null;
+        var sbRect = sb ? sb.getBoundingClientRect() : null;
+        var targetLeft = sbRect ? (sbRect.left - contRect.left) : (compRect ? compRect.left - contRect.left : 0);
+        if (compRect && targetLeft < (compRect.left - contRect.left)) {
+          targetLeft = compRect.left - contRect.left;
+        }
+        pop.style.left = Math.round(targetLeft) + 'px';
+        pop.style.right = 'auto';
+      }
+    } else {
+      pop.style.left = 'auto';
+      pop.style.right = '0';
+    }
     renderModelPanel();
     var inp = $('#mp-search-input');
     if (inp) {
@@ -8070,19 +8087,29 @@ html:not([data-theme="light"]) .theme-icon-sun {
   function closeModelPanel() {
     var pop = $('#model-popover-panel');
     var wrap = $('#model-picker-wrap');
-    if (pop) pop.hidden = true;
+    if (pop) {
+      pop.hidden = true;
+      pop.style.left = '';
+      pop.style.right = '';
+    }
+    currentModelPanelSide = null;
     if (wrap) wrap.classList.remove('open');
     document.removeEventListener('click', handleModelClickOutside, true);
     document.removeEventListener('keydown', handleModelKeydown, true);
   }
 
-  function toggleModelPanel(e) {
+  function toggleModelPanel(e, side) {
     if (e) { e.preventDefault(); e.stopPropagation(); }
+    side = side || 'right';
     var pop = $('#model-popover-panel');
     if (pop && !pop.hidden) {
-      closeModelPanel();
+      if (currentModelPanelSide === side) {
+        closeModelPanel();
+      } else {
+        openModelPanel(side);
+      }
     } else {
-      openModelPanel();
+      openModelPanel(side);
     }
   }
 
@@ -9809,9 +9836,9 @@ html:not([data-theme="light"]) .theme-icon-sun {
 
   // 二级模型面板事件绑定
   var mpWrap = $('#model-picker-wrap');
-  if (mpWrap) mpWrap.addEventListener('click', toggleModelPanel);
+  if (mpWrap) mpWrap.addEventListener('click', function (e) { toggleModelPanel(e, 'right'); });
   var sbModel = $('#sb-model');
-  if (sbModel) sbModel.addEventListener('click', toggleModelPanel);
+  if (sbModel) sbModel.addEventListener('click', function (e) { toggleModelPanel(e, 'left'); });
   var mpClose = $('#mp-close-btn');
   if (mpClose) mpClose.addEventListener('click', closeModelPanel);
   var mpDone = $('#mp-done-btn');

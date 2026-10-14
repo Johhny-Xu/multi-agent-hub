@@ -143,3 +143,35 @@ test('renderPlatformList renders platform groups and expandable session tree', (
   assert.ok(tree.className.includes('platform-session-tree'), 'Must create session tree');
   assert.equal(tree.children.length, 3); // 2 session items + 1 new session button
 });
+
+test('model popover, scroll bottom icon, thinking effort format, and card head styling', () => {
+
+  // 1. Scroll-bottom button only has icon and no text
+  assert.ok(html.includes('id="btn-scroll-bottom"'), 'scroll-bottom button exists');
+  assert.ok(!html.includes('<span>↓ 回到底部</span>'), 'scroll-bottom button must not have text');
+  assert.ok(html.includes('.scroll-bottom-pill {') && html.includes('border-radius: 50%'), 'scroll-bottom-pill must be circular');
+
+  // 2. getModelSummaryText formats effort without '思考: '
+  const summaryFnMatch = html.match(/function getModelSummaryText\(agent, opts\) \{([\s\S]*?)\n  \}/);
+  assert.ok(summaryFnMatch, 'getModelSummaryText exists');
+  assert.ok(!summaryFnMatch[1].includes("'思考: '"), "getModelSummaryText must not prepend '思考: '");
+
+  // 3. openModelPanel handles left and right side
+  assert.ok(html.includes("function openModelPanel(side)"), "openModelPanel accepts side parameter");
+  assert.ok(html.includes("if (side === 'left')"), "openModelPanel handles side === 'left'");
+
+  // 4. Role description and plan badge hidden in card head
+  assert.ok(html.includes('.card .role,\n.uh-title-stack .role {\n  display: none !important;\n}'), 'role description hidden');
+  assert.ok(html.includes('.qa-plan,\n[data-plan-for] {\n  display: none !important;\n}'), 'qa-plan hidden');
+
+  // 5. Symmetric alignment for card head and jump button
+  assert.ok(html.includes('.card.uh-card .card-head {\n  display: flex;\n  align-items: center;'), 'card-head centered vertically');
+  assert.ok(html.includes('.uh-chat-jump-btn {\n  height: 26px !important;'), 'jump button has 26px height');
+  assert.ok(html.includes('.uh-head-right .agent-toggle-wrap {\n  margin: 0 !important;\n  white-space: nowrap;\n  background: var(--gem-bg-card-inner);\n  border: 1px solid var(--gem-border);\n  border-radius: 999px;\n  padding: 0 8px 0 5px;\n  height: 26px !important;'), 'toggle wrap has 26px height');
+
+  // 6. Avatar squircle border radii
+  assert.ok(html.includes('.platform-avatar {\n    width: 34px;\n    height: 34px;\n    border-radius: 9px;'), 'platform-avatar has 9px border-radius');
+  assert.ok(html.includes('.uh-head-left .platform-avatar {\n  width: 40px;\n  height: 40px;\n  border-radius: 10px;'), 'head platform-avatar has 10px border-radius');
+  assert.ok(html.includes('.current-agent-pill .agent-avatar-sm {\n    width: 24px !important;\n    height: 24px !important;\n    border-radius: 6px !important;'), 'pill avatar has 6px squircle');
+});
+
