@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 const html = (await readFile(new URL('../console/client/index.html', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-const names = ['getModelCatalog', 'getModelCapability', 'getAgentPrefs', 'saveAgentPrefs', 'getModelSummaryText', 'updateModelSummaryUI',
+const names = ['getModelCatalog', 'getModelCapability', 'getAgentPrefs', 'saveAgentPrefs', 'getModelDisplayName', 'getModelSummaryText', 'updateModelSummaryUI',
   'updateCapabilityUI', 'renderModelPanel', 'populateChatModels', 'sendChat', 'addFiles'];
 const functions = names.map((name) => {
   const start = html.indexOf('  function ' + name + '(');

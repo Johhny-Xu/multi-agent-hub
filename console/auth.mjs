@@ -711,7 +711,8 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
   // 启动新登录前自动将当前已生效凭据归档保存，避免新账号登录覆盖丢失原账号
   autoSyncLiveAccount(worker).catch(() => {});
   // 统一使用独立沙箱目录承接新登录凭据，确保中途取消或未完成授权时绝不污染现有生效账号
-  const effectiveSandbox = sandbox || join(HOME, '.agenthub', 'sandbox', `${worker}-${name || 'oauth'}-${Date.now()}`);
+  const safeDirName = String(name || 'oauth').replace(/[^\p{L}\p{N}._-]/gu, '_');
+  const effectiveSandbox = sandbox || join(HOME, '.agenthub', 'sandbox', `${worker}-${safeDirName}-${Date.now()}`);
   mkdirSync(effectiveSandbox, { recursive: true });
   const targetHome = effectiveSandbox;
   const id = `${sandbox ? 'add' : 'login'}-${Date.now()}-${++seq}`;
@@ -1161,7 +1162,8 @@ export function startLogin(worker, name = '', opts = {}) {
 
 /** 沙箱添加账号：以隔离 HOME 启动登录流程，授权后凭据落在沙箱内，供快照成档案 */
 export function startLoginSandbox(worker, name) {
-  const sandbox = join(HOME, '.agenthub', 'sandbox', `${worker}-${name || 'auto'}-${Date.now()}`);
+  const safeDirName = String(name || 'auto').replace(/[^\p{L}\p{N}._-]/gu, '_');
+  const sandbox = join(HOME, '.agenthub', 'sandbox', `${worker}-${safeDirName}-${Date.now()}`);
   return launchWorkerSession(worker, { sandbox, name: name || null });
 }
 

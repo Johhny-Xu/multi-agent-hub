@@ -1425,14 +1425,7 @@ export async function start(context) {
     if (theRef) deliveringRefs.add(theRef);
     try {
       const body = extractResultBody(fullText);
-      let artifact = null;
-      if (body.length > 900) {
-        artifact = await writeArtifact(thread.agent, tag || 'reply', body);
-      }
-      const preview = artifact
-        ? `${body.slice(0, SUMMARY_CAP)}\n…（完整输出已落盘本机）`
-        : body;
-      addMsg(thread, 'agent', preview, { ...(artifact ? { artifact } : {}), ...(theRef ? { ref: theRef } : {}) });
+      addMsg(thread, 'agent', body, { ...(theRef ? { ref: theRef } : {}) });
     } finally {
       if (theRef) deliveringRefs.delete(theRef);
     }
@@ -1821,14 +1814,7 @@ export async function start(context) {
         addMsg(thread, 'me', taskText, { ts: taskTs });
 
         const body = extractResultBody(replyText);
-        let artifact = null;
-        if (body.length > 900) {
-          artifact = await writeArtifact(thread.agent, 'external', body);
-        }
-        const preview = artifact
-          ? `${body.slice(0, SUMMARY_CAP)}\n…（完整输出已落盘本机）`
-          : body;
-        addMsg(thread, 'agent', preview, { ...(artifact ? { artifact } : {}), ref, ts: replyTs });
+        addMsg(thread, 'agent', body, { ref, ts: replyTs });
 
         seenExternalRefs.add(ref);
         imported++;
@@ -2246,7 +2232,7 @@ export async function start(context) {
     const badReq = (msg) => { const e = new Error(msg); /** @ts-ignore */ e.status = 400; return e; };
     const nameRe = /^[\w.\-]{1,64}$/;
     const safeName = (v, name) => { const s = str(v, 64, name); if (!nameRe.test(s)) throw badReq(`${name} 含非法字符`); return s; };
-    const profileNameRe = /^[\p{L}\p{N}._-]{1,64}$/u;
+    const profileNameRe = /^[\p{L}\p{N}._\-*]{1,64}$/u;
     const safeProfileName = (v, name) => {
       const s = str(v, 64, name).trim();
       if (!profileNameRe.test(s) || s === '.' || s === '..') throw badReq(`${name} 含非法字符`);
