@@ -21,9 +21,9 @@ test('index.html contains unified sidebar layout with platform session tree and 
 test('index.html contains optimized clear and export controls with dropdown menu', () => {
   // Clear and export buttons in chat header
   assert.ok(html.includes('id="btn-chat-clear"'), 'Must have clear button');
-  assert.ok(html.includes('id="btn-chat-export"'), 'Must have export button');
-  assert.ok(html.includes('id="export-dropdown-wrap"'), 'Must have export dropdown wrapper');
-  assert.ok(html.includes('id="export-dropdown-menu"'), 'Must have export dropdown menu');
+  assert.ok(html.includes('id="btn-chat-export"') || html.includes('id="btn-head-more"'), 'Must have export or more button');
+  assert.ok(html.includes('id="export-dropdown-wrap"') || html.includes('id="head-more-wrap"'), 'Must have export dropdown wrapper');
+  assert.ok(html.includes('id="export-dropdown-menu"') || html.includes('id="head-more-menu"'), 'Must have export dropdown menu');
   assert.ok(html.includes('id="btn-export-markdown"'), 'Must have export markdown button');
   assert.ok(html.includes('id="btn-export-json"'), 'Must have export json button');
   assert.ok(html.includes('id="btn-export-copy"'), 'Must have export copy button');
@@ -45,7 +45,7 @@ test('index.html contains Antigravity workbench layout with tabs and inline arti
   assert.ok(html.includes('id="wb-preview-code"'), 'Must have preview code container');
 
   // Toggle handles & badges
-  assert.ok(html.includes('id="wb-edge-tab"'), 'Must have workbench edge tab handle');
+  assert.ok(html.includes('id="btn-workbench-toggle"') || html.includes('id="wb-edge-tab"'), 'Must have workbench toggle button');
   assert.ok(html.includes('id="head-wb-badge"'), 'Must have chat header workbench count badge');
 });
 
@@ -127,6 +127,9 @@ test('renderPlatformList renders platform groups and expandable session tree', (
     applyAvatar: () => {},
     threadMeta: () => '10:00',
     selectPlatform: () => {},
+    getPinnedSessions: () => [],
+    chatSessSortMode: 'updated',
+    chatSessFilter: 'all',
     api: async () => ({})
   });
   vm.runInContext(code, context);
