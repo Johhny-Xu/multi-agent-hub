@@ -5,7 +5,8 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 const html = (await readFile(new URL('../console/client/index.html', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-const names = ['getModelCatalog', 'getModelCapability', 'getAgentPrefs', 'saveAgentPrefs', 'getModelDisplayName', 'getModelSummaryText', 'updateModelSummaryUI',
+const names = ['getModelCatalog', 'getModelCapability', 'getAgentPrefs', 'saveAgentPrefs', 'getModelDisplayName', 'getModelSummaryText',
+  'getAgentAccent', 'applyAgentAccent', 'updateModelSummaryUI',
   'updateCapabilityUI', 'renderModelPanel', 'populateChatModels', 'sendChat', 'addFiles'];
 const functions = names.map((name) => {
   const start = html.indexOf('  function ' + name + '(');
@@ -22,7 +23,7 @@ const selection = (id, { on = true, off = true, stream = true, image = true, fil
 function fixture(models = [selection('fixture')]) {
   const nodes = new Map();
   class Element {
-    children = []; style = {}; value = ''; hidden = false; disabled = false; attributes = {}; listeners = {};
+    children = []; style = { setProperty() {} }; value = ''; hidden = false; disabled = false; attributes = {}; listeners = {};
     constructor(tag) { this.tagName = tag; }
     set textContent(value) { this.text = String(value); this.children = []; }
     get textContent() { return this.text || ''; }
@@ -35,7 +36,11 @@ function fixture(models = [selection('fixture')]) {
   const el = (tag, className, text) => { const node = new Element(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const calls = [], notices = [];
   const worker = { configured: true, default_model: models[0].id, availability: { enabled: true, reason: '' }, models };
+  // applyAgentAccent() writes onto <html>; the context only needs the two members it touches.
+  const documentElement = new Element('html');
   const context = vm.createContext({ $, el, Object, Array, JSON, localStorage: { setItem() {} },
+    document: { documentElement },
+    AGENT_THEMES: { probe: { color: '#818cf8', glow: 'rgba(129, 140, 248, 0.35)', label: 'probe' } },
     state: { snap: { platform: 'linux', capabilities: { workers: { probe: worker } }, modelCatalog: { probe: models.map((model, index) => ({ id: model.id, name: model.id, default: index === 0, available: model.availability.enabled, reason: model.availability.reason, capability: model })) } } },
     chat: { activeAgent: 'probe', activeSessionId: 'session', atts: [], sending: false }, modelSettings: {},
     toast: (message) => notices.push(message), updateStatusBar() {}, renderAttStrip() {}, URL: { revokeObjectURL() {}, createObjectURL() {} },
