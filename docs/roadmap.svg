@@ -11,7 +11,7 @@
       .body { font-size:21px; fill:#334155; }
       .version { font-size:26px; font-weight:700; fill:#0f766e; }
       .stage { font-size:20px; fill:#334155; }
-      .stat { font-size:27px; font-weight:700; fill:#0f766e; }
+      .stat { font-size:24px; font-weight:700; fill:#0f766e; }
       .note { font-size:20px; fill:#475569; }
     </style>
     <marker id="timeline-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
@@ -54,7 +54,7 @@
     <text x="716" y="417" class="body">子代理主题色贯通（按钮/进度条/二级菜单）</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
     <text x="716" y="450" class="body">侧栏卡片单行化精简 + 浅色高对比度校准</text>
-    <text x="692" y="476" class="note">聚焦无遮挡专注模式、壁纸色彩统一与现代 IDE 级丝滑交互动效。</text>
+    <text x="692" y="476" class="note">聚焦无遮挡专注模式与壁纸色彩统一、IDE 级丝滑交互。</text>
   </g>
 
   <text x="64" y="541" class="section">版本演进</text>
