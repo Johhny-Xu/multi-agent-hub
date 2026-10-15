@@ -4649,9 +4649,8 @@ body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .cha
 .platform-search-wrap input {
   height: 32px;
   border-radius: 999px;
-  /* 左侧 12px：已移除放大镜图标，不再需要为其预留 32px；
-     右侧 46px 保留给 ::after 的 ⌘K 快捷键提示 */
-  padding: 0 46px 0 12px !important;
+  /* 左右各 12px：放大镜与 ⌘K 快捷键提示均已移除，不再预留角标位 */
+  padding: 0 12px !important;
   background: var(--gem-bg-card-inner);
   color: var(--gem-text);
   border: 1px solid var(--gem-border);
@@ -4663,25 +4662,6 @@ body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .cha
 .platform-search-wrap input:focus {
   border-color: var(--gem-primary);
   box-shadow: var(--mcode-focus-ring);
-}
-.platform-search-wrap::after {
-  content: "⌘K";
-  position: absolute;
-  right: 9px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 10px;
-  font-family: var(--mono, monospace);
-  color: var(--gem-text-muted);
-  background: var(--gem-surface-high);
-  border: 1px solid var(--gem-border);
-  border-radius: 999px;
-  padding: 1px 6px;
-  pointer-events: none;
-  line-height: 1.3;
-}
-.platform-search-wrap:focus-within::after {
-  opacity: 0;
 }
 .platform-list {
   padding: 8px 6px;
@@ -7880,6 +7860,34 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     return { text: '冷备', cls: 'pill-sess-count' };
   }
 
+  // 平台卡片底行摘要挂载/更新：无真实内容时不渲染整行（占位"待机"不再显示，卡片保持单行）
+  function mountAgentSummaryRow(body, theme, text) {
+    if (!body) return;
+    var row = body.querySelector('.platform-capsule-summary');
+    if (row) {
+      var tEl = row.querySelector('.platform-capsule-summary-text');
+      if (tEl) { tEl.textContent = text; tEl.title = text; }
+      return;
+    }
+    row = el('div', 'platform-capsule-summary');
+    var dot = el('span', 'platform-summary-dot');
+    dot.style.background = (theme && theme.color) || 'var(--gem-primary)';
+    dot.style.boxShadow = '0 0 6px ' + ((theme && theme.glow) || 'rgba(138, 180, 248, 0.4)');
+    row.appendChild(dot);
+    var textEl = el('span', 'platform-capsule-summary-text', text);
+    textEl.title = text;
+    row.appendChild(textEl);
+    body.appendChild(row);
+  }
+
+  // 按 agent 名从当前 DOM 查找并挂载（异步摘要到达时用）
+  function mountAgentSummaryByName(name, text) {
+    var item = document.querySelector('.platform-item[data-agent="' + name + '"]');
+    if (!item) return;
+    var theme = (typeof AGENT_THEMES !== 'undefined' && AGENT_THEMES[name]) || null;
+    mountAgentSummaryRow(item.querySelector('.platform-capsule-body'), theme, text);
+  }
+
   // LLM 智能微总结客户端缓存与回调
   var agentSmartSummaries = {};
   function loadAgentSummaries() {
@@ -7887,8 +7895,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       if (res && res.summaries) {
         agentSmartSummaries = Object.assign(agentSmartSummaries, res.summaries);
         Object.keys(res.summaries).forEach(function (name) {
-          var elSummary = document.querySelector('.platform-item[data-agent="' + name + '"] .platform-capsule-summary-text');
-          if (elSummary && res.summaries[name]) elSummary.textContent = res.summaries[name];
+          if (res.summaries[name]) mountAgentSummaryByName(name, res.summaries[name]);
         });
       }
     }).catch(function () {});
@@ -7896,8 +7903,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   window.__ahSetAgentSummary = function(name, summary) {
     if (name && summary) {
       agentSmartSummaries[name] = summary;
-      var elSummary = document.querySelector('.platform-item[data-agent="' + name + '"] .platform-capsule-summary-text');
-      if (elSummary) elSummary.textContent = summary;
+      mountAgentSummaryByName(name, summary);
     }
   };
 
@@ -8113,23 +8119,8 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       var topRow = el('div', 'platform-capsule-top');
       var badges = el('div', 'platform-capsule-badges');
 
-      // 额度微胶囊
-      var qCapsule = getAgentQuotaCapsule(name);
-      if (qCapsule) {
-        var qPill = el('span', qCapsule.cls, qCapsule.text);
-        qPill.title = '模型额度状态';
-        badges.appendChild(qPill);
-      }
-
-      // 缓存时效胶囊
-      var cCapsule = getAgentCacheCapsule(name, t ? t.updated : null);
-      if (cCapsule) {
-        var cPill = el('span', cCapsule.cls, cCapsule.text);
-        cPill.title = '缓存与活跃时效';
-        badges.appendChild(cPill);
-      }
-
-      // 会话数与未读
+      // 注：额度胶囊与缓存时效胶囊已按用户要求移除（getAgentQuotaCapsule / getAgentCacheCapsule 定义保留备用）
+      // 会话数胶囊：徽标区现有唯一元素，空间充足，不会再被 overflow 裁切
       var sessions = (t && Array.isArray(t.sessions) && t.sessions.length) ? t.sessions : (isActive && chat.sessions && chat.sessions.length ? chat.sessions : []);
       if (sessions.length > 1) {
         var sPill = el('span', 'pill-sess-count', sessions.length + '会话');
@@ -8146,25 +8137,14 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       }
       capsuleBody.appendChild(topRow);
 
-      // 底行：智能微总结 / 任务状态（带品牌专属高亮光圆点）
-      var summaryRow = el('div', 'platform-capsule-summary');
-      var dot = el('span', 'platform-summary-dot');
-      dot.style.background = theme.color || 'var(--gem-primary)';
-      dot.style.boxShadow = '0 0 6px ' + (theme.glow || 'rgba(138, 180, 248, 0.4)');
-      summaryRow.appendChild(dot);
-
+      // 底行：智能微总结 / 最后消息（无真实内容时整行不渲染，卡片保持单行）
       var summaryText = (agentSmartSummaries && agentSmartSummaries[name]) || '';
-      if (!summaryText) {
-        if (t && t.last) {
-          summaryText = (t.last.role === 'me' ? '我: ' : (t.last.role === 'sys' ? '[系统] ' : '')) + String(t.last.text || '').replace(/\s+/g, ' ');
-        } else {
-          summaryText = '待机 · 点击开启对话';
-        }
+      if (!summaryText && t && t.last) {
+        summaryText = (t.last.role === 'me' ? '我: ' : (t.last.role === 'sys' ? '[系统] ' : '')) + String(t.last.text || '').replace(/\s+/g, ' ');
       }
-      var textEl = el('span', 'platform-capsule-summary-text', summaryText);
-      textEl.title = summaryText;
-      summaryRow.appendChild(textEl);
-      capsuleBody.appendChild(summaryRow);
+      if (summaryText) {
+        mountAgentSummaryRow(capsuleBody, theme, summaryText);
+      }
 
       item.appendChild(capsuleBody);
 
