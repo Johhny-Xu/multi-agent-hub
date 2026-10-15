@@ -40,6 +40,33 @@ def source_hashes():
     return hashes
 
 
+def redact_local_paths(text):
+    """Strip absolute local paths from captured output before it is committed.
+
+    This report is a committed evidence artifact, and a failing suite happily
+    prints the interpreter path, the temp directory and the working directory
+    of whoever ran it. Those must not enter the repository: the v0.9.9.6 run
+    leaked three such paths for exactly this reason.
+
+    Captured output can arrive double-escaped (a suite that echoes JSON, or the
+    repr of an argv list), so backslashes are matched in runs rather than
+    literally.
+    """
+    home = str(Path.home())
+    variants = set()
+    for repeats in (4, 2, 1):
+        variants.add(home.replace("\\", "\\" * repeats))
+        variants.add(home.replace("/", "/" * repeats))
+        variants.add(home.replace("\\", "/" * repeats))
+    for variant in sorted(variants, key=len, reverse=True):
+        if variant:
+            text = text.replace(variant, "<home>")
+    text = re.sub(r"[A-Za-z]:[\\/]{1,4}Users[\\/]{1,4}[^\\/\s\"']+", "<user-path>", text)
+    text = re.sub(r"/home/[^/\s\"']+", "/home/<user>", text)
+    text = re.sub(r"/Users/[^/\s\"']+", "/Users/<user>", text)
+    return text
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, default=ROOT / "docs" / "refactor-validation.json")
@@ -106,7 +133,7 @@ def main():
         if count:
             entry["tests"] = int(count.group(1))
         if code:
-            entry["failure_output"] = output[-6000:]
+            entry["failure_output"] = redact_local_paths(output[-6000:])
         results.append(entry)
         print(name + ": " + ("PASS" if code == 0 else "FAIL"), flush=True)
     final_sources = source_hashes()
