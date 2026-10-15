@@ -1,7 +1,7 @@
 // @ts-check
 // Multi-Agent Hub 原生 OAuth 配额跟踪器
-// 从 9router usage services 移植（codebuddy-cn / minimax / antigravity），
-// 令牌直接读取各官方 CLI 的 OAuth 凭据文件 —— 不再依赖 9router。
+// 直读各官方 CLI 已落盘的 OAuth 凭据，向各厂商官方接口查询剩余配额；
+// 令牌与账号不落本模块，只做即时解密与转发。
 // 零第三方依赖（Node 22 全局 fetch）。
 
 import { readFile, writeFile } from 'node:fs/promises';

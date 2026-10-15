@@ -11035,10 +11035,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 
       var header = '平台配额（' + agent + '）';
       if (!plat) {
-        return header + '\n当前平台未接入配额跟踪 (9router)';
+        return header + '\n当前平台未接入配额跟踪';
       }
       if (!quotasData || !quotasData[plat] || quotasData[plat].error) {
-        return header + '\n当前平台未接入配额跟踪 (9router)';
+        return header + '\n当前平台未接入配额跟踪';
       }
 
       if (plat === 'codebuddy') {
@@ -11048,7 +11048,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         var group = groups.filter(function (g) { return g.source === targetSource; })[0];
         if (!group && groups.length) group = groups[0];
         if (!group) {
-          return header + '\n当前平台未接入配额跟踪 (9router)';
+          return header + '\n当前平台未接入配额跟踪';
         }
         var planStr = group.plan ? '（' + group.plan + '）' : '';
         var lines = [(group.source || '') + planStr + '总剩余 ' + (group.totalRemaining != null ? group.totalRemaining : 0) + ' 积分 · ' + (group.packageCount || 0) + ' 个有效包'];
@@ -11062,7 +11062,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         var agyData = quotasData.antigravity;
         var qList = Array.isArray(agyData && agyData.quotas) ? agyData.quotas : [];
         if (!qList.length) {
-          return '平台配额（antigravity）\n当前平台未接入配额跟踪 (9router)';
+          return '平台配额（antigravity）\n当前平台未接入配额跟踪';
         }
         var majorNames = ['gemini_session', 'gemini_weekly', 'claude_gpt_weekly'];
         var majorQuotas = qList.filter(function (q) {
@@ -11090,7 +11090,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         var traeData = quotasData.traecode;
         var qListTrae = Array.isArray(traeData.quotas) ? traeData.quotas : [];
         if (!qListTrae.length) {
-          return header + '\n当前平台未接入配额跟踪 (9router)';
+          return header + '\n当前平台未接入配额跟踪';
         }
         var q0 = qListTrae[0];
         var rTime = formatResetTime(q0.resetAt);
@@ -11128,7 +11128,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         });
         return lines.join('\n');
       }
-      return header + '\n当前平台未接入配额跟踪 (9router)';
+      return header + '\n当前平台未接入配额跟踪';
     },
     gear: function () {
       return '自定义状态栏显示项\n点击自由勾选/取消显示各项指标';
