@@ -59,17 +59,43 @@ test('index.html contains custom background layer and settings card with presets
 
   // Background settings card
   assert.ok(html.includes('id="settings-bg-card"'), 'Must have settings-bg-card');
-  assert.ok(html.includes('data-preset="default"'), 'Must have default preset');
-  assert.ok(html.includes('data-preset="aurora"'), 'Must have aurora preset');
-  assert.ok(html.includes('data-preset="dusk"'), 'Must have dusk preset');
-  assert.ok(html.includes('data-preset="cyber"'), 'Must have cyber preset');
-  assert.ok(html.includes('data-preset="grid"'), 'Must have grid preset');
+  assert.ok(html.includes('data-preset="mocha"'), 'Must have mocha preset');
+  assert.ok(html.includes('data-preset="shell"'), 'Must have shell preset');
   assert.ok(html.includes('data-preset="custom"'), 'Must have custom preset');
   assert.ok(html.includes('id="custom-bg-input"'), 'Must have URL input');
   assert.ok(html.includes('id="btn-upload-local-bg"'), 'Must have local upload button');
   assert.ok(html.includes('id="bg-opacity-slider"'), 'Must have opacity slider');
   assert.ok(html.includes('id="bg-blur-slider"'), 'Must have blur slider');
   assert.ok(html.includes('id="btn-reset-bg"'), 'Must have reset button');
+
+  // Dedicated Dark/Light palettes for Mocha and Shell presets
+  assert.ok(html.includes(':root, [data-preset="mocha"]'), 'Must have Mocha dark root declaration');
+  assert.ok(html.includes('[data-preset="mocha"][data-theme="light"]'), 'Must have Mocha Latte light declaration');
+  assert.ok(html.includes('[data-preset="shell"]'), 'Must have Shell dark declaration');
+  assert.ok(html.includes('[data-preset="shell"][data-theme="light"]'), 'Must have Shell Paper light declaration');
+  assert.ok(html.includes('--user-bubble-bg: #313244;'), 'Mocha dark has surface0 user bubble');
+  assert.ok(html.includes('--user-bubble-bg: #dce0e8;'), 'Mocha light has crust user bubble');
+  assert.ok(html.includes('--user-bubble-bg: #1e1e26;'), 'Shell dark has shell user bubble');
+  assert.ok(html.includes('--user-bubble-bg: #e9ecef;'), 'Shell light has paper user bubble');
+  assert.ok(html.includes('var(--user-bubble-bg'), '.bubble.user uses --user-bubble-bg');
+  assert.ok(html.includes('var(--composer-bg'), '.composer uses --composer-bg');
+
+  // Custom background glassmorphic transparency & conversation frame adaptation
+  assert.ok(html.includes('body.has-custom-bg .composer'), 'Composer must support transparent glassmorphic styling on custom bg');
+  assert.ok(html.includes('body.has-custom-bg .bubble.user'), 'User bubble must support transparent glassmorphic styling on custom bg');
+  assert.ok(html.includes('body.has-custom-bg .chat-col'), 'Chat col must be transparent on custom bg');
+  assert.ok(html.includes('const hasImg = Boolean(config.url && config.url.trim());'), 'Must check valid image before activating has-custom-bg');
+
+  // Stacking context: header.top (z-index 100) and chat-head (z-index 50) float above content
+  assert.ok(html.includes('position: relative;\n  z-index: 100;\n  height: 52px;'), 'header.top must have position relative and z-index 100');
+  assert.ok(html.includes('position: relative;\n  z-index: 50;\n  min-height: 54px;'), 'chat-head must have position relative and z-index 50');
+
+  // Sidebar auto-collapse & hover-expand mechanisms
+  assert.ok(html.includes('HOVER_EXPAND_DELAY = 180'), 'Must define 180ms hover expand delay');
+  assert.ok(html.includes('HOVER_COLLAPSE_DELAY = 650'), 'Must define 650ms hover collapse delay');
+  assert.ok(html.includes('scheduleHoverExpand'), 'Must implement scheduleHoverExpand');
+  assert.ok(html.includes('scheduleHoverCollapse'), 'Must implement scheduleHoverCollapse');
+  assert.ok(html.includes('setupSidebarHoverEngine'), 'Must implement setupSidebarHoverEngine');
 });
 
 test('index.html has zero emoji characters across UI markup and scripts', () => {
@@ -130,6 +156,10 @@ test('renderPlatformList renders platform groups and expandable session tree', (
     getPinnedSessions: () => [],
     chatSessSortMode: 'updated',
     chatSessFilter: 'all',
+    AGENT_THEMES: { codebuddy: { color: '#818cf8', glow: 'rgba(129, 140, 248, 0.35)', label: 'CodeBuddy' } },
+    getAgentQuotaCapsule: () => ({ text: '余95%', cls: 'pill-quota' }),
+    getAgentCacheCapsule: () => ({ text: 'cache 2m', cls: 'pill-cache' }),
+    agentSmartSummaries: {},
     api: async () => ({})
   });
   vm.runInContext(code, context);
@@ -172,6 +202,6 @@ test('model popover, scroll bottom icon, thinking effort format, and card head s
   // 6. Avatar squircle border radii
   assert.ok(html.includes('.platform-avatar {\n    width: 34px;\n    height: 34px;\n    border-radius: 9px;'), 'platform-avatar has 9px border-radius');
   assert.ok(html.includes('.uh-head-left .platform-avatar {\n  width: 40px;\n  height: 40px;\n  border-radius: 10px;'), 'head platform-avatar has 10px border-radius');
-  assert.ok(html.includes('.current-agent-pill .agent-avatar-sm {\n    width: 24px !important;\n    height: 24px !important;\n    border-radius: 6px !important;'), 'pill avatar has 6px squircle');
+  assert.ok(html.includes('.current-agent-pill .agent-avatar-sm') && html.includes('border-radius: 6.5px !important;'), 'pill avatar has squircle border radius');
 });
 
