@@ -71,6 +71,10 @@ test('index.html contains custom background layer and settings card with presets
   assert.ok(html.includes('[data-preset="cyber"][data-theme="light"]'), 'Cyber must have a light palette');
   assert.ok(html.includes('[data-preset="grid"][data-theme="light"]'), 'Grid must have a light palette');
   assert.ok(html.includes('--preset-bg:'), 'Gradient presets must define --preset-bg');
+
+  // 面板标题 / 列表项标签用的高亮正文色必须被定义：此前它从未定义，
+  // var(--mcode-text-bright, #fff/#eee) 一直落到近白色，浅色主题下白底白字。
+  assert.ok(html.includes('--mcode-text-bright: var(--gem-text);'), '--mcode-text-bright must be defined for light themes');
   assert.ok(html.includes('id="custom-bg-input"'), 'Must have URL input');
   assert.ok(html.includes('id="btn-upload-local-bg"'), 'Must have local upload button');
   assert.ok(html.includes('id="bg-opacity-slider"'), 'Must have opacity slider');
