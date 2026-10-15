@@ -1076,6 +1076,8 @@ export async function start(context) {
   const conv = { threads: [], captured: [] };
   const convWriter = jsonWriter(convPath, () => conv, 1200, 'miniapp.chat.save_failed');
   const saveConv = () => convWriter.schedule();
+  /** @type {Record<string, string>} 平台智能微总结缓存 (供 LLM 异步写入或前端查询) */
+  const agentSummariesStore = {};
 
   try {
     const saved = JSON.parse((await readFile(convPath, 'utf-8')).replace(/^\uFEFF/, ''));
@@ -2476,6 +2478,26 @@ export async function start(context) {
         const force = url.searchParams.get('force') === '1' || url.searchParams.get('refresh') === '1';
         const all = await vendorQuota.getAllQuotas({ force });
         send(200, all.workers || all);
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/chat/agent-summary') {
+        const agent = url.searchParams.get('agent') ? safeName(url.searchParams.get('agent'), 'agent') : null;
+        if (agent) {
+          send(200, { ok: true, agent, summary: agentSummariesStore[agent] || null });
+        } else {
+          send(200, { ok: true, summaries: agentSummariesStore });
+        }
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/chat/agent-summary') {
+        const body = await readJson();
+        const agent = body?.agent ? safeName(body.agent, 'agent') : null;
+        if (!agent) {
+          send(400, { ok: false, error: 'agent is required' });
+          return;
+        }
+        agentSummariesStore[agent] = String(body.summary || '').slice(0, 100);
+        send(200, { ok: true, agent, summary: agentSummariesStore[agent] });
         return;
       }
       if (request.method === 'GET' && p === '/api/chat/archives') {
