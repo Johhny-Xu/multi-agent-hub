@@ -6450,16 +6450,19 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 }
 
 /* ===== 所选子代理主题色贯通体系 (Agent Accent Propagation) =====
-   发送按钮、对话输入框下方的模型胶囊（如 codearts/默认模型）、
-   状态栏模型名（默认模型）与上下文进度条内条，统一跟随当前所选子代理的主题色。
-   例：选中 CodeArts 时四处同时变为华为红 #ef4444。
-   变量 --agent-accent / --agent-accent-glow 由 applyAgentAccent() 在切换子代理时写入 <html>；
-   未取到子代理时回落到主题原生色，保证不出现无着色状态。 */
-#model-summary-text {
-  color: var(--agent-accent, var(--mcode-text));
-}
+   变量 --agent-accent / --agent-accent-glow 由 applyAgentAccent() 在切换子代理时
+   写入 <html>（取值 AGENT_THEMES[agent].color，如 CodeArts 华为红 #ef4444）。
+
+   · 跟随子代理主题色：发送按钮背景（color-mix 生成的深色渐变，保持白字可读）、
+     上下文进度条内条。
+   · 不跟随、固定用「对话窗问候语」字体色（与 .chat-empty-state .empty-slogan 的
+     color: var(--gem-text) 完全一致，所有子代理统一）：
+     输入框下方模型胶囊（mimocode/MiMo-V2.6-Flash (26f) · max）
+     状态栏模型名（MiMo-V2.6-Flash (26f) · max）
+   未取到子代理时按钮回落到主题原生色，保证不出现无着色状态。 */
+#model-summary-text,
 #sb-model {
-  color: var(--agent-accent, var(--mcode-text-subtle));
+  color: var(--gem-text, var(--mcode-text));
 }
 .composer .send-btn {
   background: linear-gradient(135deg,
