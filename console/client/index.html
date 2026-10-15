@@ -4236,13 +4236,22 @@ header.top #endpoint:hover {
   gap: 8px;
   background: var(--gem-bg-sidebar);
   border-right: 1px solid var(--gem-border);
-  transition: margin-left 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease;
+  transition: margin-left 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease, padding-top 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .cb-activity-bar.collapsed-col {
   margin-left: -56px;
   transform: translateX(-100%);
   opacity: 0;
   pointer-events: none;
+}
+/* 顶栏收起时，活动栏首项整体下移，为常驻 Logo 锚点让出位置（Logo 永不隐藏） */
+body.header-collapsed .cb-activity-bar {
+  padding-top: 50px;
+}
+/* 常驻模式：Logo 锚点加一圈主题色描边作为状态提示 */
+body.chrome-pinned .brand-logo-pin {
+  border-color: var(--agent-accent, var(--gem-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent-accent, var(--gem-primary)) 22%, transparent), 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* 收起时的安全边距避让 Logo */
@@ -6258,17 +6267,10 @@ body.has-custom-bg {
   --studio-bg-elevated: var(--gem-bg-card);
   --studio-surface: var(--gem-bg-card);
 
-  /* 唯一的例外：交互态（hover / 进度条轨道）不能是纯白，否则悬停无反馈、
-     配额进度条轨道在白底上彻底消失。这里换成半透明中性覆盖层 —— 视觉上不构成
-     独立的灰色面，但足以提供 hover 反馈与可见的进度条轨道。 */
-  --gem-surface-high: rgba(15, 23, 42, 0.07);
-  --mcode-surface-hover: rgba(15, 23, 42, 0.07);
-  --studio-surface-hover: rgba(15, 23, 42, 0.07);
-}
-html:not([data-theme="light"]) body.has-custom-bg {
-  --gem-surface-high: rgba(255, 255, 255, 0.1);
-  --mcode-surface-hover: rgba(255, 255, 255, 0.1);
-  --studio-surface-hover: rgba(255, 255, 255, 0.1);
+  /* 注意：--gem-surface-high（及别名 --mcode-surface-hover）**刻意不动**。
+     它是「交互态 / 进度条轨道 / 选中行底色」这一层的灰，用户明确要求
+     「灰色的地方不变」—— 配额进度条轨道、模型列表选中行底色、各种 hover
+     反馈都靠它，改成纯白会让这些控件在白底上彻底消失。 */
 }
 
 body.has-custom-bg .cb-workspace,
@@ -6530,8 +6532,9 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   color: var(--mcode-accent);
   border: 1px solid color-mix(in srgb, var(--agent-accent) 32%, transparent);
 }
+/* 模型列表选中行：**底色灰保持不变**（来自 --mcode-surface-hover / --gem-surface-high），
+   只让描边与左侧色条跟随子代理主题色；勾选图标见上方 .mp-check。 */
 .mp-model-item.selected {
-  background: color-mix(in srgb, var(--agent-accent) 16%, transparent);
   border-color: color-mix(in srgb, var(--agent-accent) 45%, transparent);
 }
 .sb-config-btn-text:hover {
@@ -6563,6 +6566,8 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 </head>
 <body>
 <div id="app-bg-layer" class="app-bg-layer" aria-hidden="true"></div>
+<!-- 常驻品牌锚点：顶栏与活动栏收起时依然固定显示，永不隐藏；点击可切换常驻/自动收展 -->
+<div id="brand-logo-pin" class="brand-logo-pin" role="button" tabindex="0" aria-label="multi-agent-hub 品牌锚点" title="multi-agent-hub · 点击切换顶栏与活动栏的常驻 / 自动收展"></div>
 <header class="top">
   <div class="brand-box">
     <div class="brand-logo" aria-hidden="true">
@@ -11119,6 +11124,215 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     }, { passive: true });
   }
   setupSidebarHoverEngine();
+
+  // ================= 顶栏与活动栏智能收展引擎 (Chrome Auto-Hide Engine) =================
+  // 需求：左上角品牌 Logo 常驻锚点永不隐藏；顶栏整行与活动栏整列在无交互时平滑收起进入专注模式。
+  // 交互：光标靠近顶部边缘(Y<=38)展开顶栏，靠近左侧边缘(X<=42)展开活动栏；悬浮 Logo 同时展开两者；
+  //       离开后 650ms 舒适防抖收起；下拉菜单打开 / 弹窗打开 / 顶栏内有输入焦点时禁止收起；
+  //       点击 Logo 切换「自动收展 / 常驻」并持久化。
+  var CHROME_EDGE_Y = 38;          // 光标 Y <= 38px 视为命中顶栏边缘
+  var CHROME_EDGE_X = 42;          // 光标 X <= 42px 视为命中活动栏边缘
+  var CHROME_EXPAND_DELAY = 90;    // 命中边缘后的展开延时（避免过路误触）
+  var CHROME_COLLAPSE_DELAY = 650; // 离开后的舒适防抖收起延时
+  var CHROME_AUTOHIDE_KEY = 'agent_hub_chrome_autohide';
+  var chromeAutoHide = true;
+  var chromeHit = { header: false, actbar: false };
+  var chromeTimers = { headerExpand: null, headerCollapse: null, actbarExpand: null, actbarCollapse: null };
+
+  try {
+    if (localStorage.getItem(CHROME_AUTOHIDE_KEY) === 'false') chromeAutoHide = false;
+  } catch (e) { /* ignore */ }
+
+  function chromePinEl() { return document.getElementById('brand-logo-pin'); }
+  function chromeHeaderEl() { return document.querySelector('header.top'); }
+  function chromeActBarEl() { return document.querySelector('.cb-activity-bar'); }
+
+  // 挂载 Logo 图片：复用顶栏内那一张，避免在 HTML 里重复一份 base64
+  (function mountBrandLogoPin() {
+    var pin = chromePinEl();
+    if (!pin) return;
+    var srcImg = document.querySelector('header.top .brand-logo img');
+    if (srcImg && !pin.querySelector('img')) {
+      var img = srcImg.cloneNode(true);
+      img.className = 'brand-logo-img';
+      img.setAttribute('alt', 'multi-agent-hub');
+      img.removeAttribute('width');
+      img.removeAttribute('height');
+      pin.appendChild(img);
+    }
+  })();
+
+  function chromeClearTimer(key) {
+    if (chromeTimers[key]) { clearTimeout(chromeTimers[key]); chromeTimers[key] = null; }
+  }
+  function chromeClearAllTimers() {
+    for (var k in chromeTimers) chromeClearTimer(k);
+  }
+
+  function chromeIsCollapsed(which) {
+    if (which === 'header') {
+      var h = chromeHeaderEl();
+      return !!(h && h.classList.contains('collapsed-row'));
+    }
+    var a = chromeActBarEl();
+    return !!(a && a.classList.contains('collapsed-col'));
+  }
+
+  function chromeSetCollapsed(which, collapsed) {
+    if (which === 'header') {
+      var h = chromeHeaderEl();
+      if (h) h.classList.toggle('collapsed-row', collapsed);
+      document.body.classList.toggle('header-collapsed', collapsed);
+    } else {
+      var a = chromeActBarEl();
+      if (a) a.classList.toggle('collapsed-col', collapsed);
+      document.body.classList.toggle('actbar-collapsed', collapsed);
+    }
+  }
+
+  // 手机端布局不同，不做自动收展
+  function chromeSupported() { return window.innerWidth > 859; }
+
+  function chromeMenuOpen() {
+    var menus = document.querySelectorAll('.export-dropdown-menu, #model-popover-panel, #status-bar-config-panel');
+    for (var i = 0; i < menus.length; i++) {
+      if (!menus[i].hidden) return true;
+    }
+    return false;
+  }
+
+  function chromeBusy() {
+    var modal = document.getElementById('modal');
+    if (modal && modal.open) return true;
+    if (chromeMenuOpen()) return true;
+    var h = chromeHeaderEl();
+    var active = document.activeElement;
+    if (h && active && h.contains(active)) return true;
+    return false;
+  }
+
+  function chromeCanCollapse() {
+    return chromeAutoHide && chromeSupported() && !chromeBusy();
+  }
+
+  function chromeSchedule(which, expand) {
+    var expandKey = which + 'Expand';
+    var collapseKey = which + 'Collapse';
+    var collapsed = chromeIsCollapsed(which);
+    if (expand) {
+      chromeClearTimer(collapseKey);
+      if (!collapsed || chromeTimers[expandKey]) return;
+      chromeTimers[expandKey] = setTimeout(function () {
+        chromeTimers[expandKey] = null;
+        chromeSetCollapsed(which, false);
+      }, CHROME_EXPAND_DELAY);
+    } else {
+      chromeClearTimer(expandKey);
+      if (collapsed || chromeTimers[collapseKey]) return;
+      chromeTimers[collapseKey] = setTimeout(function () {
+        chromeTimers[collapseKey] = null;
+        if (chromeHit[which] || !chromeCanCollapse()) return;
+        chromeSetCollapsed(which, true);
+      }, CHROME_COLLAPSE_DELAY);
+    }
+  }
+
+  function chromeExpandAll() {
+    chromeClearAllTimers();
+    chromeSetCollapsed('header', false);
+    chromeSetCollapsed('actbar', false);
+  }
+
+  function chromeCollapseAll() {
+    chromeClearAllTimers();
+    chromeSetCollapsed('header', true);
+    chromeSetCollapsed('actbar', true);
+  }
+
+  function chromeApplyMode() {
+    document.body.classList.toggle('chrome-pinned', !chromeAutoHide);
+    var pin = chromePinEl();
+    if (pin) {
+      pin.title = chromeAutoHide
+        ? 'multi-agent-hub · 自动收展已开启（光标移到顶部/左侧边缘自动展开，点击切换为常驻）'
+        : 'multi-agent-hub · 顶栏与活动栏已常驻（点击切换为自动收展）';
+    }
+    if (!chromeAutoHide) chromeExpandAll();
+  }
+
+  function chromeToggleMode() {
+    chromeAutoHide = !chromeAutoHide;
+    try { localStorage.setItem(CHROME_AUTOHIDE_KEY, chromeAutoHide ? 'true' : 'false'); } catch (e) { /* ignore */ }
+    chromeApplyMode();
+    toast(chromeAutoHide
+      ? '已开启自动收展：光标移到顶部 / 左侧边缘自动展开，离开后平滑收起'
+      : '已切换为常驻模式：顶栏与活动栏保持展开');
+  }
+
+  function chromeOnPointerMove(x, y) {
+    var h = chromeHeaderEl();
+    var a = chromeActBarEl();
+    if (!h || !a) return;
+
+    var hRect = h.getBoundingClientRect();
+    var aRect = a.getBoundingClientRect();
+    // 收起后元素被移出视口（负坐标），因此几何命中会自动失效，仅靠边缘判定展开
+    var headerHit = (y <= CHROME_EDGE_Y) ||
+      (x >= hRect.left && x <= hRect.right && y >= hRect.top && y <= hRect.bottom);
+    var actbarHit = (x <= CHROME_EDGE_X) ||
+      (x >= aRect.left && x <= aRect.right && y >= aRect.top && y <= aRect.bottom);
+
+    // 悬浮常驻 Logo 锚点：同时展开顶栏与活动栏
+    var pin = chromePinEl();
+    if (pin) {
+      var pRect = pin.getBoundingClientRect();
+      if (x >= pRect.left - 8 && x <= pRect.right + 8 && y >= pRect.top - 8 && y <= pRect.bottom + 8) {
+        headerHit = true;
+        actbarHit = true;
+      }
+    }
+
+    chromeHit.header = headerHit;
+    chromeHit.actbar = actbarHit;
+    chromeSchedule('header', headerHit);
+    chromeSchedule('actbar', actbarHit);
+  }
+
+  function setupChromeAutoHideEngine() {
+    chromeApplyMode();
+
+    window.addEventListener('mousemove', function (e) {
+      if (!chromeAutoHide) return;
+      chromeOnPointerMove(e.clientX, e.clientY);
+    }, { passive: true });
+
+    // 失焦 / 尺寸变化时清理定时器，避免状态错乱
+    window.addEventListener('blur', chromeClearAllTimers);
+    window.addEventListener('resize', function () {
+      if (!chromeSupported()) chromeExpandAll();
+    });
+
+    var pin = chromePinEl();
+    if (pin) {
+      pin.addEventListener('click', function (e) {
+        e.stopPropagation();
+        chromeToggleMode();
+      });
+      pin.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          chromeToggleMode();
+        }
+      });
+      pin.addEventListener('mouseenter', function () {
+        if (!chromeAutoHide) return;
+        chromeHit.header = true;
+        chromeHit.actbar = true;
+        chromeExpandAll();
+      });
+    }
+  }
+  setupChromeAutoHideEngine();
 
   // 侧栏折叠/展开与返回
   var toggleSidebarBtn = $('#btn-toggle-sidebar-collapse');
