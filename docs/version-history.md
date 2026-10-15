@@ -17,9 +17,11 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 
 所有备份均核对 ZIP CRC 与每个文件的 SHA256；各版推送前扫描源码和 Git 历史中的密钥模式。模式扫描存在覆盖边界，不代表对所有秘密形式的绝对保证。
 
-安装包仍为本机产物，未上传 GitHub Release 附件。标签可用于获取对应源码；测试报告记载的模型、账号、网络和宿主限制继续有效。
+安装包在 `v0.9.9.6` 之前一直是本机产物，未上传 GitHub Release 附件；`v0.9.9.6` 起改为随标签一并发布（见下）。标签可用于获取对应源码；测试报告记载的模型、账号、网络和宿主限制继续有效。
 
-`v0.9.9.6`（2026-10-15）：WebUI 交互精修与全链路视觉体系贯通。本版把 `0.9.9.3` → `0.9.9.6` 的连续增量收口为正式标签，并把运行源码（`hub/agent_hub.py` 的 `SERVER_VERSION`、`console/server.mjs`、`console/client/index.html`）、IDE 扩展（vscode / codearts / codex / antigravity）、插件清单（`plugins/agenthub-workers` 的 `.zcode-plugin` / `.minimax-plugin` / `.claude-plugin`）与插件市场（`marketplace.json`、`.zcode-plugin/marketplace.json`）的版本号全链路对齐到 `0.9.9.6`。发布产物集（`agenthub-0.9.9.6-{hub,plugins,both}.zip`、`agenthub-workers-0.9.9.6-minimax-plugin.zip`、`multi-agent-hub-0.9.9.6.{vsix,carts,cloudide}`）首次与本标签源码版本号一致，但**仍为本机产物，未上传 GitHub Release 附件**。
+`v0.9.9.6`（2026-10-15）：WebUI 交互精修与全链路视觉体系贯通。本版把 `0.9.9.3` → `0.9.9.6` 的连续增量收口为正式标签，并把运行源码（`hub/agent_hub.py` 的 `SERVER_VERSION`、`console/server.mjs`、`console/client/index.html`）、IDE 扩展（vscode / codearts / codex / antigravity）、插件清单（`plugins/agenthub-workers` 的 `.zcode-plugin` / `.minimax-plugin` / `.claude-plugin`）与插件市场（`marketplace.json`、`.zcode-plugin/marketplace.json`）的版本号全链路对齐到 `0.9.9.6`。发布产物集（`agenthub-0.9.9.6-{hub,plugins,both}.zip`、`agenthub-workers-0.9.9.6-minimax-plugin.zip`、`multi-agent-hub-0.9.9.6.{vsix,carts,cloudide}`）首次与本标签源码版本号一致，并**首次随标签上传为 GitHub Release 附件**（含 `SHA256SUMS`）。
+
+关于发布产物的一条重要约定（`v0.9.9.6` 实测得出）：`packaging/build.py` 打包的是**工作区的字节**，因此产物内容随检出时的行尾符变化。仓库 `.gitattributes` 只声明了 `*.sh text eol=lf`，Windows 脚本（`.cmd` / `.bat` / `.ps1`）未声明，其行尾由 `core.autocrlf` 决定——Windows 检出任 CRLF、Linux 检出任 LF。所以**发布用的产物必须在 Windows 侧构建**：只有 Windows 检出的工作区能同时给出 LF 的 `.sh`（Linux 必需）与 CRLF 的 `.cmd` / `.bat` / `.ps1`（Windows 必需）。Linux 侧构建的产物 `.sh` 正确但 Windows 入口脚本会变成 LF。两个平台的构建产物内容并不逐字节相同（差异 135/137 来自行尾符，其余 2 个是 `manifest.json` 与包内 `SHA256SUMS` 因内容哈希而连锁变化）；两侧内容摘要不同，但各自内部自洽。
 
 ## 后续版本
 
