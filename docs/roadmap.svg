@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.9.2 重点攻坚 MiniMaxCode 适配与前端优化</title>
-  <desc id="roadmap-desc">v0.9.9.2 当前重点为攻坚 MiniMaxCode 适配与 WebUI 前端优化：全新三栏式控制台、时段问候、会话归档复原删除、MiniMax-M3.1-Flash-Preview 与 M3 旗舰深度适配。</desc>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.9.6 重点攻坚 WebUI 交互精修、自定义壁纸毛玻璃体系与智能收展引擎</title>
+  <desc id="roadmap-desc">v0.9.9.6 当前重点为 WebUI 控制台 UI/UX 体系化打磨：品牌锚点常驻、顶栏/活动栏/侧栏智能悬浮收展、6 大深浅双模色系预设、自定义壁纸全局毛玻璃、子代理主题色贯通、侧栏单行化精简与零依赖单文件交互 Demo。</desc>
   <defs>
     <style>
       .title { font-size:34px; font-weight:700; fill:#0f172a; }
       .meta { font-size:20px; fill:#475569; }
-      .focus { font-size:44px; font-weight:700; fill:#0f172a; }
-      .lead { font-size:22px; fill:#334155; }
+      .focus { font-size:42px; font-weight:700; fill:#0f172a; }
+      .lead { font-size:21px; fill:#334155; }
       .section { font-size:25px; font-weight:700; fill:#0f172a; }
-      .body { font-size:22px; fill:#334155; }
-      .version { font-size:27px; font-weight:700; fill:#0f766e; }
-      .stage { font-size:21px; fill:#334155; }
-      .stat { font-size:28px; font-weight:700; fill:#0f766e; }
+      .body { font-size:21px; fill:#334155; }
+      .version { font-size:26px; font-weight:700; fill:#0f766e; }
+      .stage { font-size:20px; fill:#334155; }
+      .stat { font-size:27px; font-weight:700; fill:#0f766e; }
       .note { font-size:20px; fill:#475569; }
     </style>
     <marker id="timeline-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
@@ -22,88 +22,88 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-11　·　当前版本 v0.9.9.2　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
+  <text x="64" y="108" class="meta">更新：2026-10-15　·　当前版本 v0.9.9.6　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.9.2 · 当前重点</text>
-    <rect x="938" y="151" width="246" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1061" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">版本攻坚 · 前端优化</text>
-    <text x="96" y="227" class="focus">MiniMax 双向适配与前端优化</text>
-    <text x="96" y="262" class="lead">MiniMaxCode Worker &amp; Plugin V1 · 三栏式 WebUI · 归档复原/一键删除 · 复制 Agent 配置</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.9.6 · 当前重点</text>
+    <rect x="916" y="151" width="268" height="36" rx="18" fill="#dbeafe"/>
+    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">UI/UX 精修 · 视觉与动效</text>
+    <text x="96" y="227" class="focus">WebUI 交互精修与全链路视觉体系</text>
+    <text x="96" y="262" class="lead">Logo 锚点常驻与智能收展 · 6 大深浅双模预设与壁纸毛玻璃 · 子代理色贯通 · 侧栏净空精简</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
     <circle cx="102" cy="343" r="5" fill="#0f766e"/>
     <text x="120" y="351" class="body">任意 MCP 直连 + 6 大原生深度宿主</text>
     <circle cx="102" cy="376" r="5" fill="#0f766e"/>
-    <text x="120" y="384" class="body">零客户端 WebUI 独立管理与对话</text>
+    <text x="120" y="384" class="body">9 厂商状态检测式 OAuth 与多账号秒切</text>
     <circle cx="102" cy="409" r="5" fill="#0f766e"/>
-    <text x="120" y="417" class="body">ref 续查支持长任务异步追踪</text>
+    <text x="120" y="417" class="body">Singleflight 配额合并与 360 并发加固</text>
     <circle cx="102" cy="442" r="5" fill="#0f766e"/>
-    <text x="120" y="450" class="body">一键安装脚本与配置安全隔离</text>
+    <text x="120" y="450" class="body">单文件零依赖交互 Demo 与安全隔离</text>
 
     <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">当前攻坚重点成果</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">MiniMax 双向适配 (M3.1 + Plugin V1)</text>
+    <text x="716" y="351" class="body">Logo 常驻锚点 + 顶栏/活动栏/侧栏智能收展</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
-    <text x="716" y="384" class="body">WebUI 三栏控制台与时段关怀</text>
+    <text x="716" y="384" class="body">6 大深浅双模预设 + 壁纸全局毛玻璃通透</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">会话归档复原与二次确认一键删除</text>
+    <text x="716" y="417" class="body">子代理主题色贯通（按钮/进度条/二级菜单）</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
-    <text x="716" y="450" class="body">复制 Agent 配置与全环境剪贴板</text>
-    <text x="692" y="476" class="note">聚焦 MiniMax 生态双向打通与沉浸式 WebUI 交互体验。</text>
+    <text x="716" y="450" class="body">侧栏卡片单行化精简 + 浅色高对比度校准</text>
+    <text x="692" y="476" class="note">聚焦无遮挡专注模式、壁纸色彩统一与现代 IDE 级丝滑交互动效。</text>
   </g>
 
   <text x="64" y="541" class="section">版本演进</text>
   <text x="1216" y="539" text-anchor="end" class="note">每一步都保留上一阶段的基础</text>
   <g id="version-timeline">
     <rect x="64" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="88" y="602" class="version">v0.5</text>
-    <text x="88" y="646" class="stage">登录与 Windows</text>
-    <text x="88" y="675" class="stage">worker 兼容</text>
+    <text x="88" y="602" class="version">v0.5–0.6</text>
+    <text x="88" y="646" class="stage">Windows 兼容</text>
+    <text x="88" y="675" class="stage">统一任务契约</text>
 
     <line x1="284" y1="634" x2="294" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="298" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="322" y="602" class="version">v0.6</text>
-    <text x="322" y="646" class="stage">统一任务契约</text>
-    <text x="322" y="675" class="stage">原生宿主适配</text>
+    <text x="322" y="602" class="version">v0.7–0.8</text>
+    <text x="322" y="646" class="stage">插件与 Hub 分离</text>
+    <text x="322" y="675" class="stage">自动发现与配对</text>
 
     <line x1="518" y1="634" x2="528" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="532" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="556" y="602" class="version">v0.7</text>
-    <text x="556" y="646" class="stage">插件与 Hub 分离</text>
-    <text x="556" y="675" class="stage">跨机器部署</text>
+    <text x="556" y="602" class="version">v0.9.0–0.9.4</text>
+    <text x="556" y="646" class="stage">6 宿主 + 9 Worker</text>
+    <text x="556" y="675" class="stage">三栏 WebUI 控制台</text>
 
     <line x1="752" y1="634" x2="762" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="766" y="560" width="216" height="146" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="790" y="602" class="version">v0.8</text>
-    <text x="790" y="646" class="stage">自动发现 Hub</text>
-    <text x="790" y="675" class="stage">选择与配对</text>
+    <text x="790" y="602" class="version">v0.9.9.2</text>
+    <text x="790" y="646" class="stage">9 厂商 OAuth 闭环</text>
+    <text x="790" y="675" class="stage">高并发压测加固</text>
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v0.9.9.2</text>
-    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">MiniMax 适配</text>
-    <text x="1024" y="675" class="stage">WebUI 体验革命</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v0.9.9.6</text>
+    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">壁纸毛玻璃与 6 预设</text>
+    <text x="1024" y="675" class="stage">智能收展与主题贯通</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->
   <text x="64" y="753" class="section">当前实测</text>
   <g id="validation-summary">
     <rect x="64" y="775" width="368" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="88" y="807" class="body">Windows 完整回归</text>
-    <text x="88" y="848" class="stat">32 组回归通过</text>
+    <text x="88" y="807" class="body">Windows 完整回归与 DOM 断言</text>
+    <text x="88" y="848" class="stat">32 组回归 + 7 项 DOM 通过</text>
 
     <rect x="448" y="775" width="368" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="472" y="807" class="body">Linux 完整回归</text>
-    <text x="472" y="848" class="stat">29 组回归通过</text>
+    <text x="472" y="807" class="body">Linux 完整回归与并发压测</text>
+    <text x="472" y="848" class="stat">29 组回归 + &gt;4,500 次压测</text>
 
     <rect x="832" y="775" width="384" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
-    <text x="856" y="807" class="body">Windows ↔ Linux</text>
-    <text x="856" y="848" class="stat">双向通信通过</text>
+    <text x="856" y="807" class="body">Windows ↔ Linux 与安全审计</text>
+    <text x="856" y="848" class="stat">双向通信 + 0 敏感泄漏</text>
   </g>
 
   <g id="authentication-boundary">
