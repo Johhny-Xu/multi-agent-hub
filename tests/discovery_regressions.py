@@ -280,7 +280,7 @@ class DiscoveryTests(unittest.TestCase):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
                 connection.request("GET", "/health")
                 health = json.loads(connection.getresponse().read())
-                self.assertEqual(health["version"], "0.9.9.2")
+                self.assertEqual(health["version"], "0.9.9.6")
                 self.assertTrue(health["auth_required"])
                 for request, expected_status in (({"jsonrpc": "2.0", "id": 7, "method": "ping"}, 200), ({"jsonrpc": "2.0", "method": "ping"}, 202)):
                     connection.request("POST", "/mcp", json.dumps(request), {"Authorization": "Bearer SYNTHETIC_LOCAL_TEST_TOKEN", "Content-Type": "application/json"})

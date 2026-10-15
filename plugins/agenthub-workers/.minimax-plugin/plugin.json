@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "name": "agenthub-workers",
   "displayName": "Multi-Agent Hub Workers",
-  "version": "0.9.9.2",
+  "version": "0.9.9.6",
   "description": "连接 Multi-Agent Hub 协同总线，支持将开发与审查任务并发分派给 9 个主流 AI 编程代理、自动发现局域网节点、查询在线状态与回收执行结果。",
   "author": "multi-agent-hub Contributors",
   "icon": "icon.png",
