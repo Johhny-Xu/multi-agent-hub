@@ -1,13 +1,13 @@
 # multi-agent-hub
 
-![multi-agent-hub 0.9.9.2 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
+![multi-agent-hub 0.9.9.6 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
 
-**multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，具备三层灵活接入形态：
+**multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，为 9 种主流 AI 编码 Worker 与 6 款原生深度宿主（外加任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理与零客户端 WebUI 管理大盘，具备三层灵活接入形态：
 1. **任意 MCP 客户端直连即用**：任何支持标准 MCP 协议的客户端（如 Cursor、Claude Desktop、Windsurf、VS Code Cline/Roo Code、Continue 等），仅需配置 Hub 的 MCP URL（或使用内置一键复制的 Prompt 指令），即可直接调度多端 Worker；
 2. **6 款原生宿主深度适配（体验更顺畅、更舒服）**：针对 **Codex**、**ZCode**、**MiniMax Code（及 Claude Code / Agent Plugins 1.0）**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 提供了深度定制的原生插件、专用子代理体系（`hub-*.md`）、专属技能与斜杠命令，上下文自动隔离，免去手动配置参数的繁琐；
 3. **零客户端独立使用**：即使没有外部 IDE 或 AI 客户端，Hub 内置的 **CodeBuddy 风格三栏式 WebUI 管理大盘** 也能独立完成平台多会话树管理、沉浸式对话、任务派发与监控、全量会话归档复原与彻底清理。
 
-当前源码版本为 **0.9.9.2**，本阶段重点在于**9 Worker 登录链路全量状态检测化重构与真实凭据结构对齐**：统一登录/加号入口与「我已完成授权」状态检测收口（杜绝假成功）、CodeBuddy 新版 XDG 共享会话存储对齐与官方 state 兑换看门狗（CLI 轮询卡死由 Hub 兜底完成）、Trae 官方 PKCE 授权链接修复、ZCode 国际/国内双区切换、MiMo API Key 通道与账号身份分离、MiniMax 账户名注入识别、模型别名逐个可删。
+当前源码版本为 **0.9.9.6**，本阶段（v0.9.9.3 ~ v0.9.9.6）在完成 **9 Worker 登录链路状态检测化重构与真实凭据对齐** 的基础上，重点聚焦 **WebUI 控制台 UI/UX 体系化打磨、自定义壁纸全局毛玻璃通透体系、三向智能悬浮收展引擎与侧栏净空精简**：新增左上角常驻品牌锚点（`.brand-logo-pin`，点击可切换自动收展/常驻并持久化）与顶栏/活动栏/平台侧栏光标感知智能收展引擎（对话侧栏展开时活动栏联动常驻防跳动，触发热区统一扩展至侧栏完整占位宽度）；将主题预设扩充为 **Mocha、Shell、Aurora（极光微光）、Dusk（暮霭流金）、Cyber（赛博深空）、Grid（科技网格）** 共 6 套完整深/浅双模调色板（12 种组合，通过 WCAG AA 高对比度校准），并在自定义壁纸或高定预设下启用全局 Glassmorphism 毛玻璃通透体系与基础中性灰面统一（残留灰面元素 96 → 0，保留 `--gem-surface-high` 承载交互态与进度条轨道）；实现发送按钮、上下文进度条及对话区全部二级菜单对当前子代理品牌色（`--agent-accent`）的全链路贯通，而模型名称等资讯文字严格保持正文标准色（`--gem-text`）；完成侧栏卡片单行化精简（移除冗余待机占位行、放大镜图标、⌘K 提示与超宽胶囊，确保「N会话」徽标完整无裁切）并推出包含内存虚拟驱动引擎的单文件零依赖脱机交互 Demo（`demo.html`）。
 
 ---
 
@@ -15,14 +15,16 @@
 
 - 🔌 **6 大原生宿主客户端**：深度适配 Codex、ZCode、MiniMax Code（兼容 Claude Code / Agent Plugins 1.0）、DeepSeek Harness、CodeArts、Antigravity，提供原生子代理、斜杠命令与工作流。
 - 🤖 **9 种 Worker 统一适配**：标准契约调度 Antigravity、CodeBuddy（国际/国内版）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts（Antigravity 原生客户端为新增宿主角色，不作为第十种 Worker）。
-- 🎛️ **CodeBuddy 风格三栏式交互控制台**：内置 Web 管理大盘（`--with-console`，端口 `8890`，默认监听 `0.0.0.0` 开放局域网访问），提供 48px 极简活动栏、260px 平台会话管理树、单平台沉浸式对话（一体化暗色毛玻璃输入壳体 `.chat-composer-shell` + 自适应模型/思考/流式配置浮层）与右侧可折叠扩展工作台；支持 7 大时段 35 句智能问候语、跨平台全局头像自由替换；全量会话归档支持跨平台集中筛选、搜索、排序、一键复原与**右上角一键删除（带二次确认防误触）**；刷新时自动并发检测全量子代理真实在线状态与延迟；全网络环境剪贴板支持（兼容局域网 HTTP 非安全上下文与 HTTPS）。
-- 🔐 **9 Worker 全量 WebUI OAuth 登录、退出与多账号切换**：所有 9 个 Worker（`minimaxcode`、`codebuddy`、`codebuddy-cn`、`github-copilot`、`antigravity`、`mimocode`、`traecode`、`zcode`、`codearts`）均可在 WebUI「配额与账号」面板内**免 SSH 终端完成 OAuth 授权登录、退出登录、当前账号档案保存、多账号一键切换与隔离沙盒添加账号**；页内暗色毛玻璃 OAuth 模态窗自动提取 TUI 设备码（MiniMax / Copilot）、ACP JSON-RPC 授权链接（CodeBuddy 国际/国内版）、Google OAuth 2.0 回调交换（Antigravity）、X25519 端到端加密授权流（MiMo）、双区 OAuth 引导（Trae）、CLI 轮询式 OAuth（ZCode）及 AK/SK 配置（CodeArts）。
+- 🎛️ **CodeBuddy 风格三栏式交互控制台与智能悬浮收展**：内置 Web 管理大盘（`--with-console`，端口 `8890`，默认监听 `0.0.0.0` 开放局域网访问），提供极窄活动栏、平台会话管理树、单平台沉浸式对话（一体化毛玻璃输入壳体 `.chat-composer-shell` + 左右贴靠自适应模型/思考/流式配置浮层）与右侧可折叠扩展工作台；左上角配备永不隐藏的品牌锚点 `#brand-logo-pin`，支持顶栏（`Y ≤ 38px`）、活动栏（`X ≤ 42px`）与平台侧栏（全宽热区）的光标存在感知平滑收展与防误触缓冲（弹窗打开、输入聚焦或会话侧栏展开时自动锁定防误收）；支持 7 大时段 35 句智能问候语、跨平台全局头像自由替换、全量会话归档筛选/复原/**右上角二次确认一键清空**及全网络环境剪贴板降级兼容。
+- 🎨 **6 大深浅双模色系预设、自定义壁纸毛玻璃与子代理主题色贯通**：内置 Mocha、Shell、Aurora、Dusk、Cyber、Grid 六大色系预设（均配备完整深色/浅色双模调色板与 CSS 变量化渐变底图，浅色状态栏面板对比度高达 14.27:1 ~ 15.27:1）；应用自定义壁纸或高定预设时，顶栏、会话头、Composer 输入台、消息气泡、侧边栏与右侧工作台全面切换为半透明毛玻璃态（`backdrop-filter: blur(20px~24px) saturate(180%~190%)`），基础中性灰面统一并入卡片色号 `--gem-bg-card`；发送按钮、上下文进度条内条及对话区二级菜单动态跟随所选子代理主题色（`--agent-accent`），模型标签文字统一采用问候语标准正文色（`--gem-text`）。
+- 🖥️ **零依赖单文件交互 Demo**：内置 `scripts/build_demo.py` 与内存虚拟驱动引擎 `demo_engine.js`，一键打包生成单文件纯前端交互演示页（`demo.html` / `demo/index.html`），无需后端服务即可脱机完整体验三栏控制台、多主题切换与模拟调度交互。
+- 🔐 **9 Worker 全量 WebUI OAuth 登录、状态检测收口与多账号秒切**：所有 9 个 Worker（`minimaxcode`、`codebuddy`、`codebuddy-cn`、`github-copilot`、`antigravity`、`mimocode`、`traecode`、`zcode`、`codearts`）均可在 WebUI「配额与账号」面板内**免 SSH 终端完成 OAuth 授权登录、退出登录、当前账号档案保存（完整支持中文/Unicode 备注名）、44ms 乐观 UI 多账号秒切与隔离沙盒添加账号**；采用真实凭据落盘状态检测（杜绝假成功），对齐 CodeBuddy 新版 XDG 共享会话存储与官方 state 兑换看门狗、Trae 官方 PKCE 授权、ZCode 国内/国际双区切换、MiMo API Key 与账号身份分离及登录会话取消进程回收（`POST /api/auth/cancel`）。
 - 🚀 **子代理原生 HTTP MCP 直连端点**：提供轻量内置 HTTP MCP Server（默认端点 `http://127.0.0.1:8790/mcp`），向任意 AI 客户端（Cursor / Claude Desktop / Antigravity / Windsurf / Cline 等）开放 `subagent_run`（大产物本地落盘、只回摘要不占会话上下文）、`subagent_result`、`subagent_artifact`、`subagent_agents` 调度；控制台一键复制 MCP URL 与**【复制本文（发给Agent配置）】**，直接粘贴发给 Agent 即可全自动接入。
 - ⚡ **子代理启用开关与全端双向同步**：在 WebUI 控制台对任意 Worker（如暂时无额度或调试中的子代理）一键启停；权威状态即时同步落盘并由 Hub 调度器、WebUI 与所有客户端插件实时感知；被禁用的 Worker 在 `hub_status` 显式呈现 `[已禁用]`，派发时零延迟前置拦截（`profile_disabled`），杜绝浪费计算与配额资源。
-- 🎯 **精炼去重的生产模型目录**：为各 Worker 对齐官方真实模型与积分倍率体系，全面清理无法用于代码任务的生图模型、冗余平台别名与旧代模型，保留各服务商当季旗舰与高可用选型（如 MiniMax-M3.1-Flash-Preview、M3 1M 上下文等）。
+- 🎯 **精炼去重的生产模型目录**：为各 Worker 对齐官方真实模型与积分倍率体系，全面清理无法用于代码任务的生图模型、冗余平台别名与旧代模型，保留各服务商当季旗舰与高可用选型（如 MiniMax-M3 1M 上下文与 M3.1-Flash-Preview 512K 上下文一键切换、自定义模型别名逐个可删等）。
 - 🔄 **灵活多样的部署形态**：插件与 Hub 支持同机共存或分离部署；支持纯 Windows、纯 Linux 及 Windows ↔ Linux 跨机连接（局域网直连或 SSH 反向通道）。客户端连接特定 Hub 并非多 Hub 联邦，模型请求仍由官方 CLI 发送至服务商。
 - 🛡️ **严格能力预检与终态判定**：根据模型能力约束思考、流式与附件；CodeArts 宿主环境强制执行 `tool_search → tool_describe → tool_call` 单一调用路径与单任务单次派发；拒绝空回答、已知异常退出及 agy 超时后的部分回答；保留原任务回执（ref），阻止 worker 向自身重复派发。
-- 🔍 **智能发现与平滑切换**：局域网与本机 Hub 自动广播扫描与手动回退；连接配置与凭据独立于源码，平滑升级不丢失历史任务数据。
+- 🔍 **智能发现与平滑切换**：局域网与本机 Hub 自动广播扫描与手动回退；MCP 桥接支持配置恢复后动态重连自愈；连接配置与凭据独立于源码，平滑升级不丢失历史任务数据。
 
 ---
 
@@ -39,9 +41,9 @@
 
 | 验证项目 | 实际结果 | 状态说明 |
 | --- | --- | --- |
-| Windows 回归测试 | ✅ 通过 (32组) | 2026-10-12 压测与加固后 32/32 组全量通过（见 `docs/refactor-validation.json`）；非全量付费模型实测证明 |
+| Windows 回归测试 & DOM 断言 | ✅ 通过 (32组 + 7项 DOM) | 32/32 组回归测试全量通过（见 `docs/refactor-validation.json`），WebUI 布局/主题/毛玻璃/侧栏精简 DOM 断言 `tests/console_layout_theme_dom.mjs` 7/7 通过；非全量付费模型实测证明 |
 | Linux 回归测试 & 压测 | ✅ 通过 (29组 + >4,500次压测) | 360 并发洪峰 0 报错（`/health` P95 1.25s）、60 并发配额 Singleflight 合并（P95 850ms）、100KB 大任务 + 30 并发状态机零损坏（见 `docs/stage3-stress-report.json`、`docs/stage4-5-load-report.json`、`docs/stage6-compat-report.json`） |
-| Linux 生产 Hub 0.9.9.2 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，内置原生 9 厂商配额监控与多账号切换，已有配置、任务历史与鉴权平滑保留 |
+| Linux 生产 Hub 0.9.9.6 | ✅ 通过 | 暴露 24 个 Hub 工具与 9 种 worker，内置原生 9 厂商配额监控、多账号切换与 v0.9.9.6 智能收展/毛玻璃 WebUI 大盘，已有配置、任务历史与鉴权平滑保留 |
 | Linux Antigravity CLI 1.3.1 | ✅ 真实调用通过 | gemini-3.8-flash-medium 精确标记通过，插件模式校验通过（4技能/9代理/1MCP）；真实模型调用 `hub_status` 成功返回 9 种 worker，完整原生子代理 `hub-mimocode` 派发成功（返回 `ref=mimocode-79e2416c91`，`completed`，`answer=95`） |
 | Linux ZCode CLI 0.16.9 | ✅ 真实调用通过 | 原生 `agenthub-workers:mimocode` 子代理经插件派发，原 ref 续查返回 `73` |
 | Windows Codex / ZCode | ✅ 真实调用通过 | 两种原生子代理分别返回 `2117`、`2077`；初轮长标记回答不完整的记录也保留 |
@@ -164,13 +166,13 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 > **适合场景**：在单台电脑（Windows 或 Linux）上进行开发，希望一键配齐 Hub 服务、WebUI 控制台及已有的 IDE 插件。
 
 #### 步骤 1：获取项目代码
-- **方式 A（Git 克隆，推荐）**：
+- **方式 A（Git 克隆，获取最新 v0.9.9.6 源码，推荐）**：
   ```bash
   git clone https://github.com/Johhny-Xu/multi-agent-hub.git
   cd multi-agent-hub
   ```
 - **方式 B（下载 Release 打包）**：
-  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-0.9.9.2-both.zip` 并解压。
+  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载最新预构建包（如 `agenthub-0.9.9.2-both.zip`）并解压。
 
 #### 步骤 2：一键执行安装并启动
 - **Windows**：直接双击根目录 **`install.cmd`**（或在终端运行 `.\install.cmd`）；
@@ -179,7 +181,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 > 💡 **全自动诊断与注册**：安装器会自动检查环境、安装 Hub 服务与 Web 控制台，并自动探测注册当前机器上的 Codex、ZCode、DSH、CodeArts、Antigravity 原生插件与专属子代理。
 
 #### 步骤 3：立即开始使用
-- 浏览器访问 **`http://localhost:8890`**，即可直接进入三栏式 Web 控制大盘；
+- 浏览器访问 **`http://localhost:8890`**，即可直接进入三栏式 Web 控制大盘（或直接双击打开仓库内的 `demo.html` 脱机体验完整前端交互）；
 - 或在您已安装的 IDE 中，直接呼出子代理开始对话派发；
 - **日常启停控制**：日常使用可直接双击或运行 `start.bat`（Linux：`bash start.sh`），停止运行 `stop.bat`（Linux：`bash stop.sh`）。
 
@@ -246,6 +248,8 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 ### 📦 预打包文件与运行依赖
 
+> *注：下表列出的文件名为最近一次已打包发布的安装产物（`0.9.9.2`）；当前仓库源码已演进至 `v0.9.9.6`，亦可直接通过 `python packaging/build.py` 按最新源码构建。*
+
 | 安装包 | 适用环境 | 包含内容 |
 | --- | --- | --- |
 | **agenthub-0.9.9.2-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
@@ -265,53 +269,59 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指定 `--with-console` 即可开启，默认运行在 Node.js 服务端口 `8890`，监听 `0.0.0.0` 开放局域网访问）：
 
-- 🎛️ **CodeBuddy 风格三栏式交互大盘**：
-  - **48px 极简活动栏**：支持对话、代理状态、任务队列、跨代理共享笔记一键切换，移动端自动下沉自适应；
-  - **260px 平台会话管理树**：多平台展开/收起、快速搜索过滤、一键开启新对话、会话标题与消息量直观呈现；
-  - **沉浸式中央交互区**：单平台独立会话、模型参数下沉状态栏，右侧支持一键折叠/展开多功能扩展工作台。
+- 🎛️ **CodeBuddy 风格三栏式交互大盘与智能悬浮收展引擎**：
+  - **左上角常驻品牌锚点 (`#brand-logo-pin`)**：固定于左上角（`z-index: 120`）永不隐藏，点击即可一键切换顶栏与活动栏的「自动收展 / 常驻锁定」模式并持久化至本地存储，双收起状态下自动追加安全避让边距；
+  - **顶栏与极窄活动栏智能收展**：提供「对话 / 设置」极简双主视图切换（内聚子代理与配额中枢、任务队列与跨代理共享笔记），移动端自适应下沉底部导航栏；桌面端光标移至顶边（`Y ≤ 38px`）或左边（`X ≤ 42px`）经 90ms 防误触识别后平滑展开，离开后 650ms 防抖自动收起进入沉浸式专注模式，且在平台会话侧栏展开或弹窗/输入焦点激活时自动保持常驻不跳动；
+  - **平台会话管理树与单行化精简**：光标进入左侧侧栏完整占位区域（`1440px` 视口下 `X ≤ 324px`）即自动滑出展开；移除无内容的「待机 · 点击开启对话」占位行实现卡片单行化（有异步智能摘要或最后消息时按需动态挂载 `/api/chat/agent-summary`），移除搜索框放大镜图标与 ⌘K 提示、收敛额度/缓存胶囊，确保「N会话」徽标在全 9 张卡片上 100% 完整无裁切展示；
+  - **沉浸式中央交互区**：对话头采用「子代理头像（点击切换 9 子代理）｜当前会话名（点击切换对话）」一体胶囊，「新建 / 清空 / 导出」收进「⋯」溢出菜单，右侧保留「工作台」独立按钮（窄屏下禁止自动全宽遮挡对话，改由边缘把手提示）；顶栏（`z-index: 100`）与会话头（`z-index: 50`）赋予独立层叠上下文，彻底杜绝下拉菜单被代码块或工作台截断。
+- 🎨 **6 大深浅双模色系预设、自定义壁纸毛玻璃与子代理主题色贯通**：
+  - **6 套完整深/浅双模调色板**：内置 **Mocha**（`#1e1e2e` / Latte `#eff1f5`）、**Shell**（`#0f0f11` / Paper `#f8f9fa`）、**Aurora 极光微光**（`#0B0F19`）、**Dusk 暮霭流金**（`#18121D`）、**Cyber 赛博深空**（`#070913`）、**Grid 科技网格**（`#0A0F1E`）6 大预设共 12 种深浅配色组合，渐变底图收敛为 CSS 变量随深浅主题自动切换，浅色主题下状态栏配置面板文字对比度达 `7.99:1 ~ 15.27:1`（远超 WCAG AA 标准）；
+  - **自定义壁纸全局毛玻璃通透体系 (`body.has-custom-bg`)**：上传本地/网络壁纸或选用 Aurora/Dusk/Cyber/Grid 预设时，顶栏、会话头、Composer 输入台、用户消息气泡、侧边栏与右侧工作台全面自适应切换为半透明毛玻璃态（`backdrop-filter: blur(20px~24px) saturate(180%~190%)`）；基础中性灰面全量统一并入卡片色号 `--gem-bg-card`（残留灰面元素由 96 降至 0），仅保留 `--gem-surface-high` 作为交互态、配额进度条轨道与选中行底色载体；
+  - **子代理主题色贯通 (`--agent-accent`)**：切换子代理时，发送按钮深色渐变背景、上下文进度条内条以及 `#panel-chat` 对话区全部二级菜单（模型与运行参数弹窗徽标/选中行色条/勾选/思考档位/完成按钮、状态栏显示项弹窗、会话头二级菜单图标、输入框焦点描边等）实时联动跟随子代理品牌色；输入框下方模型胶囊与状态栏模型名则严格保持问候语正文色 `var(--gem-text)`，兼顾品牌辨识度与阅读舒适度。
+- 🖥️ **单文件零依赖交互 Demo (`demo.html`)**：
+  - 通过 `scripts/build_demo.py` 与内存虚拟驱动引擎 `demo_engine.js` 打包生成单文件纯前端交互 Demo（同步输出至 `demo.html` 与 `demo/index.html`），无需启动 Node/Python 后端即可在任意浏览器脱机体验完整 UI/UX 与虚拟任务交互。
 - 📦 **全量会话归档聚合与一键批量删除**：
-  - 支持跨所有平台聚合历史归档，提供多平台按名称筛选、输入框实时模糊搜索、时间正倒序与消息量排序；
-  - 支持会话一键复原至活跃对话树（自动定位并打开）、单条永久删除；
-  - 右上角新增**【一键删除】与防误触内联二次确认**（点击切换为“确定全删？”【确认删除】【取消】），保障操作安全。
+  - 支持跨所有平台聚合历史归档，将平台筛选与排序整合为单漏斗图标菜单（支持按项目/时间线视图及更新时间/创建时间排序）、支持输入框实时模糊搜索；
+  - 支持会话一键复原至活跃对话树（自动定位并打开）、单条永久删除，以及右上角**【一键删除】与防误触内联二次确认**；打开某 Agent 对话时自动将该 Agent 下全部会话未读红点清零。
 - 🚀 **子代理原生 HTTP MCP 直连端点与配置生成**：
   - 自带轻量内置 HTTP MCP Server（默认端点 `http://127.0.0.1:8790/mcp`），向任意 AI 宿主开放 `subagent_run`（服务端等待结果，超长产物落盘本地并只返回摘要，不占用会话上下文）、`subagent_result`、`subagent_artifact`、`subagent_agents` 四大核心工具；
-  - 控制台提供**【复制 MCP URL】**与**【复制本文（发给Agent配置）】**，一键生成包含工具清单、JSON 接入配置模板与调用引导的完整提示词，直接发给任意 AI Agent（Cursor、Claude、Antigravity、Windsurf、Cline 等）即可全自动完成 MCP 登记。
+  - 控制台提供**【复制 MCP URL】**与**【复制本文（发给Agent配置）】**，一键生成包含工具清单、JSON 接入配置模板与调用引导的完整提示词，直接发给任意 AI Agent 即可全自动完成 MCP 登记。
 - 📋 **全网络环境剪贴板健壮回退**：
   - 针对局域网 IP（非安全上下文 `window.isSecureContext=false`）下现代浏览器对 `navigator.clipboard` 的静默拦截，实现原生 Textarea 与 ExecCommand 多层回退保障，全端全环境复制 100% 成功。
-- 🔘 **Worker 一键激活/禁用开关 (Subagent Toggle Switch)**：
-  - 每个 Worker 卡片内置原生启用切换开关。当某个模型服务商无额度、账号欠费或处于维护调试期时，可随时一键关闭该子代理；状态即时持久化落盘至 `agents.json` 并通过 Hub 调度器向全端生效。
+- 🔘 **Worker 一键激活/禁用开关与多账号乐观切换**：
+  - 每个 Worker 卡片内置原生启用切换开关，状态即时持久化落盘至 `agents.json` 并向全端生效；支持统一「🔐 登录 / 添加账号」入口、真实凭据落盘状态检测、44ms 乐观 UI 账号/上下文切换与中文/Unicode 账号档案管理。
 - ⚡ **权威状态双向同步与免派发拦截**：
   - 禁用的 Worker 在 `hub_status` 中明确显示为 `[已禁用]`，`hub_capabilities` 返回 `enabled: false`，在派发任务（`hub_dispatch` / `hub_ask`）时触发秒级前置快速拦截（`profile_disabled`），杜绝因误调用产生无谓等待与额度报警。
 - 🌟 **智能时段问候、头像定制与社区互动**：
   - 内置 7 大精细时段共 35 句暖心关怀问候语，每次进入或切换平台自适应随机呈现；
-  - 点击头像即可选择本地图片实现跨平台全局头像替换并持久化同步；
-  - 底部优雅轻量页脚：左侧开源致意（“好好吃饭更重要哦”彩蛋）、中间 GitHub Star 一键直达、右侧当前版本号（`v0.9.9.2`）显式标注。
+  - 点击头像即可选择本地图片实现跨平台全局头像替换并持久化同步（消除顶栏头像纵向拉伸，统一全局 Squircle R 角与 Logo 标准）；
+  - 底部优雅轻量页脚：左侧开源致意（“好好吃饭更重要哦”彩蛋）、中间 GitHub Star 一键直达、右侧当前版本号（`v0.9.9.6`，支持由后端 `snap.version` 动态覆盖）显式标注。
 - 🎛️ **监控状态栏自定义面板与模型抽屉**：
-  - 底部状态栏新增自定义指标控制面板，支持一键呼出多选面板，按需勾选或隐藏实时监控项（包括子代理、模型、网络延时、吞吐 TPS、会话 Token、平台额度等）；点击状态栏模型标签即可平滑呼出参数面板，支持分级思考强度（`low` / `medium` / `high` / `max`）调节。
+  - 整条状态栏即为可点击整体（点击任意位置在点击点正上方居中弹出显示项配置面板，自动做容器边界钳制，按需勾选模型、网络延时、吞吐 TPS、会话 Token、平台额度等）；模型选择器弹窗支持左右贴靠自适应、展示精简思考档位标签（`模型名 · 思考档位`）、深度思考两段式胶囊（`默认 / 开启 / 关闭`）与流式开关，支持单个删除自定义模型别名。
 - 🏷️ **官方积分倍率与福利标识**：
   - 深度适配 TraeCode、CodeBuddy-CN 等平台的积分倍率显示，直观呈现 `0.06x ~ 2.00x` 换算比率，以及 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 等专属视觉标签。
 - 💳 **实时额度与通道余额监控**：
-  - 支持自动解析并呈现 MiniMax、9router 等上游通道的剩余积分与调用配额。
+  - 原生 `console/vendor-quota.mjs` 模块实时抓取 9 厂商配额并带 60s TTL 缓存与 Singleflight 并发请求合并，支持 MiniMax `512K | 1M` 上下文档位一键切换与上游通道剩余配额展示。
 
 ---
 
 ## 统一工具与能力约束
 
-宿主插件对外统一暴露 **7 个 MCP 核心工具**：
+宿主插件对外统一暴露 **7 个核心调度 MCP 工具**（外加子代理状态管理扩展工具 `hub_set_status` / `hub_set_agent_status`，共 8 个桥接工具）：
 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover`。
 
-所有宿主（Codex 代理/技能、ZCode 代理、DSH 预设/工作流、CodeArts 子代理、Antigravity 技能/代理）遵循同一套任务契约：
+所有宿主（Codex 代理/技能、ZCode 代理、MiniMaxCode 插件、DSH 预设/工作流、CodeArts 子代理、Antigravity 技能/代理）遵循同一套任务契约：
 
 | Worker | 默认配置模型 | 平台特性、目录收敛与倍率规则 |
 | --- | --- | --- |
 | **Antigravity** | gemini-3.8-flash-medium | 精简保留 3.8 Flash (High/Medium)、3.1 Pro High、Claude 4.6 (Sonnet/Opus) 等 6 款旗舰；支持多模态与标准工作流（作为 Worker 角色；Antigravity 原生客户端为宿主角色） |
-| **CodeBuddy** (国内版) | deepseek-v4.1-flash (x0.11) | 剔除生图及老旧模型，精炼至 DeepSeek V4.1/Pro、MiniMax-M3、GLM-5.3/5.2/5.1、Kimi-K3/K2.8/K2.7、混元系列等 13 款代码模型，完整标注官方积分倍率（x0.06 ~ x2.00）与试用标 |
+| **CodeBuddy** (国内版) | deepseek-v4.1-flash (x0.11) | 剔除生图及老旧模型，精炼至 DeepSeek V4.1/Pro、MiniMax-M3、GLM-5.3/5.2/5.1、Kimi-K3/K2.8/K2.7、混元系列等 13 款代码模型，完整标注官方积分倍率（x0.06 ~ x2.00）与试用标；对齐 XDG 共享会话存储与 state 兑换看门狗 |
 | **CodeBuddy** (国际版) | deepseek-v4.1-flash | 精简收敛至 18 款主流高可用模型；文件工具需实际权限，使用标准代理隔离上下文 |
-| **GitHub Copilot** | auto | 沿用官方 CLI 选型 |
-| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 精炼收敛为 MiMo-V2.6 Flash/Pro/UltraSpeed 及 9router/trae 通道共 4 款高效选型 |
-| **MiniMax** | MiniMax-M3 | 精简收敛为 M3（1M 上下文）与 M3.1 Flash（512K 上下文）当季双旗舰；支持 9router 通道积分余额展示 |
-| **TraeCode** | GLM-5.3-FlashX (0.31x) | 精简收敛至 20 款官方模型，精准标注 `0.06x ~ 1.50x` 官方积分倍率与 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 营销标识 |
-| **ZCode** | GLM-5.3-Flash | 显式思考切换与未验证正文流式默认禁用 |
+| **GitHub Copilot** | auto | 沿用官方 CLI 选型，支持 WebUI 设备码登录与 GNOME Keyring 同步读写 |
+| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 精炼收敛为 MiMo-V2.6 Flash/Pro/UltraSpeed 及 9router/trae 通道共 4 款高效选型；API Key 通道与小米 OAuth 账号身份分离 |
+| **MiniMax** | MiniMax-M3 | 精简收敛为 M3（1M 上下文）与 M3.1-Flash-Preview（512K 上下文）当季双旗舰，支持卡片上下文胶囊一键切换与 `oauth.account` 备注名识别 |
+| **TraeCode** | GLM-5.3-FlashX (0.31x) | 精简收敛至 20 款官方模型，精准标注 `0.06x ~ 1.50x` 官方积分倍率与 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 营销标识；支持双区 PKCE OAuth 与 TraeClaw 网关 |
+| **ZCode** | GLM-5.3-Flash | 支持国内版 (BigModel) / 国际版 (Z.ai) 双区切换与 `enc:v1:` AES-256-GCM 加密落盘；显式思考切换与未验证正文流式默认禁用 |
 | **CodeArts** | GLM-5.2 (0.70x) | 完整保留 4 款企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）；支持 Linux CLI 自动加载 AK/SK、IDE 动态工具协议与独立数据隔离 |
 
 上表是新安装的默认配置。已有服务器保留原模型；本轮 Linux MiMo 实测使用其既有 `9router/trae`，不代表 `26f` 已实测。
@@ -334,11 +344,11 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 
 ## 版本演进与开发调试
 
-当前 0.9.9.2 版本重点攻坚全平台 WebUI OAuth 登录闭环、多账号隔离切换与稳定性加固：
+当前 **0.9.9.6** 版本重点完成 WebUI 控制台交互精修、6 大深浅双模色系预设与自定义壁纸毛玻璃体系、品牌锚点常驻与三向智能悬浮收展引擎、子代理主题色全链路贯通及侧栏单行化精简：
 
-![multi-agent-hub 0.9.9.2 进度图：当前重点攻坚 MiniMaxCode 适配与前端优化，展示已有基础、后续优化、版本演进和实际验证范围](docs/roadmap.svg)
+![multi-agent-hub 0.9.9.6 进度图：当前重点攻坚 WebUI 交互精修、自定义壁纸毛玻璃体系与智能收展引擎，展示已有基础、重点成果、版本演进和实际验证范围](docs/roadmap.svg)
 
-### 离线回归与安全检查
+### 离线回归、前端断言与安全检查
 
 ```bash
 # 克隆仓库
@@ -348,8 +358,14 @@ cd multi-agent-hub
 # 执行全量隔离回归测试（不产生真实模型费用）
 python tests/run_regressions.py --report docs/local-validation.json
 
-# 扫描源码凭据泄漏风险
+# 执行 WebUI 控制台 DOM 结构、主题配色与智能收展断言测试
+node --test tests/console_layout_theme_dom.mjs
+
+# 扫描源码与 Git 历史中的凭据/隐私泄漏风险
 python scripts/audit_secrets.py --history
+
+# 重新打包生成单文件脱机交互 Demo（同步更新 demo.html 与 demo/index.html）
+python scripts/build_demo.py
 
 # 构建分发包（输出至仓库外部）
 python packaging/build.py --output ../agenthub-releases
@@ -359,6 +375,7 @@ python packaging/build.py --output ../agenthub-releases
 
 ## 关联文档与导航
 
+- [项目最新交接与 v0.9.9.6 状态清单](docs/HANDOVER_20261015.md)
 - [CodeArts 双向接入、任务实测与认证边界](docs/codearts-compatibility.md)
 - [CodeArts IDE 优先适配与实测跟进](docs/codearts-ide-followup.md)
 - [CodeArts 接入已有模型路由](docs/codearts-custom-provider.md)
@@ -369,7 +386,7 @@ python packaging/build.py --output ../agenthub-releases
 - [版本历史与检查点记录](docs/version-history.md)
 - [版本更新日志](CHANGELOG.md)
 - [Codex 插件与子代理集成](integrations/codex/README.md)
-- [ZCode 原生插件集成](plugins/agenthub-workers/README.md)
+- [ZCode / MiniMaxCode 原生插件集成](plugins/agenthub-workers/README.md)
 - [DSH 预设与工作流集成](integrations/dsh/README.md)
 - [CodeArts 原生插件与命令集成](integrations/codearts/README.md)
 - [CodeArts IDE & VS Code 桌面扩展 (CARTS / VSIX)](integrations/vscode/README.md)
@@ -387,4 +404,3 @@ python packaging/build.py --output ../agenthub-releases
 ## 开源协议
 
 本项目遵循 [Apache License 2.0](LICENSE) 开源协议（允许使用、修改与分发，衍生作品须保留原作者版权声明、许可证文本及修改说明，并包含专利授权与商标保护条款）。
-
