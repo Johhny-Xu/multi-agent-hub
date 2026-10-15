@@ -143,6 +143,7 @@ test('renderPlatformList renders platform groups and expandable session tree', (
   const nodes = new Map();
   const $ = (s) => { if (!nodes.has(s)) nodes.set(s, new Element('div')); return nodes.get(s); };
   const el = (tag, cls, text) => { const n = new Element(tag); n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const mountCalls = [];
 
   const context = vm.createContext({
     $, el, chat: {
@@ -172,6 +173,7 @@ test('renderPlatformList renders platform groups and expandable session tree', (
     AGENT_THEMES: { codebuddy: { color: '#818cf8', glow: 'rgba(129, 140, 248, 0.35)', label: 'CodeBuddy' } },
     getAgentQuotaCapsule: () => ({ text: '余95%', cls: 'pill-quota' }),
     getAgentCacheCapsule: () => ({ text: 'cache 2m', cls: 'pill-cache' }),
+    mountAgentSummaryRow: (body, theme, text) => { mountCalls.push(text); },
     agentSmartSummaries: {},
     api: async () => ({})
   });
@@ -185,6 +187,15 @@ test('renderPlatformList renders platform groups and expandable session tree', (
   const tree = group.children[1];
   assert.ok(tree.className.includes('platform-session-tree'), 'Must create session tree');
   assert.equal(tree.children.length, 3); // 2 session items + 1 new session button
+
+  // 摘要行仅在存在真实内容（最后消息 / 智能总结）时挂载
+  assert.deepEqual(mountCalls, ['你好，我是 CodeBuddy'], 'summary row mounts when real content exists');
+
+  // 无真实内容时（占位态）不挂载 → 卡片保持单行，不再显示"待机 · 点击开启对话"
+  context.chat.threads[0].last = null;
+  mountCalls.length = 0;
+  context.renderPlatformList();
+  assert.deepEqual(mountCalls, [], 'no placeholder summary row when there is no real content');
 });
 
 test('model popover, scroll bottom icon, thinking effort format, and card head styling', () => {
