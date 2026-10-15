@@ -4567,7 +4567,10 @@ header.top #endpoint:hover {
   border-right: 1px solid var(--gem-border);
   transition: margin-left 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease, padding-top 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.cb-activity-bar.collapsed-col {
+/* 收起时用 nav.tabs 前缀提升特异性：否则会被上方
+   `nav.tabs.cb-activity-bar { margin: 0 }`(0,2,1) 压掉 margin-left，
+   导致活动栏视觉上滑走了却仍占着 56px 布局宽度、右侧内容无法左移。 */
+nav.tabs.cb-activity-bar.collapsed-col {
   margin-left: -56px;
   transform: translateX(-100%);
   opacity: 0;
@@ -4588,7 +4591,9 @@ body.header-collapsed.actbar-collapsed .chat-threads:not(.collapsed) .platform-s
   padding-left: 54px;
   transition: padding-left 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
-body.header-collapsed.actbar-collapsed .chat-threads.collapsed .chat-head-left {
+/* 收起时的安全边距避让 Logo：chat-head 在 .chat-main 里，是 #chat-threads 的兄弟节点，
+   原来的 `.chat-threads.collapsed .chat-head-left` 永远匹配不到，已改为兄弟选择器。 */
+body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .chat-head-left {
   margin-left: 46px;
   transition: margin-left 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -7009,9 +7014,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
             <!-- 顶部工具栏 -->
             <div class="chat-head" id="chat-head">
               <div class="chat-head-left">
-                <button id="btn-expand-sidebar" class="icon-toggle-btn" type="button" title="展开平台会话列表" hidden>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-                </button>
                 <button id="btn-chat-back" class="text" type="button" title="返回平台列表">← 平台</button>
                 <!-- 一体胶囊：点头像切换子代理，点当前会话名切换对话 -->
                 <div class="current-agent-pill unified-pill" id="current-agent-pill">
@@ -8335,8 +8337,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (window.innerWidth < 860 || chatAutoCollapse) {
       var sb = $('#chat-threads');
       if (sb) sb.classList.add('collapsed');
-      var exp = $('#btn-expand-sidebar');
-      if (exp) exp.hidden = false;
     }
     if (!updatePlatformListActiveState(name, targetSessionId)) {
       renderPlatformList();
@@ -11385,38 +11385,20 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   // 通用侧栏展开/收起切换
   function togglePlatformsSidebar(forceState) {
     var sb = $('#chat-threads');
-    var exp = $('#btn-expand-sidebar');
     if (!sb) return;
     var willCollapse = (typeof forceState === 'boolean') ? !forceState : !sb.classList.contains('collapsed');
     cancelHoverTimers();
     if (willCollapse) {
       sb.classList.add('collapsed');
-      if (exp) {
-        exp.hidden = false;
-        exp.style.opacity = '0';
-        exp.style.transform = 'scale(0.85)';
-        setTimeout(function () {
-          exp.style.transition = 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
-          exp.style.opacity = '1';
-          exp.style.transform = 'scale(1)';
-        }, 80);
-      }
     } else {
       sb.classList.remove('collapsed');
-      if (exp) {
-        exp.style.transition = 'all 0.16s ease';
-        exp.style.opacity = '0';
-        exp.style.transform = 'scale(0.85)';
-        setTimeout(function () { exp.hidden = true; }, 160);
-      }
     }
   }
 
-  // 跨区域光标进出检测 (涵盖最左侧任务栏、展开侧栏与展开按键)
+  // 跨区域光标进出检测 (涵盖最左侧任务栏与展开后的侧栏)
   function setupSidebarHoverEngine() {
     var actBar = $('.cb-activity-bar');
     var sb = $('#chat-threads');
-    var exp = $('#btn-expand-sidebar');
 
     function onPointerEnter() {
       isPointerInSidebarZone = true;
@@ -11429,7 +11411,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     function onPointerLeave(e) {
       var toEl = e.relatedTarget;
       if (toEl) {
-        if ((actBar && actBar.contains(toEl)) || (sb && sb.contains(toEl)) || (exp && exp.contains(toEl))) {
+        if ((actBar && actBar.contains(toEl)) || (sb && sb.contains(toEl))) {
           return;
         }
       }
@@ -11456,10 +11438,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
           scheduleHoverCollapse();
         }
       });
-    }
-    if (exp) {
-      exp.addEventListener('mouseenter', onPointerEnter);
-      exp.addEventListener('mouseleave', onPointerLeave);
     }
 
     // 全局边界几何感知检测：无论是否处于CSS过渡期均能无缝追踪光标
@@ -12130,10 +12108,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     });
   }
 
-  var expandBtn = $('#btn-expand-sidebar');
-  if (expandBtn) expandBtn.addEventListener('click', function () {
-    togglePlatformsSidebar(true);
-  });
   $('#btn-chat-back').addEventListener('click', function () {
     togglePlatformsSidebar(true);
   });
