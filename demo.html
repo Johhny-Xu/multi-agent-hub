@@ -4712,6 +4712,11 @@
   --mcode-surface-raised: var(--gem-surface-high);
   --mcode-code-bg: #11111b;
   --mcode-text: var(--gem-text);
+  /* 面板标题 / 列表项标签用的「高亮正文色」。
+     此前这个色号从未被定义，var(--mcode-text-bright, #fff/#eee) 一直落到近白色，
+     深色主题下看不出问题，浅色主题（Mocha Latte / Shell Paper / Aurora / Dusk /
+     Cyber / Grid 浅色）就是白底白字、可读性为 0。这里补上定义并让它跟随 --gem-text。 */
+  --mcode-text-bright: var(--gem-text);
   --mcode-text-primary: var(--gem-text);
   --mcode-text-secondary: var(--gem-text-secondary);
   --mcode-text-muted: var(--gem-text-muted);
@@ -4774,6 +4779,11 @@ html[data-theme="light"]:not([data-preset="shell"]) {
   --mcode-surface-raised: var(--gem-bg-card);
   --mcode-code-bg: #e6e9ef;
   --mcode-text: var(--gem-text);
+  /* 面板标题 / 列表项标签用的「高亮正文色」。
+     此前这个色号从未被定义，var(--mcode-text-bright, #fff/#eee) 一直落到近白色，
+     深色主题下看不出问题，浅色主题（Mocha Latte / Shell Paper / Aurora / Dusk /
+     Cyber / Grid 浅色）就是白底白字、可读性为 0。这里补上定义并让它跟随 --gem-text。 */
+  --mcode-text-bright: var(--gem-text);
   --mcode-text-primary: var(--gem-text);
   --mcode-text-secondary: var(--gem-text-secondary);
   --mcode-text-muted: var(--gem-text-muted);
@@ -4836,6 +4846,11 @@ html[data-preset="shell"]:not([data-theme="light"]) {
   --mcode-surface-raised: var(--gem-surface-high);
   --mcode-code-bg: #09090c;
   --mcode-text: var(--gem-text);
+  /* 面板标题 / 列表项标签用的「高亮正文色」。
+     此前这个色号从未被定义，var(--mcode-text-bright, #fff/#eee) 一直落到近白色，
+     深色主题下看不出问题，浅色主题（Mocha Latte / Shell Paper / Aurora / Dusk /
+     Cyber / Grid 浅色）就是白底白字、可读性为 0。这里补上定义并让它跟随 --gem-text。 */
+  --mcode-text-bright: var(--gem-text);
   --mcode-text-primary: var(--gem-text);
   --mcode-text-secondary: var(--gem-text-secondary);
   --mcode-text-muted: var(--gem-text-muted);
@@ -4898,6 +4913,11 @@ html[data-preset="shell"][data-theme="light"] {
   --mcode-surface-raised: var(--gem-bg-card);
   --mcode-code-bg: #f1f3f5;
   --mcode-text: var(--gem-text);
+  /* 面板标题 / 列表项标签用的「高亮正文色」。
+     此前这个色号从未被定义，var(--mcode-text-bright, #fff/#eee) 一直落到近白色，
+     深色主题下看不出问题，浅色主题（Mocha Latte / Shell Paper / Aurora / Dusk /
+     Cyber / Grid 浅色）就是白底白字、可读性为 0。这里补上定义并让它跟随 --gem-text。 */
+  --mcode-text-bright: var(--gem-text);
   --mcode-text-primary: var(--gem-text);
   --mcode-text-secondary: var(--gem-text-secondary);
   --mcode-text-muted: var(--gem-text-muted);
