@@ -10965,6 +10965,36 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   var HOVER_EXPAND_DELAY = 180;   // 鼠标移入任务栏/侧栏触发延时 (180ms防误触)
   var HOVER_COLLAPSE_DELAY = 650; // 鼠标移出侧栏平滑收起延时 (650ms防抖缓冲)
 
+  // 展开触发范围 = 「红色框」= 活动栏 + 侧边栏展开后的整块占位宽度，
+  // 而不再只是活动栏那一条窄带（原先仅 actBar.right + 14px，鼠标必须贴到最左侧才展开）。
+  var SIDEBAR_REVEAL_FALLBACK = 268;   // 与 .cb-platforms-sidebar 的 width: 268px 对齐
+  var sidebarRevealWidthCache = SIDEBAR_REVEAL_FALLBACK;
+  var lastPointer = { x: -1, y: -1 };
+
+  // 取侧边栏展开宽度：展开时实时量取并缓存，收起时（宽度为 0）用最近一次已知值
+  function getSidebarRevealWidth() {
+    var sb = $('#chat-threads');
+    if (sb && !sb.classList.contains('collapsed')) {
+      var w = sb.getBoundingClientRect().width;
+      if (w > 0) sidebarRevealWidthCache = w;
+    }
+    return sidebarRevealWidthCache;
+  }
+
+  // 光标是否落在红色框范围内（活动栏 + 侧边栏占位整块）
+  function isPointerInRevealZone(x, y) {
+    var sb = $('#chat-threads');
+    var actBar = $('.cb-activity-bar');
+    if (!sb || !actBar) return false;
+    var actRect = actBar.getBoundingClientRect();
+    var sbRect = sb.getBoundingClientRect();
+    var isCollapsed = sb.classList.contains('collapsed');
+    var revealRight = actRect.right + getSidebarRevealWidth();
+    var inZoneX = isCollapsed ? (x <= revealRight) : (x <= Math.max(sbRect.right, revealRight));
+    var inZoneY = (y >= actRect.top && y <= actRect.bottom);
+    return inZoneX && inZoneY;
+  }
+
   function isChatTabActive() {
     var chatPanel = $('#panel-chat');
     return chatPanel && chatPanel.classList.contains('active');
@@ -10991,7 +11021,8 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (hoverExpandTimer) return;
     hoverExpandTimer = setTimeout(function () {
       hoverExpandTimer = null;
-      if (isPointerInSidebarZone) {
+      // 展开前再核对一次：光标确实还在红色框范围内
+      if (isPointerInSidebarZone || isPointerInRevealZone(lastPointer.x, lastPointer.y)) {
         togglePlatformsSidebar(true);
       }
     }, HOVER_EXPAND_DELAY);
@@ -11005,7 +11036,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (hoverCollapseTimer) return;
     hoverCollapseTimer = setTimeout(function () {
       hoverCollapseTimer = null;
-      if (!isPointerInSidebarZone) {
+      // 收起前再核对一次：光标仍在红色框范围内（或停在侧栏内）就不收起
+      var stillInZone = isPointerInSidebarZone ||
+        isPointerInRevealZone(lastPointer.x, lastPointer.y);
+      if (!stillInZone) {
         var activeEl = document.activeElement;
         var hasFocus = activeEl && sb.contains(activeEl);
         if (!hasFocus) {
@@ -11097,16 +11131,14 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 
     // 全局边界几何感知检测：无论是否处于CSS过渡期均能无缝追踪光标
     window.addEventListener('mousemove', function (e) {
+      lastPointer.x = e.clientX;
+      lastPointer.y = e.clientY;
       if (!chatAutoCollapse || !isChatTabActive()) return;
       if (!sb || !actBar) return;
-      var actRect = actBar.getBoundingClientRect();
-      var sbRect = sb.getBoundingClientRect();
       var isCollapsed = sb.classList.contains('collapsed');
 
-      var maxExpandedRight = actRect.right + 280;
-      var inZoneX = isCollapsed ? (e.clientX <= actRect.right + 14) : (e.clientX <= Math.max(sbRect.right, maxExpandedRight));
-      var inZoneY = (e.clientY >= actRect.top && e.clientY <= actRect.bottom);
-      var currentlyInZone = inZoneX && inZoneY;
+      // 触发范围改为「红色框」：活动栏 + 侧边栏展开后的整块占位宽度
+      var currentlyInZone = isPointerInRevealZone(e.clientX, e.clientY);
 
       if (currentlyInZone) {
         cancelHoverCollapse();
@@ -11344,7 +11376,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (!autoCollapseBtn) return;
     autoCollapseBtn.classList.toggle('active', !!chatAutoCollapse);
     autoCollapseBtn.style.color = chatAutoCollapse ? 'var(--gem-primary)' : 'var(--gem-text-muted)';
-    autoCollapseBtn.title = chatAutoCollapse ? '智能悬浮收展 (已开启：光标靠近左侧自动展开，移出自动收起)' : '固定常驻展开 (已锁定：侧栏保持常驻展开)';
+    autoCollapseBtn.title = chatAutoCollapse ? '智能悬浮收展 (已开启：光标进入左侧侧栏区域自动展开，移出自动收起)' : '固定常驻展开 (已锁定：侧栏保持常驻展开)';
   }
   if (autoCollapseBtn) {
     updateAutoCollapseBtn();
@@ -11355,7 +11387,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       if (!chatAutoCollapse) {
         cancelHoverTimers();
       }
-      toast(chatAutoCollapse ? '已开启：光标靠近左侧自动展开，移出自动收起' : '已关闭：侧栏保持常驻展开');
+      toast(chatAutoCollapse ? '已开启：光标进入左侧侧栏区域自动展开，移出自动收起' : '已关闭：侧栏保持常驻展开');
     });
   }
   var toggleAllTreeBtn = $('#btn-toggle-all-tree');
