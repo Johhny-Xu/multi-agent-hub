@@ -7169,13 +7169,47 @@ html:not([data-theme="light"]) .theme-icon-sun {
 body.has-custom-bg {
   background-color: transparent !important;
   background-image: none !important;
-  /* 色号统一：原「内层」色号（红框按钮组底色，即 --gem-bg-card-inner / --mcode-surface-muted）
-     全部提升为「卡片」色号（蓝框按钮组底色，即 --gem-bg-card），
-     消除自定义壁纸下同一行内出现两种按钮底色的割裂感。
-     注意：--mcode-surface-muted 在预设主题块里已被解析成 --gem-bg-card-inner 的值，
-     自定义属性在声明处完成替换后逐层继承，因此两者都必须在此显式重映射。 */
+
+  /* ===== 色号统一（仅在自定义背景模式生效）=====
+     规则：自定义壁纸下不再保留任何独立的「中性灰面」色号 —— 凡是原本渲染出
+     灰色块的 surface 色号，全部并入「卡片」色号 --gem-bg-card，也就是顶栏
+     蓝框按钮组（主题切换 / 服务器端点）的底色，做到整屏一个面。
+     涉及的原灰色号（Mocha Light / Shell Light 为例）：
+       --gem-bg-canvas       #eff1f5 / #f8f9fa
+       --gem-bg-sidebar      #e6e9ef / #f1f3f5   （设置页大灰块的主要来源）
+       --gem-bg-card-inner   #dce0e8 / #e9ecef   （原红框按钮组底色）
+       --gem-surface-low     #e6e9ef / #f1f3f5
+       --mcode-surface-muted / --mcode-bg-secondary / --mcode-code-bg 等同族别名
+     注意：--mcode-* 系列在预设主题块里写成 var(--gem-*) 别名，并在 <html> 上就
+     完成了变量替换后逐层继承；因此 body 上必须把别名本身也显式重映射，只改
+     --gem-* 不会生效。 */
+  --gem-bg-canvas: var(--gem-bg-card);
+  --gem-bg-sidebar: var(--gem-bg-card);
   --gem-bg-card-inner: var(--gem-bg-card);
+  --gem-surface-low: var(--gem-bg-card);
+  --gem-surface-highest: var(--gem-bg-card);
+  --mcode-bg: var(--gem-bg-card);
+  --mcode-bg-primary: var(--gem-bg-card);
+  --mcode-bg-secondary: var(--gem-bg-card);
+  --mcode-surface: var(--gem-bg-card);
   --mcode-surface-muted: var(--gem-bg-card);
+  --mcode-surface-raised: var(--gem-bg-card);
+  --mcode-code-bg: var(--gem-bg-card);
+  --studio-bg: var(--gem-bg-card);
+  --studio-bg-elevated: var(--gem-bg-card);
+  --studio-surface: var(--gem-bg-card);
+
+  /* 唯一的例外：交互态（hover / 进度条轨道）不能是纯白，否则悬停无反馈、
+     配额进度条轨道在白底上彻底消失。这里换成半透明中性覆盖层 —— 视觉上不构成
+     独立的灰色面，但足以提供 hover 反馈与可见的进度条轨道。 */
+  --gem-surface-high: rgba(15, 23, 42, 0.07);
+  --mcode-surface-hover: rgba(15, 23, 42, 0.07);
+  --studio-surface-hover: rgba(15, 23, 42, 0.07);
+}
+html:not([data-theme="light"]) body.has-custom-bg {
+  --gem-surface-high: rgba(255, 255, 255, 0.1);
+  --mcode-surface-hover: rgba(255, 255, 255, 0.1);
+  --studio-surface-hover: rgba(255, 255, 255, 0.1);
 }
 
 body.has-custom-bg .cb-workspace,
