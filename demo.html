@@ -12346,6 +12346,8 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     } else {
       sb.classList.remove('collapsed');
     }
+    // 对话列表展开时，活动栏（对话 / 设置标签页）必须同时常驻
+    chromeSyncActbarWithSidebar();
   }
 
   // 跨区域光标进出检测 (涵盖最左侧任务栏与展开后的侧栏)
@@ -12507,8 +12509,28 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     return false;
   }
 
-  function chromeCanCollapse() {
-    return chromeAutoHide && chromeSupported() && !chromeBusy();
+  // 对话列表（会话侧栏）是否处于展开可见状态
+  function chromeSidebarExpanded() {
+    var sb = document.getElementById('chat-threads');
+    return !!(sb && !sb.classList.contains('collapsed'));
+  }
+
+  function chromeCanCollapse(which) {
+    if (!chromeAutoHide || !chromeSupported() || chromeBusy()) return false;
+    // 对话列表展开时，「对话 / 设置」活动栏必须常驻：
+    // 一旦活动栏收起，它那 56px 会被回收，侧栏会整体左移贴到 Logo 锚点下方，
+    // 布局会突兀地跳一下；同时用户也就点不到这两个标签页了。
+    if (which === 'actbar' && chromeSidebarExpanded()) return false;
+    return true;
+  }
+
+  // 对话列表一展开，立刻把活动栏拉回来（不等 650ms 防抖，避免闪一下）
+  function chromeSyncActbarWithSidebar() {
+    if (!chromeAutoHide || !chromeSupported()) return;
+    if (!chromeSidebarExpanded()) return;
+    chromeClearTimer('actbarCollapse');
+    chromeHit.actbar = false;
+    chromeSetCollapsed('actbar', false);
   }
 
   function chromeSchedule(which, expand) {
@@ -12527,7 +12549,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       if (collapsed || chromeTimers[collapseKey]) return;
       chromeTimers[collapseKey] = setTimeout(function () {
         chromeTimers[collapseKey] = null;
-        if (chromeHit[which] || !chromeCanCollapse()) return;
+        if (chromeHit[which] || !chromeCanCollapse(which)) return;
         chromeSetCollapsed(which, true);
       }, CHROME_COLLAPSE_DELAY);
     }
@@ -12596,6 +12618,8 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 
   function setupChromeAutoHideEngine() {
     chromeApplyMode();
+    // 初始若对话列表已是展开态（例如关闭了自动收起），活动栏也保持常驻
+    chromeSyncActbarWithSidebar();
 
     window.addEventListener('mousemove', function (e) {
       if (!chromeAutoHide) return;
