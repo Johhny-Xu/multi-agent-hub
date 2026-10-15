@@ -172,7 +172,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
   cd multi-agent-hub
   ```
 - **方式 B（下载 Release 打包）**：
-  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载最新预构建包（如 `agenthub-0.9.9.2-both.zip`）并解压。
+  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载最新预构建包（如 `agenthub-0.9.9.6-both.zip`）并解压。
 
 #### 步骤 2：一键执行安装并启动
 - **Windows**：直接双击根目录 **`install.cmd`**（或在终端运行 `.\install.cmd`）；
@@ -237,8 +237,8 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 原生宿主客户端 | 独立导入 / 按需单装方式 | 插件目录与详细说明 |
 | --- | --- | --- |
-| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-0.9.9.2.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
-| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-0.9.9.2-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
+| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-0.9.9.6.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
+| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-0.9.9.6-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **3. ZCode IDE / CLI** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts zcode`<br>• **IDE 发现页 / 本地配置**：在 ZCode 插件发现页添加本仓库，或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **4. OpenAI Codex** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`<br>• 自动注册本地插件市场并将 9 个子代理与工作流写入目标工作区 `.codex/agents/` | [`integrations/codex`](integrations/codex/README.md) |
 | **5. DeepSeek Harness (DSH)** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`<br>• **手动 Bundle 挂载**：`dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [`integrations/dsh`](integrations/dsh/README.md) |
@@ -248,15 +248,15 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 ### 📦 预打包文件与运行依赖
 
-> *注：下表列出的文件名为最近一次已打包发布的安装产物（`0.9.9.2`）；当前仓库源码已演进至 `v0.9.9.6`，亦可直接通过 `python packaging/build.py` 按最新源码构建。*
+> *注：下表为 `v0.9.9.6` 的预打包产物，与当前源码版本号一致；也可直接通过 `python packaging/build.py --output <目录> --component all` 按源码自行构建。*
 
 | 安装包 | 适用环境 | 包含内容 |
 | --- | --- | --- |
-| **agenthub-0.9.9.2-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
-| **agenthub-0.9.9.2-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
-| **agenthub-0.9.9.2-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
-| **agenthub-workers-0.9.9.2-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
-| **multi-agent-hub-0.9.9.2.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
+| **agenthub-0.9.9.6-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
+| **agenthub-0.9.9.6-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
+| **agenthub-0.9.9.6-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
+| **agenthub-workers-0.9.9.6-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
+| **multi-agent-hub-0.9.9.6.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
 
 - **运行依赖要求**：
   - **基础运行环境**：Python 3.8+（Codex 代理安装需 Python 3.11+）；Node.js 20+（用于 MCP 桥接与 Web 控制台）；

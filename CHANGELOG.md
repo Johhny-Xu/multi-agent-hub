@@ -9,6 +9,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [0.9.9.6] - 2026-10-15
+
+WebUI 交互精修与全链路视觉体系贯通。`0.9.9.3` → `0.9.9.6` 为 WebUI 单线的连续增量迭代，本次统一收口为 `v0.9.9.6` 标签发布；逐步明细见 [版本记录](docs/version-history.md)。
+
+### 品牌锚点与界面智能收展 (`console`)
+
+- **品牌锚点常驻 ([`console/client/index.html`](console/client/index.html))**：新增左上角 `#brand-logo-pin` 常驻 Logo（`fixed / top:10px / left:18px / 32×32 / z-index:120`），JS 复用顶栏内那张 Logo（`cloneNode`）挂载以免在 HTML 里重复一份 base64；顶栏原 `.brand-logo` 转为 `visibility: hidden` 的 32px 间距占位，锚点正好落位；`body.has-custom-bg` 下适配毛玻璃。**锚点永不隐藏**（固定定位 + `pointer-events` 独立，不受顶栏 `collapsed-row` 的 `pointer-events:none` 影响）。
+- **顶栏 / 活动栏智能收展引擎**：新增 `setupChromeAutoHideEngine()` —— 光标 Y ≤ 38px 展开顶栏、X ≤ 42px 展开活动栏（90ms 命中延时防过路误触），离开后 650ms 舒适防抖收起；下拉菜单 / `<dialog>` 弹窗打开、或顶栏内有输入焦点时禁止收起；点击 Logo 在「自动收展 / 常驻」间切换并持久化到 `localStorage.agent_hub_chrome_autohide`，常驻态加主题色描边提示；手机端（≤859px）不启用。配套新增 `body.header-collapsed .cb-activity-bar { padding-top: 50px }`（含过渡），避免活动栏首项与 Logo 锚点重叠。
+- **活动栏随侧栏常驻**：修掉「会话侧栏展开着、`对话 / 设置` 活动栏却被自动收起」的错位 —— 侧栏热区是 `x ≤ 324`、活动栏热区只有 `x ≤ 42`，光标停在侧栏上时活动栏会 650ms 后收起、被回收 56px 布局宽度导致侧栏突兀左移且用户点不到标签页。现 `chromeCanCollapse('actbar')` 增加判断：`#chat-threads` 未处于 `collapsed` 时活动栏一律不收起；并新增 `chromeSyncActbarWithSidebar()` 在展开侧栏的瞬间（不等 650ms 防抖）把活动栏拉回，初始化时同步一次。
+- **移除会话头「展开侧栏」按钮并修正两处布局缺陷**：删除 `#btn-expand-sidebar` 及其全部 JS 引用（`togglePlatformsSidebar` / `setupSidebarHoverEngine` / `selectPlatform` / 点击绑定），展开侧栏改为只靠光标进入左侧区域自动展开与移动端「← 平台」按钮。顺带修掉两个一直存在但未被发现的 CSS 特异性 bug：① `nav.tabs.cb-activity-bar { margin: 0 }`(0,2,1) 压掉了 `.cb-activity-bar.collapsed-col { margin-left: -56px }`(0,2,0)，活动栏视觉上滑走了却仍占 56px 布局宽度，右侧内容无法左移；② `body.header-collapsed.actbar-collapsed .chat-threads.collapsed .chat-head-left` 永远匹配不到，因为 `.chat-head` 在 `.chat-main` 里、是 `#chat-threads` 的**兄弟节点**而非子节点，避让 Logo 的 46px 边距从未生效，改用兄弟选择器 `.chat-threads.collapsed ~ .chat-main .chat-head-left`。实测：活动栏收起后内容起点由 x=57 → x=1，会话头左侧胶囊由 x=77 → x=67（Logo 锚点右边缘 50，留 17px 间隙）。
+- **侧栏展开触发范围对齐**：`setupSidebarHoverEngine` 原来在侧栏收起时只在 `actBar.right + 14px` 内才触发展开（鼠标必须贴到最左侧活动栏那一条窄带），而展开后的保持范围却是 `actBar.right + 280px`，两者不对称、手感割裂。现统一按「活动栏 + 侧边栏自身展开宽度」计算（新增 `getSidebarRevealWidth()` / `isPointerInRevealZone()`，宽度实时量取并缓存、收起时回退 268px）；展开与收起的防抖定时器在触发前都会用 `lastPointer` 重新核对实际光标位置，避免 `mouseleave` 早于最后一次 `mousemove` 导致误收起。
+
+### 主题与视觉体系 (`console`)
+
+- **色系预设由 2 个扩充为 6 个**：`v0.9.9.4` 曾把预设精简到只剩 Mocha / Shell，本版补回 Aurora 极光微光（`#0B0F19`）、Dusk 暮霭流金（`#18121D`）、Cyber 赛博深空（`#070913`）、Grid 科技网格（`#0A0F1E`）。与旧版的关键差别：每个预设都给出**完整的深 / 浅双模式调色板**（`[data-preset="x"]` + `html[data-preset="x"][data-theme="light"]`），并把渐变底图收敛成 CSS 变量 `--preset-bg` / `--preset-bg-size` / `--preset-bg-repeat` / `--preset-bg-position`，由 JS 以 `backgroundImage = 'var(--preset-bg)'` 引用 —— 切换深浅主题时底图自动跟随，无需 JS 重算。选中这四个预设自动进入 `body.has-custom-bg` 毛玻璃模式。Grid 预设额外声明 `--preset-bg-repeat: no-repeat, repeat, repeat`，否则 32px 网格线只会画一格。
+- **修复浅色主题下「状态栏显示项」面板白底白字**：`.sb-config-title` / `.sb-config-label` / `.sb-config-close:hover` 三处引用 `var(--mcode-text-bright, #fff|#eee)`，但 `--mcode-text-bright` **在全站从未被定义过** —— 深色主题下近白色恰好看着正常，浅色主题（Mocha Latte / Shell Paper / Aurora / Dusk / Cyber / Grid 浅色）就是白底白字、可读性为 0。现按既有别名机制在四个主题块补上 `--mcode-text-bright: var(--gem-text);`（`var()` 在 `<html>` 上按当前预设解析，六个预设的深浅共 12 种组合自动跟随）。实测对比度：Aurora 浅色 14.27:1、Mocha 浅色 7.99:1、Grid 浅色 15.27:1、Aurora 深色 13.4:1（WCAG AA 要求 4.5:1）。
+- **自定义背景中性灰面统一**：在 `body.has-custom-bg` 作用域内把基础中性灰面色号整体并入「卡片」色号 `--gem-bg-card`：`--gem-bg-canvas`、`--gem-bg-sidebar`、`--gem-bg-card-inner`、`--gem-surface-low`、`--gem-surface-highest`，以及它们在预设主题块里写成 `var(--gem-*)` 别名的 `--mcode-bg` / `--mcode-bg-primary` / `--mcode-bg-secondary` / `--mcode-surface` / `--mcode-surface-muted` / `--mcode-surface-raised` / `--mcode-code-bg` / `--studio-*` 全族。**注意这些别名在 `<html>` 上就完成了变量替换并逐层继承，因此必须在 `body` 上显式重映射，只改 `--gem-*` 不生效**。实测设置页残留灰面元素由 96 个降至 0。**`--gem-surface-high`（及别名 `--mcode-surface-hover`）刻意保持原样不动** —— 这一层灰是交互态 / 配额进度条轨道 / 列表选中行底色的载体。
+- **子代理主题色贯通**：新增 `getAgentAccent()` / `applyAgentAccent()`，把当前所选子代理主题色（`AGENT_THEMES.color`，如 CodeArts 华为红 `#ef4444`、TRAE `#34d399`、Copilot `#c084fc`）写入 `<html>` 的 `--agent-accent` / `--agent-accent-glow`；**发送按钮背景**（`color-mix` 生成的深色渐变，保持白字可读）与**上下文进度条内条**跟随，切换即时联动，未知代理按名称哈希生成稳定色。把 `#panel-chat` 作用域内的主题强调色令牌整体改指向 `--agent-accent`（`--gem-primary` / `--gem-primary-container` / `--mcode-accent` / `--mcode-accent-gradient` / `--mcode-primary-action-bg` / `--mcode-accent-glow` / `--mcode-focus-ring`），于是「模型与运行参数」弹窗、「状态栏显示项」弹窗、会话头二级菜单、输入台聚焦描边、引用块左边线、行内代码、空状态卡片 hover 全部一次贯通。承载白字的实心块（Max 档位、完成、`button.primary`）统一改用 `--mcode-accent-gradient`；文字 / 边框 / 图标则用可读强调色 `color-mix(in srgb, var(--agent-accent) 72%, var(--gem-text))`，避免 Antigravity `#8ab4f8` 这类亮色在浅底上看不清。**模型名文字不参与着色**（统一取对话窗问候语字体色 `var(--gem-text)`）；**列表行的灰色底刻意不改**。
+- **移除所有搜索框的放大镜图标**：模型与运行参数弹窗的 `#mp-search-input` 与平台 / 会话侧栏的 `#platform-search` 都不再渲染图标。附带修掉根因：`.mp-search-input`(0,1,0) 的 `padding` / `border-radius` / `height` / `font-size` 一直**被基础表单规则 `input[type="text"]`(0,1,1) 压掉**，内边距实际回落到全局 `7px 12px`，于是文字从 12px 开始、图标在 8px 起 — 正好重叠；现把该规则连同 `:hover` / `:focus` 提到 `.mp-search-wrap .mp-search-input`(0,2,0) 与 `.mp-search-wrap .mp-search-input:focus`(0,3,0)。全量盘点确认应用中所有带「搜索」占位的输入框（`#platform-search`、`#mp-search-input`、`#agent-card-search`、`#custom-bg-input`）均已无图标残留。
+
+### 对话区交互精修 (`console`)
+
+- **第二批侧栏精简**：删除搜索框右侧 ⌘K 快捷键提示、卡片上的「余100% / 冷备」额度与缓存胶囊、以及「待机 · 点击开启对话」占位行。根因：徽标区三连胶囊内容宽 126px **> 可视 86px**，第三枚「N会话」被 `overflow: hidden` 静默裁切（元素一直在 DOM 中但看不见）；删去前两枚后 9/9 卡片 `clipped: false`。同步新增 `mountAgentSummaryRow()` / `mountAgentSummaryByName()`，采用**按需重建**策略 —— 占位态整行不渲染，真实智能总结到达后再插入，杜绝占位文案回潮。
+- **底栏模型弹窗左右贴靠自适应**；思考档位标签精简为 `模型名 · 思考档位`；回到底部改为极简纯图标悬浮键；全局 Squircle R 角与 Logo 标准统一（消除 ZCode 插件图标缺失）；卡片去框化与冗余信息净化；会话折叠改为平滑 CSS 渐变过渡动画；消息气泡操作重塑为底角独立复制图标并伴随反馈动效；彻底消除顶栏头像纵向拉伸。
+
+### 工程与发布
+
+- **零依赖交互 Demo**：新增 [`scripts/build_demo.py`](scripts/build_demo.py) + [`scripts/demo_engine.js`](scripts/demo_engine.js)，把控制台打包为含内存虚拟驱动引擎的单文件纯前端 Demo，支持脱机运行与全功能免后端体验；同步产出 `demo/index.html`、根目录 `demo.html` 与桌面副本。
+- **版本号全链路统一**：[`packaging/build.py`](packaging/build.py)、`integrations/*`（vscode / codearts / codex / antigravity）、`plugins/agenthub-workers`（`.zcode-plugin` / `.minimax-plugin` / `.claude-plugin`）、`marketplace.json`、`hub/agent_hub.py`（`SERVER_VERSION`）、`console/server.mjs`、`console/client/index.html`、扩展打包回归测试全部对齐到 **0.9.9.6**，结束版本号分叉。历史条目（本文件的 `[0.9.9.2]` 段、`docs/version-history.md`、`docs/roadmap.svg` 的时间线节点）按记录性质保留原版本号。
+- **README 与架构图重写**：[`README.md`](README.md)、[`docs/architecture.svg`](docs/architecture.svg)、[`docs/roadmap.svg`](docs/roadmap.svg) 全面重写，产物表与源码头像同步到 `v0.9.9.6`。
+- **静态隐私审计**：[`scripts/audit_secrets.py`](scripts/audit_secrets.py) 工作区扫描归零；全套隔离回归测试全绿。
+
+---
+
 ## [0.9.9.2] - 2026-10-12
 
 ### 登录链路全量重构：状态检测收口、CodeBuddy 共享会话存储对齐、Trae PKCE 修复、ZCode 双区切换 (`console`)

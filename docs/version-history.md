@@ -19,6 +19,8 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 
 安装包仍为本机产物，未上传 GitHub Release 附件。标签可用于获取对应源码；测试报告记载的模型、账号、网络和宿主限制继续有效。
 
+`v0.9.9.6`（2026-10-15）：WebUI 交互精修与全链路视觉体系贯通。本版把 `0.9.9.3` → `0.9.9.6` 的连续增量收口为正式标签，并把运行源码（`hub/agent_hub.py` 的 `SERVER_VERSION`、`console/server.mjs`、`console/client/index.html`）、IDE 扩展（vscode / codearts / codex / antigravity）、插件清单（`plugins/agenthub-workers` 的 `.zcode-plugin` / `.minimax-plugin` / `.claude-plugin`）与插件市场（`marketplace.json`、`.zcode-plugin/marketplace.json`）的版本号全链路对齐到 `0.9.9.6`。发布产物集（`agenthub-0.9.9.6-{hub,plugins,both}.zip`、`agenthub-workers-0.9.9.6-minimax-plugin.zip`、`multi-agent-hub-0.9.9.6.{vsix,carts,cloudide}`）首次与本标签源码版本号一致，但**仍为本机产物，未上传 GitHub Release 附件**。
+
 ## 后续版本
 
 - `v0.9.0`：华为 CodeArts 双向接入与第九种 Worker 适配；四种客户端共用任务与结果协议。
