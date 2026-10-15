@@ -3957,6 +3957,335 @@ html[data-preset="shell"][data-theme="light"] {
   --mcode-focus-ring: 0 0 0 3px rgba(15, 23, 42, 0.16);
 }
 
+/* ===== 5~8. 追加色系预设：Aurora / Dusk / Cyber / Grid =====
+   说明：这四个预设除了给出完整调色板外，还各自带一张渐变底图（--preset-bg），
+   由 #app-bg-layer 承载、JS 通过 var(--preset-bg) 取用；选中时自动进入
+   body.has-custom-bg 毛玻璃模式，因此壁纸画面能自然穿透整个界面。
+   这里只需覆写 --gem-* 与少量字面色号：--mcode-* 系列在预设块里写成
+   var(--gem-*) 别名并在 <html> 上完成替换，会自动跟随，无需重复声明。 */
+
+/* 5. Aurora 极光微光（深色）— 极夜蓝底 + 青紫极光 */
+[data-preset="aurora"],
+html[data-preset="aurora"]:not([data-theme="light"]) {
+  --gem-bg-canvas: #0b0f19;
+  --gem-bg-sidebar: #0f1526;
+  --gem-bg-card: #141b2e;
+  --gem-bg-card-inner: #090d17;
+  --gem-surface-low: #0f1526;
+  --gem-surface-high: #1b2438;
+  --gem-surface-highest: #26314a;
+  --gem-text: #dbe4f5;
+  --gem-text-secondary: #a3b0c9;
+  --gem-text-muted: #6b7896;
+  --gem-border: rgba(219, 228, 245, 0.08);
+  --gem-border-strong: rgba(219, 228, 245, 0.16);
+  --gem-primary: #38bdf8;
+  --gem-primary-container: rgba(56, 189, 248, 0.16);
+  --gem-on-primary-container: #7dd3fc;
+  --gem-btn-bg: linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%);
+  --gem-btn-text: #0b0f19;
+  --gem-quota-fill: linear-gradient(90deg, #38bdf8, #8b5cf6);
+  --gem-aurora: linear-gradient(90deg, #38bdf8 0%, #8b5cf6 50%, #22d3ee 100%);
+  --gem-shadow-card: 0 4px 16px rgba(4, 7, 15, 0.5);
+  --gem-shadow-float: 0 12px 32px rgba(4, 7, 15, 0.7);
+  --user-bubble-bg: #1b2438;
+  --user-bubble-border: #2b3a57;
+  --user-bubble-text: #dbe4f5;
+  --composer-bg: #0f1526;
+  --composer-border: #26314a;
+  --composer-shadow: 0 12px 32px rgba(4, 7, 15, 0.7);
+  --studio-accent-soft: rgba(56, 189, 248, 0.15);
+  --mcode-code-bg: #090d17;
+  --mcode-accent-glow: rgba(56, 189, 248, 0.28);
+  --mcode-focus-ring: 0 0 0 3px rgba(56, 189, 248, 0.24);
+  --agent-accent: #38bdf8;
+  --agent-accent-glow: rgba(56, 189, 248, 0.3);
+  --preset-bg: radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.18), transparent 45%), radial-gradient(circle at 85% 80%, rgba(139, 92, 246, 0.22), transparent 50%), linear-gradient(135deg, #0b0f19 0%, #111827 50%, #0f172a 100%);
+  --preset-bg-size: cover;
+}
+
+/* 5L. Aurora 极光微光（浅色）— 晴空蓝白 */
+html[data-preset="aurora"][data-theme="light"] {
+  --gem-bg-canvas: #f2f6fc;
+  --gem-bg-sidebar: #e8eef8;
+  --gem-bg-card: #ffffff;
+  --gem-bg-card-inner: #dbe4f0;
+  --gem-surface-low: #e8eef8;
+  --gem-surface-high: #d3ddec;
+  --gem-surface-highest: #c2cfe2;
+  --gem-text: #1f2b3d;
+  --gem-text-secondary: #3f4c63;
+  --gem-text-muted: #78859c;
+  --gem-border: rgba(31, 43, 61, 0.12);
+  --gem-border-strong: rgba(31, 43, 61, 0.22);
+  --gem-primary: #0284c7;
+  --gem-primary-container: rgba(2, 132, 199, 0.12);
+  --gem-on-primary-container: #0369a1;
+  --gem-btn-bg: linear-gradient(135deg, #0284c7 0%, #6366f1 100%);
+  --gem-btn-text: #ffffff;
+  --gem-quota-fill: linear-gradient(90deg, #0284c7, #6366f1);
+  --gem-aurora: linear-gradient(90deg, #0284c7 0%, #6366f1 50%, #06b6d4 100%);
+  --gem-shadow-card: 0 2px 8px rgba(31, 43, 61, 0.08);
+  --gem-shadow-float: 0 8px 24px rgba(31, 43, 61, 0.12);
+  --user-bubble-bg: #dbe4f0;
+  --user-bubble-border: #c2cfe2;
+  --user-bubble-text: #1f2b3d;
+  --composer-bg: #ffffff;
+  --composer-border: #c2cfe2;
+  --composer-shadow: 0 8px 24px rgba(31, 43, 61, 0.12);
+  --studio-accent-soft: rgba(2, 132, 199, 0.1);
+  --mcode-code-bg: #e8eef8;
+  --mcode-accent-glow: rgba(2, 132, 199, 0.2);
+  --mcode-focus-ring: 0 0 0 3px rgba(2, 132, 199, 0.2);
+  --agent-accent: #0284c7;
+  --agent-accent-glow: rgba(2, 132, 199, 0.22);
+  --preset-bg: radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.28), transparent 45%), radial-gradient(circle at 85% 80%, rgba(139, 92, 246, 0.2), transparent 50%), linear-gradient(135deg, #f2f6fc 0%, #e6eef9 50%, #eef4fb 100%);
+  --preset-bg-size: cover;
+}
+
+/* 6. Dusk 暮霭流金（深色）— 暖紫褐底 + 琥珀流金 */
+[data-preset="dusk"],
+html[data-preset="dusk"]:not([data-theme="light"]) {
+  --gem-bg-canvas: #18121d;
+  --gem-bg-sidebar: #1f1627;
+  --gem-bg-card: #261c30;
+  --gem-bg-card-inner: #140f19;
+  --gem-surface-low: #1f1627;
+  --gem-surface-high: #33253f;
+  --gem-surface-highest: #402e4e;
+  --gem-text: #f2e6ef;
+  --gem-text-secondary: #c4aec0;
+  --gem-text-muted: #8b7690;
+  --gem-border: rgba(242, 230, 239, 0.08);
+  --gem-border-strong: rgba(242, 230, 239, 0.16);
+  --gem-primary: #f59e0b;
+  --gem-primary-container: rgba(245, 158, 11, 0.16);
+  --gem-on-primary-container: #fbbf24;
+  --gem-btn-bg: linear-gradient(135deg, #f59e0b 0%, #e11d48 100%);
+  --gem-btn-text: #18121d;
+  --gem-quota-fill: linear-gradient(90deg, #f59e0b, #f43f5e);
+  --gem-aurora: linear-gradient(90deg, #f59e0b 0%, #e11d48 50%, #a855f7 100%);
+  --gem-shadow-card: 0 4px 16px rgba(12, 8, 15, 0.5);
+  --gem-shadow-float: 0 12px 32px rgba(12, 8, 15, 0.7);
+  --user-bubble-bg: #33253f;
+  --user-bubble-border: #473353;
+  --user-bubble-text: #f2e6ef;
+  --composer-bg: #1f1627;
+  --composer-border: #402e4e;
+  --composer-shadow: 0 12px 32px rgba(12, 8, 15, 0.7);
+  --studio-accent-soft: rgba(245, 158, 11, 0.15);
+  --mcode-code-bg: #140f19;
+  --mcode-accent-glow: rgba(245, 158, 11, 0.28);
+  --mcode-focus-ring: 0 0 0 3px rgba(245, 158, 11, 0.24);
+  --agent-accent: #f59e0b;
+  --agent-accent-glow: rgba(245, 158, 11, 0.3);
+  --preset-bg: radial-gradient(circle at 75% 25%, rgba(245, 158, 11, 0.16), transparent 45%), radial-gradient(circle at 20% 85%, rgba(244, 63, 94, 0.18), transparent 45%), linear-gradient(135deg, #18121d 0%, #1f1627 50%, #120e1a 100%);
+  --preset-bg-size: cover;
+}
+
+/* 6L. Dusk 暮霭流金（浅色）— 暖米杏白 */
+html[data-preset="dusk"][data-theme="light"] {
+  --gem-bg-canvas: #faf6f4;
+  --gem-bg-sidebar: #f2e9e6;
+  --gem-bg-card: #ffffff;
+  --gem-bg-card-inner: #eaddd9;
+  --gem-surface-low: #f2e9e6;
+  --gem-surface-high: #e0d0cb;
+  --gem-surface-highest: #d0bdb7;
+  --gem-text: #33222b;
+  --gem-text-secondary: #5a4049;
+  --gem-text-muted: #93787f;
+  --gem-border: rgba(51, 34, 43, 0.12);
+  --gem-border-strong: rgba(51, 34, 43, 0.22);
+  --gem-primary: #b45309;
+  --gem-primary-container: rgba(180, 83, 9, 0.12);
+  --gem-on-primary-container: #92400e;
+  --gem-btn-bg: linear-gradient(135deg, #b45309 0%, #be123c 100%);
+  --gem-btn-text: #ffffff;
+  --gem-quota-fill: linear-gradient(90deg, #b45309, #be123c);
+  --gem-aurora: linear-gradient(90deg, #b45309 0%, #be123c 50%, #7c3aed 100%);
+  --gem-shadow-card: 0 2px 8px rgba(51, 34, 43, 0.08);
+  --gem-shadow-float: 0 8px 24px rgba(51, 34, 43, 0.12);
+  --user-bubble-bg: #eaddd9;
+  --user-bubble-border: #d0bdb7;
+  --user-bubble-text: #33222b;
+  --composer-bg: #ffffff;
+  --composer-border: #d0bdb7;
+  --composer-shadow: 0 8px 24px rgba(51, 34, 43, 0.12);
+  --studio-accent-soft: rgba(180, 83, 9, 0.1);
+  --mcode-code-bg: #f2e9e6;
+  --mcode-accent-glow: rgba(180, 83, 9, 0.2);
+  --mcode-focus-ring: 0 0 0 3px rgba(180, 83, 9, 0.2);
+  --agent-accent: #b45309;
+  --agent-accent-glow: rgba(180, 83, 9, 0.22);
+  --preset-bg: radial-gradient(circle at 75% 25%, rgba(245, 158, 11, 0.22), transparent 45%), radial-gradient(circle at 20% 85%, rgba(244, 63, 94, 0.18), transparent 45%), linear-gradient(135deg, #faf6f4 0%, #f6ece8 50%, #fbf4f1 100%);
+  --preset-bg-size: cover;
+}
+
+/* 7. Cyber 赛博深空（深色）— 近黑靛蓝 + 霓虹青 */
+[data-preset="cyber"],
+html[data-preset="cyber"]:not([data-theme="light"]) {
+  --gem-bg-canvas: #070913;
+  --gem-bg-sidebar: #0b0e1c;
+  --gem-bg-card: #0f1428;
+  --gem-bg-card-inner: #05070f;
+  --gem-surface-low: #0b0e1c;
+  --gem-surface-high: #161c33;
+  --gem-surface-highest: #202844;
+  --gem-text: #dbeafe;
+  --gem-text-secondary: #9fb0d0;
+  --gem-text-muted: #66759a;
+  --gem-border: rgba(219, 234, 254, 0.08);
+  --gem-border-strong: rgba(219, 234, 254, 0.16);
+  --gem-primary: #6366f1;
+  --gem-primary-container: rgba(99, 102, 241, 0.16);
+  --gem-on-primary-container: #a5b4fc;
+  --gem-btn-bg: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  --gem-btn-text: #05070f;
+  --gem-quota-fill: linear-gradient(90deg, #6366f1, #06b6d4);
+  --gem-aurora: linear-gradient(90deg, #6366f1 0%, #06b6d4 50%, #a855f7 100%);
+  --gem-shadow-card: 0 4px 16px rgba(3, 5, 12, 0.55);
+  --gem-shadow-float: 0 12px 32px rgba(3, 5, 12, 0.75);
+  --user-bubble-bg: #161c33;
+  --user-bubble-border: #26304d;
+  --user-bubble-text: #dbeafe;
+  --composer-bg: #0b0e1c;
+  --composer-border: #202844;
+  --composer-shadow: 0 12px 32px rgba(3, 5, 12, 0.75);
+  --studio-accent-soft: rgba(99, 102, 241, 0.15);
+  --mcode-code-bg: #05070f;
+  --mcode-accent-glow: rgba(99, 102, 241, 0.3);
+  --mcode-focus-ring: 0 0 0 3px rgba(99, 102, 241, 0.26);
+  --agent-accent: #6366f1;
+  --agent-accent-glow: rgba(99, 102, 241, 0.32);
+  --preset-bg: radial-gradient(circle at 50% 10%, rgba(99, 102, 241, 0.25), transparent 50%), radial-gradient(circle at 80% 90%, rgba(6, 182, 212, 0.2), transparent 45%), linear-gradient(180deg, #070913 0%, #0d1124 100%);
+  --preset-bg-size: cover;
+}
+
+/* 7L. Cyber 赛博深空（浅色）— 冷调雾蓝 */
+html[data-preset="cyber"][data-theme="light"] {
+  --gem-bg-canvas: #f4f6fb;
+  --gem-bg-sidebar: #e9edf7;
+  --gem-bg-card: #ffffff;
+  --gem-bg-card-inner: #dde3f0;
+  --gem-surface-low: #e9edf7;
+  --gem-surface-high: #d5dcec;
+  --gem-surface-highest: #c4cee2;
+  --gem-text: #1b2340;
+  --gem-text-secondary: #3b4668;
+  --gem-text-muted: #7783a0;
+  --gem-border: rgba(27, 35, 64, 0.12);
+  --gem-border-strong: rgba(27, 35, 64, 0.22);
+  --gem-primary: #4338ca;
+  --gem-primary-container: rgba(67, 56, 202, 0.12);
+  --gem-on-primary-container: #3730a3;
+  --gem-btn-bg: linear-gradient(135deg, #4338ca 0%, #0891b2 100%);
+  --gem-btn-text: #ffffff;
+  --gem-quota-fill: linear-gradient(90deg, #4338ca, #0891b2);
+  --gem-aurora: linear-gradient(90deg, #4338ca 0%, #0891b2 50%, #7c3aed 100%);
+  --gem-shadow-card: 0 2px 8px rgba(27, 35, 64, 0.08);
+  --gem-shadow-float: 0 8px 24px rgba(27, 35, 64, 0.12);
+  --user-bubble-bg: #dde3f0;
+  --user-bubble-border: #c4cee2;
+  --user-bubble-text: #1b2340;
+  --composer-bg: #ffffff;
+  --composer-border: #c4cee2;
+  --composer-shadow: 0 8px 24px rgba(27, 35, 64, 0.12);
+  --studio-accent-soft: rgba(67, 56, 202, 0.1);
+  --mcode-code-bg: #e9edf7;
+  --mcode-accent-glow: rgba(67, 56, 202, 0.2);
+  --mcode-focus-ring: 0 0 0 3px rgba(67, 56, 202, 0.2);
+  --agent-accent: #4338ca;
+  --agent-accent-glow: rgba(67, 56, 202, 0.22);
+  --preset-bg: radial-gradient(circle at 50% 10%, rgba(99, 102, 241, 0.22), transparent 50%), radial-gradient(circle at 80% 90%, rgba(6, 182, 212, 0.18), transparent 45%), linear-gradient(180deg, #f6f8fd 0%, #eaeffa 100%);
+  --preset-bg-size: cover;
+}
+
+/* 8. Grid 科技网格（深色）— 暗板岩底 + 32px 网格线 */
+[data-preset="grid"],
+html[data-preset="grid"]:not([data-theme="light"]) {
+  --gem-bg-canvas: #0a0f1e;
+  --gem-bg-sidebar: #0e1426;
+  --gem-bg-card: #121a30;
+  --gem-bg-card-inner: #080c18;
+  --gem-surface-low: #0e1426;
+  --gem-surface-high: #1a2440;
+  --gem-surface-highest: #243052;
+  --gem-text: #e2e8f5;
+  --gem-text-secondary: #a6b2cc;
+  --gem-text-muted: #6e7c9c;
+  --gem-border: rgba(226, 232, 245, 0.08);
+  --gem-border-strong: rgba(226, 232, 245, 0.16);
+  --gem-primary: #818cf8;
+  --gem-primary-container: rgba(129, 140, 248, 0.16);
+  --gem-on-primary-container: #a5b4fc;
+  --gem-btn-bg: linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
+  --gem-btn-text: #080c18;
+  --gem-quota-fill: linear-gradient(90deg, #818cf8, #22d3ee);
+  --gem-aurora: linear-gradient(90deg, #818cf8 0%, #22d3ee 50%, #a855f7 100%);
+  --gem-shadow-card: 0 4px 16px rgba(4, 7, 15, 0.55);
+  --gem-shadow-float: 0 12px 32px rgba(4, 7, 15, 0.75);
+  --user-bubble-bg: #1a2440;
+  --user-bubble-border: #2a3757;
+  --user-bubble-text: #e2e8f5;
+  --composer-bg: #0e1426;
+  --composer-border: #243052;
+  --composer-shadow: 0 12px 32px rgba(4, 7, 15, 0.75);
+  --studio-accent-soft: rgba(129, 140, 248, 0.15);
+  --mcode-code-bg: #080c18;
+  --mcode-accent-glow: rgba(129, 140, 248, 0.28);
+  --mcode-focus-ring: 0 0 0 3px rgba(129, 140, 248, 0.24);
+  --agent-accent: #818cf8;
+  --agent-accent-glow: rgba(129, 140, 248, 0.3);
+  --preset-bg: radial-gradient(ellipse at 50% 50%, rgba(99, 102, 241, 0.15) 0%, rgba(10, 15, 30, 0.95) 75%), linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  --preset-bg-size: 100% 100%, 32px 32px, 32px 32px;
+  /* 网格线两层必须平铺，否则 32px 的线只会画一格 */
+  --preset-bg-repeat: no-repeat, repeat, repeat;
+  --preset-bg-position: center, 0 0, 0 0;
+}
+
+/* 8L. Grid 科技网格（浅色）— 白纸底 + 淡灰网格 */
+html[data-preset="grid"][data-theme="light"] {
+  --gem-bg-canvas: #f5f7fa;
+  --gem-bg-sidebar: #eaedf3;
+  --gem-bg-card: #ffffff;
+  --gem-bg-card-inner: #dde2ea;
+  --gem-surface-low: #eaedf3;
+  --gem-surface-high: #d7dde7;
+  --gem-surface-highest: #c6cedb;
+  --gem-text: #1e2537;
+  --gem-text-secondary: #414b62;
+  --gem-text-muted: #7b8598;
+  --gem-border: rgba(30, 37, 55, 0.12);
+  --gem-border-strong: rgba(30, 37, 55, 0.22);
+  --gem-primary: #4f46e5;
+  --gem-primary-container: rgba(79, 70, 229, 0.12);
+  --gem-on-primary-container: #4338ca;
+  --gem-btn-bg: linear-gradient(135deg, #4f46e5 0%, #0891b2 100%);
+  --gem-btn-text: #ffffff;
+  --gem-quota-fill: linear-gradient(90deg, #4f46e5, #0891b2);
+  --gem-aurora: linear-gradient(90deg, #4f46e5 0%, #0891b2 50%, #7c3aed 100%);
+  --gem-shadow-card: 0 2px 8px rgba(30, 37, 55, 0.08);
+  --gem-shadow-float: 0 8px 24px rgba(30, 37, 55, 0.12);
+  --user-bubble-bg: #dde2ea;
+  --user-bubble-border: #c6cedb;
+  --user-bubble-text: #1e2537;
+  --composer-bg: #ffffff;
+  --composer-border: #c6cedb;
+  --composer-shadow: 0 8px 24px rgba(30, 37, 55, 0.12);
+  --studio-accent-soft: rgba(79, 70, 229, 0.1);
+  --mcode-code-bg: #eaedf3;
+  --mcode-accent-glow: rgba(79, 70, 229, 0.2);
+  --mcode-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.2);
+  --agent-accent: #4f46e5;
+  --agent-accent-glow: rgba(79, 70, 229, 0.22);
+  --preset-bg: radial-gradient(ellipse at 50% 50%, rgba(99, 102, 241, 0.14) 0%, rgba(246, 248, 252, 0.95) 75%), linear-gradient(to right, rgba(30, 37, 55, 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(30, 37, 55, 0.06) 1px, transparent 1px);
+  --preset-bg-size: 100% 100%, 32px 32px, 32px 32px;
+  /* 网格线两层必须平铺，否则 32px 的线只会画一格 */
+  --preset-bg-repeat: no-repeat, repeat, repeat;
+  --preset-bg-position: center, 0 0, 0 0;
+}
+
 /* ===== Brand Avatar System (High Contrast & High Craft for All 4 Palettes) ===== */
 .platform-avatar, .agent-avatar-sm, .empty-avatar {
   position: relative;
@@ -6954,6 +7283,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
               <div class="bg-preset-group" id="bg-preset-group">
                 <button type="button" class="bg-preset-btn active" data-preset="mocha">Mocha (#1E1E2E)</button>
                 <button type="button" class="bg-preset-btn" data-preset="shell">Shell (#0F0F11)</button>
+                <button type="button" class="bg-preset-btn" data-preset="aurora" title="极夜蓝底 + 青紫极光渐变">Aurora 极光 (#0B0F19)</button>
+                <button type="button" class="bg-preset-btn" data-preset="dusk" title="暖紫褐底 + 琥珀流金渐变">Dusk 暮霭 (#18121D)</button>
+                <button type="button" class="bg-preset-btn" data-preset="cyber" title="近黑靛蓝 + 霓虹青渐变">Cyber 赛博 (#070913)</button>
+                <button type="button" class="bg-preset-btn" data-preset="grid" title="暗板岩底 + 32px 科技网格">Grid 网格 (#0A0F1E)</button>
                 <button type="button" class="bg-preset-btn" data-preset="custom">自定义图片</button>
               </div>
             </div>
@@ -13460,17 +13793,18 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     const bgLayer = document.getElementById('app-bg-layer');
     if (!bgLayer) return;
 
+    // layer: true 表示该预设带一张渐变底图，由 #app-bg-layer 承载
+    // （底图取 CSS 变量 --preset-bg / --preset-bg-size，随深浅主题自动切换）
     const PRESETS = {
-      mocha: {
-        bg: '#1e1e2e',
-        bodyClass: false
-      },
-      shell: {
-        bg: '#0f0f11',
-        bodyClass: false
-      },
-      custom: { bg: '', bodyClass: true }
+      mocha: { layer: false },
+      shell: { layer: false },
+      aurora: { layer: true },
+      dusk: { layer: true },
+      cyber: { layer: true },
+      grid: { layer: true },
+      custom: { layer: true }
     };
+    const VALID_PRESETS = Object.keys(PRESETS);
 
     let saved = null;
     try {
@@ -13478,7 +13812,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     } catch { saved = {}; }
 
     const config = {
-      preset: saved?.preset || 'mocha',
+      preset: VALID_PRESETS.indexOf(saved?.preset) >= 0 ? saved.preset : 'mocha',
       url: saved?.url || '',
       opacity: typeof saved?.opacity === 'number' ? saved.opacity : 100,
       blur: typeof saved?.blur === 'number' ? saved.blur : 0
@@ -13497,24 +13831,34 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     const resetBtn = document.getElementById('btn-reset-bg');
 
     const applyBackground = () => {
-      const preset = config.preset || 'mocha';
+      let preset = config.preset || 'mocha';
+      if (VALID_PRESETS.indexOf(preset) < 0) preset = 'mocha';
+      config.preset = preset;
       document.documentElement.setAttribute('data-preset', preset);
 
-      if (preset === 'custom') {
-        const hasImg = Boolean(config.url && config.url.trim());
-        if (hasImg) {
-          document.body.classList.add('has-custom-bg');
-          bgLayer.style.display = 'block';
+      // 是否需要底图：非 custom 预设看 PRESETS[preset].layer；custom 则要求已填图片
+      const useLayer = preset === 'custom'
+        ? Boolean(config.url && config.url.trim())
+        : !!PRESETS[preset].layer;
+
+      if (useLayer) {
+        document.body.classList.add('has-custom-bg');
+        bgLayer.style.display = 'block';
+        if (preset === 'custom') {
           bgLayer.style.backgroundImage = `url("${config.url}")`;
           bgLayer.style.backgroundSize = 'cover';
+          bgLayer.style.backgroundRepeat = 'no-repeat';
           bgLayer.style.backgroundPosition = 'center';
-          bgLayer.style.opacity = (config.opacity / 100).toString();
-          bgLayer.style.filter = config.blur > 0 ? `blur(${config.blur}px)` : 'none';
         } else {
-          document.body.classList.remove('has-custom-bg');
-          bgLayer.style.display = 'none';
-          bgLayer.style.backgroundImage = 'none';
+          // 渐变底图定义在预设块里（--preset-bg / -size / -repeat / -position），
+          // 深浅主题各一份，切换主题时自动跟随
+          bgLayer.style.backgroundImage = 'var(--preset-bg)';
+          bgLayer.style.backgroundSize = 'var(--preset-bg-size, cover)';
+          bgLayer.style.backgroundRepeat = 'var(--preset-bg-repeat, no-repeat)';
+          bgLayer.style.backgroundPosition = 'var(--preset-bg-position, center)';
         }
+        bgLayer.style.opacity = (config.opacity / 100).toString();
+        bgLayer.style.filter = config.blur > 0 ? `blur(${config.blur}px)` : 'none';
       } else {
         document.body.classList.remove('has-custom-bg');
         bgLayer.style.display = 'none';

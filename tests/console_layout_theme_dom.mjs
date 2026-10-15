@@ -61,7 +61,16 @@ test('index.html contains custom background layer and settings card with presets
   assert.ok(html.includes('id="settings-bg-card"'), 'Must have settings-bg-card');
   assert.ok(html.includes('data-preset="mocha"'), 'Must have mocha preset');
   assert.ok(html.includes('data-preset="shell"'), 'Must have shell preset');
+  assert.ok(html.includes('data-preset="aurora"'), 'Must have aurora preset');
+  assert.ok(html.includes('data-preset="dusk"'), 'Must have dusk preset');
+  assert.ok(html.includes('data-preset="cyber"'), 'Must have cyber preset');
+  assert.ok(html.includes('data-preset="grid"'), 'Must have grid preset');
   assert.ok(html.includes('data-preset="custom"'), 'Must have custom preset');
+  assert.ok(html.includes('[data-preset="aurora"][data-theme="light"]'), 'Aurora must have a light palette');
+  assert.ok(html.includes('[data-preset="dusk"][data-theme="light"]'), 'Dusk must have a light palette');
+  assert.ok(html.includes('[data-preset="cyber"][data-theme="light"]'), 'Cyber must have a light palette');
+  assert.ok(html.includes('[data-preset="grid"][data-theme="light"]'), 'Grid must have a light palette');
+  assert.ok(html.includes('--preset-bg:'), 'Gradient presets must define --preset-bg');
   assert.ok(html.includes('id="custom-bg-input"'), 'Must have URL input');
   assert.ok(html.includes('id="btn-upload-local-bg"'), 'Must have local upload button');
   assert.ok(html.includes('id="bg-opacity-slider"'), 'Must have opacity slider');
@@ -84,7 +93,7 @@ test('index.html contains custom background layer and settings card with presets
   assert.ok(html.includes('body.has-custom-bg .composer'), 'Composer must support transparent glassmorphic styling on custom bg');
   assert.ok(html.includes('body.has-custom-bg .bubble.user'), 'User bubble must support transparent glassmorphic styling on custom bg');
   assert.ok(html.includes('body.has-custom-bg .chat-col'), 'Chat col must be transparent on custom bg');
-  assert.ok(html.includes('const hasImg = Boolean(config.url && config.url.trim());'), 'Must check valid image before activating has-custom-bg');
+  assert.ok(html.includes('Boolean(config.url && config.url.trim())'), 'Must check valid image before activating has-custom-bg');
 
   // Stacking context: header.top (z-index 100) and chat-head (z-index 50) float above content
   assert.ok(html.includes('position: relative;\n  z-index: 100;\n  height: 52px;'), 'header.top must have position relative and z-index 100');
