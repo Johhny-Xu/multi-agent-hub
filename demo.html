@@ -4679,6 +4679,9 @@
   --gem-border-strong: rgba(205, 214, 244, 0.16);
   --gem-primary: #cba6f7;
   --gem-primary-container: rgba(203, 166, 247, 0.16);
+  /* 子代理主题色默认值（与主题主色同值）；JS applyAgentAccent() 会以内联样式覆盖为所选子代理色 */
+  --agent-accent: #cba6f7;
+  --agent-accent-glow: rgba(203, 166, 247, 0.26);
   --gem-on-primary-container: #f5c2e7;
   --gem-btn-bg: linear-gradient(135deg, #b4befe 0%, #cba6f7 100%);
   --gem-btn-text: #11111b;
@@ -4738,6 +4741,9 @@ html[data-theme="light"]:not([data-preset="shell"]) {
   --gem-border-strong: rgba(76, 79, 105, 0.22);
   --gem-primary: #8839ef;
   --gem-primary-container: rgba(136, 57, 239, 0.12);
+  /* 子代理主题色默认值（与主题主色同值） */
+  --agent-accent: #8839ef;
+  --agent-accent-glow: rgba(136, 57, 239, 0.20);
   --gem-on-primary-container: #8839ef;
   --gem-btn-bg: linear-gradient(135deg, #8839ef 0%, #1e66f5 100%);
   --gem-btn-text: #ffffff;
@@ -4797,6 +4803,9 @@ html[data-preset="shell"]:not([data-theme="light"]) {
   --gem-border-strong: rgba(255, 255, 255, 0.16);
   --gem-primary: #00d26a;
   --gem-primary-container: rgba(0, 210, 106, 0.14);
+  /* 子代理主题色默认值（与主题主色同值） */
+  --agent-accent: #00d26a;
+  --agent-accent-glow: rgba(0, 210, 106, 0.26);
   --gem-on-primary-container: #4ade80;
   --gem-btn-bg: linear-gradient(135deg, #059669 0%, #00d26a 100%);
   --gem-btn-text: #0a0a0d;
@@ -4856,6 +4865,9 @@ html[data-preset="shell"][data-theme="light"] {
   --gem-border-strong: rgba(0, 0, 0, 0.16);
   --gem-primary: #0f172a;
   --gem-primary-container: rgba(15, 23, 42, 0.08);
+  /* 子代理主题色默认值（与主题主色同值） */
+  --agent-accent: #0f172a;
+  --agent-accent-glow: rgba(15, 23, 42, 0.16);
   --gem-on-primary-container: #0f172a;
   --gem-btn-bg: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   --gem-btn-text: #ffffff;
@@ -7428,6 +7440,77 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 }
 .sb-cbar i {
   transition: width .2s, background-color .25s ease;
+}
+
+/* ===== 子代理对话区：全部二级菜单与强调色跟随「发送」的子代理主题色 =====
+   把 #panel-chat（含会话列表、会话头下拉、消息区、输入台、状态栏及其弹出面板）
+   作用域内的主题强调色令牌整体改指向 --agent-accent，于是：
+     模型与运行参数弹窗  .mp-agent-badge / .mp-model-item.selected / .mp-check /
+                         .mp-search-input:focus / .mp-opt-btn.active / .mp-done-btn
+     状态栏显示项弹窗    .sb-config-btn-text / .sb-config-checkbox
+     会话头二级菜单      .export-menu-item svg（⋯ 更多 / 切换子代理 / 切换对话 / 筛选）
+     输入台与消息区      .composer:focus-within、引用块左边线、行内代码、空状态卡片 hover
+   全部一次性跟随发送按钮的子代理主题色。
+
+   --mcode-accent 取「可读强调色」：把子代理色按 72% 混入当前主题正文字色，
+   保证浅色主题下不会出现亮色文字（如 Antigravity #8ab4f8）在浅底上看不清的问题。
+   需要承载白字的实心块（Max 档位、完成、primary 按钮）统一改用
+   --mcode-accent-gradient（深色→子代理色的渐变），与发送按钮同一套色。 */
+#panel-chat {
+  --gem-primary: color-mix(in srgb, var(--agent-accent) 72%, var(--gem-text));
+  --gem-primary-container: color-mix(in srgb, var(--agent-accent) 14%, transparent);
+  --gem-on-primary-container: color-mix(in srgb, var(--agent-accent) 72%, var(--gem-text));
+  --mcode-accent: color-mix(in srgb, var(--agent-accent) 72%, var(--gem-text));
+  --mcode-accent-gradient: linear-gradient(135deg,
+    color-mix(in srgb, var(--agent-accent) 72%, #000) 0%,
+    var(--agent-accent) 100%);
+  --mcode-primary-action-bg: linear-gradient(135deg,
+    color-mix(in srgb, var(--agent-accent) 72%, #000) 0%,
+    var(--agent-accent) 100%);
+  --mcode-accent-glow: var(--agent-accent-glow);
+  --mcode-focus-ring: 0 0 0 3px color-mix(in srgb, var(--agent-accent) 30%, transparent);
+}
+/* 实心强调块统一走渐变（白字可读），不跟随 --mcode-accent 的「可读强调色」 */
+#panel-chat .mp-opt-btn.active {
+  background: var(--mcode-accent-gradient);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 6px var(--agent-accent-glow);
+}
+/* 二级菜单里原来写死的靛蓝 rgba(99,102,241,*) 一并改为子代理色 */
+.mp-agent-badge {
+  background: color-mix(in srgb, var(--agent-accent) 15%, transparent);
+  color: var(--mcode-accent);
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 32%, transparent);
+}
+.mp-model-item.selected {
+  background: color-mix(in srgb, var(--agent-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--agent-accent) 45%, transparent);
+}
+.sb-config-btn-text:hover {
+  background: color-mix(in srgb, var(--agent-accent) 15%, transparent);
+}
+/* 对话区内其余写死靛蓝/天蓝的强调控件，一并归到子代理色 */
+#panel-chat .btn-head-workbench.active {
+  background: color-mix(in srgb, var(--agent-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent-accent) 40%, transparent);
+  color: var(--mcode-accent);
+}
+#panel-chat .pill.acc {
+  border-color: color-mix(in srgb, var(--agent-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+}
+#panel-chat .mp-param-flag {
+  color: var(--mcode-accent);
+}
+#panel-chat .wb-artifact-btn.primary {
+  background: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+  color: var(--mcode-accent);
+  border-color: color-mix(in srgb, var(--agent-accent) 30%, transparent);
+}
+#panel-chat .wb-artifact-btn.primary:hover {
+  background: var(--mcode-accent-gradient);
+  color: #fff;
 }
 </style>
 </head>
