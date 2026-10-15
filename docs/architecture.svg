@@ -50,7 +50,7 @@
     <text x="56" y="482" font-size="14.5px" font-weight="700" fill="#15803d">③ 零客户端？WebUI 独立管</text>
     <text x="56" y="505" font-size="13px" font-weight="600" fill="#166534">三栏大盘 (:8890) · 智能悬浮收展</text>
     <text x="56" y="527" class="micro muted">6 大双模预设 · 壁纸毛玻璃 · 子代理色</text>
-    <text x="56" y="548" class="micro muted">9 厂商 OAuth 闭环 · 多账号秒切 · 脱机 Demo</text>
+    <text x="56" y="548" class="micro muted">9 厂商 OAuth 闭环 · 多账号秒切</text>
     <text x="56" y="568" font-size="12px" fill="#16a34a" font-weight="600">无需任何 IDE 即可统一调度管理</text>
   </g>
 
@@ -60,14 +60,14 @@
     <text x="340" y="182" class="label blue">02 · 连接</text>
     <text x="340" y="212" class="heading">统一 MCP 桥接</text>
     <text x="340" y="250" class="body" font-weight="700">扫描→选择→配对</text>
-    <text x="340" y="280" class="small muted">局域网自动广播或手动填 URL</text>
+    <text x="340" y="280" class="small muted">局域网自动广播或填 URL</text>
     <text x="340" y="316" class="body">选定一个 Hub</text>
     <text x="340" y="342" class="small muted">本机 / 局域网 / 远端服务器</text>
     <line x1="340" y1="365" x2="518" y2="365" stroke="#bfdbfe"/>
     <text x="340" y="396" class="body" font-weight="700">双重 MCP 服务支持</text>
-    <text x="340" y="426" class="small">8 个 MCP 桥接工具 (含状态控制)</text>
+    <text x="340" y="426" class="small">8 个 MCP 工具 · 状态控制</text>
     <text x="340" y="454" class="small green" font-weight="600">HTTP 子代理直连 (:8790)</text>
-    <text x="340" y="482" class="small blue">一键生成 Agent 接入 Prompt</text>
+    <text x="340" y="482" class="small blue">生成 Agent 接入 Prompt</text>
     <text x="340" y="510" class="small muted">大产物落盘 · 仅回摘要</text>
     <text x="340" y="538" class="small muted">动态重连自愈 · 剪贴板降级</text>
     <text x="340" y="572" class="small blue" font-weight="700">保存连接，随时一键切换</text>
@@ -81,7 +81,7 @@
     <text x="598" y="250" class="body" font-weight="700">Windows / Linux</text>
     <text x="598" y="280" class="small muted">与客户端同机或跨机分离部署</text>
     <text x="598" y="316" class="body">预检模型与能力约束</text>
-    <text x="598" y="342" class="small muted">思考分级 / 流式 / 图片 / 附件限制</text>
+    <text x="598" y="342" class="small muted">思考分级 · 流式 · 图片 · 附件</text>
     <line x1="598" y1="365" x2="804" y2="365" stroke="#a7d8c4"/>
     <text x="598" y="396" class="body" font-weight="700">任务与状态生命周期</text>
     <text x="598" y="426" class="small">持久化回执 (ref) 异步安全轮询</text>
@@ -89,7 +89,7 @@
     <text x="598" y="482" class="small green" font-weight="600">Singleflight 配额合并 · 高并发</text>
     <text x="598" y="510" class="small muted">进程组守护与彻底回收</text>
     <text x="598" y="538" class="small muted">跨代理共享笔记记忆体系</text>
-    <text x="598" y="572" class="small green" font-weight="700">常驻守护服务 (systemd / 后台)</text>
+    <text x="598" y="572" class="small green" font-weight="700">常驻守护 (systemd / 后台)</text>
   </g>
 
   <g id="workers">
