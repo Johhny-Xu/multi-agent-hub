@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v0.9.9.8 已完成开源前收口与源码检出安装修复</title>
-  <desc id="roadmap-desc">v0.9.9.8 与 v0.9.9.7 是同一次收口的两半：前者修复源码检出在 Linux 上的安装链路（执行位丢失、源码目录直接安装、回环请求被环境代理劫持），后者补上 Node 20 的 WebSocket 兼容、登录与控制台的路径发现、测试与宿主解耦。同时完成开源前整理：补齐 CONTRIBUTING.md / SECURITY.md / README.en.md，移除凭据路径提示，补齐 Windows 脚本行尾规则，并移出 docs/ 中 66 个无人引用的测试证据文件。</desc>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v1.0.0 已完成首个公开正式版发布</title>
+  <desc id="roadmap-desc">v1.0.0 是首个公开正式版：把 0.9.9.7–0.9.9.9 的开源前收口正式转正（源码检出安装链路、Node 20 兼容、测试与宿主解耦），并合入发布线审校修复（MCP 桥 serverInfo 版本对齐、扩展打包版本守卫、中英 README 重排）。凭据与隐私审计清零，社区文件补齐，GitHub Release 与全部产物已发布。</desc>
   <defs>
     <style>
       .title { font-size:34px; font-weight:700; fill:#0f172a; }
@@ -22,17 +22,17 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-16　·　当前版本 v0.9.9.8　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
+  <text x="64" y="108" class="meta">更新：2026-10-16　·　当前版本 v1.0.0　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v0.9.9.8 · 当前重点</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.0 · 当前重点</text>
     <rect x="916" y="151" width="268" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">安装修复 · 开源收口</text>
-    <text x="96" y="227" class="focus">源码检出装得上，陌生人看得懂</text>
-    <text x="96" y="262" class="lead">执行位丢失不再阻断 · 源码目录可直接安装 · 回环请求不被代理劫持 · Node 20 兼容</text>
+    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">首个公开正式版</text>
+    <text x="96" y="227" class="focus">首发完成：干净、能装、可交付</text>
+    <text x="96" y="262" class="lead">发布线审校修复合入 · MCP 版本全端对齐 · 扩展打包版本守卫 · README 双语重排</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
@@ -45,16 +45,16 @@
     <circle cx="102" cy="442" r="5" fill="#0f766e"/>
     <text x="120" y="450" class="body">6 大双模预设 + 壁纸毛玻璃 + 子代理色贯通</text>
 
-    <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">本版收口成果</text>
+    <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">本版发布成果</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">执行位丢失后 sh install.sh 仍可跑通</text>
+    <text x="716" y="351" class="body">Release v1.0.0 已发布，9 个附件校验一致</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
-    <text x="716" y="384" class="body">源码目录直接安装（构建临时目录自动清理）</text>
+    <text x="716" y="384" class="body">MCP 桥版本全端对齐（7 份副本一致）</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">回环请求强制直连，修复 Health timeout</text>
+    <text x="716" y="417" class="body">扩展打包缺版本即报错，不再误标</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
-    <text x="716" y="450" class="body">Node 20 WebSocket polyfill + 测试宿主解耦</text>
-    <text x="692" y="476" class="note">CONTRIBUTING / SECURITY / README.en 已补齐。</text>
+    <text x="716" y="450" class="body">中英 README 重排：目录 / 快速开始 / 端口表</text>
+    <text x="692" y="476" class="note">审计 0 命中 · 社区文件与交接包已备齐。</text>
   </g>
 
   <text x="64" y="541" class="section">版本演进</text>
@@ -85,9 +85,9 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v0.9.9.8</text>
-    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">安装链路修复</text>
-    <text x="1024" y="675" class="stage">开源前收口与文档</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.0</text>
+    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">首个公开正式版</text>
+    <text x="1024" y="675" class="stage">含发布线审校修复</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->
