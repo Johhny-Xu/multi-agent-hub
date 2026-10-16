@@ -1,1 +1,11 @@
+# Shell entry points must keep LF so they run on Linux/macOS even when the
+# checkout happens on Windows, where core.autocrlf=true would otherwise rewrite
+# them on the way out.
 *.sh text eol=lf
+
+# Windows entry points must keep CRLF. Without these three lines a Linux
+# checkout packages .cmd/.bat/.ps1 with LF endings (core.autocrlf is only true
+# on Windows), and cmd.exe / PowerShell mis-parse them.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
