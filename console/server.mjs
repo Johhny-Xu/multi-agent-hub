@@ -1296,10 +1296,18 @@ export async function start(context) {
     const baseTime = typeof dispatchTime === 'number' ? dispatchTime : tsNow() - 60_000;
     const timeThreshold = baseTime - 5000;
 
-    // codebuddy / codebuddy-cn: 扫 ~/.codebuddy/projects/<home-dir>/ 取 mtime 晚于任务派发时刻的最新 .jsonl 文件名 (去 .jsonl)
+    // codebuddy / codebuddy-cn: 扫 ~/.codebuddy(-cn)/projects/<slug>/ 取 mtime 晚于任务派发时刻的最新 .jsonl 文件名 (去 .jsonl)
     if (agent === 'codebuddy' || agent === 'codebuddy-cn') {
       const homeSlug = os.homedir().replace(/^\/+/, '').replace(/[/\\]+/g, '-');
-      const dir = join(os.homedir(), '.codebuddy', 'projects', homeSlug);
+      const cwdSlug = process.cwd().replace(/^\/+/, '').replace(/[/\\]+/g, '-');
+      const profileDirs = agent === 'codebuddy-cn' ? ['.codebuddy-cn', '.codebuddy'] : ['.codebuddy'];
+      const candidateDirs = [];
+      for (const prof of profileDirs) {
+        for (const slug of [cwdSlug, homeSlug]) {
+          candidateDirs.push(join(os.homedir(), prof, 'projects', slug));
+        }
+      }
+      const dir = candidateDirs.find((d) => existsSync(d)) || candidateDirs[0];
       try {
         if (existsSync(dir)) {
           const files = await readdir(dir);
@@ -1722,8 +1730,16 @@ export async function start(context) {
   const watcherKick = setInterval(() => tuneWatcher(), 10_000);
   watcherKick.unref?.();
 
-  // ---------------- 外部派发任务同步: 周期扫描 ~/agent-hub/results/*.json 归组进各 agent 线程
-  const RESULTS_DIR = join(os.homedir(), 'agent-hub', 'results');
+  // ---------------- 外部派发任务同步: 周期扫描枢纽 results/*.json 归组进各 agent 线程
+  const RESULTS_DIRS = Array.from(new Set([
+    process.env.HUB_RESULTS_DIR,
+    process.env.HUB_STATE_DIR ? join(process.env.HUB_STATE_DIR, 'results') : '',
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'hub', 'state', 'results'),
+    join(os.homedir(), '.config', 'agenthub', 'state', 'results'),
+    join(os.homedir(), 'agent-hub', 'results'),
+  ].filter(Boolean).map((d) => resolve(d))));
+  const resolveActiveResultsDir = () => RESULTS_DIRS.find((d) => existsSync(d)) || RESULTS_DIRS[0];
+  const RESULTS_DIR = resolveActiveResultsDir();
   const seenRefsFile = join(dataDir, 'external-refs-seen.json');
   const seenExternalRefs = new Set();
   try {
@@ -1745,8 +1761,9 @@ export async function start(context) {
     if (sweepBusy) return;
     sweepBusy = true;
     try {
-      if (!existsSync(RESULTS_DIR)) return;
-      const files = await readdir(RESULTS_DIR);
+      const activeResultsDir = resolveActiveResultsDir();
+      if (!existsSync(activeResultsDir)) return;
+      const files = await readdir(activeResultsDir);
       const newEntries = [];
       for (const f of files) {
         if (!f.endsWith('.json') || f.endsWith('-last.json')) continue;
@@ -1759,7 +1776,7 @@ export async function start(context) {
       const items = [];
       for (const entry of newEntries) {
         try {
-          const raw = await readFile(join(RESULTS_DIR, entry.file), 'utf-8');
+          const raw = await readFile(join(activeResultsDir, entry.file), 'utf-8');
           const data = JSON.parse(raw);
           if (!data || data.status === 'running' || data.status === 'pending') continue;
           items.push({ ...entry, data });
@@ -2538,7 +2555,7 @@ export async function start(context) {
       }
       if (request.method === 'GET' && p === '/api/artifact') {
         const rp = resolve(url.searchParams.get('path') || '');
-        const roots = [resolve(artifactDir), RESULTS_DIR].map((r) => resolve(r));
+        const roots = [resolve(artifactDir), ...RESULTS_DIRS].map((r) => resolve(r));
         if (!roots.some((root) => rp.startsWith(root + sep))) throw badReq('仅允许读取控制台产物或枢纽 results 产物: ' + rp);
         const text = await readFile(rp, 'utf-8');
         send(200, { text: text.slice(0, 120_000), truncated: text.length > 120_000 });

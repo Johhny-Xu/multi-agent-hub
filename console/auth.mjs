@@ -25,9 +25,33 @@ import { autoSyncLiveAccount, addFromSandbox, findCodeBuddySharedAuth } from './
 
 const execFile = promisify(execFileCb);
 const HOME = homedir();
-const AGENTS_JSON = join(HOME, '.config', 'agenthub-codearts', 'agents.json');
+const CONSOLE_DIR = dirname(fileURLToPath(import.meta.url));
+function resolveAgentsJsonPath() {
+  if (process.env.HUB_AGENTS_FILE && process.env.HUB_AGENTS_FILE.trim()) {
+    return process.env.HUB_AGENTS_FILE.trim();
+  }
+  const candidates = [
+    join(CONSOLE_DIR, '..', 'hub', 'agents.json'),
+    join(HOME, '.config', 'agenthub', 'agents.json'),
+    join(HOME, '.config', 'agenthub-codearts', 'agents.json'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return join(CONSOLE_DIR, '..', 'hub', 'agents.json');
+}
+function resolveCliBin(binName, fallbackPath) {
+  const pathDirs = String(process.env.PATH || '').split(process.platform === 'win32' ? ';' : ':').filter(Boolean);
+  const searchDirs = [...pathDirs, join(HOME, '.npm-global', 'bin'), join(HOME, '.local', 'bin'), '/usr/local/bin', '/usr/bin'];
+  for (const dir of searchDirs) {
+    const candidate = join(dir, binName);
+    if (existsSync(candidate)) return candidate;
+  }
+  return fallbackPath;
+}
+const AGENTS_JSON = resolveAgentsJsonPath();
 const CODEARTS_ENV = join(HOME, '.config', 'agenthub-codearts', 'codearts-auth.env');
-const SECRET_HELPER = join(dirname(fileURLToPath(import.meta.url)), 'secret-get.py');
+const SECRET_HELPER = join(CONSOLE_DIR, 'secret-get.py');
 
 const _writeLocks = new Map();
 /** 进程内异步互斥锁：同一 key 的临界区严格串行，消除并发读-改-写覆盖丢失（RMW lost update） */
@@ -122,14 +146,14 @@ function zcodeProviderOf(region) {
 // ---------------------------------------------------------------- 登录命令表（全部 9 个 Worker 均支持 WebUI 登录）
 export const LOGIN_COMMANDS = {
   'minimaxcode': {
-    cmd: [join(HOME, '.npm-global', 'bin', 'mmx'), 'auth', 'login', '--recommend', '--region=cn'],
+    cmd: [resolveCliBin('mmx', join(HOME, '.npm-global', 'bin', 'mmx')), 'auth', 'login', '--recommend', '--region=cn'],
     headless: true,
     mode: 'pty_device',
     note: '打开 MiniMax 授权链接并确认设备码，后端将自动轮询并写入 ~/.mmx/config.json；也可直接在下方粘贴 MiniMax API Key (sk-...)。MiniMax 官方不返回账户名，建议在上方填写「账号备注名称」以便识别',
     callbackHint: '可选：直接粘贴 MiniMax API Key (sk-...) 立即完成认证',
   },
   'codebuddy': {
-    cmd: [join(HOME, '.npm-global', 'bin', 'codebuddy'), '--acp'],
+    cmd: [resolveCliBin('codebuddy', join(HOME, '.npm-global', 'bin', 'codebuddy')), '--acp'],
     headless: true,
     mode: 'acp_oauth',
     acpEnv: 'external',
@@ -137,7 +161,7 @@ export const LOGIN_COMMANDS = {
     callbackHint: '可选：粘贴 started 成功页链接自动完成认证；或粘贴 auth.info JSON / accessToken 导入（不影响网页端会话）',
   },
   'codebuddy-cn': {
-    cmd: [join(HOME, '.npm-global', 'bin', 'codebuddy'), '--acp'],
+    cmd: [resolveCliBin('codebuddy', join(HOME, '.npm-global', 'bin', 'codebuddy')), '--acp'],
     headless: true,
     mode: 'acp_oauth',
     acpEnv: 'internal',
@@ -145,7 +169,7 @@ export const LOGIN_COMMANDS = {
     callbackHint: '可选：粘贴 started 成功页链接自动完成认证；或粘贴 auth.info JSON / accessToken 导入（不影响网页端会话）',
   },
   'github-copilot': {
-    cmd: [join(HOME, '.local', 'bin', 'copilot'), 'login', '--device-code'],
+    cmd: [resolveCliBin('copilot', join(HOME, '.local', 'bin', 'copilot')), 'login', '--device-code'],
     headless: true,
     mode: 'pty_device',
     note: '点击打开 GitHub Device 授权页并输入下方 8 位设备码，授权后自动写入系统凭据环',
@@ -287,9 +311,16 @@ function cleanupSessionResources(entry) {
   }
   if (entry.proc) {
     const p = entry.proc;
+    const ownGroup = entry.ownGroup;
     entry.proc = null;
+    if (ownGroup && p.pid) {
+      try { process.kill(-p.pid, 'SIGTERM'); } catch { /* ignore */ }
+    }
     try { p.kill('SIGTERM'); } catch { /* ignore */ }
     const killTimer = setTimeout(() => {
+      if (ownGroup && p.pid) {
+        try { process.kill(-p.pid, 'SIGKILL'); } catch { /* ignore */ }
+      }
       try { if (p.exitCode === null) p.kill('SIGKILL'); } catch { /* ignore */ }
     }, 300);
     killTimer.unref?.();
@@ -759,11 +790,38 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
   if (spec.mode === 'pty_device' && spec.cmd) {
     const cleanEnv = { ...process.env, HOME: targetHome, DISPLAY: '', BROWSER: 'echo', TERM: 'xterm-256color', NO_COLOR: '1' };
     delete cleanEnv.CI;
-    const child = spawn('python3', ['-c', 'import pty, sys; pty.spawn(sys.argv[1:])', ...spec.cmd], {
+    const ptyScript = [
+      'import os, pty, signal, sys',
+      'pid, fd = pty.fork()',
+      'if pid == 0:',
+      '    os.execvp(sys.argv[1], sys.argv[1:])',
+      'def _forward(sig, _frame):',
+      '    try: os.kill(pid, sig)',
+      '    except OSError: pass',
+      'for _s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):',
+      '    signal.signal(_s, _forward)',
+      'try:',
+      '    while True:',
+      '        try:',
+      '            data = os.read(fd, 4096)',
+      '            if not data: break',
+      '            os.write(1, data)',
+      '        except OSError:',
+      '            break',
+      'finally:',
+      '    try: os.close(fd)',
+      '    except OSError: pass',
+      '    _, status = os.waitpid(pid, 0)',
+      '    sys.exit(os.WEXITSTATUS(status) if os.WIFEXITED(status) else 1)',
+    ].join('\n');
+    const ownGroup = process.platform !== 'win32';
+    const child = spawn('python3', ['-c', ptyScript, ...spec.cmd], {
       cwd: targetHome,
       env: cleanEnv,
+      detached: ownGroup,
     });
     entry.proc = child;
+    entry.ownGroup = ownGroup;
     child.stdout.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
     child.stderr.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
     child.on('exit', async (code) => {

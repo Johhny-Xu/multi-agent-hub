@@ -7,9 +7,24 @@ import zipfile
 from pathlib import Path
 
 class TestExtensionPackaging(unittest.TestCase):
+    _created_dist = False
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo_root = Path(__file__).resolve().parent.parent
+        cls.dist_dir = cls.repo_root / "integrations" / "vscode" / "dist"
+        if not (cls.dist_dir / "multi-agent-hub-0.9.9.7.vsix").exists():
+            import subprocess, sys
+            cls._created_dist = not cls.dist_dir.exists()
+            subprocess.run([sys.executable, str(cls.repo_root / "packaging" / "package_extensions.py")], check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._created_dist and cls.dist_dir.exists():
+            import shutil
+            shutil.rmtree(cls.dist_dir, ignore_errors=True)
+
     def setUp(self):
-        self.repo_root = Path(__file__).resolve().parent.parent
-        self.dist_dir = self.repo_root / "integrations" / "vscode" / "dist"
         self.vsix = self.dist_dir / "multi-agent-hub-0.9.9.7.vsix"
         self.carts = self.dist_dir / "multi-agent-hub-0.9.9.7.carts"
         self.cloudide = self.dist_dir / "multi-agent-hub-0.9.9.7.cloudide"

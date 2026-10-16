@@ -19,7 +19,8 @@ cd multi-agent-hub
 
 ## 如果报 Permission denied
 
-包内 15 个 `.sh` 在归档里已记录 `0755`，`tar -xzf` 解压会保留权限位，可直接 `./install.sh`。
+包内 15 个 `.sh` 在归档里已记录 `0755`（`create_system=3, mode=0755`）。`tar -xzf` 与 Linux 下的
+`unzip` 都会保留权限位，可直接 `./install.sh`。
 
 但**部分解压工具会丢掉 Unix 权限位** —— Python 的 `zipfile.extractall()` 会解出 `0664`，
 Windows 资源管理器、部分 JS 解压库同样如此。为了不依赖权限位，根目录与 `packaging/` 下的
@@ -40,8 +41,9 @@ chmod +x install.sh connect.sh start.sh stop.sh packaging/*.sh \
 ## 从源码目录直接安装
 
 `install.py` 只接受带 `manifest.json` 的发行包。源码目录没有该文件，旧版会直接报
-`Invalid or unreadable configuration: manifest.json`。现在 `install.sh` 检测到源码目录时会先用
-`packaging/build.py` 在临时目录构建 `both` 包，再从该包安装。
+`Invalid or unreadable configuration: manifest.json`。现在两条入口都能处理源码目录：`install.sh`
+会在临时目录构建 `both` 包再交给安装器；直接调用 `python packaging/install.py --bundle .` 时，
+`install.py` 自己也会先构建一份（构建出的临时目录在安装结束后自动删除，其中的 `.sh` 会补回 `0755`）。
 
 ## 代理环境（http_proxy / https_proxy）
 

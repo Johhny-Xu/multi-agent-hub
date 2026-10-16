@@ -48,6 +48,8 @@ def replace_file(source, target):
     os.close(fd)
     try:
         shutil.copy2(source, temporary)
+        if os.name != 'nt' and target.suffix == '.sh':
+            os.chmod(temporary, 0o755)
         os.replace(temporary, target)
     finally:
         if os.path.exists(temporary):

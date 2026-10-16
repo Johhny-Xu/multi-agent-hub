@@ -223,6 +223,8 @@ def main():
                 python = env.get("HUB_PYTHON") or sys.executable
                 (root / "logs").mkdir(exist_ok=True)
                 agents = Path(env.get("HUB_AGENTS_FILE") or root / "hub/agents.json")
+                env["HUB_AGENTS_FILE"] = str(agents)
+                env.setdefault("HUB_RESULTS_DIR", str(Path(env.get("HUB_STATE_DIR") or root / "hub/state") / "results"))
                 if not agents.exists():
                     agents.parent.mkdir(parents=True, exist_ok=True)
                     with agents.open("xb") as dest:
