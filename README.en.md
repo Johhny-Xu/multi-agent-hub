@@ -402,6 +402,7 @@ python packaging/build.py --output ../agenthub-releases
 
 - 🎨 **Brand vector icons and avatar standards**: thanks to [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) for the refined, high-quality tech and AI brand SVGs that give the Web console and every sub-agent avatar a clean, standard native vector foundation.
 - 🤖 **Vendor kernels and developer ecosystems**: thanks to Huawei CodeArts, Google Antigravity, Tencent CodeBuddy, GitHub Copilot, Xiaomi MiMo, MiniMax, ByteDance Trae, Z.ai and others for their official CLI kernels and open ecosystems.
+- 🌉 **Trae desktop bridging and automation (`trae_delegate` channel)**: thanks to the [TraeClaw](https://github.com/firerlAGI/TraeClaw) open-source project for its local bridge service and CDP/DOM automation, which let this project dispatch tasks to the TraeCode desktop client.
 - 💖 **Open-source community**: thanks to every developer who gave feedback and suggestions on multi-model dispatch, cross-platform native integration and the Web console.
 
 ---
