@@ -46,6 +46,17 @@ RESULTS = str(Path(os.path.expandvars(os.path.expanduser(
     or str(STATE_DIR / "results")
 ))).resolve())
 GATEWAY = os.environ.get("TRAE_GATEWAY", "http://127.0.0.1:8787").rstrip("/")
+
+
+def _loopback_urlopen(request, timeout):
+    """urlopen that never sends loopback traffic through an env proxy."""
+    import urllib.parse
+    import urllib.request
+    url = request.full_url if isinstance(request, urllib.request.Request) else request
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    if host in {"127.0.0.1", "localhost", "::1"} or host.startswith("127."):
+        return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
 NODE = shutil.which("node") or "node"
 DOM_READ_TRAE = (
     os.environ.get("TRAE_DOM_READ", "").strip()
@@ -178,11 +189,14 @@ def start_progress_poller(ref, reader_script, stop_event):
     return th
 
 
-_HTTP_REQUEST = """import json, sys, urllib.request
+_HTTP_REQUEST = """import json, sys, urllib.parse, urllib.request
 payload = sys.stdin.buffer.read()
 request = urllib.request.Request(sys.argv[1], data=payload,
     headers={"Content-Type": "application/json; charset=utf-8"}, method="POST")
-with urllib.request.urlopen(request, timeout=float(sys.argv[2])) as response:
+host = (urllib.parse.urlsplit(sys.argv[1]).hostname or "").lower()
+loopback = host in {"127.0.0.1", "localhost", "::1"} or host.startswith("127.")
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({})) if loopback else urllib.request.build_opener()
+with opener.open(request, timeout=float(sys.argv[2])) as response:
     sys.stdout.buffer.write(response.read())
 """
 
@@ -378,7 +392,7 @@ def push_callback(callback_url, payload):
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type": "application/json; charset=utf-8"},
             method="POST")
-        with urllib.request.urlopen(req, timeout=15):
+        with _loopback_urlopen(req, 15):
             pass
         print("[async] callback 已推送")
     except Exception as e:  # noqa: BLE001

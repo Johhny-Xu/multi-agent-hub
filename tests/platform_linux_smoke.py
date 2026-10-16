@@ -81,7 +81,8 @@ http.createServer((q,r)=>{r.end(JSON.stringify({url:process.env.HUBCONSOLE_SERVE
     def test_owned_start_stop_loads_literal_env_and_preserves_created_template(self):
         code, output = self.launch("start")
         self.assertEqual(code, 0, output)
-        from urllib.request import urlopen
+        from urllib.request import ProxyHandler, build_opener
+        urlopen = build_opener(ProxyHandler({})).open  # bypass env proxies for loopback
         with urlopen("http://127.0.0.1:" + str(self.console_port), timeout=2) as response:
             received = json.load(response)
         self.assertEqual(received, {"url": "http://127.0.0.1:" + str(self.hub_port) + "/mcp",

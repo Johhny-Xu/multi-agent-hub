@@ -691,6 +691,17 @@ def _tool_hub_capabilities_impl(args):
 TRAE_GATEWAY = os.environ.get("TRAE_GATEWAY", "http://127.0.0.1:8787").rstrip("/")
 
 
+def _loopback_urlopen(request, timeout):
+    """urlopen that never sends loopback traffic through an env proxy."""
+    import urllib.parse
+    import urllib.request
+    url = request.full_url if isinstance(request, urllib.request.Request) else request
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    if host in {"127.0.0.1", "localhost", "::1"} or host.startswith("127."):
+        return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 def _trae_gw_post(path, payload, timeout=270):
     import urllib.request
     import urllib.error
@@ -701,7 +712,7 @@ def _trae_gw_post(path, payload, timeout=270):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _loopback_urlopen(req, timeout) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.URLError as e:
         return {"error": f"无法连接 Trae 网关 ({TRAE_GATEWAY}{path}): {e}。请确认 TraeCode 桌面端及网关已就绪，或检查 TRAE_GATEWAY 配置。"}
@@ -713,7 +724,7 @@ def _trae_gw_get(path, timeout=15):
     import urllib.request
     import urllib.error
     try:
-        with urllib.request.urlopen(TRAE_GATEWAY + path, timeout=timeout) as r:
+        with _loopback_urlopen(TRAE_GATEWAY + path, timeout) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.URLError as e:
         return {"error": f"无法连接 Trae 网关 ({TRAE_GATEWAY}): {e}。请确认 TraeCode 桌面端及网关已就绪，或检查 TRAE_GATEWAY 配置。"}

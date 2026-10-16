@@ -17,7 +17,17 @@ if [ -z "$installer_python" ] || ! "$installer_python" -c 'import sys; sys.exit(
   exit 1
 fi
 if [ "$action" = install ]; then
-  exec "$installer_python" "$package_root/packaging/install.py" --bundle "$package_root" "$@"
+  bundle=$package_root
+  if [ ! -f "$package_root/manifest.json" ] && [ -f "$package_root/packaging/build.py" ]; then
+    # Source checkout (no release manifest): build a verified "both" bundle into a
+    # temp dir first. install.py only accepts manifest-verified bundles.
+    build_dir=$(mktemp -d "${TMPDIR:-/tmp}/agenthub-src-bundle.XXXXXX")
+    echo "Source tree detected; building an installable bundle in $build_dir" >&2
+    "$installer_python" "$package_root/packaging/build.py" --output "$build_dir" --component both >/dev/null
+    "$installer_python" -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$(ls "$build_dir"/agenthub-*-both.zip)" "$build_dir"
+    bundle=$(ls -d "$build_dir"/agenthub-*-both)
+  fi
+  exec "$installer_python" "$package_root/packaging/install.py" --bundle "$bundle" "$@"
 fi
 if [ "$action" = connect ]; then
   exec "$installer_python" "$package_root/packaging/connect.py" --prefix "$package_root" "$@"
