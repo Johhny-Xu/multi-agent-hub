@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">multi-agent-hub 1.0.0: any MCP client, 6 native deep-integration hosts and a zero-client WebUI - 9 Workers under one scheduler</title>
+  <desc id="architecture-desc">Any MCP-capable client plugs straight in. Codex, ZCode, MiniMaxCode (Claude Code), DSH, CodeArts and Antigravity get native deep integration (sub-agents / commands / skills / workflows). With no client at all, the built-in WebUI console manages and chats on its own (persistent brand anchor, smart hover reveal/collapse for the top bar / activity bar / sidebar, 6 light-dark presets, custom-wallpaper glassmorphism, sub-agent accent colours). Same-machine or cross-machine connections; 9 Workers driven through their official CLIs; Apache License 2.0. This release is the first public version: the pre-open-source consolidation, promoted, plus the post-review fixes.</desc>
+  <defs>
+    <style>
+      text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
+      .title { font-size: 34px; font-weight: 700; }
+      .heading { font-size: 24px; font-weight: 700; }
+      .body { font-size: 20px; }
+      .small { font-size: 16px; }
+      .tiny { font-size: 13.5px; }
+      .micro { font-size: 12px; }
+      .muted { fill: #52647b; }
+      .blue { fill: #1d4ed8; }
+      .green { fill: #0f766e; }
+      .amber { fill: #92400e; }
+      .label { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect width="1280" height="980" rx="24" fill="#f8fafc"/>
+  <text x="32" y="58" class="title">multi-agent-hub · how a task actually flows</text>
+  <rect x="1096" y="26" width="152" height="40" rx="20" fill="#dbeafe"/>
+  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">source v1.0.0</text>
+  <text x="32" y="94" class="body muted">Any MCP client · 6 native hosts · zero-client WebUI · 9 official Workers · Apache-2.0</text>
+
+  <!-- Read from left to right; each arrow carries tasks and their results. -->
+  <g id="clients">
+    <rect x="32" y="144" width="254" height="452" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="32" y="144" width="254" height="8" rx="4" fill="#2563eb"/>
+    <text x="50" y="182" class="label blue">01 · Clients &amp; access</text>
+    <text x="50" y="212" class="heading">How to plug in</text>
+
+    <!-- Layer 1: Any MCP Client -->
+    <rect x="44" y="226" width="230" height="84" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="56" y="248" font-size="14.5px" font-weight="700" fill="#334155">① Plug in any MCP client</text>
+    <text x="56" y="271" class="tiny muted">Cursor · Claude Desktop · Windsurf</text>
+    <text x="56" y="293" class="micro muted">Cline · any agent: add the URL</text>
+
+    <!-- Layer 2: Native Deep Integrations -->
+    <rect x="44" y="320" width="230" height="130" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <text x="56" y="342" font-size="14.5px" font-weight="700" fill="#1d4ed8">② 6 native integrations ⭐</text>
+    <text x="56" y="367" font-size="13.5px" font-weight="600" fill="#1e293b">Codex · ZCode · MiniMaxCode</text>
+    <text x="56" y="390" font-size="13.5px" font-weight="600" fill="#1e293b">DSH · CodeArts · Antigravity</text>
+    <text x="56" y="415" font-size="12.5px" fill="#2563eb" font-weight="500">No setup · sub-agents &amp; skills</text>
+    <text x="56" y="435" class="micro muted">Claude Code / Agent Plugins 1.0</text>
+
+    <!-- Layer 3: Standalone WebUI -->
+    <rect x="44" y="460" width="230" height="120" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+    <text x="56" y="482" font-size="14.5px" font-weight="700" fill="#15803d">③ No client? Just the WebUI</text>
+    <text x="56" y="505" font-size="13px" font-weight="600" fill="#166534">3-pane :8890 · smart UI</text>
+    <text x="56" y="527" class="micro muted">6 dual presets · glass · accents</text>
+    <text x="56" y="548" class="micro muted">9-vendor OAuth · instant switch</text>
+    <text x="56" y="568" font-size="12px" fill="#16a34a" font-weight="600">Dispatch with no IDE at all</text>
+  </g>
+
+  <g id="connection">
+    <rect x="320" y="144" width="220" height="452" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+    <rect x="320" y="144" width="220" height="8" rx="4" fill="#2563eb"/>
+    <text x="340" y="182" class="label blue">02 · Connection</text>
+    <text x="340" y="212" class="heading">Unified bridge</text>
+    <text x="340" y="250" class="body" font-weight="700">Scan, pick, pair</text>
+    <text x="340" y="280" class="small muted">LAN broadcast or URL</text>
+    <text x="340" y="316" class="body">Pick one Hub</text>
+    <text x="340" y="342" class="small muted">local / LAN / remote</text>
+    <line x1="340" y1="365" x2="518" y2="365" stroke="#bfdbfe"/>
+    <text x="340" y="396" class="body" font-weight="700">Two MCP endpoints</text>
+    <text x="340" y="426" class="small">8 MCP tools · status</text>
+    <text x="340" y="454" class="small green" font-weight="600">HTTP subagent (:8790)</text>
+    <text x="340" y="482" class="small blue">Agent onboarding prompt</text>
+    <text x="340" y="510" class="small muted">Only summaries return</text>
+    <text x="340" y="538" class="small muted">Reconnect · clipboard</text>
+    <text x="340" y="572" class="small blue" font-weight="700">Save &amp; switch anytime</text>
+  </g>
+
+  <g id="hub">
+    <rect x="576" y="144" width="250" height="452" rx="18" fill="#ecfdf5" stroke="#a7d8c4"/>
+    <rect x="576" y="144" width="250" height="8" rx="4" fill="#0f766e"/>
+    <text x="598" y="182" class="label green">03 · Hub</text>
+    <text x="598" y="212" class="heading">Dispatch hub</text>
+    <text x="598" y="250" class="body" font-weight="700">Windows / Linux</text>
+    <text x="598" y="280" class="small muted">Same- or cross-machine</text>
+    <text x="598" y="316" class="body">Pre-flight model checks</text>
+    <text x="598" y="342" class="small muted">Thinking · stream · files</text>
+    <line x1="598" y1="365" x2="804" y2="365" stroke="#a7d8c4"/>
+    <text x="598" y="396" class="body" font-weight="700">Task &amp; status flow</text>
+    <text x="598" y="426" class="small">Persistent refs · polling</text>
+    <text x="598" y="454" class="small amber" font-weight="600">Worker on/off · breaker</text>
+    <text x="598" y="482" class="small green" font-weight="600">Singleflight quota merge</text>
+    <text x="598" y="510" class="small muted">Process guard &amp; reclaim</text>
+    <text x="598" y="538" class="small muted">Loopback direct, no proxy</text>
+    <text x="598" y="572" class="small green" font-weight="700">Daemon (systemd / bg)</text>
+  </g>
+
+  <g id="workers">
+    <rect x="862" y="144" width="386" height="452" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="862" y="144" width="386" height="8" rx="4" fill="#0f766e"/>
+    <text x="886" y="182" class="label green">04 · Workers</text>
+    <text x="886" y="212" class="heading">9 official CLI channels</text>
+    <text x="886" y="253" class="body">Antigravity</text><text x="1224" y="253" text-anchor="end" class="small muted">agy</text>
+    <text x="886" y="285" class="body">CodeBuddy International</text><text x="1224" y="285" text-anchor="end" class="small muted">cb · XDG-aligned</text>
+    <text x="886" y="317" class="body">CodeBuddy China</text><text x="1224" y="317" text-anchor="end" class="small muted">cbcn · watchdog</text>
+    <text x="886" y="349" class="body">GitHub Copilot</text><text x="1224" y="349" text-anchor="end" class="small muted">gcp</text>
+    <text x="886" y="381" class="body">MiMo</text><text x="1224" y="381" text-anchor="end" class="small muted">mimo</text>
+    <rect x="880" y="394" width="350" height="28" rx="6" fill="#eff6ff"/>
+    <text x="886" y="414" class="body blue" font-weight="700">MiniMaxCode</text><text x="1218" y="414" text-anchor="end" class="small blue">mmx · M3 / M3.1</text>
+    <text x="886" y="446" class="body">TraeCode</text><text x="1224" y="446" text-anchor="end" class="small muted">trae · PKCE / gateway</text>
+    <text x="886" y="478" class="body">ZCode</text><text x="1224" y="478" text-anchor="end" class="small muted">zcode · dual-region switch</text>
+    <rect x="880" y="493" width="350" height="34" rx="8" fill="#fffbeb"/>
+    <text x="886" y="518" class="body" font-weight="700">CodeArts</text><text x="1218" y="517" text-anchor="end" class="small muted">ca · Linux GLM verified</text>
+    <text x="886" y="565" class="small muted">On dispatch it calls the vendor CLI</text>
+  </g>
+  <path d="M290 352H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M546 352H570" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M832 352H856" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="640" y="631" text-anchor="middle" class="small muted">Tasks flow right; status and results come back the same way · artifacts stay on disk · unsupported features are rejected up front</text>
+
+  <!-- Deployment choices: independent components, not Hub-to-Hub federation. -->
+  <rect x="32" y="661" width="1216" height="146" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="56" y="696" class="heading">Deploy freely: same machine or across hosts, either direction</text>
+  <rect x="56" y="718" width="438" height="72" rx="10" fill="#eff6ff"/>
+  <text x="76" y="744" class="body blue" font-weight="700">Windows client ⇄ Linux Hub</text>
+  <text x="76" y="778" class="small muted">LAN direct verified</text>
+  <rect x="510" y="718" width="470" height="72" rx="10" fill="#ecfdf5"/>
+  <text x="530" y="744" class="body green" font-weight="700">Linux client ⇄ Windows Hub</text>
+  <text x="530" y="778" class="small muted">Verified via SSH reverse tunnel</text>
+  <text x="1004" y="747" class="body" font-weight="700">Or one machine</text>
+  <text x="1004" y="777" class="small muted">plugins / hub / both</text>
+
+  <rect x="32" y="831" width="1216" height="108" rx="18" fill="#eaf2ff" stroke="#bfdbfe"/>
+  <text x="56" y="866" class="heading blue">Model vendors · the actual data flow</text>
+  <text x="56" y="898" class="body">Client / WebUI → Hub → official CLI → model vendor. Long content ships as local files, never into context.</text>
+  <text x="56" y="929" class="small muted">Accounts &amp; models are set per vendor; Antigravity / MiniMaxCode double as both plugin and Worker.</text>
+  <text x="32" y="965" class="small muted">Current source v1.0.0 · first public release · review fixes folded in · Apache License 2.0 (original copyright retained)</text>
+</svg>
