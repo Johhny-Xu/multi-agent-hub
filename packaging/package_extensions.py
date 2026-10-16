@@ -2,9 +2,9 @@
 """Build VSIX and CARTS extension packages for CodeArts IDE & VS Code.
 
 Produces:
-- multi-agent-hub-0.9.9.vsix (Standard VS Code extension)
-- multi-agent-hub-0.9.9.carts (Huawei CodeArts IDE extension)
-- multi-agent-hub-0.9.9.cloudide (Huawei CloudIDE extension)
+- multi-agent-hub-<version>.vsix (Standard VS Code extension)
+- multi-agent-hub-<version>.carts (Huawei CodeArts IDE extension)
+- multi-agent-hub-<version>.cloudide (Huawei CloudIDE extension)
 """
 
 import hashlib
@@ -68,7 +68,10 @@ def build_extension(source_dir: Path, output_dirs: list[Path]):
 
     name = pkg.get("name", "multi-agent-hub")
     display_name = pkg.get("displayName", "Multi-Agent Hub")
-    version = pkg.get("version", "0.9.9")
+    version = pkg.get("version")
+    if not isinstance(version, str) or not version.strip():
+        # A silent stale fallback ("0.9.9") would ship mislabeled packages.
+        raise ValueError(f"{pkg_json_file} must declare a version")
     publisher = pkg.get("publisher", "agenthub")
     description = pkg.get("description", "Multi-agent orchestration and Hub bridge for CodeArts IDE & VS Code")
 
