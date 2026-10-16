@@ -12,7 +12,7 @@
 ## 跑起来
 
 ```bash
-cd multi-agent-hub
+cd multi-agent-hub-1.0.0      # 解压后的目录名；git clone 的是 multi-agent-hub
 ./install.sh                    # 一键安装：Hub 服务 + WebUI + 已安装宿主的原生插件
 ./install.sh --with-console     # 额外启动 Web 控制台（默认 :8890）
 ```

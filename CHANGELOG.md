@@ -18,6 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`docs/HANDOVER_20261016.md` 凭据提示脱敏**：与 `fa48961` 对 20261015 的处理保持一致，发布流程改为通用表述（账号级凭据仅在使用时从本机既有配置读取，不写入仓库、不打印、不落日志）。
 - **新增 `CODE_OF_CONDUCT.md`**：贡献者公约（改编自 Contributor Covenant 2.1），补齐 GitHub 社区健康文件。
 
+首发合入的收口修复：
+
+- **MCP 桥 serverInfo 版本对齐**：`mcp/server.mjs` 及 6 份宿主副本（antigravity / codearts / codex / dsh / vscode / agenthub-workers）在 `initialize` 中仍上报 `0.9.9`，与 Hub、控制台、各插件清单的 `1.0.0` 不一致；已统一为 `1.0.0`，7 份副本保持逐字节一致。
+- **`packaging/package_extensions.py` 去掉过期兜底版本**：`package.json` 缺少 `version` 时不再静默打出 `0.9.9` 标签的扩展包，而是直接报错；文档字符串改为 `<version>` 占位。
+- **`RUN_ON_LINUX.md`**：解压后的目录名是 `multi-agent-hub-1.0.0`，修正 `cd` 示例；交付 ZIP 重新写入 `.sh` 的 `0755` 权限位（原 ZIP 由 Windows 打包，全部为 `0600`，与文档描述不符）。
+- **README 中英双语重排**：增加目录与三步快速开始；把端口 `8765`（Hub）/ `8890`（控制台）/ `8790`（控制台内置子代理 MCP）列表说明，修正“方案二只需启动 Hub”的描述（`8790` 端点随 `--with-console` 启动）；MCP 工具改为逐个列表（桥接共 8 个）；长段落与前端实现细节收进折叠区；架构图 alt 不再写旧版本号。
+
 > 版本号只做机械对齐，无功能改动。
 
 ## [0.9.9.9] - 2026-10-16
