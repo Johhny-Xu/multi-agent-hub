@@ -59,7 +59,7 @@
 > 1. **回归测试 ≠ 全量付费实测**：Windows 32 组与 Linux 29 组回归通过为框架逻辑与离线回归，不能视为每个服务商、模型或原生宿主均已跑通真实付费任务。
 > 2. **原生插件 vs 可选 Python SDK**：Antigravity 原生插件基于声明式配置直接接入 MCP 桥与子代理，已跑通真实模型调用与原生子代理派发；而可选 Python SDK 为外部编排库，当前 wheel 无 `beta.run_workflow`，且其 API 鉴权与宿主登录隔离。
 > 3. **实机未安装环境如实报告**：Linux 实机未安装 Codex 与 DSH CLI，标记为 `not_installed`，不虚报通过。
-> 4. **CodeArts 鉴权与调用边界**：IDE 登录不代表独立 CLI 具备调用条件，已有 9router 登录也不能替代华为账号权限。当前 worker 仅开放默认思考与非流式文本；未生效的配置不会替换用户原默认模型。
+> 4. **CodeArts 鉴权与调用边界**：IDE 登录不代表独立 CLI 具备调用条件，其他服务的登录态也不能替代华为账号权限。当前 worker 仅开放默认思考与非流式文本；未生效的配置不会替换用户原默认模型。
 > 5. **本地与网络隐私**：客户端选定单个 Hub 并非跨 Hub 联邦；提示词与附件在调用对应 worker 时仍会发送至官方模型服务商。
 
 完整任务回执、源码哈希、失败记录及修复后两端各 83 项增量检查见 [0.9.9 验收记录](docs/release-0.9.9.md)。
@@ -318,13 +318,13 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 | **CodeBuddy** (国内版) | deepseek-v4.1-flash (x0.11) | 剔除生图及老旧模型，精炼至 DeepSeek V4.1/Pro、MiniMax-M3、GLM-5.3/5.2/5.1、Kimi-K3/K2.8/K2.7、混元系列等 13 款代码模型，完整标注官方积分倍率（x0.06 ~ x2.00）与试用标；对齐 XDG 共享会话存储与 state 兑换看门狗 |
 | **CodeBuddy** (国际版) | deepseek-v4.1-flash | 精简收敛至 18 款主流高可用模型；文件工具需实际权限，使用标准代理隔离上下文 |
 | **GitHub Copilot** | auto | 沿用官方 CLI 选型，支持 WebUI 设备码登录与 GNOME Keyring 同步读写 |
-| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 精炼收敛为 MiMo-V2.6 Flash/Pro/UltraSpeed 及 9router/trae 通道共 4 款高效选型；API Key 通道与小米 OAuth 账号身份分离 |
+| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 精炼收敛为 MiMo-V2.6 Flash/Pro/UltraSpeed 等 4 款高效选型；API Key 通道与小米 OAuth 账号身份分离 |
 | **MiniMax** | MiniMax-M3 | 精简收敛为 M3（1M 上下文）与 M3.1-Flash-Preview（512K 上下文）当季双旗舰，支持卡片上下文胶囊一键切换与 `oauth.account` 备注名识别 |
 | **TraeCode** | GLM-5.3-FlashX (0.31x) | 精简收敛至 20 款官方模型，精准标注 `0.06x ~ 1.50x` 官方积分倍率与 `[会员 5 折]`、`[限时 1 折]`、`[专属补贴]` 营销标识；支持双区 PKCE OAuth 与 TraeClaw 网关 |
 | **ZCode** | GLM-5.3-Flash | 支持国内版 (BigModel) / 国际版 (Z.ai) 双区切换与 `enc:v1:` AES-256-GCM 加密落盘；显式思考切换与未验证正文流式默认禁用 |
 | **CodeArts** | GLM-5.2 (0.70x) | 完整保留 4 款企业级官方模型（`GLM-5.2`、`GLM-5.2-ArkTS-SPARK`、`OpenPangu-2.0-Pro`、`OpenPangu-2.0-Flash`）；支持 Linux CLI 自动加载 AK/SK、IDE 动态工具协议与独立数据隔离 |
 
-上表是新安装的默认配置。已有服务器保留原模型；本轮 Linux MiMo 实测使用其既有 `9router/trae`，不代表 `26f` 已实测。
+上表是新安装的默认配置。已有服务器保留原模型；本轮 Linux MiMo 实测沿用服务器上既有配置，不代表 `26f` 已实测。
 
 - **输入文件限制**：`files` 参数传输客户端本地文件内容并在 Hub 端暂存，限制最多 8 个文件、总量不超过 1 MiB。
 - **工作目录说明**：`cwd` 指 **Hub 所在主机**的工作目录，不会静默映射客户端路径。
