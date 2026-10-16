@@ -8281,7 +8281,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v0.9.9.8</span>
+            <span class="footer-version">v0.9.9.9</span>
           </div>
         </footer>
       </section>
@@ -11504,7 +11504,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         sa.mcp,
         '',
         '【服务说明与工具】',
-        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '0.9.9.8'),
+        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '0.9.9.9'),
         '',
         '把上面 URL 作为 HTTP MCP server 注册给本机 AI 会话后，即可像原生子代理一样直接指挥 traecode / workbuddy / zcode / qwen-work 等全部注册代理，长内容以本机文件形式交付，不进会话上下文。',
         '',
@@ -11628,7 +11628,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '0.9.9.8';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '0.9.9.9';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
