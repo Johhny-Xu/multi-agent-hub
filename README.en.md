@@ -10,7 +10,7 @@
 2. **6 native deep-integration hosts, for a smoother experience.** **Codex**, **ZCode**, **MiniMax Code** (plus Claude Code / Agent Plugins 1.0), **DeepSeek Harness (DSH)**, **Huawei CodeArts** and **Antigravity** each get a purpose-built native plugin, a dedicated sub-agent set (`hub-*.md`), their own skills and slash commands, with context isolated automatically and no manual parameter wiring.
 3. **Zero-client standalone use.** Even with no external IDE or AI client, the built-in **CodeBuddy-style three-pane WebUI console** handles platform session trees, immersive chat, task dispatch and monitoring, and full archive restore and cleanup on its own.
 
-The current source version is **0.9.9.6**. This stage (v0.9.9.3 → v0.9.9.6) built on the **9-Worker login-flow state-detection refactor and real credential alignment**, and focused on **systematic WebUI console polish, a global glassmorphism system for custom wallpapers, and the three-way smart hover reveal/collapse engine with sidebar decluttering**. It adds a persistent brand anchor in the top-left corner (`.brand-logo-pin`, click to toggle auto-collapse / always-pinned, persisted) and a cursor-aware reveal/collapse engine for the top bar, activity bar and platform sidebar (the activity bar stays pinned while a chat sidebar is expanded, so nothing jumps; the trigger zone was unified to the sidebar's full footprint). The theme presets grew to **6 complete light/dark palettes — Mocha, Shell, Aurora, Dusk, Cyber and Grid** (12 combinations, WCAG AA contrast calibrated). With a custom wallpaper or a high-end preset, a global Glassmorphism system and unified base neutral surfaces kick in (leftover grey surfaces 96 → 0, with `--gem-surface-high` kept as the carrier for interactive states and the progress track). The send button, context progress bar and every second-level menu in the chat area now follow the active sub-agent's brand colour (`--agent-accent`), while informational text such as model names strictly stays in the standard body colour (`--gem-text`). Sidebar cards were reduced to a single line (dropping the idle placeholder row, the magnifier icon, the ⌘K hint and the oversized capsule, so the "N sessions" badge is never clipped), and a single-file zero-dependency offline interactive Demo (`demo.html`) with an in-memory virtual driver engine was shipped.
+The current source version is **0.9.9.7**. **0.9.9.7** is a consolidation release: it fixes the install path for a source checkout on Linux (lost exec bits, installing straight from a checkout, loopback requests hijacked by an environment proxy) and finishes the pre-open-source cleanup (contributing guide, security policy and English README added; credential path hint removed; 66 unreferenced test-evidence files moved out). Before that, v0.9.9.3 → v0.9.9.6 built on the **9-Worker login-flow state-detection refactor and real credential alignment**, and focused on **systematic WebUI console polish, a global glassmorphism system for custom wallpapers, and the three-way smart hover reveal/collapse engine with sidebar decluttering**. It adds a persistent brand anchor in the top-left corner (`.brand-logo-pin`, click to toggle auto-collapse / always-pinned, persisted) and a cursor-aware reveal/collapse engine for the top bar, activity bar and platform sidebar (the activity bar stays pinned while a chat sidebar is expanded, so nothing jumps; the trigger zone was unified to the sidebar's full footprint). The theme presets grew to **6 complete light/dark palettes — Mocha, Shell, Aurora, Dusk, Cyber and Grid** (12 combinations, WCAG AA contrast calibrated). With a custom wallpaper or a high-end preset, a global Glassmorphism system and unified base neutral surfaces kick in (leftover grey surfaces 96 → 0, with `--gem-surface-high` kept as the carrier for interactive states and the progress track). The send button, context progress bar and every second-level menu in the chat area now follow the active sub-agent's brand colour (`--agent-accent`), while informational text such as model names strictly stays in the standard body colour (`--gem-text`). Sidebar cards were reduced to a single line (dropping the idle placeholder row, the magnifier icon, the ⌘K hint and the oversized capsule, so the "N sessions" badge is never clipped), and a single-file zero-dependency offline interactive Demo (`demo.html`) with an in-memory virtual driver engine was shipped.
 
 ---
 
@@ -169,13 +169,13 @@ You do not need to remember commands or hunt for config files. Pick the client y
 > **Best for**: developing on a single machine (Windows or Linux), and wanting the Hub service, the WebUI console and any existing IDE plugins configured in one go.
 
 #### Step 1: get the code
-- **Via Git clone (latest v0.9.9.6 source, recommended)**:
+- **Via Git clone (latest v0.9.9.7 source, recommended)**:
   ```bash
   git clone https://github.com/Johhny-Xu/multi-agent-hub.git
   cd multi-agent-hub
   ```
 - **Via a Release bundle**:
-  Download the latest prebuilt package (for example `agenthub-0.9.9.6-both.zip`) from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) and unzip it.
+  Download the latest prebuilt package (for example `agenthub-0.9.9.7-both.zip`) from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) and unzip it.
 
 #### Step 2: install and start in one step
 - **Windows**: double-click **`install.cmd`** in the repository root (or run `.\install.cmd` in a terminal).
@@ -240,8 +240,8 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | Native host | How to import / install it alone | Plugin directory and docs |
 | --- | --- | --- |
-| **1. Huawei CodeArts / VS Code** | • **GUI extension**: in the IDE's Extensions panel choose "Install from VSIX/CARTS…" and import `multi-agent-hub-0.9.9.6.carts` or `.vsix`<br>• **Command line**: `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
-| **2. MiniMax Code / Claude Code** | • **Desktop / cloud plugin bundle (MiniMax Plugin V1)**: import `agenthub-workers-0.9.9.6-minimax-plugin.zip` directly (contains `.minimax-plugin/plugin.json`)<br>• **CLI (`mcode` / `claude`)**: `mcode --plugin-dir ./plugins/agenthub-workers` (contains `.claude-plugin/plugin.json` and an Agent Plugins 1.0 `plugin.json`) | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
+| **1. Huawei CodeArts / VS Code** | • **GUI extension**: in the IDE's Extensions panel choose "Install from VSIX/CARTS…" and import `multi-agent-hub-0.9.9.7.carts` or `.vsix`<br>• **Command line**: `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
+| **2. MiniMax Code / Claude Code** | • **Desktop / cloud plugin bundle (MiniMax Plugin V1)**: import `agenthub-workers-0.9.9.7-minimax-plugin.zip` directly (contains `.minimax-plugin/plugin.json`)<br>• **CLI (`mcode` / `claude`)**: `mcode --plugin-dir ./plugins/agenthub-workers` (contains `.claude-plugin/plugin.json` and an Agent Plugins 1.0 `plugin.json`) | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **3. ZCode IDE / CLI** | • **Automatic registration**: `.\install.cmd --component plugins --native-hosts zcode`<br>• **Discovery page / local config**: add this repository on ZCode's plugin discovery page, or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **4. OpenAI Codex** | • **Automatic registration**: `.\install.cmd --component plugins --native-hosts codex --project <workspace path>`<br>• Registers a local plugin marketplace and writes the 9 sub-agents and workflows into the target workspace's `.codex/agents/` | [`integrations/codex`](integrations/codex/README.md) |
 | **5. DeepSeek Harness (DSH)** | • **Automatic registration**: `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`<br>• **Manual bundle mount**: `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [`integrations/dsh`](integrations/dsh/README.md) |
@@ -251,15 +251,15 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 ### 📦 Prebuilt packages and runtime requirements
 
-> *Note: the table lists the `v0.9.9.6` prebuilt artifacts, matching the current source version. You can also build from source with `python packaging/build.py --output <dir> --component all`.*
+> *Note: the table lists the `v0.9.9.7` prebuilt artifacts, matching the current source version. You can also build from source with `python packaging/build.py --output <dir> --component all`.*
 
 | Package | Environment | Contents |
 | --- | --- | --- |
-| **agenthub-0.9.9.6-both.zip** | Client and Hub on the same machine (most recommended) | All components, the install wizard, and service management scripts |
-| **agenthub-0.9.9.6-plugins.zip** | A client machine used only for writing code | Native plugins for multiple hosts, the MCP bridge, sub-agents and workflows |
-| **agenthub-0.9.9.6-hub.zip** | A server machine running only Workers and models | Python Hub service, 9 Worker adapter drivers, optional WebUI console |
-| **agenthub-workers-0.9.9.6-minimax-plugin.zip** | MiniMax Code desktop / MiniMax Agent cloud / Marketplace | A zero-wrapper standalone plugin package conforming to MiniMax Plugin V1 |
-| **multi-agent-hub-0.9.9.6.carts / .vsix** | Huawei CodeArts IDE, VS Code and compatible editors | Desktop GUI extension: one-click import, sidebar panel, status indicator |
+| **agenthub-0.9.9.7-both.zip** | Client and Hub on the same machine (most recommended) | All components, the install wizard, and service management scripts |
+| **agenthub-0.9.9.7-plugins.zip** | A client machine used only for writing code | Native plugins for multiple hosts, the MCP bridge, sub-agents and workflows |
+| **agenthub-0.9.9.7-hub.zip** | A server machine running only Workers and models | Python Hub service, 9 Worker adapter drivers, optional WebUI console |
+| **agenthub-workers-0.9.9.7-minimax-plugin.zip** | MiniMax Code desktop / MiniMax Agent cloud / Marketplace | A zero-wrapper standalone plugin package conforming to MiniMax Plugin V1 |
+| **multi-agent-hub-0.9.9.7.carts / .vsix** | Huawei CodeArts IDE, VS Code and compatible editors | Desktop GUI extension: one-click import, sidebar panel, status indicator |
 
 - **Runtime requirements**:
   - **Base environment**: Python 3.8+ (Codex agent installation needs Python 3.11+); Node.js 20+ (for the MCP bridge and Web console).
@@ -298,7 +298,7 @@ The Hub ships a lightweight, modern Web console (enable it with `--with-console`
 - 🌟 **Time-of-day greetings, avatar customisation and community touches**:
   - 35 warm greeting lines across 7 fine-grained time-of-day bands, shown at random on each entry or platform switch.
   - Click the avatar to pick a local image and replace it globally across platforms, persisted and synced (with vertical stretching removed in the top bar and a unified global squircle radius and logo standard).
-  - A light, elegant footer: an open-source nod on the left (with a "eat well first" easter egg), a one-click GitHub Star in the middle, and the current version (`v0.9.9.6`, dynamically overridable via the backend `snap.version`) on the right.
+  - A light, elegant footer: an open-source nod on the left (with a "eat well first" easter egg), a one-click GitHub Star in the middle, and the current version (`v0.9.9.7`, dynamically overridable via the backend `snap.version`) on the right.
 - 🎛️ **Customisable status bar panel and model drawer**:
   - The whole status bar is clickable as one surface (clicking anywhere opens the display-item config panel centred just above the click point, clamped to the container, where you can tick model, network latency, throughput TPS, session tokens, platform quota and more). The model picker supports left/right adaptive docking, condensed thinking-level labels (`model · thinking level`), a two-stage deep-thinking capsule (`default / on / off`) and a streaming toggle, and lets you delete individual custom model aliases.
 - 🏷️ **Official credit multipliers and promotional badges**:
@@ -347,7 +347,7 @@ The table above is the default for new installations. Existing servers keep thei
 
 ## Version history and development
 
-**0.9.9.6** focuses on WebUI console polish, the 6 light/dark presets and wallpaper glassmorphism system, the persistent brand anchor and three-way smart reveal/collapse engine, full sub-agent accent propagation, and single-line sidebar cards:
+**0.9.9.7** fixes the source-checkout install path on Linux and finishes the pre-open-source cleanup; **0.9.9.6** focuses on WebUI console polish, the 6 light/dark presets and wallpaper glassmorphism system, the persistent brand anchor and three-way smart reveal/collapse engine, full sub-agent accent propagation, and single-line sidebar cards:
 
 ![multi-agent-hub 0.9.9.6 roadmap: current focus on WebUI polish, the wallpaper glassmorphism system and the smart reveal/collapse engine, showing existing foundations, key results, version evolution and actual verification scope](docs/roadmap.svg)
 
