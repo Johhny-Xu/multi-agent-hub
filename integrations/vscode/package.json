@@ -2,7 +2,7 @@
   "name": "multi-agent-hub",
   "displayName": "Multi-Agent Hub",
   "description": "Multi-agent orchestration and Hub bridge for CodeArts IDE & VS Code",
-  "version": "0.9.9.6",
+  "version": "0.9.9.7",
   "publisher": "agenthub",
   "license": "Apache-2.0",
   "engines": {

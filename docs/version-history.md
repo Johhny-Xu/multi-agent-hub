@@ -21,6 +21,8 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 
 `v0.9.9.6`（2026-10-15）：WebUI 交互精修与全链路视觉体系贯通。本版把 `0.9.9.3` → `0.9.9.6` 的连续增量收口为正式标签，并把运行源码（`hub/agent_hub.py` 的 `SERVER_VERSION`、`console/server.mjs`、`console/client/index.html`）、IDE 扩展（vscode / codearts / codex / antigravity）、插件清单（`plugins/agenthub-workers` 的 `.zcode-plugin` / `.minimax-plugin` / `.claude-plugin`）与插件市场（`marketplace.json`、`.zcode-plugin/marketplace.json`）的版本号全链路对齐到 `0.9.9.6`。发布产物集（`agenthub-0.9.9.6-{hub,plugins,both}.zip`、`agenthub-workers-0.9.9.6-minimax-plugin.zip`、`multi-agent-hub-0.9.9.6.{vsix,carts,cloudide}`）首次与本标签源码版本号一致，并**首次随标签上传为 GitHub Release 附件**（含 `SHA256SUMS`）。
 
+`v0.9.9.7`（2026-10-16）：源码检出在 Linux 上的安装链路修复与开源前收口。修复执行位丢失导致 `sh install.sh` 报 `Permission denied`、源码目录无法直接安装、回环请求被环境代理劫持三处问题；补齐 `CONTRIBUTING.md` / `SECURITY.md` / `README.en.md`，移除交接文档中的凭据路径提示，补齐 `.gitattributes` 的 Windows 脚本行尾规则，并把 `docs/` 中 66 个无人引用的测试证据移出仓库（172 → 106 个文件）。本版不含新功能。
+
 关于发布产物的一条重要约定（`v0.9.9.6` 实测得出）：`packaging/build.py` 打包的是**工作区的字节**，因此产物内容随检出时的行尾符变化。仓库 `.gitattributes` 只声明了 `*.sh text eol=lf`，Windows 脚本（`.cmd` / `.bat` / `.ps1`）未声明，其行尾由 `core.autocrlf` 决定——Windows 检出任 CRLF、Linux 检出任 LF。所以**发布用的产物必须在 Windows 侧构建**：只有 Windows 检出的工作区能同时给出 LF 的 `.sh`（Linux 必需）与 CRLF 的 `.cmd` / `.bat` / `.ps1`（Windows 必需）。Linux 侧构建的产物 `.sh` 正确但 Windows 入口脚本会变成 LF。两个平台的构建产物内容并不逐字节相同（差异 135/137 来自行尾符，其余 2 个是 `manifest.json` 与包内 `SHA256SUMS` 因内容哈希而连锁变化）；两侧内容摘要不同，但各自内部自洽。
 
 ## 后续版本

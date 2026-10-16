@@ -9,6 +9,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [0.9.9.7] - 2026-10-16
+
+源码检出在 Linux 上的安装链路修复，以及开源前的仓库收口。本版不含新功能，改动集中在「陌生人 clone 下来能不能装上、能不能看懂」。
+
+### 安装链路 (`packaging` / `hub`)
+
+- **执行位丢失不再阻断安装**：根目录与 `packaging/` 下的启动包装脚本由 `exec "$dir/launch.sh"` 改为 `exec sh "$dir/launch.sh"`。Python 的 `zipfile.extractall()`、Windows 资源管理器与部分 JS 解压库会丢掉 Unix 权限位，原写法下 `sh install.sh` 直接报 `Permission denied`。15 个 `.sh` 同时在 git 索引中标记为 `100755`。
+- **源码目录可直接安装**：`install.py` 只接受带 `manifest.json` 的发行包，源码目录过去报 `Invalid or unreadable configuration: manifest.json`。`packaging/launch.sh` 现在检测到源码目录时先用 `build.py` 在临时目录构建 `both` 包再安装，并在退出时清理该临时目录（原先每次源码安装都会在 `/tmp` 残留一个完整 bundle）。
+- **回环请求不再被环境代理劫持**：健康检查、Trae 网关与回调都走 `127.0.0.1`，而 `urllib` 遵循 `http_proxy`。在设了代理但未设 `NO_PROXY` 的机器上，这些探针被发给代理并拿回 404/502，安装报 `Health timeout`。`hub/agent_hub.py`、`hub/async_worker.py` 与 `packaging/service.py` 现对回环地址强制直连，其余地址仍走代理。
+- **测试适配**：`tests/run_regressions.py` 为其子套件导出 `NO_PROXY`；`codex_adapter_smoke` 的工具数断言由 7 更正为 8（`hub_discover` 加入后未同步，且该用例仅在设置 `CODEX_TEST_BINARY` 时执行，此前一直静默跳过）。
+
+### 开源前收口 (`docs` / 仓库)
+
+- **补齐三个标准文件**：新增 [`CONTRIBUTING.md`](CONTRIBUTING.md)（开发约定、提交信息规范、套件超时与审计规则）、[`SECURITY.md`](SECURITY.md)（漏洞私密上报渠道与攻击面清单）、[`README.en.md`](README.en.md)（README 英文对应版）；`README.md` 增加语言切换入口。
+- **移除凭据路径提示**：[`docs/HANDOVER_20261015.md`](docs/HANDOVER_20261015.md) 中记录了发布所用凭据的文件路径、前缀与实测 scopes。`audit_secrets.py` 匹配的是密钥值而非路径，抓不到这一类，只能手工清理。
+- **行尾规则补齐**：[`.gitattributes`](.gitattributes) 由只有 `*.sh text eol=lf` 扩展为同时声明 `*.cmd` / `*.bat` / `*.ps1` 为 CRLF —— 原先从 Linux 检出再打包时，12 个 Windows 脚本会全部变成 LF。
+- **示例配置去掉本地私有别名**：[`hub/agents.example.json`](hub/agents.example.json) 的模型别名表删除了 `"trae": "custom-local:trae"`。同一张表其它别名都指向官方模型 ID，只有它指向作者本机才存在的自定义 provider；生产代码里的 `custom-local:trae` 路由入口保留。
+- **移出 66 个无人引用的测试证据**：`docs/` 由 172 个文件降至 106 个，移出的包括 `-before-fixture` / `-raw` / `-targeted` 类中间快照、两份已被取代的旧交接记录、未被引用的 `logo.png` 与 codebuddy 探针日志目录。仓库内所有 markdown 链接仍可解析。
+
+> 两点说明：
+> 1. 移出只作用于树的末端，这些文件仍在 Git 历史中；彻底移除需重写全部 SHA 并重发标签与 Release。
+> 2. `docs/architecture.svg` 与 `docs/roadmap.svg` 是带日期的视觉产物，仍标注 `0.9.9.6`，未随本次版本号调整。
+
+---
+
 ## [0.9.9.6] - 2026-10-15
 
 WebUI 交互精修与全链路视觉体系贯通。`0.9.9.3` → `0.9.9.6` 为 WebUI 单线的连续增量迭代，本次统一收口为 `v0.9.9.6` 标签发布；逐步明细见 [版本记录](docs/version-history.md)。

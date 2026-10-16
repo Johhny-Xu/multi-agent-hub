@@ -10,9 +10,9 @@ class TestExtensionPackaging(unittest.TestCase):
     def setUp(self):
         self.repo_root = Path(__file__).resolve().parent.parent
         self.dist_dir = self.repo_root / "integrations" / "vscode" / "dist"
-        self.vsix = self.dist_dir / "multi-agent-hub-0.9.9.6.vsix"
-        self.carts = self.dist_dir / "multi-agent-hub-0.9.9.6.carts"
-        self.cloudide = self.dist_dir / "multi-agent-hub-0.9.9.6.cloudide"
+        self.vsix = self.dist_dir / "multi-agent-hub-0.9.9.7.vsix"
+        self.carts = self.dist_dir / "multi-agent-hub-0.9.9.7.carts"
+        self.cloudide = self.dist_dir / "multi-agent-hub-0.9.9.7.cloudide"
 
     def test_artifacts_exist(self):
         self.assertTrue(self.vsix.exists(), "VSIX artifact missing")
@@ -34,7 +34,7 @@ class TestExtensionPackaging(unittest.TestCase):
                 with zf.open("extension/package.json") as f:
                     pkg_data = json.load(f)
                     self.assertEqual(pkg_data["name"], "multi-agent-hub")
-                    self.assertEqual(pkg_data["version"], "0.9.9.6")
+                    self.assertEqual(pkg_data["version"], "0.9.9.7")
                     self.assertEqual(pkg_data["publisher"], "agenthub")
 
                 # Validate [Content_Types].xml

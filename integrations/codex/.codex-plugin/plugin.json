@@ -1,6 +1,6 @@
 {
   "name": "agenthub-workers",
-  "version": "0.9.9.6",
+  "version": "0.9.9.7",
   "description": "Codex workflows, read-only Hub discovery and an MCP bridge to nine multi-agent-hub workers.",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
