@@ -1,5 +1,7 @@
 # multi-agent-hub
 
+[English](README.en.md) · **简体中文**
+
 ![multi-agent-hub 0.9.9.6 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度](docs/architecture.svg)
 
 **multi-agent-hub** 是一个面向多开发环境的 AI Agent 统一调度中枢。它基于标准 MCP 协议、原生插件与子代理体系，为 9 种主流 AI 编码 Worker 与 6 款原生深度宿主（外加任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理与零客户端 WebUI 管理大盘，具备三层灵活接入形态：
