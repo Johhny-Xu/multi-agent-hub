@@ -4,7 +4,7 @@
 
 > A local dispatch hub for AI agents: it turns the AI coding CLIs scattered across your machines into one Worker pool you can delegate to and collaborate with.
 
-![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 9 Workers under one scheduler](docs/architecture.svg)
+![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 9 Workers under one scheduler](docs/architecture.en.svg)
 
 **Current version: v1.0.0** (first public release) · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
@@ -423,7 +423,7 @@ Contribution rules (pre-commit checks, commit message format) are in [CONTRIBUTI
 | 0.9.9.7 | Linux source install fixes: lost exec bits, install from a checkout, loopback requests hijacked by a proxy |
 | 0.9.9.3 – 0.9.9.6 | 9-Worker login state-detection refactor; systematic WebUI polish, 6 themes, glassmorphism and smart reveal/collapse |
 
-![multi-agent-hub roadmap](docs/roadmap.svg)
+![multi-agent-hub roadmap](docs/roadmap.en.svg)
 
 Full details: [CHANGELOG.md](CHANGELOG.md) and [version history](docs/version-history.md).
 
