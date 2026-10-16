@@ -14,7 +14,6 @@ RULES = {
     "literal_credential": re.compile(r"(?i)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|HUB_TOKEN)[\"']?\s*[:=]\s*[\"']([A-Za-z0-9_./+=-]{20,})[\"']"),
     "local_user_path": re.compile(r"(?i)(?:[Cc]:[/\\]+Users[/\\]+Joh" + r"hny|/home/joh" + r"hny)\b"),
     "private_lan_ip": re.compile(r"\b192\.168\." + r"2\.29\b"),
-    "legacy_hub_token": re.compile(r"sbl4LvbZ4DcvlgSN-" + r"JpNLBQmvkHlYqie"),
     # 个人邮箱（常见个人邮箱域名；example.com / 厂商域名除外）
         "personal_email": re.compile(r"(?i)\b(?!noreply@|no-reply@|do-not-reply)[A-Za-z0-9._%+-]+@(?!(?:example\.(?:com|org|net))\b)(?:gmail|googlemail|outlook|hotmail|qq|foxmail|163|126|yeah|sina|vip\.163|139)\.[a-z.]+\b"),
     # 中国大陆手机号（前后不得为十六进制字符，避免命中哈希串的子串）
