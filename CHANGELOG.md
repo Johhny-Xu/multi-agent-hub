@@ -9,6 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [1.0.0] - 2026-10-16
+
+**首个公开正式版**。把开源前的三段收口（`0.9.9.7` / `0.9.9.8` / `0.9.9.9`）正式转正，并完成最后一道清理：凭据与隐私面清零，社区文件补齐。
+
+- **`scripts/audit_secrets.py` 移除已退役的 hub-token 规则**：该 token 已完成轮换、旧值失效，特定字面量留在面向公开的脚本里没有收益；通用规则（`literal_credential` / `provider_key`）继续覆盖新值被意外硬编码的风险。
+- **两份 README 致谢 [TraeClaw](https://github.com/firerlAGI/TraeClaw)**：`trae_delegate` 通道由 TraeClaw 网关驱动，按开源惯例在「致谢与鸣谢」/「Acknowledgements」中补记。
+- **`docs/HANDOVER_20261016.md` 凭据提示脱敏**：与 `fa48961` 对 20261015 的处理保持一致，发布流程改为通用表述（账号级凭据仅在使用时从本机既有配置读取，不写入仓库、不打印、不落日志）。
+- **新增 `CODE_OF_CONDUCT.md`**：贡献者公约（改编自 Contributor Covenant 2.1），补齐 GitHub 社区健康文件。
+
+> 版本号只做机械对齐，无功能改动。
+
 ## [0.9.9.9] - 2026-10-16
 
 收口文档。`v0.9.9.7` 与 `v0.9.9.8` 发版时两张 SVG 仍是标注 `0.9.9.6` 的旧版，本版一并补齐。
