@@ -30,7 +30,6 @@
         "deepseekv41f": "deepseek-v4.1-flash",
         "grok4.7": "grok-4.7",
         "grok-4.7": "grok-4.7",
-        "trae": "custom-local:trae",
         "v41f": "deepseek-v4.1-flash"
       },
       "async_default": true
