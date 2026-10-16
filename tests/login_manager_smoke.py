@@ -155,7 +155,7 @@ class LoginContractTests(unittest.TestCase):
             self.assertNotEqual(result["status"], "authenticated")
 
     def test_unknown_and_manual_workers_never_spawn(self):
-        with patch.object(login.subprocess, "Popen") as popen:
+        with patch.object(login.subprocess, "Popen") as popen, patch.object(login.shutil, "which", return_value=None):
             self.assertFalse(self.manager.handle("unknown", "start", {})["ok"])
             self.assertFalse(self.manager.handle("codebuddy", "execute", {})["ok"])
             self.assertEqual(self.manager.handle("zcode", "start", {})["status"], "unavailable")

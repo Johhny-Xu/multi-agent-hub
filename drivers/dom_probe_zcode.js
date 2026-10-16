@@ -1,5 +1,63 @@
 // 探查 ZCode 渲染进程的 DOM 全貌 (经 CDP)
 const http = require("http");
+if (typeof globalThis.WebSocket === "undefined") {
+  const crypto = require("crypto");
+  globalThis.WebSocket = class WebSocket {
+    constructor(url) {
+      this._listeners = { message: new Set(), open: new Set(), error: new Set() };
+      const u = new URL(url);
+      const key = crypto.randomBytes(16).toString("base64");
+      const req = http.request({
+        hostname: u.hostname,
+        port: u.port || 80,
+        path: u.pathname + u.search,
+        headers: { Connection: "Upgrade", Upgrade: "websocket", "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": key },
+      });
+      req.on("upgrade", (_res, socket, head) => {
+        this._socket = socket;
+        let buf = head && head.length ? Buffer.from(head) : Buffer.alloc(0);
+        socket.on("data", (chunk) => {
+          buf = Buffer.concat([buf, chunk]);
+          while (buf.length >= 2) {
+            const op = buf[0] & 0x0f;
+            let len = buf[1] & 0x7f;
+            let offset = 2;
+            if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); offset = 4; }
+            else if (len === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); offset = 10; }
+            if (buf.length < offset + len) return;
+            const payload = buf.subarray(offset, offset + len);
+            buf = buf.subarray(offset + len);
+            if (op === 0x1) {
+              const ev = { data: payload.toString("utf8") };
+              if (typeof this.onmessage === "function") this.onmessage(ev);
+              for (const fn of this._listeners.message) fn(ev);
+            } else if (op === 0x8) { socket.end(); }
+          }
+        });
+        socket.on("error", (e) => { if (typeof this.onerror === "function") this.onerror(e); });
+        if (typeof this.onopen === "function") this.onopen({});
+      });
+      req.on("error", (e) => { if (typeof this.onerror === "function") this.onerror(e); });
+      req.end();
+    }
+    addEventListener(type, fn) { if (this._listeners[type]) this._listeners[type].add(fn); }
+    removeEventListener(type, fn) { if (this._listeners[type]) this._listeners[type].delete(fn); }
+    send(data) {
+      if (!this._socket) return;
+      const payload = Buffer.from(String(data), "utf8");
+      const mask = crypto.randomBytes(4);
+      let header;
+      if (payload.length < 126) { header = Buffer.from([0x81, 0x80 | payload.length]); }
+      else if (payload.length < 65536) { header = Buffer.alloc(4); header[0] = 0x81; header[1] = 0x80 | 126; header.writeUInt16BE(payload.length, 2); }
+      else { header = Buffer.alloc(10); header[0] = 0x81; header[1] = 0x80 | 127; header.writeBigUInt64BE(BigInt(payload.length), 2); }
+      const masked = Buffer.alloc(payload.length);
+      for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask[i & 3];
+      this._socket.write(Buffer.concat([header, mask, masked]));
+    }
+    close() { if (this._socket) { try { this._socket.destroy(); } catch (_) {} } }
+  };
+}
+
 // CDP 端口 (默认 9223; 可用环境变量 CDP_PORT 覆盖)
 const CDP_PORT = process.env.CDP_PORT || "9223";
 function get(path) {

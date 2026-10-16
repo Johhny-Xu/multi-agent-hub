@@ -62,13 +62,17 @@ def worker_config(app, node):
     else:
         node_args = node['argv']
     home = Path.home()
-    modules = [Path(os.environ.get('APPDATA') or home / 'AppData/Roaming') / 'npm/node_modules',
+    node_prefix_modules = []
+    if node_args:
+        node_bin = Path(node_args[0]).resolve()
+        node_prefix_modules = [node_bin.parent.parent / 'lib/node_modules', node_bin.parent / 'node_modules']
+    modules = [*node_prefix_modules, Path(os.environ.get('APPDATA') or home / 'AppData/Roaming') / 'npm/node_modules',
                home / '.npm-global/lib/node_modules', Path('/usr/local/lib/node_modules'), Path('/usr/lib/node_modules')]
     def module_file(relative):
         return first_file([directory / relative for directory in modules])
-    cb = module_file('@tencent-ai/codebuddy-code/bin/codebuddy')
-    mimo = module_file('@mimo-ai/cli/bin/mimo')
-    mmx = module_file('mmx-cli/dist/mmx.mjs')
+    cb = module_file('@tencent-ai/codebuddy-code/bin/codebuddy') or first_file([shutil.which('codebuddy')])
+    mimo = module_file('@mimo-ai/cli/bin/mimo') or first_file([shutil.which('mimo')])
+    mmx = module_file('mmx-cli/dist/mmx.mjs') or first_file([shutil.which('mmx')])
     workers = {}
     if cb and node_args:
         for name, profile, extra in [('codebuddy', '.codebuddy', {}), ('codebuddy-cn', '.codebuddy-cn', {'CODEBUDDY_INTERNET_ENVIRONMENT': 'internal'})]:
@@ -89,6 +93,8 @@ def worker_config(app, node):
             workers[name] = {'role': 'Official installed CLI', 'cli': [str(cli)] + args, 'model_arg': '--model', 'models': {'default': model}, 'async_default': True}
             if name == 'antigravity':
                 workers[name]['options_before_prompt'] = True
+    if first_file([shutil.which('traecli'), home / '.local/bin/traecli']):
+        workers['traecode'] = {'role': 'Trae official gateway worker', 'cli': None, 'model_arg': None, 'models': {'default': 'GLM-5.3-FlashX'}}
     zcode = native.discover(node)['zcode']
     if zcode and node_args:
         cli_path = zcode[-1] if zcode[-1].endswith('.cjs') else None
@@ -153,8 +159,36 @@ def systemd_unit(prefix, config_dir, python):
     return '# AgentHub-managed prefix: ' + str(prefix.resolve()) + '\n[Unit]\nDescription=multi-agent-hub user service\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=' + command_line + '\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n'
 
 
+def _prepare_source_bundle(source_root, component):
+    import tempfile
+    import zipfile
+    import build as build_mod
+    temp_dir = Path(tempfile.mkdtemp(prefix='agenthub-src-bundle-'))
+    target_comp = component if component in ('hub', 'plugins', 'both') else 'both'
+    artifact = build_mod.build(temp_dir / 'releases', target_comp)
+    unpacked = temp_dir / 'unpacked'
+    with zipfile.ZipFile(temp_dir / 'releases' / artifact['file']) as archive:
+        archive.extractall(unpacked)
+        if os.name != 'nt':
+            for info in archive.infolist():
+                if info.filename.endswith('.sh'):
+                    (unpacked / info.filename).chmod(0o755)
+    return temp_dir, unpacked / ('agenthub-' + build_mod.VERSION + '-' + target_comp)
+
+
 def install(args):
     bundle = Path(args.bundle).resolve()
+    temp_source_bundle = None
+    if not (bundle / 'manifest.json').exists() and (bundle / 'packaging/build.py').is_file() and (bundle / 'hub/agent_hub.py').is_file():
+        temp_source_bundle, bundle = _prepare_source_bundle(bundle, args.component)
+    try:
+        return _install_verified_bundle(args, bundle)
+    finally:
+        if temp_source_bundle and temp_source_bundle.exists():
+            shutil.rmtree(temp_source_bundle, ignore_errors=True)
+
+
+def _install_verified_bundle(args, bundle):
     manifest = verify_bundle(bundle)
     component = args.component or manifest['component']
     if component != manifest['component'] and manifest['component'] != 'both':
@@ -273,6 +307,8 @@ def install(args):
             if component == 'plugins' and is_hub or component == 'hub' and not is_hub:
                 continue
             target = stage / relative; target.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(bundle / name, target)
+            if os.name != 'nt' and target.suffix == '.sh':
+                target.chmod(0o755)
             selected_files.append(relative)
         if app.exists():
             # Update selected managed files atomically. Renaming the whole app

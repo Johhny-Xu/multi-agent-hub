@@ -21,9 +21,10 @@ class AdapterError extends Error {
 export class AppServer {
   constructor({ cli, node = process.execPath, cwd, storage, env = process.env }) {
     this.pending = new Map(); this.notifications = []; this.nextId = 0; this.interactiveRequest = false;
+    this.ownGroup = process.platform !== 'win32' && env.AGENTHUB_OWNED_POSIX_GROUP !== '1';
     this.child = spawn(node, [cli, 'app-server', '--cwd', cwd], {
       cwd, env: { ...env, ZCODE_STORAGE_DIR: storage }, windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32',
+      stdio: ['pipe', 'pipe', 'pipe'], detached: this.ownGroup,
     });
     // Vendor stderr can include private settings. Do not forward its raw text.
     this.child.stderr.resume();
@@ -72,10 +73,12 @@ export class AppServer {
         const finish = () => { clearTimeout(timer); kill.off('close', finish); kill.off('error', finish); resolve_(); };
         const timer = setTimeout(finish, 1500); kill.once('close', finish); kill.once('error', finish);
       });
-    } else { try { process.kill(-this.child.pid, 'SIGTERM'); } catch { this.child.kill('SIGTERM'); } }
+    } else if (this.ownGroup) { try { process.kill(-this.child.pid, 'SIGTERM'); } catch { this.child.kill('SIGTERM'); } }
+    else { try { this.child.kill('SIGTERM'); } catch {} }
     await this.waitForExit(500);
     if (process.platform !== 'win32' && this.child.exitCode === null && !this.closed) {
-      try { process.kill(-this.child.pid, 'SIGKILL'); } catch { this.child.kill('SIGKILL'); }
+      if (this.ownGroup) { try { process.kill(-this.child.pid, 'SIGKILL'); } catch { this.child.kill('SIGKILL'); } }
+      else { try { this.child.kill('SIGKILL'); } catch {} }
       await this.waitForExit(500);
     }
   }
@@ -190,6 +193,15 @@ export async function runZcodeTask(options, { connect, onText = () => {}, now = 
     if (left <= 0) throw new AdapterError('TURN_TIMEOUT', 'timeout');
     return Math.min(30000, left);
   };
+  const onSignal = () => {
+    if (rpc?.child && rpc.child.exitCode === null) {
+      try { if (rpc.ownGroup) process.kill(-rpc.child.pid, 'SIGTERM'); else rpc.child.kill('SIGTERM'); } catch {}
+    }
+    if (directory) rm(directory, { recursive: true, force: true }).catch(() => {}).finally(() => process.exit(143));
+    else process.exit(143);
+  };
+  process.once('SIGTERM', onSignal);
+  process.once('SIGINT', onSignal);
   try {
     directory = await mkdtemp(join(tmpdir(), 'agenthub-zcode-rpc-'));
     const cwd = resolve(options.cwd || process.cwd());
@@ -245,6 +257,8 @@ export async function runZcodeTask(options, { connect, onText = () => {}, now = 
     const status = error instanceof AdapterError ? (!sent && error.status === 'unknown' ? 'failed' : error.status) : sent ? 'unknown' : 'failed';
     return result(status, '', selected ? selected.providerId + '/' + selected.modelId : options.model, error instanceof AdapterError ? error.code : 'ADAPTER_FAILED', sessionId);
   } finally {
+    process.off('SIGTERM', onSignal);
+    process.off('SIGINT', onSignal);
     if (rpc) {
       for (const id of own) try { await rpc.request('session/close', { sessionId: id, ...(!sent && !accepted ? { expectedPersistence: 'deferred' } : {}) }, 1500); } catch { /* Only our created IDs are closed; stop the owned server below. */ }
       try { await rpc.shutdown(); } catch { /* Cleanup cannot turn a known task result into an unhandled exception. */ }
