@@ -75,6 +75,12 @@ def main():
     if not node:
         raise SystemExit("Node.js is required for the MCP and console regressions")
     suite_env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8", AGENTHUB_TEST_PYTHON=sys.executable)
+    # Suites probe their own loopback servers with plain urllib; keep that traffic
+    # off any http_proxy/https_proxy the runner inherited (CI and corporate hosts).
+    loopback = "127.0.0.1,localhost,::1"
+    for key in ("NO_PROXY", "no_proxy"):
+        current = suite_env.get(key, "")
+        suite_env[key] = (current + "," + loopback) if current else loopback
     groups = [(name, [sys.executable, "tests/" + file]) for name, file in (
         ("hub_core", "hub_core_regressions.py"),
         ("runtime", "runtime_regressions.py"),

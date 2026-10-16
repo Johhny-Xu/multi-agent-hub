@@ -11,7 +11,17 @@ import socket
 import subprocess
 import sys
 import time
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
+
+# Every URL this module probes is our own loopback service. Route it around any
+# http_proxy/https_proxy in the environment: on hosts behind a corporate proxy
+# without NO_PROXY=127.0.0.1, urllib otherwise sends the health probe to the
+# proxy, gets its 404/502 back, and the install fails with "Health timeout".
+_LOCAL_OPENER = build_opener(ProxyHandler({}))
+
+
+def urlopen(url, timeout=None):
+    return _LOCAL_OPENER.open(url, timeout=timeout)
 from runtime import SetupError, atomic_json, read_json, run
 
 

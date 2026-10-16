@@ -1,2 +1,2 @@
 #!/bin/sh
-exec "$(dirname -- "$0")/packaging/launch.sh" stop "$@"
+exec sh "$(dirname -- "$0")/packaging/launch.sh" stop "$@"

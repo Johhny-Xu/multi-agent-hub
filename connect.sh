@@ -1,2 +1,2 @@
 #!/bin/sh
-exec "$(dirname -- "$0")/packaging/launch.sh" connect "$@"
+exec sh "$(dirname -- "$0")/packaging/launch.sh" connect "$@"

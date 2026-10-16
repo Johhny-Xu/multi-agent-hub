@@ -15,7 +15,9 @@ import threading
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
+
+urlopen = build_opener(ProxyHandler({})).open  # loopback probes must bypass env proxies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import zipfile
 

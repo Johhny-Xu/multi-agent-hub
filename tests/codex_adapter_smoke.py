@@ -349,7 +349,7 @@ class CodexAdapterTests(unittest.TestCase):
                     initialized = rpc.call("initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
                                                           "clientInfo": {"name": "native-plugin-fixture", "version": "1"}})
                     self.assertEqual(initialized["result"]["protocolVersion"], "2025-11-25")
-                    self.assertEqual(len(rpc.call("tools/list")["result"]["tools"]), 7)
+                    self.assertEqual(len(rpc.call("tools/list")["result"]["tools"]), 8)  # hub_discover added in 0.9.9.x
                 finally:
                     rpc.close()
 
