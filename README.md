@@ -399,6 +399,7 @@ python packaging/build.py --output ../agenthub-releases
 
 - 🎨 **品牌矢量图标与头像规范**：特别感谢 [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) 开源项目提供的精致高品质科技与 AI 品牌 SVG 图标，为本项目 Web 控制台及各子代理的头像视觉体系提供了美观、规范的原生矢量支持；
 - 🤖 **各平台官方内核与开发者生态**：感谢 Huawei CodeArts、Google Antigravity、Tencent CodeBuddy、GitHub Copilot、Xiaomi MiMo、MiniMax、ByteDance Trae、Z.ai 等官方提供的 CLI 内核与开放生态；
+- 🌉 **Trae 桌面桥接与自动化（`trae_delegate` 通道）**：感谢 [TraeClaw](https://github.com/firerlAGI/TraeClaw) 开源项目提供的本地桥接服务与 CDP/DOM 自动化能力，使本项目得以将任务派发至 TraeCode 桌面端执行；
 - 💖 **开源社区支持**：感谢所有在多模型融合调度、跨平台原生接入与 Web 控制台优化中提供反馈与建议的开发者们！
 
 ---
