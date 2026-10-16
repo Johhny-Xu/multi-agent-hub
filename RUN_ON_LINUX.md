@@ -19,14 +19,18 @@ cd multi-agent-hub
 
 ## 如果报 Permission denied
 
-原 20261016 源码包是在 Windows（FAT 属性）上打的 ZIP，**所有 `.sh` 都没有可执行位**，任何解压方式都会丢。
-本修复版做了两件事：
+包内 15 个 `.sh` 在归档里已记录 `0755`，`tar -xzf` 解压会保留权限位，可直接 `./install.sh`。
 
-1. 重新打包时为 15 个 `.sh` 写入 0755；
-2. 根目录与 `packaging/` 下的启动包装脚本改为 `exec sh .../launch.sh`，因此即使执行位丢失，
-   直接 `sh install.sh` 也能跑通，无需 chmod。
+但**部分解压工具会丢掉 Unix 权限位** —— Python 的 `zipfile.extractall()` 会解出 `0664`，
+Windows 资源管理器、部分 JS 解压库同样如此。为了不依赖权限位，根目录与 `packaging/` 下的
+启动包装脚本统一改成了 `exec sh .../launch.sh`，因此**即使权限位丢了，`sh install.sh` 也能直接跑通**：
 
-仍想补位可执行：
+```bash
+sh install.sh                  # 权限位丢了也能用
+sh install.sh --with-console   # 额外启动 Web 控制台（默认 :8890）
+```
+
+注意 `./install.sh`（不带 `sh`）仍然需要执行位；想恢复它，补一次即可：
 
 ```bash
 chmod +x install.sh connect.sh start.sh stop.sh packaging/*.sh \
@@ -73,5 +77,5 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 ## 备注
 
-- 本文件是**交付说明，不属于项目源码**，可直接删除。
+- 本文件随源码包一起分发，同时由仓库跟踪维护；打包时保持与仓库版本一致即可。
 - 版本 `0.9.9.6`，开源协议 Apache-2.0，详见 `LICENSE` 与 `README.md`。
