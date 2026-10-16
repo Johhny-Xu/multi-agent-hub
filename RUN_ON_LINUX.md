@@ -1,6 +1,6 @@
 # 在 Linux 上运行（交付说明）
 
-本压缩包是 **multi-agent-hub v0.9.9.9 的完整源码**，解压后可在 Linux 上运行。
+本压缩包是 **multi-agent-hub v1.0.0 的完整源码**，解压后可在 Linux 上运行。
 
 ## 环境要求
 
@@ -80,4 +80,4 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 ## 备注
 
 - 本文件随源码包一起分发，同时由仓库跟踪维护；打包时保持与仓库版本一致即可。
-- 版本 `0.9.9.9`，开源协议 Apache-2.0，详见 `LICENSE` 与 `README.md`。
+- 版本 `1.0.0`，开源协议 Apache-2.0，详见 `LICENSE` 与 `README.md`。

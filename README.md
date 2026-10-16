@@ -9,7 +9,7 @@
 2. **6 款原生宿主深度适配（体验更顺畅、更舒服）**：针对 **Codex**、**ZCode**、**MiniMax Code（及 Claude Code / Agent Plugins 1.0）**、**DeepSeek Harness (DSH)**、**华为 CodeArts** 与 **Antigravity** 提供了深度定制的原生插件、专用子代理体系（`hub-*.md`）、专属技能与斜杠命令，上下文自动隔离，免去手动配置参数的繁琐；
 3. **零客户端独立使用**：即使没有外部 IDE 或 AI 客户端，Hub 内置的 **CodeBuddy 风格三栏式 WebUI 管理大盘** 也能独立完成平台多会话树管理、沉浸式对话、任务派发与监控、全量会话归档复原与彻底清理。
 
-当前源码版本为 **0.9.9.9**。**0.9.9.7** / **0.9.9.8** / **0.9.9.9** 是同一次收口的三段：`0.9.9.7` 修复源码检出在 Linux 上的安装链路（执行位丢失、源码目录直接安装、回环请求被环境代理劫持）；`0.9.9.8` 补上 Node 20 的 WebSocket 兼容、登录与控制台的路径发现、测试与宿主解耦，并完成开源前仓库清理（补齐贡献指南、安全政策与英文 README；移除凭据路径提示；移出 66 个无人引用的测试证据文件）；`0.9.9.9` 重画两张架构图与进度图，并补上本轮交接文档。此前 v0.9.9.3 ~ v0.9.9.6 在完成 **9 Worker 登录链路状态检测化重构与真实凭据对齐** 的基础上，重点聚焦 **WebUI 控制台 UI/UX 体系化打磨、自定义壁纸全局毛玻璃通透体系、三向智能悬浮收展引擎与侧栏净空精简**：新增左上角常驻品牌锚点（`.brand-logo-pin`，点击可切换自动收展/常驻并持久化）与顶栏/活动栏/平台侧栏光标感知智能收展引擎（对话侧栏展开时活动栏联动常驻防跳动，触发热区统一扩展至侧栏完整占位宽度）；将主题预设扩充为 **Mocha、Shell、Aurora（极光微光）、Dusk（暮霭流金）、Cyber（赛博深空）、Grid（科技网格）** 共 6 套完整深/浅双模调色板（12 种组合，通过 WCAG AA 高对比度校准），并在自定义壁纸或高定预设下启用全局 Glassmorphism 毛玻璃通透体系与基础中性灰面统一（残留灰面元素 96 → 0，保留 `--gem-surface-high` 承载交互态与进度条轨道）；实现发送按钮、上下文进度条及对话区全部二级菜单对当前子代理品牌色（`--agent-accent`）的全链路贯通，而模型名称等资讯文字严格保持正文标准色（`--gem-text`）；完成侧栏卡片单行化精简（移除冗余待机占位行、放大镜图标、⌘K 提示与超宽胶囊，确保「N会话」徽标完整无裁切）并推出包含内存虚拟驱动引擎的单文件零依赖脱机交互 Demo（`demo.html`）。
+当前源码版本为 **1.0.0**（首个公开正式版），沿袭开源前的三段收口：`0.9.9.7` 修复源码检出在 Linux 上的安装链路（执行位丢失、源码目录直接安装、回环请求被环境代理劫持）；`0.9.9.8` 补上 Node 20 的 WebSocket 兼容、登录与控制台的路径发现、测试与宿主解耦，并完成开源前仓库清理（补齐贡献指南、安全政策与英文 README；移除凭据路径提示；移出 66 个无人引用的测试证据文件）；`0.9.9.9` 重画两张架构图与进度图，并补上本轮交接文档；转正前的最后一道清理也一并完成（审计脚本移除已退役的 hub-token 规则、两份 README 致谢 TraeClaw、交接文档凭据提示脱敏、补齐贡献者公约）。此前 v0.9.9.3 ~ v0.9.9.6 在完成 **9 Worker 登录链路状态检测化重构与真实凭据对齐** 的基础上，重点聚焦 **WebUI 控制台 UI/UX 体系化打磨、自定义壁纸全局毛玻璃通透体系、三向智能悬浮收展引擎与侧栏净空精简**：新增左上角常驻品牌锚点（`.brand-logo-pin`，点击可切换自动收展/常驻并持久化）与顶栏/活动栏/平台侧栏光标感知智能收展引擎（对话侧栏展开时活动栏联动常驻防跳动，触发热区统一扩展至侧栏完整占位宽度）；将主题预设扩充为 **Mocha、Shell、Aurora（极光微光）、Dusk（暮霭流金）、Cyber（赛博深空）、Grid（科技网格）** 共 6 套完整深/浅双模调色板（12 种组合，通过 WCAG AA 高对比度校准），并在自定义壁纸或高定预设下启用全局 Glassmorphism 毛玻璃通透体系与基础中性灰面统一（残留灰面元素 96 → 0，保留 `--gem-surface-high` 承载交互态与进度条轨道）；实现发送按钮、上下文进度条及对话区全部二级菜单对当前子代理品牌色（`--agent-accent`）的全链路贯通，而模型名称等资讯文字严格保持正文标准色（`--gem-text`）；完成侧栏卡片单行化精简（移除冗余待机占位行、放大镜图标、⌘K 提示与超宽胶囊，确保「N会话」徽标完整无裁切）并推出包含内存虚拟驱动引擎的单文件零依赖脱机交互 Demo（`demo.html`）。
 
 ---
 
@@ -168,13 +168,13 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 > **适合场景**：在单台电脑（Windows 或 Linux）上进行开发，希望一键配齐 Hub 服务、WebUI 控制台及已有的 IDE 插件。
 
 #### 步骤 1：获取项目代码
-- **方式 A（Git 克隆，获取最新 v0.9.9.9 源码，推荐）**：
+- **方式 A（Git 克隆，获取最新 v1.0.0 源码，推荐）**：
   ```bash
   git clone https://github.com/Johhny-Xu/multi-agent-hub.git
   cd multi-agent-hub
   ```
 - **方式 B（下载 Release 打包）**：
-  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载最新预构建包（如 `agenthub-0.9.9.9-both.zip`）并解压。
+  从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载最新预构建包（如 `agenthub-1.0.0-both.zip`）并解压。
 
 #### 步骤 2：一键执行安装并启动
 - **Windows**：直接双击根目录 **`install.cmd`**（或在终端运行 `.\install.cmd`）；
@@ -239,8 +239,8 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 原生宿主客户端 | 独立导入 / 按需单装方式 | 插件目录与详细说明 |
 | --- | --- | --- |
-| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-0.9.9.9.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
-| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-0.9.9.9-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
+| **1. 华为 CodeArts / VS Code** | • **图形扩展**：在 IDE“扩展”面板选择“从 VSIX/CARTS 安装...”，导入 `multi-agent-hub-1.0.0.carts` 或 `.vsix`<br>• **命令行注册**：`.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [`integrations/codearts`](integrations/codearts/README.md) & [`integrations/vscode`](integrations/vscode/README.md) |
+| **2. MiniMax Code / Claude Code** | • **桌面端 / 云端插件包（MiniMax Plugin V1）**：直接导入 `agenthub-workers-1.0.0-minimax-plugin.zip`（含 `.minimax-plugin/plugin.json`）<br>• **CLI (`mcode` / `claude`)**：`mcode --plugin-dir ./plugins/agenthub-workers`（含 `.claude-plugin/plugin.json` 与 Agent Plugins 1.0 `plugin.json`） | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **3. ZCode IDE / CLI** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts zcode`<br>• **IDE 发现页 / 本地配置**：在 ZCode 插件发现页添加本仓库，或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [`plugins/agenthub-workers`](plugins/agenthub-workers/README.md) |
 | **4. OpenAI Codex** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`<br>• 自动注册本地插件市场并将 9 个子代理与工作流写入目标工作区 `.codex/agents/` | [`integrations/codex`](integrations/codex/README.md) |
 | **5. DeepSeek Harness (DSH)** | • **命令行自动注册**：`.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`<br>• **手动 Bundle 挂载**：`dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [`integrations/dsh`](integrations/dsh/README.md) |
@@ -250,15 +250,15 @@ bash install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 ### 📦 预打包文件与运行依赖
 
-> *注：下表为 `v0.9.9.9` 的预打包产物，与当前源码版本号一致；也可直接通过 `python packaging/build.py --output <目录> --component all` 按源码自行构建。*
+> *注：下表为 `v1.0.0` 的预打包产物，与当前源码版本号一致；也可直接通过 `python packaging/build.py --output <目录> --component all` 按源码自行构建。*
 
 | 安装包 | 适用环境 | 包含内容 |
 | --- | --- | --- |
-| **agenthub-0.9.9.9-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
-| **agenthub-0.9.9.9-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
-| **agenthub-0.9.9.9-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
-| **agenthub-workers-0.9.9.9-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
-| **multi-agent-hub-0.9.9.9.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
+| **agenthub-1.0.0-both.zip** | 客户端与 Hub 均在同一机器运行（最推荐） | 包含全部组件、安装向导、服务管理脚本 |
+| **agenthub-1.0.0-plugins.zip** | 仅用于编写代码的客户端电脑 | 多宿主客户端原生插件、MCP 桥接器、子代理与工作流 |
+| **agenthub-1.0.0-hub.zip** | 仅运行 Worker 与模型的服务端机器 | Python Hub 服务、9 种 Worker 适配驱动、可选 WebUI 控制台 |
+| **agenthub-workers-1.0.0-minimax-plugin.zip** | MiniMax Code 桌面端 / MiniMax Agent 云端 / Marketplace | 符合 MiniMax Plugin V1 规范的零包裹层独立插件包 |
+| **multi-agent-hub-1.0.0.carts / .vsix** | 华为 CodeArts IDE、VS Code 及兼容编辑器 | 桌面端图形扩展：一键导入、侧边栏面板、状态指示灯 |
 
 - **运行依赖要求**：
   - **基础运行环境**：Python 3.8+（Codex 代理安装需 Python 3.11+）；Node.js 20+（用于 MCP 桥接与 Web 控制台）；
@@ -297,7 +297,7 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 - 🌟 **智能时段问候、头像定制与社区互动**：
   - 内置 7 大精细时段共 35 句暖心关怀问候语，每次进入或切换平台自适应随机呈现；
   - 点击头像即可选择本地图片实现跨平台全局头像替换并持久化同步（消除顶栏头像纵向拉伸，统一全局 Squircle R 角与 Logo 标准）；
-  - 底部优雅轻量页脚：左侧开源致意（“好好吃饭更重要哦”彩蛋）、中间 GitHub Star 一键直达、右侧当前版本号（`v0.9.9.9`，支持由后端 `snap.version` 动态覆盖）显式标注。
+  - 底部优雅轻量页脚：左侧开源致意（“好好吃饭更重要哦”彩蛋）、中间 GitHub Star 一键直达、右侧当前版本号（`v1.0.0`，支持由后端 `snap.version` 动态覆盖）显式标注。
 - 🎛️ **监控状态栏自定义面板与模型抽屉**：
   - 整条状态栏即为可点击整体（点击任意位置在点击点正上方居中弹出显示项配置面板，自动做容器边界钳制，按需勾选模型、网络延时、吞吐 TPS、会话 Token、平台额度等）；模型选择器弹窗支持左右贴靠自适应、展示精简思考档位标签（`模型名 · 思考档位`）、深度思考两段式胶囊（`默认 / 开启 / 关闭`）与流式开关，支持单个删除自定义模型别名。
 - 🏷️ **官方积分倍率与福利标识**：
@@ -346,7 +346,7 @@ Hub 提供内置的轻量化现代 Web 管理大盘（在安装或启动时指�
 
 ## 版本演进与开发调试
 
-**0.9.9.9** 重画两张架构图与进度图并补上交接文档；**0.9.9.8** 补上 Node 20 WebSocket 兼容、路径发现与测试解耦；**0.9.9.7** 完成源码检出在 Linux 上的安装链路修复与开源前仓库清理；**0.9.9.6** 重点完成 WebUI 控制台交互精修、6 大深浅双模色系预设与自定义壁纸毛玻璃体系、品牌锚点常驻与三向智能悬浮收展引擎、子代理主题色全链路贯通及侧栏单行化精简：
+**1.0.0**（首个公开正式版）完成开源前收尾（审计清理、README 致谢 TraeClaw、交接文档脱敏、贡献者公约）；**0.9.9.9** 重画两张架构图与进度图并补上交接文档；**0.9.9.8** 补上 Node 20 WebSocket 兼容、路径发现与测试解耦；**0.9.9.7** 完成源码检出在 Linux 上的安装链路修复与开源前仓库清理；**0.9.9.6** 重点完成 WebUI 控制台交互精修、6 大深浅双模色系预设与自定义壁纸毛玻璃体系、品牌锚点常驻与三向智能悬浮收展引擎、子代理主题色全链路贯通及侧栏单行化精简：
 
 ![multi-agent-hub 0.9.9.6 进度图：当前重点攻坚 WebUI 交互精修、自定义壁纸毛玻璃体系与智能收展引擎，展示已有基础、重点成果、版本演进和实际验证范围](docs/roadmap.svg)
 
