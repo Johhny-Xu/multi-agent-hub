@@ -417,7 +417,7 @@ Contribution rules (pre-commit checks, commit message format) are in [CONTRIBUTI
 
 | Version | Focus |
 | --- | --- |
-| **1.0.0** | First public release: audit cleanup, TraeClaw credit, handover docs scrubbed, Code of Conduct added |
+| **1.0.0** | First public release: audit cleanup, TraeClaw credit, handover docs scrubbed, Code of Conduct added, post-review fixes folded in |
 | 0.9.9.9 | Redrawn architecture and roadmap diagrams, handover record |
 | 0.9.9.8 | Node 20 WebSocket compatibility, path discovery for login and console, tests decoupled from hosts; contributing guide, security policy and English README |
 | 0.9.9.7 | Linux source install fixes: lost exec bits, install from a checkout, loopback requests hijacked by a proxy |
