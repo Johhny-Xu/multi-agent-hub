@@ -9,6 +9,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [0.9.9.8] - 2026-10-16
+
+补齐 `0.9.9.7` 收口的另一半。本版来自对同一份源码包的另一路独立修复，与 `0.9.9.7` 的改动**完全不重叠**（各 14 个文件），合并后才是完整的修复。
+
+### 运行时兼容 (`drivers` / `console`)
+
+- **Node 20 下 DOM/ZCode 驱动直接崩溃**：`drivers/dom_probe.js`、`dom_probe_zcode.js`、`dom_read.js`、`zcode_dom.js`、`zcode_read.js` 直接调用 `new WebSocket(...)`，而全局 `WebSocket` 自 **Node 21.2 才加入、22 才默认启用**，本项目声明支持 Node.js 20+。五个驱动现各自带一段守卫式 polyfill（`if (typeof globalThis.WebSocket === "undefined")`），完成 upgrade 握手并按 RFC 6455 要求对出站帧做掩码。
+- **进程组归属与信号回收**：`drivers/zcode_rpc.mjs` 与 `console/auth.mjs` 尊重 `AGENTHUB_OWNED_POSIX_GROUP`，仅在自己拥有进程组时才 detach，并在 SIGTERM/SIGKILL 时回收整个进程组；`auth.mjs` 另加 SIGTERM/SIGINT 处理器，回收子进程并清理其沙箱目录。
+- **PTY 登录脚本重写**：`console/auth.mjs` 用显式的 `pty.fork()` 循环替换 `pty.spawn`，向子进程转发信号并以子进程真实退出码退出——旧写法两者都会吞掉。
+
+### 非作者机器上的路径发现 (`console` / `packaging`)
+
+- **`console/auth.mjs`**：`agents.json` 依次从 `HUB_AGENTS_FILE`、`hub/agents.json`、`~/.config/agenthub(-codearts)/agents.json` 解析，不再写死最后一个；CLI 可执行文件改为遍历 `PATH` 及 `~/.npm-global/bin`、`~/.local/bin`、`/usr/local/bin`、`/usr/bin`，不再假定装在 `~/.npm-global`。
+- **`console/server.mjs`**：codebuddy 会话目录同时在 `.codebuddy` 与 `.codebuddy-cn`、以及 cwd 与 home 两种 slug 下探测；结果目录从 `HUB_RESULTS_DIR`、`HUB_STATE_DIR/results`、`hub/state/results`、`~/.config/agenthub/state/results`、`~/agent-hub/results` 中择一。
+- **`packaging/install.py`**：node 模块查找额外覆盖 node 可执行文件旁的 prefix 目录（nvm、`/usr/local`）；codebuddy / mimo / mmx 增加 `shutil.which()` 兜底；探测 `traecli` 并注册 `traecode` worker。
+
+### 安装链路 (`packaging`)
+
+- **`install.py` 新增 `_prepare_source_bundle()`**：传入源码目录而非发行包时，先在临时目录构建 `both` 包、解压、把 `.sh` 补回 `0755`，并在 `finally` 中删除临时目录。这与 `0.9.9.7` 放进 `packaging/launch.sh` 的能力是同一件事，两者不冲突——`launch.sh` 传入的包已带 `manifest.json`，`install.py` 的守卫因此短路。`launch.sh` 仍是 `./install.sh` 的入口，本项覆盖直接调用 `python packaging/install.py --bundle .` 的场景。
+- **`packaging/runtime.py`**：写入 `.sh` 时即补回 `0755`，安装出的目录不再依赖源码是怎么解压的。
+
+### 测试 (`tests`)
+
+- **`login_manager_smoke` 与宿主解耦**：patch `shutil.which` 返回 `None`，用例不再取决于宿主机是否装了 `zcode` CLI。复现方式：把假 `zcode` 放进 `PATH`，未打补丁时该用例失败，打上后通过。这正是交接文档列为待办的缺陷。
+- **`extension_packaging_regressions`**：产物缺失时在 `setUpClass` 中自动构建，不再要求先跑过一次打包。
+
+> 未采纳该路修复的 `RUN_ON_LINUX.md` 与 `.gitattributes` 措辞（前者称 `unzip` 会保留权限位——属实，但未提醒 Python 的 `zipfile.extractall()` 会丢），仓库保留自己的版本。
+
+---
+
 ## [0.9.9.7] - 2026-10-16
 
 源码检出在 Linux 上的安装链路修复，以及开源前的仓库收口。本版不含新功能，改动集中在「陌生人 clone 下来能不能装上、能不能看懂」。

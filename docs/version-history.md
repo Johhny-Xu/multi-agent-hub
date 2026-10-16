@@ -23,6 +23,8 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 
 `v0.9.9.7`（2026-10-16）：源码检出在 Linux 上的安装链路修复与开源前收口。修复执行位丢失导致 `sh install.sh` 报 `Permission denied`、源码目录无法直接安装、回环请求被环境代理劫持三处问题；补齐 `CONTRIBUTING.md` / `SECURITY.md` / `README.en.md`，移除交接文档中的凭据路径提示，补齐 `.gitattributes` 的 Windows 脚本行尾规则，并把 `docs/` 中 66 个无人引用的测试证据移出仓库（172 → 106 个文件）。本版不含新功能。
 
+`v0.9.9.8`（2026-10-16）：补齐 `v0.9.9.7` 收口的另一半，来自对同一份源码包的另一路独立修复，两者改动完全不重叠（各 14 个文件）。修复 Node 20 下五个 DOM/ZCode 驱动因缺全局 `WebSocket` 而崩溃（内置 WebSocket 自 Node 21.2 才加入）、进程组归属与信号回收、PTY 登录脚本改用 `pty.fork()` 并透传退出码；补齐非作者机器上的路径发现（`agents.json`、CLI 可执行文件、codebuddy 会话目录、结果目录多候选）；`install.py` 增加源码目录构建能力；`login_manager_smoke` 与宿主解耦（交接文档待办项）。
+
 关于发布产物的一条重要约定（`v0.9.9.6` 实测得出）：`packaging/build.py` 打包的是**工作区的字节**，因此产物内容随检出时的行尾符变化。仓库 `.gitattributes` 只声明了 `*.sh text eol=lf`，Windows 脚本（`.cmd` / `.bat` / `.ps1`）未声明，其行尾由 `core.autocrlf` 决定——Windows 检出任 CRLF、Linux 检出任 LF。所以**发布用的产物必须在 Windows 侧构建**：只有 Windows 检出的工作区能同时给出 LF 的 `.sh`（Linux 必需）与 CRLF 的 `.cmd` / `.bat` / `.ps1`（Windows 必需）。Linux 侧构建的产物 `.sh` 正确但 Windows 入口脚本会变成 LF。两个平台的构建产物内容并不逐字节相同（差异 135/137 来自行尾符，其余 2 个是 `manifest.json` 与包内 `SHA256SUMS` 因内容哈希而连锁变化）；两侧内容摘要不同，但各自内部自洽。
 
 ## 后续版本
