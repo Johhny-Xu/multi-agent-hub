@@ -31,3 +31,7 @@ dist/
 *.vsix
 *.carts
 *.cloudide
+
+# desktop shell build artifacts
+desktop/node_modules/
+desktop/dist/

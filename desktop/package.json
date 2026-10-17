@@ -1,0 +1,75 @@
+{
+  "name": "multi-agent-hub-desktop",
+  "version": "1.0.0",
+  "description": "Multi-Agent Hub Desktop Client for Windows",
+  "main": "main.js",
+  "author": "Multi-Agent Hub Team",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable",
+    "dist:nsis": "electron-builder --win nsis",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.multiagent.hub.desktop",
+    "productName": "MultiAgentHub",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "server-runner.mjs",
+      "assets/**/*",
+      "!console/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [],
+    "extraResources": [
+      {
+        "from": "../console",
+        "to": "console",
+        "filter": [
+          "**/*",
+          "!**/node_modules/**"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MultiAgentHub",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    }
+  }
+}
