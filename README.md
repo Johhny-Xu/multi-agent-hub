@@ -31,11 +31,11 @@
 
 ## 它能做什么
 
-multi-agent-hub 基于标准 MCP 协议、原生插件与子代理体系，为 **11 种 AI 编码 Worker** 和 **6 款原生宿主**（外加任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理和 WebUI 管理大盘。
+**multi-agent-hub** 基于标准 MCP 协议、原生插件与子代理体系，为 **11 种 AI 编码 Worker** 与 **6 款原生宿主**（及任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理和 WebUI 管理大盘。
 
-接入了 Hub 的任意 AI 客户端，都能把任务派给其他 AI 执行（各自走自己的账号额度），并共享任务队列、邮箱与笔记。
+接入 Hub 的任意 AI 客户端都能把任务派给其他 AI 执行：各自走自己的账号额度，同时共享任务队列、邮箱与协作笔记。
 
-三种接入形态：
+按接入方式分三类：
 
 | 形态 | 适合谁 | 你需要做的 |
 | --- | --- | --- |
@@ -45,11 +45,11 @@ multi-agent-hub 基于标准 MCP 协议、原生插件与子代理体系，为 *
 
 **核心亮点**
 
-- 🤖 **11 种 Worker，一套契约**：Antigravity、CodeBuddy（国际 / 国内）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts，以及新增的 opencode、Cline。
-- 🔌 **6 款原生宿主**：原生子代理、斜杠命令与工作流，上下文自动隔离，免手动配参数。
-- 🔐 **WebUI 内完成 9 家 OAuth 登录**：免 SSH 授权、登出、多账号保存与秒切；以真实凭据落盘判定登录状态，不报假成功。
-- ⚡ **Worker 一键启停，全端同步**：被禁用的 Worker 在派发前就被拦截（`profile_disabled`），不浪费额度。
-- 🛡️ **严格的终态判定**：拒绝空回答、已知异常退出和超时后的半截回答；保留原任务 `ref`，禁止 Worker 给自己重复派发。
+- 🤖 **统一接入 11 种 Worker**：一套契约覆盖 Antigravity、CodeBuddy（国际 / 国内）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode 与 Cline。
+- 🔌 **深度适配 6 款原生宿主**：原生子代理、斜杠命令与工作流，上下文自动隔离，免手动配参数。
+- 🔐 **WebUI 内完成 11 个 Worker 的登录**：9 家 OAuth、cline 设备码授权、opencode API Key 三条路径并存；免 SSH 授权、登出、多账号保存与秒切，以真实凭据落盘判定登录状态，不报假成功。
+- ⚡ **一键启停 Worker，全端同步**：被禁用的 Worker 在派发前即被拦截（`profile_disabled`），不浪费额度。
+- 🛡️ **严格执行终态判定**：拒绝空回答、已知异常退出和超时后的半截回答；保留原任务 `ref`，禁止 Worker 给自己重复派发。
 - 🔄 **灵活部署**：同机或分离部署；纯 Windows、纯 Linux、Windows ↔ Linux（局域网直连或 SSH 反向通道）均可。
 - 🔍 **自动发现**：局域网 / 本机 Hub 广播扫描，配置恢复后 MCP 桥自动重连；配置与凭据独立于源码，升级不丢任务历史。
 - 🖥️ **离线 Demo**：`demo.html` 单文件、零依赖，无需后端即可体验完整控制台。
@@ -114,7 +114,7 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 
 - **Google Antigravity**
   ```text
-  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd（Linux 用 sh install.sh）并指定 --native-hosts antigravity，把 Multi-Agent Hub 原生插件与 9 个 hub-* 子代理安装到 ~/.gemini/config/plugins/multi-agent-hub 并启动 Hub 服务。
+  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd（Linux 用 sh install.sh）并指定 --native-hosts antigravity，把 Multi-Agent Hub 原生插件与 11 个 hub-* 子代理安装到 ~/.gemini/config/plugins/multi-agent-hub 并启动 Hub 服务。
   ```
 - **华为 CodeArts（IDE / CLI）**
   ```text
@@ -126,7 +126,7 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
   ```
 - **ZCode（IDE / CLI）**
   ```text
-  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd --native-hosts zcode（Linux 用 sh install.sh），将 plugins/agenthub-workers 原生插件（含 9 个外部 Worker 子代理与 MCP 桥）注册到我的 ZCode 环境中并启动 Hub。
+  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd --native-hosts zcode（Linux 用 sh install.sh），将 plugins/agenthub-workers 原生插件（含 11 个外部 Worker 子代理与 MCP 桥）注册到我的 ZCode 环境中并启动 Hub。
   ```
 - **OpenAI Codex**
   ```text
@@ -207,7 +207,7 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 | **华为 CodeArts / VS Code** | IDE 扩展面板「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.1.carts` / `.vsix`；或 `.\install.cmd --component plugins --native-hosts codearts --project <工作区>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
 | **MiniMax Code / Claude Code** | 桌面端 / 云端导入 `agenthub-workers-1.0.1-minimax-plugin.zip`；CLI：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [agenthub-workers](plugins/agenthub-workers/README.md) |
-| **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <工作区>`，自动注册本地插件市场并把 9 个子代理写入 `.codex/agents/` | [codex](integrations/codex/README.md) |
+| **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <工作区>`，自动注册本地插件市场并把 11 个子代理写入 `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
 | **Google Antigravity** | `.\install.cmd --component plugins --native-hosts antigravity`，安装到 `~/.gemini/config/plugins/multi-agent-hub`，重启生效 | [antigravity](integrations/antigravity/README.md) |
 
@@ -216,14 +216,14 @@ Linux 下把 `.\install.cmd` 换成 `sh install.sh` 即可。
 <details>
 <summary><b>Antigravity 补充说明</b></summary>
 
-- 原生插件包含 `plugin.json`、9 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及含 8 个桥接工具的 `mcp_config.json`。
+- 原生插件包含 `plugin.json`、11 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及含 8 个桥接工具的 `mcp_config.json`。
 - 可选 Python SDK 锁定 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与串并行编排。注意：已安装的 wheel 不含 `beta.run_workflow`；SDK 的 API 鉴权独立于 IDE/CLI 登录。
 </details>
 
 <details>
 <summary><b>CodeArts 补充说明</b></summary>
 
-包含 9 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 8 个 MCP 工具；既能作为客户端调度别人，也能作为 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
+包含 11 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 8 个 MCP 工具；既能作为客户端调度别人，也能作为 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
 
 - **单一调用路径**：严格遵循 `tool_search → tool_describe → tool_call`；禁止在正文中直出 XML 标签，杜绝双重派发；单任务只派发一次，之后由客户端轮询。
 - **权限与终态**：遇宿主权限拒绝时立即返回 `blocked_permission` 与原始 ref，不换工具名重试；只以非空的真实 Worker 回答判定 `completed`。
@@ -306,7 +306,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 | **主题** | Mocha、Shell、Aurora、Dusk、Cyber、Grid 6 套预设，各有深 / 浅两种（共 12 种），通过 WCAG AA 对比度校准 |
 | **自定义壁纸** | 上传壁纸后全局切换为毛玻璃半透明风格 |
 | **子代理主题色** | 发送按钮、进度条与二级菜单跟随当前子代理品牌色 |
-| **账号与额度** | 9 家 OAuth 登录、多账号秒切；实时额度监控（60s 缓存 + 并发合并） |
+| **账号与额度** | 11 个 Worker 登录（含 cline 设备码 / opencode Key）、多账号秒切；实时额度监控（60s 缓存 + 并发合并） |
 | **Worker 启停** | 卡片内开关，状态写入 `agents.json` 并全端生效 |
 | **会话归档** | 跨平台聚合、筛选、搜索、一键复原，删除前二次确认 |
 | **子代理 MCP 端点** | `:8790/mcp`，一键复制 URL 或“发给 Agent 的配置提示词” |
@@ -335,11 +335,11 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 | --- | --- | --- |
 | Windows 回归 & DOM 断言 | ✅ 32 组 + 7 项 DOM | 见 `docs/refactor-validation.json`、`tests/console_layout_theme_dom.mjs` |
 | Linux 回归 & 压测 | ✅ 29 组 + 4,500 余次压测 | 360 并发 0 报错；见 `docs/stage3-stress-report.json` 等 |
-| Linux 生产 Hub | ✅ 通过 | 24 个 Hub 工具、9 种 Worker；配置、历史与鉴权平滑保留 |
+| Linux 生产 Hub | ✅ 通过 | 24 个 Hub 工具、11 种 Worker；配置、历史与鉴权平滑保留 |
 | Linux Antigravity CLI 1.3.1 | ✅ 真实调用 | 原生子代理 `hub-mimocode` 派发成功 |
 | Linux ZCode CLI 0.16.9 | ✅ 真实调用 | 原 ref 续查返回正确答案 |
 | Windows Codex / ZCode | ✅ 真实调用 | 两种原生子代理均返回结果 |
-| Windows Antigravity | ✅ 真实调用 | `hub_status` / `hub_capabilities` 返回 9 种 Worker |
+| Windows Antigravity | ✅ 真实调用 | `hub_status` / `hub_capabilities` 返回 11 种 Worker |
 | CodeArts 原生组件与通道 | ✅ 通过 | Windows ↔ Linux 局域网与 SSH 通道正常 |
 | Linux CodeArts 自身模型 | ✅ 真实调用 | GLM-5.2 系列秒级完成，进程全部安全退出 |
 | Windows DSH | ⚠️ 账号余额受阻 | 注册通过；模型调用返回 `402 ACCOUNT_QUOTA` |
