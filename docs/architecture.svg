@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 1.0.0：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 9 种 Worker 统一调度</title>
-  <desc id="architecture-desc">任意支持 MCP 的客户端均可直接接入调度；为 Codex、ZCode、MiniMaxCode (Claude Code)、DSH、CodeArts、Antigravity 提供原生深度适配（子代理/命令/技能/工作流）；即使没有客户端，也能通过内置 WebUI 控制台独立管理与对话（支持品牌锚点常驻、顶栏/活动栏/侧栏智能悬浮收展、6 大深浅双模预设、自定义壁纸毛玻璃与子代理主题色贯通）。支持同机或跨机连接，9 种 Worker 官方内核统一调度，遵循 Apache License 2.0。本版为首个公开正式版，完成开源前收口转正与发布线审校修复。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">multi-agent-hub 1.0.1：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 11 种 Worker 统一调度</title>
+  <desc id="architecture-desc">任意支持 MCP 的客户端均可直接接入调度；为 Codex、ZCode、MiniMaxCode (Claude Code)、DSH、CodeArts、Antigravity 提供原生深度适配（子代理/命令/技能/工作流）；即使没有客户端，也能通过内置 WebUI 控制台独立管理与对话（支持品牌锚点常驻、顶栏/活动栏/侧栏智能悬浮收展、6 大深浅双模预设、自定义壁纸毛玻璃与子代理主题色贯通）。支持同机或跨机连接，11 种 Worker 官方内核统一调度，遵循 Apache License 2.0。本版新增 opencode / cline 两种 Worker，Worker 总数达 11 种。</desc>
   <defs>
     <style>
       text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
@@ -8,9 +8,9 @@
       .heading { font-size: 24px; font-weight: 700; }
       .body { font-size: 20px; }
       .small { font-size: 16px; }
-      .tiny { font-size: 13.5px; }
-      .micro { font-size: 12px; }
-      .muted { fill: #52647b; }
+      .tiny { font-size: 15px; }
+      .micro { font-size: 14px; }
+      .muted { fill: #475569; }
       .blue { fill: #1d4ed8; }
       .green { fill: #0f766e; }
       .amber { fill: #92400e; }
@@ -18,118 +18,120 @@
     </style>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#2563eb"/></marker>
   </defs>
-  <rect width="1280" height="980" rx="24" fill="#f8fafc"/>
+  <rect width="1280" height="1040" rx="24" fill="#f8fafc"/>
   <text x="32" y="58" class="title">multi-agent-hub · 一张图看懂任务怎样运行</text>
   <rect x="1112" y="26" width="136" height="40" rx="20" fill="#dbeafe"/>
-  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v1.0.0</text>
-  <text x="32" y="94" class="body muted">任意 MCP 客户端直连 · 6 款原生深度宿主 · 零客户端 WebUI 独立管理 · 9 种官方 Worker · Apache-2.0 协议</text>
+  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v1.0.1</text>
+  <text x="32" y="94" class="body muted">任意 MCP 客户端直连 · 6 款原生深度宿主 · 零客户端 WebUI 独立管理 · 11 种官方 Worker · Apache-2.0 协议</text>
 
   <!-- Read from left to right; each arrow carries tasks and their results. -->
   <g id="clients">
-    <rect x="32" y="144" width="254" height="452" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="32" y="144" width="254" height="512" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
     <rect x="32" y="144" width="254" height="8" rx="4" fill="#2563eb"/>
     <text x="50" y="182" class="label blue">01 · 接入与交互</text>
     <text x="50" y="212" class="heading">三层灵活使用形态</text>
 
     <!-- Layer 1: Any MCP Client -->
-    <rect x="44" y="226" width="230" height="84" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
-    <text x="56" y="248" font-size="14.5px" font-weight="700" fill="#334155">① 任意 MCP 客户端直连</text>
-    <text x="56" y="271" class="tiny muted">Cursor · Claude Desktop · Windsurf</text>
-    <text x="56" y="293" class="micro muted">Cline · 任意 AI Agent 填 URL 即用</text>
+    <rect x="40" y="226" width="238" height="96" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="52" y="252" font-size="16px" font-weight="700" fill="#334155">① 任意 MCP 客户端直连</text>
+    <text x="52" y="278" class="tiny muted">Cursor · Claude Desktop</text>
+    <text x="52" y="302" class="micro muted">Windsurf · Cline · 填 URL 即用</text>
 
     <!-- Layer 2: Native Deep Integrations -->
-    <rect x="44" y="320" width="230" height="130" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
-    <text x="56" y="342" font-size="14.5px" font-weight="700" fill="#1d4ed8">② 6 款原生深度适配 ⭐更爽</text>
-    <text x="56" y="367" font-size="13.5px" font-weight="600" fill="#1e293b">Codex · ZCode · MiniMaxCode</text>
-    <text x="56" y="390" font-size="13.5px" font-weight="600" fill="#1e293b">DSH · CodeArts · Antigravity</text>
-    <text x="56" y="415" font-size="12.5px" fill="#2563eb" font-weight="500">免配参数 · 专属子代理/命令/技能</text>
-    <text x="56" y="435" class="micro muted">兼容 Claude Code / Agent Plugins 1.0</text>
+    <rect x="40" y="334" width="238" height="150" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <text x="52" y="360" font-size="16px" font-weight="700" fill="#1d4ed8">② 6 款原生深度适配 ⭐</text>
+    <text x="52" y="388" font-size="14px" font-weight="600" fill="#1e293b">Codex · ZCode · MiniMaxCode</text>
+    <text x="52" y="414" font-size="14px" font-weight="600" fill="#1e293b">DSH · CodeArts · Antigravity</text>
+    <text x="52" y="440" font-size="14px" fill="#2563eb" font-weight="500">免配参数 · 子代理/命令/技能</text>
+    <text x="52" y="466" class="micro muted">兼容 Claude Code / Agent 插件</text>
 
     <!-- Layer 3: Standalone WebUI -->
-    <rect x="44" y="460" width="230" height="120" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
-    <text x="56" y="482" font-size="14.5px" font-weight="700" fill="#15803d">③ 零客户端？WebUI 独立管</text>
-    <text x="56" y="505" font-size="13px" font-weight="600" fill="#166534">三栏大盘 (:8890) · 智能悬浮收展</text>
-    <text x="56" y="527" class="micro muted">6 大双模预设 · 壁纸毛玻璃 · 子代理色</text>
-    <text x="56" y="548" class="micro muted">9 厂商 OAuth 闭环 · 多账号秒切</text>
-    <text x="56" y="568" font-size="12px" fill="#16a34a" font-weight="600">无需任何 IDE 即可统一调度管理</text>
+    <rect x="40" y="496" width="238" height="136" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+    <text x="52" y="522" font-size="16px" font-weight="700" fill="#15803d">③ 零客户端？WebUI 独立管</text>
+    <text x="52" y="548" font-size="14px" font-weight="600" fill="#166534">三栏大盘 :8890 · 智能悬浮收展</text>
+    <text x="52" y="574" class="micro muted">6 大双模预设 · 毛玻璃 · 子代理色</text>
+    <text x="52" y="598" class="micro muted">9 厂商 OAuth 闭环 · 多账号秒切</text>
+    <text x="52" y="624" font-size="14px" fill="#16a34a" font-weight="600">无需 IDE 即可统一调度管理</text>
   </g>
 
   <g id="connection">
-    <rect x="320" y="144" width="220" height="452" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+    <rect x="320" y="144" width="220" height="512" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
     <rect x="320" y="144" width="220" height="8" rx="4" fill="#2563eb"/>
     <text x="340" y="182" class="label blue">02 · 连接</text>
     <text x="340" y="212" class="heading">统一 MCP 桥接</text>
     <text x="340" y="250" class="body" font-weight="700">扫描→选择→配对</text>
-    <text x="340" y="280" class="small muted">局域网自动广播或填 URL</text>
-    <text x="340" y="316" class="body">选定一个 Hub</text>
-    <text x="340" y="342" class="small muted">本机 / 局域网 / 远端服务器</text>
-    <line x1="340" y1="365" x2="518" y2="365" stroke="#bfdbfe"/>
-    <text x="340" y="396" class="body" font-weight="700">双重 MCP 服务支持</text>
-    <text x="340" y="426" class="small">8 个 MCP 工具 · 状态控制</text>
-    <text x="340" y="454" class="small green" font-weight="600">HTTP 子代理直连 (:8790)</text>
-    <text x="340" y="482" class="small blue">生成 Agent 接入 Prompt</text>
-    <text x="340" y="510" class="small muted">大产物落盘 · 仅回摘要</text>
-    <text x="340" y="538" class="small muted">动态重连自愈 · 剪贴板降级</text>
-    <text x="340" y="572" class="small blue" font-weight="700">保存连接，随时一键切换</text>
+    <text x="340" y="284" class="small muted">局域网自动广播或填 URL</text>
+    <text x="340" y="324" class="body">选定一个 Hub</text>
+    <text x="340" y="354" class="small muted">本机 / 局域网 / 远端服务器</text>
+    <line x1="340" y1="382" x2="518" y2="382" stroke="#bfdbfe"/>
+    <text x="340" y="416" class="body" font-weight="700">双重 MCP 服务支持</text>
+    <text x="340" y="450" class="small">8 个 MCP 工具 · 状态控制</text>
+    <text x="340" y="482" class="small green" font-weight="600">HTTP 子代理直连 (:8790)</text>
+    <text x="340" y="514" class="small blue">生成 Agent 接入 Prompt</text>
+    <text x="340" y="546" class="small muted">大产物落盘 · 仅回摘要</text>
+    <text x="340" y="578" class="small muted">动态重连自愈 · 剪贴板降级</text>
+    <text x="340" y="616" class="small blue" font-weight="700">保存连接，随时一键切换</text>
   </g>
 
   <g id="hub">
-    <rect x="576" y="144" width="250" height="452" rx="18" fill="#ecfdf5" stroke="#a7d8c4"/>
+    <rect x="576" y="144" width="250" height="512" rx="18" fill="#ecfdf5" stroke="#a7d8c4"/>
     <rect x="576" y="144" width="250" height="8" rx="4" fill="#0f766e"/>
     <text x="598" y="182" class="label green">03 · Hub</text>
     <text x="598" y="212" class="heading">调度与任务中枢</text>
     <text x="598" y="250" class="body" font-weight="700">Windows / Linux</text>
-    <text x="598" y="280" class="small muted">与客户端同机或跨机分离部署</text>
-    <text x="598" y="316" class="body">预检模型与能力约束</text>
-    <text x="598" y="342" class="small muted">思考分级 · 流式 · 图片 · 附件</text>
-    <line x1="598" y1="365" x2="804" y2="365" stroke="#a7d8c4"/>
-    <text x="598" y="396" class="body" font-weight="700">任务与状态生命周期</text>
-    <text x="598" y="426" class="small">持久化回执 (ref) 异步安全轮询</text>
-    <text x="598" y="454" class="small amber" font-weight="600">Worker 启停权威秒级熔断</text>
-    <text x="598" y="482" class="small green" font-weight="600">Singleflight 配额合并 · 高并发</text>
-    <text x="598" y="510" class="small muted">进程组守护与彻底回收</text>
-    <text x="598" y="538" class="small muted">回环请求强制直连 · 绕过代理</text>
-    <text x="598" y="572" class="small green" font-weight="700">常驻守护 (systemd / 后台)</text>
+    <text x="598" y="284" class="small muted">与客户端同机或跨机分离部署</text>
+    <text x="598" y="324" class="body">预检模型与能力约束</text>
+    <text x="598" y="354" class="small muted">思考分级 · 流式 · 图片 · 附件</text>
+    <line x1="598" y1="382" x2="804" y2="382" stroke="#a7d8c4"/>
+    <text x="598" y="416" class="body" font-weight="700">任务与状态生命周期</text>
+    <text x="598" y="450" class="small">持久化回执 (ref) 异步安全轮询</text>
+    <text x="598" y="482" class="small amber" font-weight="600">Worker 启停权威秒级熔断</text>
+    <text x="598" y="514" class="small green" font-weight="600">Singleflight 配额合并 · 高并发</text>
+    <text x="598" y="546" class="small muted">进程组守护与彻底回收</text>
+    <text x="598" y="578" class="small muted">回环请求强制直连 · 绕过代理</text>
+    <text x="598" y="616" class="small green" font-weight="700">常驻守护 (systemd / 后台)</text>
   </g>
 
   <g id="workers">
-    <rect x="862" y="144" width="386" height="452" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="862" y="144" width="386" height="512" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
     <rect x="862" y="144" width="386" height="8" rx="4" fill="#0f766e"/>
     <text x="886" y="182" class="label green">04 · Workers</text>
-    <text x="886" y="212" class="heading">9 种官方 CLI 通道</text>
-    <text x="886" y="253" class="body">Antigravity</text><text x="1224" y="253" text-anchor="end" class="small muted">agy</text>
-    <text x="886" y="285" class="body">CodeBuddy 国际版</text><text x="1224" y="285" text-anchor="end" class="small muted">cb · XDG 对齐</text>
-    <text x="886" y="317" class="body">CodeBuddy 国内版</text><text x="1224" y="317" text-anchor="end" class="small muted">cbcn · 看门狗</text>
-    <text x="886" y="349" class="body">GitHub Copilot</text><text x="1224" y="349" text-anchor="end" class="small muted">gcp</text>
-    <text x="886" y="381" class="body">MiMo</text><text x="1224" y="381" text-anchor="end" class="small muted">mimo</text>
-    <rect x="880" y="394" width="350" height="28" rx="6" fill="#eff6ff"/>
-    <text x="886" y="414" class="body blue" font-weight="700">MiniMaxCode</text><text x="1218" y="414" text-anchor="end" class="small blue">mmx · M3 / M3.1</text>
-    <text x="886" y="446" class="body">TraeCode</text><text x="1224" y="446" text-anchor="end" class="small muted">trae · PKCE / 网关</text>
-    <text x="886" y="478" class="body">ZCode</text><text x="1224" y="478" text-anchor="end" class="small muted">zcode · 双区切换</text>
-    <rect x="880" y="493" width="350" height="34" rx="8" fill="#fffbeb"/>
-    <text x="886" y="518" class="body" font-weight="700">CodeArts</text><text x="1218" y="517" text-anchor="end" class="small muted">ca · Linux GLM 实测</text>
-    <text x="886" y="565" class="small muted">收到任务后调用官方内核向服务商发送请求</text>
+    <text x="886" y="212" class="heading">11 种官方 CLI 通道</text>
+    <text x="886" y="248" class="body">Antigravity</text><text x="1224" y="248" text-anchor="end" class="small muted">agy</text>
+    <text x="886" y="278" class="body">CodeBuddy 国际版</text><text x="1224" y="278" text-anchor="end" class="small muted">cb · XDG 对齐</text>
+    <text x="886" y="308" class="body">CodeBuddy 国内版</text><text x="1224" y="308" text-anchor="end" class="small muted">cbcn · 看门狗</text>
+    <text x="886" y="338" class="body">GitHub Copilot</text><text x="1224" y="338" text-anchor="end" class="small muted">gcp</text>
+    <text x="886" y="368" class="body">MiMo</text><text x="1224" y="368" text-anchor="end" class="small muted">mimo</text>
+    <rect x="880" y="378" width="350" height="28" rx="6" fill="#eff6ff"/>
+    <text x="886" y="398" class="body blue" font-weight="700">MiniMaxCode</text><text x="1218" y="398" text-anchor="end" class="small blue">mmx · M3 / M3.1</text>
+    <text x="886" y="428" class="body">opencode</text><text x="1224" y="428" text-anchor="end" class="small muted">oc · run --format json</text>
+    <text x="886" y="458" class="body">Cline</text><text x="1224" y="458" text-anchor="end" class="small muted">cline · --json NDJSON</text>
+    <text x="886" y="488" class="body">TraeCode</text><text x="1224" y="488" text-anchor="end" class="small muted">trae · PKCE / 网关</text>
+    <text x="886" y="518" class="body">ZCode</text><text x="1224" y="518" text-anchor="end" class="small muted">zcode · 双区切换</text>
+    <rect x="880" y="525" width="350" height="34" rx="8" fill="#fffbeb"/>
+    <text x="886" y="548" class="body" font-weight="700">CodeArts</text><text x="1218" y="547" text-anchor="end" class="small muted">ca · Linux GLM 实测</text>
+    <text x="886" y="604" class="small muted">收到任务后调用官方内核向服务商发送请求</text>
   </g>
-  <path d="M290 352H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <path d="M546 352H570" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <path d="M832 352H856" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <text x="640" y="631" text-anchor="middle" class="small muted">任务向右派发，状态与结果沿原路返回 · 产物本地落盘不占上下文 · 不支持的功能在执行前拒绝</text>
+  <path d="M290 400H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M546 400H570" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M832 400H856" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="640" y="700" text-anchor="middle" class="small muted">任务向右派发，状态与结果沿原路返回 · 产物本地落盘不占上下文 · 不支持的功能在执行前拒绝</text>
 
   <!-- Deployment choices: independent components, not Hub-to-Hub federation. -->
-  <rect x="32" y="661" width="1216" height="146" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
-  <text x="56" y="696" class="heading">部署自由：同机或跨机，两个方向都能连接</text>
-  <rect x="56" y="718" width="438" height="72" rx="10" fill="#eff6ff"/>
-  <text x="76" y="744" class="body blue" font-weight="700">Windows 客户端 ⇄ Linux Hub</text>
-  <text x="76" y="778" class="small muted">局域网直连已验收</text>
-  <rect x="510" y="718" width="470" height="72" rx="10" fill="#ecfdf5"/>
-  <text x="530" y="744" class="body green" font-weight="700">Linux 客户端 ⇄ Windows Hub</text>
-  <text x="530" y="778" class="small muted">已通过 SSH 反向转发验收</text>
-  <text x="1004" y="747" class="body" font-weight="700">也可同机安装</text>
-  <text x="1004" y="777" class="small muted">plugins / hub / both</text>
+  <rect x="32" y="721" width="1216" height="146" rx="18" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="56" y="756" class="heading">部署自由：同机或跨机，两个方向都能连接</text>
+  <rect x="56" y="778" width="438" height="72" rx="10" fill="#eff6ff"/>
+  <text x="76" y="804" class="body blue" font-weight="700">Windows 客户端 ⇄ Linux Hub</text>
+  <text x="76" y="838" class="small muted">局域网直连已验收</text>
+  <rect x="510" y="778" width="470" height="72" rx="10" fill="#ecfdf5"/>
+  <text x="530" y="804" class="body green" font-weight="700">Linux 客户端 ⇄ Windows Hub</text>
+  <text x="530" y="838" class="small muted">已通过 SSH 反向转发验收</text>
+  <text x="1004" y="807" class="body" font-weight="700">也可同机安装</text>
+  <text x="1004" y="837" class="small muted">plugins / hub / both</text>
 
-  <rect x="32" y="831" width="1216" height="108" rx="18" fill="#eaf2ff" stroke="#bfdbfe"/>
-  <text x="56" y="866" class="heading blue">模型服务商 · 实际的数据流</text>
-  <text x="56" y="898" class="body">客户端 / WebUI → Hub → 官方 CLI → 模型服务商；长内容以本机文件形式交付，不进会话上下文。</text>
-  <text x="56" y="929" class="small muted">账号与模型需单独配置；Antigravity 与 MiniMaxCode 均支持原生客户端插件与 Worker 双重角色。</text>
-  <text x="32" y="965" class="small muted">当前源码 v1.0.0 · 首个公开正式版：开源收口转正与发布线审校合入 · 遵循 Apache License 2.0（保留原作者版权）</text>
+  <rect x="32" y="891" width="1216" height="108" rx="18" fill="#eaf2ff" stroke="#bfdbfe"/>
+  <text x="56" y="926" class="heading blue">模型服务商 · 实际的数据流</text>
+  <text x="56" y="958" class="body">客户端 / WebUI → Hub → 官方 CLI → 模型服务商；长内容以本机文件形式交付，不进会话上下文。</text>
+  <text x="56" y="989" class="small muted">账号与模型需单独配置；Antigravity 与 MiniMaxCode 均支持原生客户端插件与 Worker 双重角色。</text>
+  <text x="32" y="1025" class="small muted">当前源码 v1.0.1 · 新增 opencode / cline 两种 Worker，Worker 总数达 11 种 · 遵循 Apache License 2.0（保留原作者版权）</text>
 </svg>

@@ -4,9 +4,9 @@
 
 > A local dispatch hub for AI agents: it turns the AI coding CLIs scattered across your machines into one Worker pool you can delegate to and collaborate with.
 
-![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 9 Workers under one scheduler](docs/architecture.en.svg)
+![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 11 Workers under one scheduler](docs/architecture.en.svg)
 
-**Current version: v1.0.0** (first public release) · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
+**Current version: v1.0.1** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -45,7 +45,7 @@ Three ways to plug in:
 
 **Highlights**
 
-- 🤖 **9 Workers, one contract**: Antigravity, CodeBuddy (international / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts.
+- 🤖 **11 Workers, one contract**: Antigravity, CodeBuddy (international / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, plus the new opencode and Cline.
 - 🔌 **6 native hosts**: native sub-agents, slash commands and workflows, with context isolated automatically.
 - 🔐 **OAuth for all 9 vendors inside the WebUI**: log in, log out, save and switch accounts without SSH; login state is read from real on-disk credentials, so there are no fake successes.
 - ⚡ **One-click Worker on/off, synced everywhere**: disabled Workers are rejected before dispatch (`profile_disabled`), so no quota is wasted.
@@ -78,7 +78,7 @@ sh install.sh --with-console          # Windows: .\install.cmd --with-console
 #    http://localhost:8890
 ```
 
-- You can also download `agenthub-1.0.0-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), unzip it and run the same command.
+- You can also download `agenthub-1.0.1-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), unzip it and run the same command.
 - Run from a source checkout, the installer first builds a release bundle in a temp directory, so no manual packaging is needed.
 - Day to day: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
 - Just want to look around? Open `demo.html` in a browser.
@@ -204,8 +204,8 @@ See [Native host plugins](#native-host-plugins).
 
 | Host | How to install | Docs |
 | --- | --- | --- |
-| **Huawei CodeArts / VS Code** | In the IDE's Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.0.carts` / `.vsix`; or `.\install.cmd --component plugins --native-hosts codearts --project <workspace>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.0-minimax-plugin.zip` in the desktop or cloud app; CLI: `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **Huawei CodeArts / VS Code** | In the IDE's Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.1.carts` / `.vsix`; or `.\install.cmd --component plugins --native-hosts codearts --project <workspace>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.1-minimax-plugin.zip` in the desktop or cloud app; CLI: `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <workspace>`; registers a local plugin marketplace and writes 9 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -321,7 +321,7 @@ Enable with `--with-console`; default port `8890`.
 - Glass: under `body.has-custom-bg`, `backdrop-filter: blur(20px~24px) saturate(180%~190%)`; neutral surfaces unify to `--gem-bg-card`, and `--gem-surface-high` is kept only for interactive states and the progress track.
 - `--agent-accent` drives the send button, context progress bar and `#panel-chat` second-level menus; model names stay in body colour `--gem-text`.
 - The whole status bar is clickable and opens a display picker (model, latency, TPS, tokens, quota); the model drawer has thinking-level and streaming switches.
-- The footer shows `v1.0.0`, overridable by the backend's `snap.version`.
+- The footer shows `v1.0.1`, overridable by the backend's `snap.version`.
 - Offline demo: `scripts/build_demo.py` + `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
 </details>
 
@@ -373,11 +373,11 @@ Full receipts, source hashes and failure records: [0.9.9 acceptance record](docs
 
 | File | Use it for |
 | --- | --- |
-| `agenthub-1.0.0-both.zip` | Client and Hub on one machine (recommended) |
-| `agenthub-1.0.0-plugins.zip` | A workstation that only writes code |
-| `agenthub-1.0.0-hub.zip` | A server that only runs Workers |
-| `agenthub-workers-1.0.0-minimax-plugin.zip` | MiniMax Code desktop / cloud (Plugin V1) |
-| `multi-agent-hub-1.0.0.carts` / `.vsix` | Huawei CodeArts IDE, VS Code and compatible editors |
+| `agenthub-1.0.1-both.zip` | Client and Hub on one machine (recommended) |
+| `agenthub-1.0.1-plugins.zip` | A workstation that only writes code |
+| `agenthub-1.0.1-hub.zip` | A server that only runs Workers |
+| `agenthub-workers-1.0.1-minimax-plugin.zip` | MiniMax Code desktop / cloud (Plugin V1) |
+| `multi-agent-hub-1.0.1.carts` / `.vsix` | Huawei CodeArts IDE, VS Code and compatible editors |
 
 Build them yourself: `python packaging/build.py --output <dir outside the repo> --component all`. All options: [packaging/README.md](packaging/README.md).
 
@@ -417,7 +417,8 @@ Contribution rules (pre-commit checks, commit message format) are in [CONTRIBUTI
 
 | Version | Focus |
 | --- | --- |
-| **1.0.0** | First public release: audit cleanup, TraeClaw credit, handover docs scrubbed, Code of Conduct added, post-review fixes folded in |
+| **1.0.1** | Adds the opencode and Cline Workers (11 total): config templates, capability declarations, NDJSON event-stream parsing, native sub-agents and every count aligned; both diagrams redrawn with larger type and higher contrast |
+| 1.0.0 | First public release: audit cleanup, TraeClaw credit, handover docs scrubbed, Code of Conduct added, post-review fixes folded in |
 | 0.9.9.9 | Redrawn architecture and roadmap diagrams, handover record |
 | 0.9.9.8 | Node 20 WebSocket compatibility, path discovery for login and console, tests decoupled from hosts; contributing guide, security policy and English README |
 | 0.9.9.7 | Linux source install fixes: lost exec bits, install from a checkout, loopback requests hijacked by a proxy |

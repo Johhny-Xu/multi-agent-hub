@@ -4,9 +4,9 @@
 
 > 一个本地多 AI Agent 调度枢纽：把散落在各处的 AI 编码 CLI 统一成一个可派活、可协作的 Worker 池。
 
-![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，9 种 Worker 统一调度](docs/architecture.svg)
+![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，11 种 Worker 统一调度](docs/architecture.svg)
 
-**当前版本：v1.0.0**（首个公开正式版） · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
+**当前版本：v1.0.1** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -31,7 +31,7 @@
 
 ## 它能做什么
 
-multi-agent-hub 基于标准 MCP 协议、原生插件与子代理体系，为 **9 种 AI 编码 Worker** 和 **6 款原生宿主**（外加任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理和 WebUI 管理大盘。
+multi-agent-hub 基于标准 MCP 协议、原生插件与子代理体系，为 **11 种 AI 编码 Worker** 和 **6 款原生宿主**（外加任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理和 WebUI 管理大盘。
 
 接入了 Hub 的任意 AI 客户端，都能把任务派给其他 AI 执行（各自走自己的账号额度），并共享任务队列、邮箱与笔记。
 
@@ -45,7 +45,7 @@ multi-agent-hub 基于标准 MCP 协议、原生插件与子代理体系，为 *
 
 **核心亮点**
 
-- 🤖 **9 种 Worker，一套契约**：Antigravity、CodeBuddy（国际 / 国内）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts。
+- 🤖 **11 种 Worker，一套契约**：Antigravity、CodeBuddy（国际 / 国内）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts，以及新增的 opencode、Cline。
 - 🔌 **6 款原生宿主**：原生子代理、斜杠命令与工作流，上下文自动隔离，免手动配参数。
 - 🔐 **WebUI 内完成 9 家 OAuth 登录**：免 SSH 授权、登出、多账号保存与秒切；以真实凭据落盘判定登录状态，不报假成功。
 - ⚡ **Worker 一键启停，全端同步**：被禁用的 Worker 在派发前就被拦截（`profile_disabled`），不浪费额度。
@@ -78,7 +78,7 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 #    http://localhost:8890
 ```
 
-- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.0-both.zip` 解压后执行同样的命令。
+- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.1-both.zip` 解压后执行同样的命令。
 - 在源码目录直接执行时，安装器会先在临时目录构建发行包再安装，无需手动打包。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
 - 想先看看界面：直接用浏览器打开仓库里的 `demo.html`。
@@ -204,8 +204,8 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 宿主 | 安装方式 | 说明文档 |
 | --- | --- | --- |
-| **华为 CodeArts / VS Code** | IDE 扩展面板「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.0.carts` / `.vsix`；或 `.\install.cmd --component plugins --native-hosts codearts --project <工作区>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | 桌面端 / 云端导入 `agenthub-workers-1.0.0-minimax-plugin.zip`；CLI：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **华为 CodeArts / VS Code** | IDE 扩展面板「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.1.carts` / `.vsix`；或 `.\install.cmd --component plugins --native-hosts codearts --project <工作区>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | 桌面端 / 云端导入 `agenthub-workers-1.0.1-minimax-plugin.zip`；CLI：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <工作区>`，自动注册本地插件市场并把 9 个子代理写入 `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -321,7 +321,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 - 毛玻璃：`body.has-custom-bg` 下 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一为 `--gem-bg-card`，`--gem-surface-high` 仅用于交互态与进度条轨道。
 - 子代理色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名保持正文色 `--gem-text`。
 - 状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉支持思考档位与流式开关。
-- 页脚右侧显示版本号 `v1.0.0`，可被后端 `snap.version` 覆盖。
+- 页脚右侧显示版本号 `v1.0.1`，可被后端 `snap.version` 覆盖。
 - 离线 Demo：`scripts/build_demo.py` + `scripts/demo_engine.js` 生成 `demo.html` 与 `demo/index.html`。
 </details>
 
@@ -373,11 +373,11 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 
 | 文件 | 适用场景 |
 | --- | --- |
-| `agenthub-1.0.0-both.zip` | 客户端与 Hub 在同一台机器（最推荐） |
-| `agenthub-1.0.0-plugins.zip` | 只写代码的客户端电脑 |
-| `agenthub-1.0.0-hub.zip` | 只跑 Worker 的服务器 |
-| `agenthub-workers-1.0.0-minimax-plugin.zip` | MiniMax Code 桌面端 / 云端（Plugin V1 规范） |
-| `multi-agent-hub-1.0.0.carts` / `.vsix` | 华为 CodeArts IDE、VS Code 及兼容编辑器 |
+| `agenthub-1.0.1-both.zip` | 客户端与 Hub 在同一台机器（最推荐） |
+| `agenthub-1.0.1-plugins.zip` | 只写代码的客户端电脑 |
+| `agenthub-1.0.1-hub.zip` | 只跑 Worker 的服务器 |
+| `agenthub-workers-1.0.1-minimax-plugin.zip` | MiniMax Code 桌面端 / 云端（Plugin V1 规范） |
+| `multi-agent-hub-1.0.1.carts` / `.vsix` | 华为 CodeArts IDE、VS Code 及兼容编辑器 |
 
 自行构建：`python packaging/build.py --output <仓库外目录> --component all`。完整参数见 [packaging/README.md](packaging/README.md)。
 
@@ -417,7 +417,8 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 | 版本 | 重点 |
 | --- | --- |
-| **1.0.0** | 首个公开正式版：审计清理、致谢 TraeClaw、交接文档脱敏、补齐贡献者公约、发布线审校修复 |
+| **1.0.1** | 新增 opencode 与 Cline 两种 Worker（共 11 种）：配置模板、能力声明、NDJSON 事件流解析、原生子代理与各处数量对齐；架构图与进度图重绘，小字号与对比度全面提亮 |
+| 1.0.0 | 首个公开正式版：审计清理、致谢 TraeClaw、交接文档脱敏、补齐贡献者公约、发布线审校修复 |
 | 0.9.9.9 | 重画架构图与进度图，补交接文档 |
 | 0.9.9.8 | Node 20 WebSocket 兼容、登录与控制台路径发现、测试与宿主解耦；补齐贡献指南、安全政策与英文 README |
 | 0.9.9.7 | 修复 Linux 源码安装链路：执行位丢失、源码目录直接安装、回环请求被代理劫持 |
