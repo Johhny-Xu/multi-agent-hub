@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 1.0.1: any MCP client, 6 native deep-integration hosts and a zero-client WebUI - 11 Workers under one scheduler</title>
+  <title id="architecture-title">multi-agent-hub 1.0.11: any MCP client, 6 native deep-integration hosts and a zero-client WebUI - 11 Workers under one scheduler</title>
   <desc id="architecture-desc">Any MCP-capable client plugs straight in. Codex, ZCode, MiniMaxCode (Claude Code), DSH, CodeArts and Antigravity get native deep integration (sub-agents / commands / skills / workflows). With no client at all, the built-in WebUI console manages and chats on its own (persistent brand anchor, smart hover reveal/collapse for the top bar / activity bar / sidebar, 6 light-dark presets, custom-wallpaper glassmorphism, sub-agent accent colours). Same-machine or cross-machine connections; 11 Workers driven through their official CLIs; Apache License 2.0. This release adds two new Workers - opencode and cline - bringing the total to 11.</desc>
   <defs>
     <style>
@@ -22,7 +22,7 @@
   <rect width="1280" height="1040" rx="24" fill="#f8fafc"/>
   <text x="32" y="58" class="title">multi-agent-hub · how a task actually flows</text>
   <rect x="1096" y="26" width="152" height="40" rx="20" fill="#dbeafe"/>
-  <text x="1172" y="53" text-anchor="middle" class="body blue" font-weight="700">source v1.0.1</text>
+  <text x="1172" y="53" text-anchor="middle" class="body blue" font-weight="700">source v1.0.11</text>
   <text x="32" y="94" class="body muted">Any MCP client · 6 native hosts · zero-client WebUI · 11 official Workers · Apache-2.0</text>
 
   <!-- Read from left to right; each arrow carries tasks and their results. -->
@@ -134,5 +134,5 @@
   <text x="56" y="926" class="heading blue">Model vendors · the actual data flow</text>
   <text x="56" y="958" class="body">Client / WebUI → Hub → official CLI → model vendor. Long content ships as local files, never into context.</text>
   <text x="56" y="989" class="small muted">Accounts &amp; models are set per vendor; Antigravity / MiniMaxCode double as both plugin and Worker.</text>
-  <text x="32" y="1025" class="small muted">Current source v1.0.1 · new opencode / cline Workers, 11 in total · Apache License 2.0 (original copyright retained)</text>
+  <text x="32" y="1025" class="small muted">Current source v1.0.11 · new opencode / cline Workers, 11 in total · Apache License 2.0 (original copyright retained)</text>
 </svg>

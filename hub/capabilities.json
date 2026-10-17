@@ -58,7 +58,7 @@
       "standard"
     ],
     "stream_semantics": "answer_deltas",
-    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified."
+    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified. To enable image attachments: add \"--allowedTools Read --permission-mode acceptEdits\" to the agent CLI (grants Read + auto-accepted edits)."
   },
   "codebuddy-cn": {
     "stream": {
@@ -119,7 +119,7 @@
       "standard"
     ],
     "stream_semantics": "answer_deltas",
-    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified."
+    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified. To enable image attachments: add \"--allowedTools Read --permission-mode acceptEdits\" to the agent CLI (grants Read + auto-accepted edits)."
   },
   "github-copilot": {
     "thinking": {
@@ -293,7 +293,10 @@
         "reason": "CodeArts JSON event output does not establish verified incremental answer delivery; the current driver returns the terminal result."
       },
       "off": {
-        "args": ["--stream", "off"]
+        "args": [
+          "--stream",
+          "off"
+        ]
       }
     },
     "attachments": {
@@ -309,8 +312,26 @@
     "stream_semantics": "terminal_only",
     "notes": "Use the official CodeArts configured default model unless a locally declared model is explicitly selected. CLI presence, OAuth records and exit code zero do not establish successful authentication or model execution."
   },
-  "antigravity": {},
-  "traecode": {},
+  "antigravity": {
+    "attachments": {
+      "file": {
+        "mode": "prompt_path"
+      },
+      "image": {
+        "mode": "prompt_path"
+      }
+    }
+  },
+  "traecode": {
+    "attachments": {
+      "file": {
+        "mode": "prompt_path"
+      },
+      "image": {
+        "mode": "prompt_path"
+      }
+    }
+  },
   "opencode": {
     "stream": {
       "on": {

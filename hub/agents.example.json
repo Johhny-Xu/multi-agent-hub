@@ -182,10 +182,10 @@
       "async_default": true
     },
     "github-copilot": {
-      "role": "编码 worker 示例（Copilot CLI）",
-      "description": "编码 worker 示例（Copilot CLI）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+      "role": "GitHub Copilot 官方 CLI（Linux）",
+      "description": "官方 copilot 可执行文件；npm 全局安装后通常在 ~/.local/bin/copilot 或 /usr/local/bin/copilot，请改成 which copilot 的实际结果。参数沿用已验证的自动模型与无头提示词写法。",
       "cli": [
-        "/usr/local/bin/github-copilot-placeholder",
+        "/usr/local/bin/copilot",
         "--silent",
         "-p",
         "{task}"

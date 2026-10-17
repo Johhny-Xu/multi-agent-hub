@@ -523,7 +523,7 @@ async function discoverHubs() {
     if (res.ok && res.data) {
       candidates.push({
         label: `$(vm) 本机 Hub (127.0.0.1:${port})`,
-        description: `v${res.data.version || '1.0.1'} · 免密可用`,
+        description: `v${res.data.version || '1.0.11'} · 免密可用`,
         detail: `端点: http://127.0.0.1:${port}/mcp`,
         url: `http://127.0.0.1:${port}/mcp`,
         host: '127.0.0.1',
@@ -540,7 +540,7 @@ async function discoverHubs() {
     if (res.ok && res.data && !candidates.some((c) => c.url.includes(ip))) {
       candidates.push({
         label: `$(server) 局域网 Hub (${ip}:8765)`,
-        description: `v${res.data.version || '1.0.1'} · 自动免密配对`,
+        description: `v${res.data.version || '1.0.11'} · 自动免密配对`,
         detail: `端点: http://${ip}:8765/mcp`,
         url: `http://${ip}:8765/mcp`,
         host: ip,

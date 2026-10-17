@@ -21,7 +21,7 @@ import * as authMod from './auth.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.11';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -1742,6 +1742,36 @@ export async function start(context) {
   ].filter(Boolean).map((d) => resolve(d))));
   const resolveActiveResultsDir = () => RESULTS_DIRS.find((d) => existsSync(d)) || RESULTS_DIRS[0];
   const RESULTS_DIR = resolveActiveResultsDir();
+  // ---------------- 会话文本中出现的文件路径 → 产物预览白名单
+  // worker 在回复里常直接写“已生成 /path/to/file.svg”，这类文件不进结构化 artifact，
+  // 但用户期望能双击打开。这里只放行“本会话消息里确实出现过、且当前存在”的路径，
+  // 避免把任意文件读取能力暴露给 WebUI。
+  const ARTIFACT_PATH_RE = /((?:[A-Za-z]:[\\/]|\/)[^\s<>"'`|]+?\.[A-Za-z0-9]{1,8})/g;
+  const ARTIFACT_TEXT_EXT_RE = /\.(svg|png|jpe?g|gif|webp|bmp|ico|pdf|md|markdown|txt|json|html?|css|js|mjs|cjs|ts|tsx|jsx|py|sh|sql|ya?ml|toml|csv|log)$/i;
+  const ARTIFACT_RAW_EXT_RE = /\.(svg|png|jpe?g|gif|webp|bmp|ico|pdf)$/i;
+  let artifactPathCache = { at: 0, set: new Set() };
+  function collectConversationPaths() {
+    const now = Date.now();
+    if (now - artifactPathCache.at < 3000) return artifactPathCache.set;
+    const set = new Set();
+    const scan = (text) => {
+      if (!text) return;
+      const s = String(text);
+      ARTIFACT_PATH_RE.lastIndex = 0;
+      let m;
+      while ((m = ARTIFACT_PATH_RE.exec(s))) {
+        const p = m[1].replace(/[.,;:!?，。；：、！？）】」》]+$/, '');
+        if (p.length > 3) set.add(resolve(p));
+      }
+    };
+    for (const t of conv.threads) {
+      for (const m of (t.messages || [])) if (m && m.text) scan(m.text);
+      for (const s of (t.sessions || [])) for (const m of (s.messages || [])) if (m && m.text) scan(m.text);
+    }
+    artifactPathCache = { at: now, set };
+    return set;
+  }
+
   const seenRefsFile = join(dataDir, 'external-refs-seen.json');
   const seenExternalRefs = new Set();
   try {
@@ -2555,12 +2585,29 @@ export async function start(context) {
         send(200, await loadAvatars());
         return;
       }
-      if (request.method === 'GET' && p === '/api/artifact') {
+      if (request.method === 'GET' && (p === '/api/artifact' || p === '/api/artifact/raw')) {
         const rp = resolve(url.searchParams.get('path') || '');
         const roots = [resolve(artifactDir), ...RESULTS_DIRS].map((r) => resolve(r));
-        if (!roots.some((root) => rp.startsWith(root + sep))) throw badReq('仅允许读取控制台产物或枢纽 results 产物: ' + rp);
+        const inRoots = roots.some((root) => rp.startsWith(root + sep));
+        if (!inRoots) {
+          const fromChat = collectConversationPaths().has(rp);
+          const okExt = p === '/api/artifact/raw' ? ARTIFACT_RAW_EXT_RE.test(rp) : ARTIFACT_TEXT_EXT_RE.test(rp);
+          if (!fromChat || !okExt) throw badReq('仅允许读取控制台产物、枢纽 results 产物或本会话出现过的文件: ' + rp);
+        }
+        if (!existsSync(rp)) throw badReq('文件不存在或不可读: ' + rp);
+        const st = await stat(rp).catch(() => null);
+        if (!st || !st.isFile()) throw badReq('不是普通文件: ' + rp);
+        if (p === '/api/artifact/raw') {
+          if (st.size > 20 * 1024 * 1024) throw badReq('文件过大（>20MB）');
+          const buf = await readFile(rp);
+          const ext = (rp.split('.').pop() || '').toLowerCase();
+          const mime = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', pdf: 'application/pdf' }[ext] || 'application/octet-stream';
+          response.writeHead(200, { 'content-type': mime, 'content-length': buf.length, 'cache-control': 'private, max-age=60' });
+          response.end(buf);
+          return;
+        }
         const text = await readFile(rp, 'utf-8');
-        send(200, { text: text.slice(0, 120_000), truncated: text.length > 120_000 });
+        send(200, { text: text.slice(0, 120_000), truncated: text.length > 120_000, path: rp, size: st.size });
         return;
       }
       // 聊天附件静态回读: /uploads/<file>（文件均由 /api/upload 以 [A-Za-z0-9+/=-] 字符集落盘）
@@ -2588,6 +2635,25 @@ export async function start(context) {
         try { b = JSON.parse(raw || '{}'); } catch { throw badReq('body 须为 JSON'); }
         const saved = await saveUpload(b.name, b.base64 || b.dataBase64);
         send(200, { ok: true, name: saved.name, url: saved.url, path: saved.path, size: saved.size, isImage: saved.isImage, content: saved.content });
+        return;
+      }
+
+      // 批量确认“会话文本里提到的文件”是否真实存在（工作台产物列表用）
+      if (request.method === 'POST' && p === '/api/artifact/stat') {
+        const body = await readJson();
+        const list = Array.isArray(body.paths) ? body.paths.slice(0, 60) : [];
+        const allowed = collectConversationPaths();
+        const items = [];
+        for (const raw of list) {
+          const rp = resolve(String(raw || ''));
+          if (!allowed.has(rp) || !ARTIFACT_TEXT_EXT_RE.test(rp)) continue;
+          try {
+            const st = await stat(rp);
+            if (!st.isFile() || st.size > 20 * 1024 * 1024) continue;
+            items.push({ request: String(raw || ''), path: rp, name: basename(rp), size: st.size, mtime: st.mtimeMs, raw: ARTIFACT_RAW_EXT_RE.test(rp) });
+          } catch { /* 文件不存在: 忽略 */ }
+        }
+        send(200, { ok: true, items });
         return;
       }
 

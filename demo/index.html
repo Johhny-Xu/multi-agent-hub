@@ -2165,6 +2165,9 @@
     border-bottom: 1px solid var(--mcode-border);
     background: var(--mcode-surface);
     flex-shrink: 0;
+    /* 与对话头部同高（54px）：浮层按钮组才能垂直居中，不会压到下方分隔线 */
+    min-height: 54px;
+    box-sizing: border-box;
   }
   .wb-head-left {
     display: flex;
@@ -2219,6 +2222,12 @@
     background: var(--gem-hover, var(--mcode-surface-hover));
     color: var(--gem-text, var(--mcode-text));
     border-color: var(--gem-border, var(--mcode-border));
+  }
+  /* 工作台头部左侧的删除按钮：红色 hover */
+  .wb-tool-btn.wb-clear-one:hover {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, .42);
+    background: rgba(248, 113, 113, .12);
   }
   .wb-tabs {
     display: flex;
@@ -2291,6 +2300,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    /* 右上角给删除 × 留位，长文件名不会被遮住 */
+    padding-right: 20px;
   }
   .wb-artifact-badge-wrap {
     display: flex;
@@ -2399,6 +2410,69 @@
   .wb-file-meta {
     font-size: 10.5px;
     color: var(--mcode-text-subtle);
+  }
+  /* ===== 工作台单条删除：卡片/图片/附件右上角 ×（悬停显现） ===== */
+  .wb-artifact-card,
+  .wb-file-row,
+  .wb-img-cell {
+    position: relative;
+  }
+  .wb-img-cell {
+    display: block;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+  .wb-img-cell img {
+    display: block;
+  }
+  .wb-item-del {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 0;
+    background: rgba(17, 24, 39, .55);
+    color: #f1f5f9;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+    transition: opacity .12s ease, background .12s ease, transform .12s ease;
+    z-index: 3;
+  }
+  .wb-item-del svg { display: block; }
+  .wb-artifact-card:hover .wb-item-del,
+  .wb-img-cell:hover .wb-item-del,
+  .wb-file-row:hover .wb-item-del,
+  .wb-item-del:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .wb-item-del:hover {
+    background: #ef4444;
+    color: #fff;
+    transform: scale(1.08);
+  }
+  /* 附件行：× 贴右缘垂直居中，正文让出空间 */
+  .wb-file-row {
+    padding-right: 30px;
+  }
+  .wb-file-row .wb-item-del {
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+  }
+  /* 无悬停能力的设备（触屏）常显，避免无法删除 */
+  @media (hover: none) {
+    .wb-item-del { opacity: 1; pointer-events: auto; }
   }
   .wb-preview-pane {
     position: absolute;
@@ -5085,85 +5159,6 @@ html[data-preset="dusk"][data-theme="light"] {
   --preset-bg-size: cover;
 }
 
-/* 7. Cyber 赛博深空（深色）— 近黑靛蓝 + 霓虹青 */
-[data-preset="cyber"],
-html[data-preset="cyber"]:not([data-theme="light"]) {
-  --gem-bg-canvas: #070913;
-  --gem-bg-sidebar: #0b0e1c;
-  --gem-bg-card: #0f1428;
-  --gem-bg-card-inner: #05070f;
-  --gem-surface-low: #0b0e1c;
-  --gem-surface-high: #161c33;
-  --gem-surface-highest: #202844;
-  --gem-text: #dbeafe;
-  --gem-text-secondary: #9fb0d0;
-  --gem-text-muted: #66759a;
-  --gem-border: rgba(219, 234, 254, 0.08);
-  --gem-border-strong: rgba(219, 234, 254, 0.16);
-  --gem-primary: #6366f1;
-  --gem-primary-container: rgba(99, 102, 241, 0.16);
-  --gem-on-primary-container: #a5b4fc;
-  --gem-btn-bg: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  --gem-btn-text: #05070f;
-  --gem-quota-fill: linear-gradient(90deg, #6366f1, #06b6d4);
-  --gem-aurora: linear-gradient(90deg, #6366f1 0%, #06b6d4 50%, #a855f7 100%);
-  --gem-shadow-card: 0 4px 16px rgba(3, 5, 12, 0.55);
-  --gem-shadow-float: 0 12px 32px rgba(3, 5, 12, 0.75);
-  --user-bubble-bg: #161c33;
-  --user-bubble-border: #26304d;
-  --user-bubble-text: #dbeafe;
-  --composer-bg: #0b0e1c;
-  --composer-border: #202844;
-  --composer-shadow: 0 12px 32px rgba(3, 5, 12, 0.75);
-  --studio-accent-soft: rgba(99, 102, 241, 0.15);
-  --mcode-code-bg: #05070f;
-  --mcode-accent-glow: rgba(99, 102, 241, 0.3);
-  --mcode-focus-ring: 0 0 0 3px rgba(99, 102, 241, 0.26);
-  --agent-accent: #6366f1;
-  --agent-accent-glow: rgba(99, 102, 241, 0.32);
-  --preset-bg: radial-gradient(circle at 50% 10%, rgba(99, 102, 241, 0.25), transparent 50%), radial-gradient(circle at 80% 90%, rgba(6, 182, 212, 0.2), transparent 45%), linear-gradient(180deg, #070913 0%, #0d1124 100%);
-  --preset-bg-size: cover;
-}
-
-/* 7L. Cyber 赛博深空（浅色）— 冷调雾蓝 */
-html[data-preset="cyber"][data-theme="light"] {
-  --gem-bg-canvas: #f4f6fb;
-  --gem-bg-sidebar: #e9edf7;
-  --gem-bg-card: #ffffff;
-  --gem-bg-card-inner: #dde3f0;
-  --gem-surface-low: #e9edf7;
-  --gem-surface-high: #d5dcec;
-  --gem-surface-highest: #c4cee2;
-  --gem-text: #1b2340;
-  --gem-text-secondary: #3b4668;
-  --gem-text-muted: #7783a0;
-  --gem-border: rgba(27, 35, 64, 0.12);
-  --gem-border-strong: rgba(27, 35, 64, 0.22);
-  --gem-primary: #4338ca;
-  --gem-primary-container: rgba(67, 56, 202, 0.12);
-  --gem-on-primary-container: #3730a3;
-  --gem-btn-bg: linear-gradient(135deg, #4338ca 0%, #0891b2 100%);
-  --gem-btn-text: #ffffff;
-  --gem-quota-fill: linear-gradient(90deg, #4338ca, #0891b2);
-  --gem-aurora: linear-gradient(90deg, #4338ca 0%, #0891b2 50%, #7c3aed 100%);
-  --gem-shadow-card: 0 2px 8px rgba(27, 35, 64, 0.08);
-  --gem-shadow-float: 0 8px 24px rgba(27, 35, 64, 0.12);
-  --user-bubble-bg: #dde3f0;
-  --user-bubble-border: #c4cee2;
-  --user-bubble-text: #1b2340;
-  --composer-bg: #ffffff;
-  --composer-border: #c4cee2;
-  --composer-shadow: 0 8px 24px rgba(27, 35, 64, 0.12);
-  --studio-accent-soft: rgba(67, 56, 202, 0.1);
-  --mcode-code-bg: #e9edf7;
-  --mcode-accent-glow: rgba(67, 56, 202, 0.2);
-  --mcode-focus-ring: 0 0 0 3px rgba(67, 56, 202, 0.2);
-  --agent-accent: #4338ca;
-  --agent-accent-glow: rgba(67, 56, 202, 0.22);
-  --preset-bg: radial-gradient(circle at 50% 10%, rgba(99, 102, 241, 0.22), transparent 50%), radial-gradient(circle at 80% 90%, rgba(6, 182, 212, 0.18), transparent 45%), linear-gradient(180deg, #f6f8fd 0%, #eaeffa 100%);
-  --preset-bg-size: cover;
-}
-
 /* 8. Grid 科技网格（深色）— 暗板岩底 + 32px 网格线 */
 [data-preset="grid"],
 html[data-preset="grid"]:not([data-theme="light"]) {
@@ -5510,7 +5505,8 @@ header.top {
   position: relative;
   z-index: 100;
   height: 52px;
-  padding: 0 18px;
+  /* 右侧 12px 与 #chat-head-btns 的 right:12px 对齐，两行按钮组右缘齐平 */
+  padding: 0 12px 0 18px;
   background: var(--gem-bg-sidebar);
   border-bottom: 1px solid var(--gem-border);
   box-shadow: none;
@@ -5716,6 +5712,19 @@ body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .cha
   display: block !important;
 }
 
+/* ===== 子代理卡片拖动排序 ===== */
+.platform-item.dragging {
+  opacity: .45;
+  transform: scale(.985);
+  cursor: grabbing;
+}
+.platform-item.drop-before {
+  box-shadow: inset 0 2px 0 0 var(--agent-color, var(--gem-primary));
+}
+.platform-item.drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--agent-color, var(--gem-primary));
+}
+
 /* 各平台专属鲜活色彩与光晕映射 */
 .platform-item[data-agent="antigravity"] {
   --agent-color: #8ab4f8;
@@ -5782,6 +5791,22 @@ body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .cha
   --agent-surface-hover: linear-gradient(90deg, rgba(37, 99, 235, 0.24) 0%, rgba(96, 165, 250, 0.12) 100%);
   --agent-surface-active: linear-gradient(90deg, rgba(37, 99, 235, 0.32) 0%, rgba(96, 165, 250, 0.18) 100%);
   --agent-border: rgba(96, 165, 250, 0.32);
+}
+.platform-item[data-agent="opencode"] {
+  --agent-color: #94a3b8;
+  --agent-glow: rgba(148, 163, 184, 0.32);
+  --agent-surface: linear-gradient(90deg, rgba(100, 116, 139, 0.16) 0%, rgba(148, 163, 184, 0.06) 100%);
+  --agent-surface-hover: linear-gradient(90deg, rgba(100, 116, 139, 0.26) 0%, rgba(148, 163, 184, 0.14) 100%);
+  --agent-surface-active: linear-gradient(90deg, rgba(100, 116, 139, 0.34) 0%, rgba(148, 163, 184, 0.2) 100%);
+  --agent-border: rgba(148, 163, 184, 0.34);
+}
+.platform-item[data-agent="cline"] {
+  --agent-color: #22d3ee;
+  --agent-glow: rgba(34, 211, 238, 0.32);
+  --agent-surface: linear-gradient(90deg, rgba(14, 116, 144, 0.14) 0%, rgba(34, 211, 238, 0.06) 100%);
+  --agent-surface-hover: linear-gradient(90deg, rgba(14, 116, 144, 0.24) 0%, rgba(34, 211, 238, 0.14) 100%);
+  --agent-surface-active: linear-gradient(90deg, rgba(14, 116, 144, 0.32) 0%, rgba(34, 211, 238, 0.2) 100%);
+  --agent-border: rgba(34, 211, 238, 0.32);
 }
 .platform-item[data-agent="console"] {
   --agent-color: #a78bfa;
@@ -6329,18 +6354,26 @@ body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .cha
   padding: 6px 12px;
   background: var(--gem-surface-low);
   border-bottom: 1px solid var(--gem-border);
-  font-size: 11px;
+  font-size: 11.5px;
+  color: var(--gem-text-muted, var(--gem-text-secondary));
+  font-family: var(--sans, -apple-system, "Segoe UI", "PingFang SC", sans-serif);
+  letter-spacing: .2px;
+}
+.code-block-head > span {
+  font-weight: 600;
   color: var(--gem-text-secondary);
-  font-family: var(--mono, monospace);
 }
 .code-block-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
   background: var(--gem-bg-card);
   border: 1px solid var(--gem-border);
   color: var(--gem-text-secondary);
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 11px;
-  font-family: var(--sans, sans-serif);
+  border-radius: 6px;
   cursor: pointer;
   transition: all .14s ease;
 }
@@ -6471,6 +6504,30 @@ body.header-collapsed.actbar-collapsed .chat-threads.collapsed ~ .chat-main .cha
   background: var(--gem-surface-high, rgba(125,125,125,0.12));
   color: var(--gem-primary, #60a5fa);
   border: 1px solid var(--gem-border, rgba(125,125,125,0.2));
+}
+/* 会话中可直接打开的文件路径（双击打开工作台预览） */
+.bubble.md .path-chip {
+  cursor: pointer;
+  border-bottom: 1px dashed currentColor;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+.bubble.md .path-chip:hover {
+  background: rgba(96, 165, 250, 0.18);
+}
+.bubble.md .path-chip::after {
+  content: '⤢';
+  margin-left: 3px;
+  font-size: 10px;
+  opacity: 0.55;
+}
+.wb-preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  object-fit: contain;
+  background: var(--gem-surface, #0b1220);
 }
 .bubble.md pre code, .code-block-wrap pre {
   font-family: ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, monospace !important;
@@ -7880,6 +7937,334 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   background: var(--mcode-accent-gradient);
   color: #fff;
 }
+/* ===== 会话胶囊停靠层：固定在侧栏顶部，侧栏收起时仍显示 ===== */
+.pill-dock {
+  position: fixed;
+  left: 64px;
+  top: var(--pill-dock-top, 72px);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+}
+.pill-dock .current-agent-pill.unified-pill {
+  height: 34px;
+  max-width: 112px;
+  margin-left: 0;
+  flex: 0 0 auto;
+}
+.pill-dock .current-agent-pill .agent-avatar-sm,
+.pill-dock #current-avatar-sm {
+  width: 26px !important;
+  min-width: 26px !important;
+  max-width: 26px !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  font-size: 11px !important;
+  flex-shrink: 0;
+}
+.pill-dock .current-agent-pill .current-session-name {
+  max-width: 62px;
+  font-size: 12px;
+}
+.pill-dock .current-agent-pill .session-selector-pill.inline {
+  min-width: 0;
+}
+.pill-dock .current-agent-pill .export-dropdown-menu {
+  z-index: 130;
+  left: 0;
+  right: auto;
+}
+/* 侧栏头部：胶囊在左、工具组靠右整组对齐（4 个图标同容器、等间距） */
+.platform-sidebar-header .platform-header-top {
+  padding-left: var(--pill-dock-w, 124px);
+  min-height: 34px;
+  gap: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+.platform-sidebar-header .platform-header-top .platform-header-left,
+.platform-sidebar-header .platform-header-top .platform-header-actions {
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.platform-sidebar-header .platform-header-top .icon-toggle-btn {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  border-radius: 7px;
+}
+/* 侧栏收起时，对话区头部同样让位，避免「← 平台」被胶囊盖住 */
+.cb-platforms-sidebar.collapsed ~ .chat-main .chat-head-left {
+  padding-left: var(--pill-dock-w, 124px);
+  transition: padding-left 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* 展开时按钮从胶囊右侧依次滑出 */
+.cb-platforms-sidebar:not(.collapsed) .platform-header-top button,
+.cb-platforms-sidebar:not(.collapsed) .platform-header-actions button {
+  animation: pillSlideOut 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes pillSlideOut {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (max-width: 640px) {
+  .pill-dock {
+    left: 8px;
+    top: var(--pill-dock-top, 52px);
+  }
+  .pill-dock .current-agent-pill.unified-pill {
+    height: 28px !important;
+    max-width: 116px !important;
+    padding: 0 6px 0 2px !important;
+  }
+  .pill-dock .current-agent-pill .agent-avatar-sm,
+  .pill-dock #current-avatar-sm {
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    font-size: 9px !important;
+  }
+  .pill-dock .current-agent-pill .current-session-name {
+    max-width: 52px !important;
+    font-size: 11px !important;
+  }
+  .pill-dock .current-agent-pill .unified-pill-divider {
+    display: none !important;
+  }
+  .platform-sidebar-header .platform-header-top {
+    padding-left: var(--pill-dock-w, 124px);
+    min-height: 28px;
+  }
+  .cb-platforms-sidebar.collapsed ~ .chat-main .chat-head-left {
+    padding-left: var(--pill-dock-w, 124px);
+  }
+}
+/* 会话胶囊只在对话页显示；设置 / 队列 / 笔记等页签隐藏，避免遮挡内容 */
+body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
+
+/* ===== 侧栏头部按钮：点击动效 ===== */
+/* 展开全部：点击后箭头旋转 180° */
+/* 展开全部：外对角 ↔ 内对角 交叉切换（不是整体旋转） */
+#btn-toggle-all-tree { position: relative; }
+#btn-toggle-all-tree svg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transition: transform .26s cubic-bezier(.16, 1, .3, 1), opacity .18s ease;
+}
+#btn-toggle-all-tree .ico-expand { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+#btn-toggle-all-tree .ico-collapse { transform: translate(-50%, -50%) scale(.55); opacity: 0; }
+#btn-toggle-all-tree.expanded .ico-expand { transform: translate(-50%, -50%) scale(.55); opacity: 0; }
+#btn-toggle-all-tree.expanded .ico-collapse { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+
+/* 漏斗：点一下倾倒 */
+#btn-session-filter.pouring svg { animation: funnelPour .38s cubic-bezier(.16, 1, .3, 1); }
+@keyframes funnelPour {
+  0% { transform: rotate(0) translateY(0); }
+  30% { transform: rotate(-16deg) translateY(-1px); }
+  62% { transform: rotate(7deg) translateY(0); }
+  100% { transform: rotate(0) translateY(0); }
+}
+
+/* 筛选菜单：从按钮下方落下 */
+#sess-filter-menu:not([hidden]) {
+  animation: menuDrop .2s cubic-bezier(.16, 1, .3, 1);
+  transform-origin: top right;
+}
+@keyframes menuDrop {
+  from { opacity: 0; transform: translateY(-6px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 筛选菜单：固定右对齐与宽度，避免被侧栏裁切 */
+.sess-filter-wrap { position: relative; }
+.sess-filter-wrap .sess-filter-menu {
+  left: auto;
+  right: 0;
+  width: 216px;
+  min-width: 216px;
+  max-width: 216px;
+  box-sizing: border-box;
+  top: calc(100% + 8px);
+}
+.sess-filter-wrap .sess-filter-menu .export-menu-item {
+  width: 100%;
+  box-sizing: border-box;
+}
+.sess-filter-wrap .sess-filter-menu .export-menu-item > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 固定 / 解锁：双图标交叉切换 */
+#btn-auto-collapse-toggle { position: relative; }
+#btn-auto-collapse-toggle svg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transition: transform .26s cubic-bezier(.16, 1, .3, 1), opacity .18s ease;
+}
+/* 默认 = 常驻展开（锁上）；.active = 智能悬浮收展（解锁） */
+#btn-auto-collapse-toggle .ico-unlock { transform: translate(-50%, -50%) scale(.55) rotate(16deg); opacity: 0; }
+#btn-auto-collapse-toggle .ico-lock { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+#btn-auto-collapse-toggle.active .ico-unlock { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+#btn-auto-collapse-toggle.active .ico-lock { transform: translate(-50%, -50%) scale(.55) rotate(-16deg); opacity: 0; }
+
+/* 归档：拉抽屉 */
+#btn-view-archives.pulling svg { animation: drawerPull .44s cubic-bezier(.16, 1, .3, 1); }
+@keyframes drawerPull {
+  0% { transform: translateY(0) scaleY(1); }
+  32% { transform: translateY(3px) scaleY(.94); }
+  68% { transform: translateY(-1px) scaleY(1.03); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+/* ===== 通用弹层：抽屉式滑入 / 滑出 ===== */
+#modal[open] { animation: drawerIn .3s cubic-bezier(.16, 1, .3, 1); }
+#modal.drawer-closing { animation: drawerOut .2s cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes drawerIn {
+  from { opacity: 0; transform: translateY(-16px) scaleY(.94); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes drawerOut {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to { opacity: 0; transform: translateY(-12px) scaleY(.95); }
+}
+/* ===== 归档面板：主按钮跟随「发送」的子代理主题色（其他保持不变） ===== */
+/* 注意：btn('复原','small primary') 生成的 className 是 "small primary"（没有 btn 类） */
+#modal.archive-viewer .primary,
+#modal.archive-viewer #modal-ok {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--agent-accent, var(--mcode-accent)) 72%, #000) 0%,
+    var(--agent-accent, var(--mcode-accent)) 100%) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px var(--agent-accent-glow, var(--mcode-accent-glow)) !important;
+}
+#modal.archive-viewer .primary:hover,
+#modal.archive-viewer #modal-ok:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 16px var(--agent-accent-glow, var(--mcode-accent-glow)) !important;
+}
+/* ===== 主题预设按钮：底色用各主题自己的按钮渐变（--gem-btn-bg），选中用光环描边 ===== */
+.bg-preset-btn[data-preset="mocha"] { background: linear-gradient(135deg, #b4befe 0%, #cba6f7 100%) !important; color: #1e1e2e !important; border-color: rgba(0, 0, 0, .12) !important; }
+.bg-preset-btn[data-preset="shell"] { background: linear-gradient(135deg, #059669 0%, #00d26a 100%) !important; color: #fff !important; border-color: rgba(255, 255, 255, .18) !important; }
+.bg-preset-btn[data-preset="aurora"] { background: linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%) !important; color: #fff !important; border-color: rgba(255, 255, 255, .18) !important; }
+.bg-preset-btn[data-preset="dusk"] { background: linear-gradient(135deg, #f59e0b 0%, #e11d48 100%) !important; color: #fff !important; border-color: rgba(255, 255, 255, .18) !important; }
+.bg-preset-btn[data-preset="grid"] { background: linear-gradient(135deg, #6366f1 0%, #22d3ee 100%) !important; color: #fff !important; border-color: rgba(120, 150, 255, .3) !important; }
+.bg-preset-btn[data-preset]:hover { filter: brightness(1.2); }
+.bg-preset-btn[data-preset].active {
+  box-shadow: 0 0 0 2px var(--gem-bg-canvas, rgba(0, 0, 0, .35)), 0 0 0 3.5px var(--mcode-accent, #6366f1);
+  filter: brightness(1.1);
+}
+/* ===== 图片站内预览（替代 window.open 新标签页） ===== */
+.img-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  cursor: zoom-out;
+  animation: lbFade .18s ease;
+}
+.img-lightbox[hidden] { display: none; }
+.img-lightbox img {
+  max-width: 92vw;
+  max-height: 88vh;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .55);
+  animation: lbZoom .2s cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes lbFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lbZoom { from { transform: scale(.94); opacity: .6; } to { transform: scale(1); opacity: 1; } }
+/* ===== 工作台展开时：头部按钮组钉在窗口最右，不随对话栏收窄左移 =====
+   定位说明：按钮组的包含块是 .chat-head 的 padding box（右缘＝对话栏右缘）。
+   工作台宽度恒为 340px 且紧贴对话栏右侧，故展开时平移 340px 正好抵消收窄，
+   两种状态右缘都落在「窗口右缘内缩 12px」，切换时零跳动；平移与
+   工作台 width 用同一条缓动曲线，动画期间也始终钉住最右。
+   注意：.chat-col 的 overflow:hidden 会把列外内容裁掉，展开时必须放开。 */
+@media (min-width: 641px) {
+  #panel-chat .chat-head-right {
+    position: absolute;
+    right: 12px;
+    top: 11px;
+    z-index: 80;
+    padding: 0;
+    transform: translateX(0);
+    transition: transform .32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #panel-chat.wb-open .chat-col {
+    overflow: visible;
+  }
+  #panel-chat.wb-open .chat-head-right {
+    transform: translateX(var(--wb-w, 340px));
+  }
+  /* 「工作台」按钮收成纯图标，作为最右侧的收起入口，同时给工作台自身控件让位 */
+  #panel-chat.wb-open #btn-workbench-toggle {
+    width: 36px !important;
+    min-width: 36px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+    border-color: var(--mcode-border) !important;
+    pointer-events: auto !important;
+  }
+  #panel-chat.wb-open #btn-workbench-toggle > span:not(.wb-badge-pill) {
+    display: none;
+  }
+  /* 展开态下角标会压住 36px 纯图标按钮，且面板头部已显示「N 项」，故隐藏 */
+  #panel-chat.wb-open #head-wb-badge {
+    display: none !important;
+  }
+  /* 工作台头部已无右侧按钮，仅保留与浮层按钮组的呼吸间距 */
+}
+/* ===== 计数徽标统一收口：去掉渐变/发光/脉冲，改为低对比胶囊 ===== */
+.wb-badge-pill,
+.platform-badge-pill,
+.chat-badge {
+  background: color-mix(in srgb, var(--mcode-accent) 15%, transparent);
+  color: var(--mcode-accent);
+  border: none;
+  box-shadow: none;
+  animation: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.wb-badge-pill {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.platform-badge-pill {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 </style>
 </head>
 <body>
@@ -7913,6 +8298,21 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     </div>
   </div>
 </header>
+
+<!-- 会话胶囊停靠层：固定在侧栏顶部左上角，侧栏收起时仍然可见 -->
+<div id="pill-dock" class="pill-dock" aria-label="当前会话快捷入口">
+  <div class="current-agent-pill unified-pill" id="current-agent-pill">
+    <button class="agent-avatar-sm agent-avatar-btn" id="current-avatar-sm" type="button" title="点击切换子代理">CB</button>
+    <span class="unified-pill-divider" aria-hidden="true"></span>
+    <div class="session-selector-pill inline" id="session-selector-pill" title="点击切换对话">
+      <span class="current-session-name" id="current-session-name">新会话</span>
+      <span class="pill-caret" aria-hidden="true">▾</span>
+      <select id="chat-session-select" style="display:none" aria-hidden="true" tabindex="-1"></select>
+      <div class="export-dropdown-menu session-picker-menu" id="session-picker-menu" hidden></div>
+    </div>
+    <div class="export-dropdown-menu agent-picker-menu" id="agent-picker-menu" hidden></div>
+  </div>
+</div>
 
 <main>
   <div id="banner" role="alert" hidden class="banner">
@@ -7950,18 +8350,21 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
           <aside class="chat-threads cb-platforms-sidebar" id="chat-threads">
             <div class="platform-sidebar-header">
               <div class="platform-header-top">
-                <div class="platform-header-left">
-                  <button id="btn-toggle-sidebar-collapse" class="platform-header-title-btn" type="button" title="点击展开/收起左侧边栏">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4h2v4zm0-6h-2V7h2v4z"/></svg>
-                    <span>会话</span>
-                  </button>
-                  <button id="btn-toggle-all-tree" class="icon-toggle-btn btn-toggle-all-tree" type="button" title="一键展开/收起所有平台会话">
+                <div class="platform-header-actions">
+                  <button id="btn-toggle-sidebar-collapse" class="icon-toggle-btn" type="button" title="点击展开/收起左侧边栏">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>
+                      <rect x="3" y="4" width="18" height="16" rx="2"/>
+                      <line x1="9" y1="4" x2="9" y2="20"/>
                     </svg>
                   </button>
-                </div>
-                <div class="platform-header-actions">
+                  <button id="btn-toggle-all-tree" class="icon-toggle-btn btn-toggle-all-tree" type="button" title="一键展开/收起所有平台会话">
+                    <svg class="ico-expand" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>
+                    </svg>
+                    <svg class="ico-collapse" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/>
+                    </svg>
+                  </button>
                   <!-- 会话筛选与排序（单漏斗图标） -->
                   <div class="sess-filter-wrap" id="sess-filter-wrap" style="position:relative">
                     <button id="btn-session-filter" class="icon-toggle-btn" type="button" title="会话筛选与排序">
@@ -7972,11 +8375,14 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
                   <button id="btn-view-archives" class="icon-toggle-btn" type="button" title="查看归档会话">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect width="22" height="5" x="1" y="3"/><line x1="10" x2="14" y1="12" y2="12"/></svg>
                   </button>
-                  <button id="btn-auto-collapse-toggle" class="icon-toggle-btn" type="button" title="进入会话时自动收起侧栏 (已开启)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="9" y1="3" x2="9" y2="21"/>
-                      <path d="M16 10l-2 2 2 2"/>
+                  <button id="btn-auto-collapse-toggle" class="icon-toggle-btn" type="button" title="智能悬浮收展（点击锁定为常驻展开）">
+                    <svg class="ico-unlock" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                    </svg>
+                    <svg class="ico-lock" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
                   </button>
                 </div>
@@ -7998,18 +8404,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
             <div class="chat-head" id="chat-head">
               <div class="chat-head-left">
                 <button id="btn-chat-back" class="text" type="button" title="返回平台列表">← 平台</button>
-                <!-- 一体胶囊：点头像切换子代理，点当前会话名切换对话 -->
-                <div class="current-agent-pill unified-pill" id="current-agent-pill">
-                  <button class="agent-avatar-sm agent-avatar-btn" id="current-avatar-sm" type="button" title="点击切换子代理">CB</button>
-                  <span class="unified-pill-divider" aria-hidden="true"></span>
-                  <div class="session-selector-pill inline" id="session-selector-pill" title="点击切换对话">
-                    <span class="current-session-name" id="current-session-name">新会话</span>
-                    <span class="pill-caret" aria-hidden="true">▾</span>
-                    <select id="chat-session-select" style="display:none" aria-hidden="true" tabindex="-1"></select>
-                    <div class="export-dropdown-menu session-picker-menu" id="session-picker-menu" hidden></div>
-                  </div>
-                  <div class="export-dropdown-menu agent-picker-menu" id="agent-picker-menu" hidden></div>
-                </div>
               </div>
 
               <div class="chat-head-right" id="chat-head-btns">
@@ -8058,7 +8452,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
                   </div>
                 </div>
                 <button id="btn-workbench-toggle" class="btn-head-action btn-head-workbench" type="button" title="展开或收起工作台">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="16" y1="5" x2="16" y2="19"/></svg>
                   <span>工作台</span>
                   <span class="wb-badge-pill" id="head-wb-badge" hidden>0</span>
                 </button>
@@ -8190,17 +8584,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
                 <span class="wb-count-pill" id="wb-count">0 项</span>
               </div>
               <div class="wb-head-right">
-                <button type="button" class="wb-tool-btn" id="wb-refresh-btn" title="刷新工作台">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                  </svg>
-                </button>
-                <button type="button" class="wb-close" id="wb-close" title="收起工作台">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
+                <!-- 头部工具按钮已按需求移除：删除/清空/收起统一走「卡片右上角 ×」与头部「工作台」按钮 -->
               </div>
             </div>
 
@@ -8238,7 +8622,8 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
               </div>
               <div class="wb-preview-meta" id="wb-preview-meta"></div>
               <div class="wb-preview-content" id="wb-preview-content">
-                <pre><code id="wb-preview-code"></code></pre>
+                <img id="wb-preview-img" class="wb-preview-img" alt="产物预览" hidden>
+                <pre id="wb-preview-pre"><code id="wb-preview-code"></code></pre>
               </div>
             </div>
           </aside>
@@ -8267,7 +8652,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
                 <button type="button" class="bg-preset-btn" data-preset="shell">Shell (#0F0F11)</button>
                 <button type="button" class="bg-preset-btn" data-preset="aurora" title="极夜蓝底 + 青紫极光渐变">Aurora 极光 (#0B0F19)</button>
                 <button type="button" class="bg-preset-btn" data-preset="dusk" title="暖紫褐底 + 琥珀流金渐变">Dusk 暮霭 (#18121D)</button>
-                <button type="button" class="bg-preset-btn" data-preset="cyber" title="近黑靛蓝 + 霓虹青渐变">Cyber 赛博 (#070913)</button>
                 <button type="button" class="bg-preset-btn" data-preset="grid" title="暗板岩底 + 32px 科技网格">Grid 网格 (#0A0F1E)</button>
                 <button type="button" class="bg-preset-btn" data-preset="custom">自定义图片</button>
               </div>
@@ -8320,7 +8704,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v1.0.1</span>
+            <span class="footer-version">v1.0.11</span>
           </div>
         </footer>
       </section>
@@ -8367,6 +8751,11 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     <button value="ok" type="button" id="modal-ok" class="primary">确认</button>
   </div>
 </dialog>
+
+<!-- 图片站内预览（附件图 / 工作台图片，不再开新标签页） -->
+<div class="img-lightbox" id="img-lightbox" hidden>
+  <img id="img-lightbox-img" alt="图片预览">
+</div>
 
 <dialog id="donate-dialog" class="cb-donate-dialog" aria-labelledby="donate-title">
   <div class="cb-donate-card">
@@ -8426,6 +8815,32 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     b.addEventListener('click', fn);
     return b;
   }
+  // 图片站内预览：点击图片在当前页放大，不再跳新标签页
+  function openImageLightbox(url, alt) {
+    var box = document.getElementById('img-lightbox');
+    var img = document.getElementById('img-lightbox-img');
+    if (!box || !img || !url) return;
+    img.src = url;
+    img.alt = alt || '图片预览';
+    box.hidden = false;
+  }
+  (function bindImageLightbox() {
+    var box = document.getElementById('img-lightbox');
+    if (!box) return;
+    box.addEventListener('click', function () {
+      box.hidden = true;
+      var img = document.getElementById('img-lightbox-img');
+      if (img) img.removeAttribute('src');
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !box.hidden) {
+        box.hidden = true;
+        var img = document.getElementById('img-lightbox-img');
+        if (img) img.removeAttribute('src');
+      }
+    });
+  })();
+
   function copyText(text, successMsg) {
     var str = String(text != null ? text : '');
     function fallback() {
@@ -8561,7 +8976,22 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     modalExtraAction = null;
     var headActions = $('#modal-head-actions');
     if (headActions) headActions.textContent = '';
-    if (modalResolver) { var r = modalResolver; modalResolver = null; $('#modal').close(); r.resolve(result); }
+    if (modalResolver) {
+      var r = modalResolver;
+      modalResolver = null;
+      var dlg = $('#modal');
+      if (dlg.open) {
+        // 抽屉滑出后再真正关闭
+        dlg.classList.add('drawer-closing');
+        setTimeout(function () {
+          dlg.classList.remove('drawer-closing');
+          try { dlg.close(); } catch (e) { /* noop */ }
+          r.resolve(result);
+        }, 200);
+      } else {
+        r.resolve(result);
+      }
+    }
   }
   $('#modal-cancel').addEventListener('click', function () { closeModal(null); });
   var extraBtnEl = $('#modal-extra');
@@ -8569,6 +8999,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (typeof modalExtraAction === 'function') modalExtraAction();
   });
   $('#modal').addEventListener('cancel', function () { closeModal(null); });
+  // 点遮罩（dialog 自身空白区）退出当前弹层
+  $('#modal').addEventListener('click', function (e) {
+    if (e.target === this) closeModal(null);
+  });
   $('#modal-ok').addEventListener('click', function () {
     if (!modalResolver) return;
     var vals = {};
@@ -9017,6 +9451,40 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     return chat.threads.find(function (t) { return t.agent === agentName; });
   }
 
+  // ---- 子代理卡片拖动排序：本地顺序记忆 ----
+  var AGENT_ORDER_KEY = 'agent_hub_agent_order';
+  var agentOrderCache = (function () {
+    try {
+      var arr = JSON.parse(localStorage.getItem(AGENT_ORDER_KEY) || '[]');
+      return Array.isArray(arr) ? arr.filter(function (x) { return typeof x === 'string' && x; }) : [];
+    } catch (e) { return []; }
+  })();
+  var dragAgentName = null;
+  var suppressAgentClickUntil = 0;
+  function saveAgentOrder(names) {
+    agentOrderCache = (names || []).slice();
+    try { localStorage.setItem(AGENT_ORDER_KEY, JSON.stringify(agentOrderCache)); } catch (e) { /* noop */ }
+  }
+  function applyAgentOrder(list) {
+    if (!agentOrderCache.length) return list;
+    var rank = {};
+    agentOrderCache.forEach(function (n, i) { rank[n] = i; });
+    return list.slice().sort(function (a, b) {
+      var ra = rank[a.name], rb = rank[b.name];
+      if (ra === undefined && rb === undefined) return 0;
+      if (ra === undefined) return 1;   // 没排过的排后面，保持原有相对顺序
+      if (rb === undefined) return -1;
+      return ra - rb;
+    });
+  }
+  function clearAgentDropMarks() {
+    var host = $('#thread-list');
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.drop-before, .drop-after'), function (n) {
+      n.classList.remove('drop-before', 'drop-after');
+    });
+  }
+
   function getPlatformList() {
     var set = {};
     var list = [];
@@ -9034,7 +9502,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       set[t.agent] = true;
       list.push({ name: t.agent, activation: 'standby', dispatchable: true });
     });
-    return list;
+    return applyAgentOrder(list);
   }
 
   function threadMeta(ts) {
@@ -9267,7 +9735,55 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         toggleAgentSessions(false);
       });
 
+      // ---- 拖动排序：整卡可拖，落到目标卡片的上/下半区决定插入位置 ----
+      item.draggable = true;
+      item.title = (item.title ? item.title + ' · ' : '') + '按住可拖动调整子代理顺序';
+      item.addEventListener('dragstart', function (e) {
+        dragAgentName = name;
+        item.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', name); } catch (err) { /* noop */ }
+      });
+      item.addEventListener('dragend', function () {
+        dragAgentName = null;
+        item.classList.remove('dragging');
+        clearAgentDropMarks();
+      });
+      item.addEventListener('dragover', function (e) {
+        if (!dragAgentName || dragAgentName === name) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = 'move'; } catch (err) { /* noop */ }
+        var r = item.getBoundingClientRect();
+        var after = (e.clientY - r.top) > r.height / 2;
+        clearAgentDropMarks();
+        item.classList.add(after ? 'drop-after' : 'drop-before');
+      });
+      item.addEventListener('dragleave', function () {
+        item.classList.remove('drop-before', 'drop-after');
+      });
+      item.addEventListener('drop', function (e) {
+        if (!dragAgentName || dragAgentName === name) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var moved = dragAgentName;
+        var names = getPlatformList().map(function (a) { return a.name; });
+        var from = names.indexOf(moved);
+        if (from < 0) return;
+        var r = item.getBoundingClientRect();
+        var after = (e.clientY - r.top) > r.height / 2;
+        names.splice(from, 1);
+        var to = names.indexOf(name);
+        if (to < 0) return;
+        names.splice(to + (after ? 1 : 0), 0, moved);
+        saveAgentOrder(names);
+        dragAgentName = null;
+        suppressAgentClickUntil = Date.now() + 400;
+        clearAgentDropMarks();
+        renderPlatformList();
+        toast('已调整子代理顺序');
+      });
+
       item.addEventListener('click', function () {
+        if (Date.now() < suppressAgentClickUntil) return;
         toggleAgentSessions(true);
       });
 
@@ -9627,6 +10143,69 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   }
 
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // 代码块复制按钮图标（复制 / 已复制勾）
+  var CODE_COPY_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  var CODE_CHECK_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  // ---- 会话文本里的本地文件路径：渲染为可双击打开工作台预览的 chip ----
+  var FILE_PATH_RE = /((?:[A-Za-z]:[\\/]|\/)[^\s<>"'`|]+?\.[A-Za-z0-9]{1,8})/g;
+  var FILE_PATH_EXT_RE = /\.(svg|png|jpe?g|gif|webp|bmp|ico|pdf|md|markdown|txt|json|html?|css|js|mjs|cjs|ts|tsx|jsx|py|sh|sql|ya?ml|toml|csv|log)$/i;
+  function extractFilePaths(text) {
+    var out = [], m, s = String(text || '');
+    FILE_PATH_RE.lastIndex = 0;
+    while ((m = FILE_PATH_RE.exec(s))) {
+      var p = m[1].replace(/[.,;:!?，。；：、！？）】」》]+$/, '');
+      if (p.length > 3 && FILE_PATH_EXT_RE.test(p)) out.push(p);
+    }
+    return out;
+  }
+  function linkifyPaths(root) {
+    if (!root || !document.createTreeWalker) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      var pe = node.parentElement;
+      if (!pe) return;
+      var tag = pe.tagName;
+      if (tag === 'A' || tag === 'PRE' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || pe.classList.contains('path-chip')) return;
+      var text = node.nodeValue || '';
+      if (text.indexOf('/') < 0 && text.indexOf('\\') < 0) return;
+      var paths = extractFilePaths(text);
+      if (!paths.length) return;
+      var frag = document.createDocumentFragment();
+      var last = 0, hit = 0;
+      paths.forEach(function (p) {
+        var idx = text.indexOf(p, last);
+        if (idx < 0) return;
+        if (idx > last) frag.appendChild(document.createTextNode(text.slice(last, idx)));
+        var chip = document.createElement('span');
+        chip.className = 'path-chip';
+        chip.setAttribute('data-path', p);
+        chip.setAttribute('title', '双击打开工作台预览');
+        chip.textContent = p;
+        frag.appendChild(chip);
+        last = idx + p.length;
+        hit++;
+      });
+      if (!hit) return;
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+  function openPathPreview(path) {
+    if (!path) return;
+    var bn = String(path).split(/[\\/]/).pop();
+    openWbPreview({ kind: 'file', name: bn, path: path, source: '会话产物' });
+  }
+  document.addEventListener('dblclick', function (e) {
+    var chip = e.target && e.target.closest ? e.target.closest('.path-chip') : null;
+    if (!chip) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openPathPreview(chip.getAttribute('data-path') || '');
+  });
+
   function renderMd(text) {
     var out = [];
     var lines = String(text).split('\n');
@@ -9642,7 +10221,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       var langLabel = esc(codeLang || 'code');
       out.push(
         '<div class="code-block-wrap">' +
-          '<div class="code-block-head"><span>' + langLabel + '</span><button type="button" class="code-block-copy">复制代码</button></div>' +
+          '<div class="code-block-head"><span>' + langLabel + '</span><button type="button" class="code-block-copy" title="复制代码" aria-label="复制代码">' + CODE_COPY_ICON + '</button></div>' +
           '<pre>' + esc(codeBuf.join('\n')) + '</pre>' +
         '</div>'
       );
@@ -9809,16 +10388,19 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       }
       var body = el('div');
       body.innerHTML = renderMd(parsed.hasThinking ? parsed.cleanText : displayText);
+      linkifyPaths(body);
       b.appendChild(body);
       b.querySelectorAll('.code-block-copy').forEach(function (cBtn) {
-        cBtn.addEventListener('click', function () {
+        cBtn.addEventListener('click', function (e) {
+          // 阻止冒泡/默认行为：避免被外层容器当作链接打开新标签页
+          e.preventDefault();
+          e.stopPropagation();
           var wrap = cBtn.closest('.code-block-wrap');
           var pre = wrap ? wrap.querySelector('pre') : null;
           if (!pre) return;
           copyText(pre.textContent || '', '代码已复制');
-          var orig = cBtn.textContent;
-          cBtn.textContent = '已复制';
-          setTimeout(function () { cBtn.textContent = orig; }, 1800);
+          cBtn.innerHTML = CODE_CHECK_ICON;
+          setTimeout(function () { cBtn.innerHTML = CODE_COPY_ICON; }, 1600);
         });
       });
     } else {
@@ -9836,7 +10418,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
           im.src = a.url;
           im.alt = a.name || '图片附件';
           im.title = a.name || '';
-          im.addEventListener('click', function () { window.open(a.url, '_blank'); });
+          im.addEventListener('click', function () { openImageLightbox(a.url, a.name); });
           b.appendChild(im);
         } else {
           b.appendChild(el('span', 'att-file', (a.name || 'file')));
@@ -9871,6 +10453,93 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     previewItem: null
   };
 
+  // ---- 工作台条目的“已清理”集合：只隐藏列表项，不动原文件 ----
+  var WB_HIDDEN_KEY = 'agent_hub_wb_hidden';
+  var wbHidden = new Set();
+  try {
+    var savedWbHidden = JSON.parse(localStorage.getItem(WB_HIDDEN_KEY) || '[]');
+    if (Array.isArray(savedWbHidden)) savedWbHidden.forEach(function (k) { if (k) wbHidden.add(k); });
+  } catch (e) { /* noop */ }
+  function wbSaveHidden() {
+    try { localStorage.setItem(WB_HIDDEN_KEY, JSON.stringify(Array.from(wbHidden))); } catch (e) { /* noop */ }
+  }
+  function wbHideKeys(keys) {
+    var n = 0;
+    (keys || []).forEach(function (k) {
+      if (k && !wbHidden.has(k)) { wbHidden.add(k); n++; }
+    });
+    if (n) wbSaveHidden();
+    return n;
+  }
+  // 单条移除：按条目自身 key 隐藏（同时兜底按路径/URL 匹配其余 key 形态）
+  function wbRemoveItem(item) {
+    if (!item) return;
+    var keys = [];
+    if (item.key) keys.push(item.key);
+    if (item.path) keys.push('A|' + item.path, 'P|' + item.path, 'LA|' + item.path);
+    if (item.url) keys.push(item.url + '|i', item.url + '|f');
+    wbHideKeys(keys);
+    if (wbState.previewItem === item) {
+      wbState.previewItem = null;
+      var pane = $('#wb-preview-pane');
+      if (pane) pane.hidden = true;
+    }
+    renderWorkbench();
+    toast('已从工作台移除（原文件未删除）');
+  }
+  // 卡片右上角的删除 ×（点击不触发卡片自身的打开/预览）
+  function wbDelBtn(item) {
+    var b = el('button', 'wb-item-del');
+    b.type = 'button';
+    b.title = '从工作台移除（不删除原文件）';
+    b.setAttribute('aria-label', '从工作台移除');
+    b.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      wbRemoveItem(item);
+    });
+    return b;
+  }
+  function wbCollectAllKeys() {
+    var t = chat.full[chat.activeAgent];
+    var msgs = (t && Array.isArray(t.messages)) ? t.messages : [];
+    var keys = [];
+    msgs.forEach(function (m) {
+      if (!m) return;
+      if (Array.isArray(m.att)) m.att.forEach(function (a) {
+        if (a) keys.push((a.url || a.name || '') + '|' + (a.isImage ? 'i' : 'f'));
+      });
+      if (m.artifact) keys.push('A|' + m.artifact);
+      if (m.text) extractFilePaths(String(m.text)).forEach(function (p) { keys.push('P|' + p); });
+    });
+    (chat.localArtifacts || []).forEach(function (la) { keys.push('LA|' + (la.path || la.name)); });
+    return keys;
+  }
+
+  // 会话文本中提到的文件 → 存在性缓存（'pending' | {ok,name,size,raw}）
+  var wbPathStat = {};
+  var wbStatInFlight = false;
+  function wbQueuePathStats(paths) {
+    var todo = paths.filter(function (p) { return !wbPathStat[p]; });
+    if (!todo.length || wbStatInFlight) return;
+    wbStatInFlight = true;
+    todo.forEach(function (p) { wbPathStat[p] = 'pending'; });
+    api('/api/artifact/stat', { paths: todo }).then(function (r) {
+      var map = {};
+      ((r && r.items) || []).forEach(function (it) { map[it.request || it.path] = it; });
+      todo.forEach(function (p) {
+        var it = map[p];
+        wbPathStat[p] = it ? { ok: true, name: it.name, size: it.size, raw: !!it.raw } : { ok: false };
+      });
+    }).catch(function () {
+      todo.forEach(function (p) { wbPathStat[p] = { ok: false }; });
+    }).then(function () {
+      wbStatInFlight = false;
+      renderWorkbench();
+    });
+  }
+
   function wbCollect() {
     var t = chat.full[chat.activeAgent];
     var msgs = (t && Array.isArray(t.messages)) ? t.messages : [];
@@ -9880,28 +10549,52 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       if (Array.isArray(m.att)) m.att.forEach(function (a) {
         if (!a) return;
         var key = (a.url || a.name || '') + '|' + (a.isImage ? 'i' : 'f');
+        if (wbHidden.has(key)) return;
         if (seen[key]) return; seen[key] = true;
-        if (a.isImage && a.url) images.push({ url: a.url, name: a.name || '图片', ts: m.ts });
-        else if (!a.isImage) files.push({ kind: 'file', name: a.name || '文件', url: a.url || null, ts: m.ts });
+        if (a.isImage && a.url) images.push({ url: a.url, name: a.name || '图片', ts: m.ts, key: key });
+        else if (!a.isImage) files.push({ kind: 'file', name: a.name || '文件', url: a.url || null, ts: m.ts, key: key });
       });
       if (m.artifact) {
         var bn = String(m.artifact).split(/[\\/]/).pop();
         var key2 = 'A|' + m.artifact;
-        if (!seen[key2]) {
+        if (!wbHidden.has(key2) && !seen[key2]) {
           seen[key2] = true;
-          artifacts.push({ kind: 'artifact', name: bn, path: m.artifact, ts: m.ts, source: chat.activeAgent || '系统' });
+          artifacts.push({ kind: 'artifact', name: bn, path: m.artifact, ts: m.ts, source: chat.activeAgent || '系统', key: key2 });
         }
       }
     });
     if (Array.isArray(chat.localArtifacts)) {
       chat.localArtifacts.forEach(function (la) {
         var key3 = 'LA|' + (la.path || la.name);
-        if (!seen[key3]) {
+        if (!wbHidden.has(key3) && !seen[key3]) {
           seen[key3] = true;
-          artifacts.unshift(la);
+          artifacts.unshift(Object.assign({}, la, { key: key3 }));
         }
       });
     }
+    // 会话文本里提到的本地文件 → 产物候选（异步确认存在性后并入列表）
+    var pathTs = {};
+    msgs.forEach(function (m) {
+      if (!m || !m.text) return;
+      extractFilePaths(String(m.text)).forEach(function (p) {
+        if (pathTs[p] === undefined) pathTs[p] = m.ts || null;
+      });
+    });
+    var pendingPaths = [];
+    Object.keys(pathTs).forEach(function (p) {
+      var st = wbPathStat[p];
+      if (st === 'pending') return;
+      if (st && st.ok) {
+        var key4 = 'P|' + p;
+        if (!wbHidden.has(key4) && !seen[key4]) {
+          seen[key4] = true;
+          artifacts.push({ kind: 'file', name: st.name || String(p).split(/[\\/]/).pop(), path: p, ts: pathTs[p], source: '产出文件', size: st.size, raw: st.raw, key: key4 });
+        }
+      } else if (!st) {
+        pendingPaths.push(p);
+      }
+    });
+    if (pendingPaths.length) wbQueuePathStats(pendingPaths);
     return { images: images, files: files, artifacts: artifacts };
   }
 
@@ -9941,7 +10634,26 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       metaEl.textContent = (item.path ? '路径: ' + item.path : '由控制台生成') + (item.ts ? ' · ' + threadMeta(item.ts) : '');
     }
 
-    if (item.text) {
+    // 图片 / SVG 走二进制 raw 预览，其余走文本
+    var isMedia = item.raw || /\.(svg|png|jpe?g|gif|webp|bmp|ico)$/i.test(item.name || item.path || '');
+    var imgEl = $('#wb-preview-img');
+    var preEl = $('#wb-preview-pre');
+    if (imgEl && preEl) {
+      if (isMedia && item.path) {
+        imgEl.hidden = false;
+        preEl.hidden = true;
+        imgEl.src = '/api/artifact/raw?path=' + encodeURIComponent(item.path) + '&t=' + Date.now();
+        imgEl.alt = item.name || '产物预览';
+      } else {
+        imgEl.hidden = true;
+        imgEl.removeAttribute('src');
+        preEl.hidden = false;
+      }
+    }
+
+    if (isMedia && item.path) {
+      // 图片预览已由 imgEl 承担，无需加载文本
+    } else if (item.text) {
       if (codeEl) codeEl.textContent = item.text;
     } else if (item.path) {
       if (codeEl) codeEl.textContent = '正在从服务端加载产物内容...';
@@ -9964,6 +10676,16 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     var downloadBtn = $('#wb-preview-download');
     if (downloadBtn) {
       downloadBtn.onclick = function () {
+        if (isMedia && item.path) {
+          var a = document.createElement('a');
+          a.href = '/api/artifact/raw?path=' + encodeURIComponent(item.path);
+          a.download = item.name || 'artifact';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          toast('开始下载 ' + item.name);
+          return;
+        }
         var content = (codeEl && codeEl.textContent) || '';
         downloadBlob(content, item.name || 'artifact.txt');
         toast('正在下载 ' + item.name);
@@ -10038,9 +10760,27 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     var refreshBtn = $('#wb-refresh-btn');
     if (refreshBtn && !refreshBtn.__inited) {
       refreshBtn.__inited = true;
+      // 扫帚：一键清空工作台列表（只清理列表项，不删除服务器上的原文件）
       refreshBtn.addEventListener('click', function () {
-        loadThreads();
-        toast('工作台已刷新');
+        var keys = wbCollectAllKeys();
+        if (!keys.length) { toast('工作台已经是空的'); return; }
+        wbHideKeys(keys);
+        wbState.previewItem = null;
+        var pane = $('#wb-preview-pane');
+        if (pane) pane.hidden = true;
+        renderWorkbench();
+        toast('已清空工作台（原文件未删除）');
+      });
+    }
+
+    // 左上角 ×：删除当前预览中的条目
+    var wbDeleteCurrentBtn = $('#wb-delete-current');
+    if (wbDeleteCurrentBtn && !wbDeleteCurrentBtn.__inited) {
+      wbDeleteCurrentBtn.__inited = true;
+      wbDeleteCurrentBtn.addEventListener('click', function () {
+        var item = wbState.previewItem;
+        if (!item) { toast('先在列表里打开一个条目再删除', true); return; }
+        wbRemoveItem(item);
       });
     }
 
@@ -10057,6 +10797,18 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (!total) {
       var emptyBox = el('div', 'wb-empty-state');
       emptyBox.innerHTML = '<svg class="wb-empty-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><div class="wb-empty-title">工作台暂无产物与附件</div><div class="wb-empty-desc">当前会话中生成的长文本产物、导出文档、代码记录与上传附件将自动汇聚在此，支持沉浸式预览与一键导出。</div>';
+      if (wbHidden.size) {
+        var restoreAllBtn = el('button', 'wb-artifact-btn primary', '恢复已清理的 ' + wbHidden.size + ' 项');
+        restoreAllBtn.type = 'button';
+        restoreAllBtn.style.marginTop = '10px';
+        restoreAllBtn.addEventListener('click', function () {
+          wbHidden.clear();
+          wbSaveHidden();
+          renderWorkbench();
+          toast('已恢复显示');
+        });
+        emptyBox.appendChild(restoreAllBtn);
+      }
       body.appendChild(emptyBox);
       return;
     }
@@ -10072,6 +10824,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 
       data.artifacts.forEach(function (item) {
         var card = el('div', 'wb-artifact-card');
+        card.appendChild(wbDelBtn(item));
         var top = el('div', 'wb-artifact-card-top');
         var badgeWrap = el('div', 'wb-artifact-badge-wrap');
         var typeInfo = getArtifactTypeInfo(item.name);
@@ -10141,12 +10894,15 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       secImg.appendChild(el('div', 'wb-sec-title', '图片 (' + data.images.length + ')'));
       var grid = el('div', 'wb-img-grid');
       data.images.forEach(function (im) {
+        var cell = el('div', 'wb-img-cell');
         var img = el('img');
         img.src = im.url;
         img.alt = im.name;
         img.title = im.name;
-        img.addEventListener('click', function () { window.open(im.url, '_blank'); });
-        grid.appendChild(img);
+        img.addEventListener('click', function () { openImageLightbox(im.url, im.name); });
+        cell.appendChild(img);
+        cell.appendChild(wbDelBtn(im));
+        grid.appendChild(cell);
       });
       secImg.appendChild(grid);
       body.appendChild(secImg);
@@ -10158,6 +10914,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       secFiles.appendChild(el('div', 'wb-sec-title', '附件 (' + data.files.length + ')'));
       data.files.forEach(function (f) {
         var row = el('div', 'wb-file-row');
+        row.appendChild(wbDelBtn(f));
         row.appendChild(el('div', 'wb-file-name', f.name));
         var meta = (f.kind === 'artifact' ? '产物 · ' + f.path : '上传附件') + (f.ts ? ' · ' + threadMeta(f.ts) : '');
         row.appendChild(el('div', 'wb-file-meta', meta));
@@ -10604,17 +11361,17 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     var text = $('#chat-input').value.trim();
     var mode = 'dispatch';
     var agent = chat.activeAgent || ($('#chat-target') ? $('#chat-target').value : '');
-    if (!text) { toast('消息为空', true); return; }
+    var ready = chat.atts.filter(function (a) { return a.status === 'ready' && a.url; });
+    if (!text && !ready.length) { toast('消息为空', true); return; }
     if (!agent) { toast('请先选择一个子代理平台', true); return; }
     if (chat.atts.some(function (a) { return a.status === 'uploading'; })) { toast('附件还在上传，稍等…', true); return; }
-    var ready = chat.atts.filter(function (a) { return a.status === 'ready' && a.url; });
 
     var prefs = getAgentPrefs(agent);
     var model = prefs.model || '';
     var payload = {
       agent: agent,
       mode: mode,
-      text: text,
+      text: text || (ready.length ? '请看附件。' : ''),
       sessionId: chat.activeSessionId
     };
     if (model) payload.model = model;
@@ -11549,7 +12306,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         sa.mcp,
         '',
         '【服务说明与工具】',
-        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.1'),
+        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.11'),
         '',
         '把上面 URL 作为 HTTP MCP server 注册给本机 AI 会话后，即可像原生子代理一样直接指挥 traecode / workbuddy / zcode / qwen-work 等全部注册代理，长内容以本机文件形式交付，不进会话上下文。',
         '',
@@ -11673,7 +12430,7 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.1';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.11';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
@@ -12360,8 +13117,21 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
         isPointerInRevealZone(lastPointer.x, lastPointer.y);
       if (!stillInZone) {
         var activeEl = document.activeElement;
-        var hasFocus = activeEl && sb.contains(activeEl);
-        if (!hasFocus) {
+        // 只有「正在输入」或「键盘焦点」才保持展开。
+        // 旧逻辑用 sb.contains(activeEl) 兜底 → 只要点过一次会话，焦点留在侧栏里，
+        // 之后鼠标移开也永远不收起（这就是「不自动收起」的真正原因）。
+        var isTyping = !!(activeEl && sb.contains(activeEl) && (
+          activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.tagName === 'SELECT' ||
+          activeEl.isContentEditable
+        ));
+        var keyboardFocus = false;
+        try {
+          keyboardFocus = !!(activeEl && sb.contains(activeEl) &&
+            activeEl.matches && activeEl.matches(':focus-visible'));
+        } catch (e) { keyboardFocus = false; }
+        if (!isTyping && !keyboardFocus) {
           togglePlatformsSidebar(false);
         }
       }
@@ -12687,6 +13457,43 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   }
   setupChromeAutoHideEngine();
 
+  // 会话胶囊停靠层：贴合品牌栏下沿；侧栏收展不影响其位置
+  function positionPillDock() {
+    var head = document.querySelector('header.top');
+    var dock = document.getElementById('pill-dock');
+    if (!head || !dock) return;
+    var r = head.getBoundingClientRect();
+    dock.style.top = Math.round(r.bottom + 12) + 'px';
+    var pill = document.getElementById('current-agent-pill');
+    if (pill) {
+      var w = Math.round(pill.getBoundingClientRect().width);
+      if (w > 0) document.documentElement.style.setProperty('--pill-dock-w', (w + 12) + 'px');
+    }
+  }
+  positionPillDock();
+  window.addEventListener('resize', positionPillDock);
+
+  // 非对话页（设置 / 队列 / 笔记）隐藏会话胶囊；:has() 不支持时的兜底
+  function syncPillDockVisibility() {
+    var dock = document.getElementById('pill-dock');
+    if (!dock) return;
+    var chatPanel = document.getElementById('panel-chat');
+    var visible = !!(chatPanel && chatPanel.classList.contains('active'));
+    dock.style.display = visible ? '' : 'none';
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.closest && e.target.closest('.cb-activity-tab')) {
+      setTimeout(syncPillDockVisibility, 0);
+    }
+  });
+  syncPillDockVisibility();
+  if (window.ResizeObserver) {
+    try {
+      var pillForResize = document.getElementById('current-agent-pill');
+      if (pillForResize) new ResizeObserver(positionPillDock).observe(pillForResize);
+    } catch (e) { /* noop */ }
+  }
+
   // 侧栏折叠/展开与返回
   var toggleSidebarBtn = $('#btn-toggle-sidebar-collapse');
   if (toggleSidebarBtn) toggleSidebarBtn.addEventListener('click', function () {
@@ -12697,7 +13504,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     if (!autoCollapseBtn) return;
     autoCollapseBtn.classList.toggle('active', !!chatAutoCollapse);
     autoCollapseBtn.style.color = chatAutoCollapse ? 'var(--gem-primary)' : 'var(--gem-text-muted)';
-    autoCollapseBtn.title = chatAutoCollapse ? '智能悬浮收展 (已开启：光标进入左侧侧栏区域自动展开，移出自动收起)' : '固定常驻展开 (已锁定：侧栏保持常驻展开)';
+    autoCollapseBtn.title = chatAutoCollapse
+      ? '智能悬浮收展 · 已开启：光标移出左侧区域会自动收起（点击改为常驻展开）'
+      : '常驻展开 · 已锁定：侧栏不会自动收起（点击恢复智能悬浮收展）';
+    autoCollapseBtn.setAttribute('aria-label', chatAutoCollapse ? '智能悬浮收展已开启' : '常驻展开已锁定');
   }
   if (autoCollapseBtn) {
     updateAutoCollapseBtn();
@@ -12707,8 +13517,16 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       updateAutoCollapseBtn();
       if (!chatAutoCollapse) {
         cancelHoverTimers();
+        toast('已锁定为常驻展开：侧栏不再自动收起');
+      } else {
+        toast('已开启智能悬浮收展：光标移出左侧区域后自动收起');
+        // 开启时若光标已在侧栏外，立刻按规则收起，避免"开了却没反应"
+        var sbNow = $('#chat-threads');
+        if (sbNow && !sbNow.classList.contains('collapsed') &&
+            !isPointerInRevealZone(lastPointer.x, lastPointer.y)) {
+          scheduleHoverCollapse();
+        }
       }
-      toast(chatAutoCollapse ? '已开启：光标进入左侧侧栏区域自动展开，移出自动收起' : '已关闭：侧栏保持常驻展开');
     });
   }
   var toggleAllTreeBtn = $('#btn-toggle-all-tree');
@@ -12740,10 +13558,15 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     } else {
       renderPlatformList();
     }
+    toggleAllTreeBtn.classList.toggle('expanded', targetState);
     toast(targetState ? '已展开所有平台会话' : '已收起所有平台会话');
   });
   var viewArchivesBtn = $('#btn-view-archives');
   if (viewArchivesBtn) viewArchivesBtn.addEventListener('click', function () {
+    viewArchivesBtn.classList.remove('pulling');
+    void viewArchivesBtn.offsetWidth;
+    viewArchivesBtn.classList.add('pulling');
+    setTimeout(function () { viewArchivesBtn.classList.remove('pulling'); }, 460);
     openArchivesViewer();
   });
 
@@ -12800,6 +13623,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
     sessFilterBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       sessFilterMenu.hidden = !sessFilterMenu.hidden;
+      sessFilterBtn.classList.remove('pouring');
+      void sessFilterBtn.offsetWidth;
+      sessFilterBtn.classList.add('pouring');
+      setTimeout(function () { sessFilterBtn.classList.remove('pouring'); }, 420);
     });
     document.addEventListener('click', function (e) {
       if (!e.target.closest('#sess-filter-wrap')) sessFilterMenu.hidden = true;
@@ -12810,6 +13637,9 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
   }
 
   function openArchivesViewer() {
+    // 撤销式删除：点「删除」只做标记，关闭弹层（含点遮罩）时才真正落盘删除
+    var pendingDeletes = {};
+    $('#modal').classList.add('archive-viewer');
     api('/api/chat/archives').then(function (res) {
       var allArchives = (res && res.archives) || [];
       var searchQuery = '';
@@ -12956,6 +13786,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 
         function appendArchiveRow(arch) {
           var row = el('div', 'archive-item-row');
+          if (pendingDeletes[arch.file]) {
+            row.style.opacity = '0.42';
+            row.style.textDecoration = 'line-through';
+          }
           row.style.display = 'flex';
           row.style.alignItems = 'center';
           row.style.justifyContent = 'space-between';
@@ -13021,18 +13855,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
           });
 
           var deleteBtn = btn('删除', 'small danger', function () {
-            if (!confirm('确定彻底删除该归档会话吗？\n[' + (arch.title || '归档会话') + ']\n删除后将不可找回。')) return;
-            withBusy(deleteBtn, function () {
-              return api('/api/chat/delete-archive', { file: arch.file }).then(function () {
-                toast('归档已删除');
-                allArchives = allArchives.filter(function (x) { return x.file !== arch.file; });
-                $('#modal-title').textContent = '全部归档会话 (' + allArchives.length + ')';
-                renderList();
-                renderHeadActions();
-              }).catch(function (err) {
-                toast('删除失败: ' + err.message, true);
-              });
-            });
+            pendingDeletes[arch.file] = true;
+            renderList();
+            renderHeadActions();
+            toast('已标记删除 · 点「撤销」可恢复；关闭面板后生效');
           });
 
           actions.appendChild(viewBtn);
@@ -13076,18 +13902,10 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
           confirmPrompt.style.fontWeight = '500';
 
           var confirmBtn = btn('确认删除', 'danger small', function () {
-            withBusy(confirmBtn, function () {
-              return api('/api/chat/delete-all-archives', {}).then(function () {
-                allArchives = [];
-                $('#modal-title').textContent = '全部归档会话 (0)';
-                renderList();
-                renderHeadActions();
-                toast('已清空全部归档会话');
-              }).catch(function (err) {
-                toast('删除失败: ' + err.message, true);
-                renderHeadActions();
-              });
-            });
+            allArchives.forEach(function (a) { pendingDeletes[a.file] = true; });
+            renderList();
+            renderHeadActions();
+            toast('已全部标记删除 · 关闭面板后生效');
           });
 
           var cancelBtn = btn('取消', 'small', function () {
@@ -13112,8 +13930,41 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       $('#modal-err').style.display = 'none';
       $('#modal-ok').textContent = '关闭';
       modalResolver = { resolve: function () {}, inputs: {}, form: form };
+
+      // 「取消」在归档面板内改为「撤销」：有标记时恢复列表；无标记时保持原关闭行为
+      var cancelBtnEl = $('#modal-cancel');
+      var prevCancelText = cancelBtnEl.textContent;
+      cancelBtnEl.textContent = '撤销';
+      var undoHandler = function (e) {
+        if (Object.keys(pendingDeletes).length) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          pendingDeletes = {};
+          renderList();
+          renderHeadActions();
+          toast('已撤销删除');
+        }
+      };
+      cancelBtnEl.addEventListener('click', undoHandler, true);
+
+      // 关闭（含点遮罩、Esc、关闭按钮）时才提交待删除
+      var commitPendingDeletes = function () {
+        cancelBtnEl.textContent = prevCancelText;
+        cancelBtnEl.removeEventListener('click', undoHandler, true);
+        $('#modal').classList.remove('archive-viewer');
+        var files = Object.keys(pendingDeletes);
+        if (!files.length) return;
+        Promise.all(files.map(function (f) {
+          return api('/api/chat/delete-archive', { file: f }).catch(function () {});
+        })).then(function () {
+          toast('已删除 ' + files.length + ' 个归档会话');
+        });
+      };
+      $('#modal').addEventListener('close', commitPendingDeletes, { once: true });
+
       $('#modal').showModal();
     }).catch(function (err) {
+      $('#modal').classList.remove('archive-viewer');
       toast('获取归档列表失败: ' + err.message, true);
     });
   }
@@ -14784,7 +15635,6 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
       shell: { layer: false },
       aurora: { layer: true },
       dusk: { layer: true },
-      cyber: { layer: true },
       grid: { layer: true },
       custom: { layer: true }
     };
