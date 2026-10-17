@@ -137,7 +137,9 @@ def local_availability(worker, profile, model, directory=None):
             process_env[str(key)] = os.path.expandvars(os.path.expanduser(str(value)))
         executable = shutil.which(executable, path=process_env.get("PATH", os.defpath)) or (executable if Path(executable).is_file() else None)
         if not executable:
-            code, reason = "cli_missing", "本机找不到已配置 CLI；请检查安装路径。"
+            # 带上配置路径与「安装损坏」提示：CLI 自更新半途失败时文件会消失，
+            # 只报「找不到」会让人以为是配置写错。
+            code, reason = "cli_missing", f"本机找不到已配置的 CLI：{configured}；若该文件本应存在，多为该 CLI 自更新中断导致安装损坏，重装一次即可。"
         if not code and len(cli) > 1 and str(cli[1]).endswith((".py", ".js", ".mjs", ".cjs")):
             path = Path(os.path.expandvars(os.path.expanduser(str(cli[1]))))
             if path.is_absolute() and not path.is_file():
