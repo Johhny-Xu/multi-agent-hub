@@ -12667,13 +12667,31 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       }));
     }
     renderSessFilterMenu();
+    // 菜单右对齐到漏斗按钮；按钮紧贴侧栏左缘时，整块会越过 #chat-threads 的左边界
+    // （实测侧栏左缘 56、菜单左缘 49，被 overflow:hidden 裁掉 7px，左边框和圆角都看不见）。
+    // 夹取时直接调 right：盒子是 right 锚定的，margin-left 会被约束吸收、推不动它；
+    // 也不用 transform，避免和 menuDrop 动画抢同一个属性。
+    function clampSessFilterMenu() {
+      sessFilterMenu.style.right = '';
+      var wrap = sessFilterMenu.parentElement;
+      if (!wrap) return;
+      var sb = $('#chat-threads');
+      var minLeft = (sb ? sb.getBoundingClientRect().left : 0) + 8;
+      var menuLeft = wrap.getBoundingClientRect().left + sessFilterMenu.offsetLeft;
+      var shift = Math.ceil(minLeft - menuLeft);
+      if (shift > 0) sessFilterMenu.style.right = (-shift) + 'px';
+    }
     sessFilterBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       sessFilterMenu.hidden = !sessFilterMenu.hidden;
+      if (!sessFilterMenu.hidden) clampSessFilterMenu();
       sessFilterBtn.classList.remove('pouring');
       void sessFilterBtn.offsetWidth;
       sessFilterBtn.classList.add('pouring');
       setTimeout(function () { sessFilterBtn.classList.remove('pouring'); }, 420);
+    });
+    window.addEventListener('resize', function () {
+      if (!sessFilterMenu.hidden) clampSessFilterMenu();
     });
     document.addEventListener('click', function (e) {
       if (!e.target.closest('#sess-filter-wrap')) sessFilterMenu.hidden = true;
