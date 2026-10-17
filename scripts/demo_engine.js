@@ -433,6 +433,112 @@
     }
   };
 
+  const mockCheckinData = {
+    ok: true,
+    today: new Date().toISOString().slice(0, 10),
+    autoCheckin: true,
+    autoCheckinTime: '08:30',
+    platforms: {
+      workbuddy: {
+        available: true,
+        source: 'WorkBuddy 共享会话 / 本地凭据',
+        lastDate: '2026-10-17',
+        lastTime: '08:31:05',
+        status: 'pending',
+        message: '今日待打卡 (昨日获得 15 积分)',
+        credits: '15 积分',
+        consecutiveDays: 3
+      },
+      traecode: {
+        available: true,
+        source: '免客户端直连 (~/.trae-cn/trae-jwt-token)',
+        lastDate: '2026-10-17',
+        lastTime: '08:31:07',
+        status: 'pending',
+        message: '今日待打卡 (昨日领取 200 Credits)',
+        credits: '200 Credits',
+        consecutiveDays: 5
+      },
+      codearts: {
+        available: true,
+        source: '华为云码道 AK/SK 凭据',
+        lastDate: '2026-10-17',
+        lastTime: '08:31:10',
+        status: 'pending',
+        message: '今日待打卡 (GLM-5.3 码道福利算力包)',
+        credits: '100,000 Token',
+        consecutiveDays: 4
+      }
+    },
+    history: [
+      { time: '2026-10-17 08:31:10', platform: 'codearts', status: 'success', message: '华为云码道签到成功！GLM-5.3 码道福利算力包已领取。' },
+      { time: '2026-10-17 08:31:07', platform: 'traecode', status: 'success', message: '免客户端签到成功！领取 200 Credits (连签 5 天)' },
+      { time: '2026-10-17 08:31:05', platform: 'workbuddy', status: 'success', message: '签到成功！获得 15 积分 (连签 3 天)' }
+    ],
+    openSourceProjects: {
+      workbuddy: [
+        {
+          name: '88lin/workbuddy-auto-signin',
+          url: 'https://github.com/88lin/workbuddy-auto-signin',
+          description: '腾讯 WorkBuddy / CodeBuddy 自动签到脚本，纯 Python 标准库零依赖，自动探测本地凭据，覆盖每日加油站打卡、开盲盒、领任务、连登奖励与断登补签。',
+          tags: ['Python', '零依赖', '加油站积分', '断登补签']
+        },
+        {
+          name: 'yu-echo/workbuddy_checkin',
+          url: 'https://github.com/yu-echo/workbuddy_checkin',
+          description: '基于 GitHub Actions 的云端自动签到脚本，支持通过本地凭据提取 Refresh Token，支持微信 PushPlus 每日打卡推送。',
+          tags: ['GitHub Actions', '云端定时', '微信推送']
+        },
+        {
+          name: 'Coco-katarina/workbuddy-checkin',
+          url: 'https://github.com/Coco-katarina/workbuddy-checkin',
+          description: '本地自动化任务流与 AI Skill 触发，通过本地安全会话读取实现零上传打卡。',
+          tags: ['Skill', '本地凭据', '安全隔离']
+        }
+      ],
+      traecode: [
+        {
+          name: 'star620/TraeTools',
+          url: 'https://github.com/star620/TraeTools',
+          description: '针对 Trae Work 的多功能助手工具，集成多账号每日签到、Vault 登录态冷切换备份、用量统计，支持一键部署到 GitHub Actions 实现无客户端云端定时签到。',
+          tags: ['多账号', '免客户端', 'GitHub Actions', '用量统计']
+        },
+        {
+          name: 'bluechonk/trae-daily-checkin',
+          url: 'https://github.com/bluechonk/trae-daily-checkin',
+          description: 'TraeWork CN 每日签到自动化工具，深度解析 api.trae.cn 接口，结合轻量调用完成免客户端自动化打卡。',
+          tags: ['免客户端', 'API直签', '轻量化']
+        },
+        {
+          name: 'bluechonk/trae-credential-reverse-engineering',
+          url: 'https://github.com/bluechonk/trae-credential-reverse-engineering',
+          description: 'Trae 桌面端本地凭据存储结构、Token 刷新与请求签名协议逆向工程文档。',
+          tags: ['逆向文档', '协议分析', 'ECDSA']
+        }
+      ],
+      codearts: [
+        {
+          name: '2951461586/CodeArts2API',
+          url: 'https://github.com/2951461586/CodeArts2API',
+          description: '华为云码道 (CodeArts Agent) 上游网关，内置每日自动签到与福利 Token 领取逻辑 (/api/v1/benefit/claim)，支持多账号去重与定时轮询。',
+          tags: ['Go', 'CodeArts码道', '福利Token', '自动领取']
+        },
+        {
+          name: 'codearts-daily-claim',
+          url: 'https://gitcode.com/gh_mirrors/co/codearts-daily-claim',
+          description: '基于华为云 CodeArts 及开发者成长中心接口的每日积分与福利自动领取脚本，支持 AK/SK 与凭据注入。',
+          tags: ['Python', '成长中心', 'AK/SK签名', '开发者空间']
+        },
+        {
+          name: 'HotWater23/develope',
+          url: 'https://github.com/HotWater23/develope',
+          description: '华为云开发者成长中心扩展与自动化方案，支持自动检测任务与完成签到。',
+          tags: ['Node.js', '开发者空间', '任务打卡']
+        }
+      ]
+    }
+  };
+
   const mockThreads = [
     {
       agent: 'antigravity',
@@ -883,6 +989,43 @@
           ok: true,
           workers: mockWorkersQuotasData
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/checkin/status') {
+        return new Response(JSON.stringify(mockCheckinData), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/checkin/run') {
+        const plat = reqBody?.platform || 'all';
+        const now = new Date();
+        const timeStr = now.toTimeString().slice(0, 8);
+        const dateStr = now.toISOString().slice(0, 10);
+        const targets = plat === 'all' ? ['workbuddy', 'traecode', 'codearts'] : [plat];
+        const results = {};
+        targets.forEach(p => {
+          if (mockCheckinData.platforms[p]) {
+            mockCheckinData.platforms[p].status = 'success';
+            mockCheckinData.platforms[p].lastDate = dateStr;
+            mockCheckinData.platforms[p].lastTime = timeStr;
+            mockCheckinData.platforms[p].consecutiveDays = (mockCheckinData.platforms[p].consecutiveDays || 0) + 1;
+            const reward = p === 'workbuddy' ? '15积分 (加油站成长值)' : (p === 'traecode' ? '200 Credits (免客户端)' : '100,000 免费Token');
+            mockCheckinData.platforms[p].credits = reward;
+            mockCheckinData.platforms[p].message = `签到成功！获得 ${reward} (连续签到 ${mockCheckinData.platforms[p].consecutiveDays} 天)`;
+            results[p] = { platform: p, ok: true, status: 'success', message: mockCheckinData.platforms[p].message, credits: reward, today: dateStr, time: timeStr };
+            mockCheckinData.history.unshift({ time: `${dateStr} ${timeStr}`, platform: p, status: 'success', message: mockCheckinData.platforms[p].message });
+          }
+        });
+        return new Response(JSON.stringify({ ok: true, results, overview: mockCheckinData }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/checkin/config') {
+        if (typeof reqBody?.autoCheckin === 'boolean') mockCheckinData.autoCheckin = reqBody.autoCheckin;
+        if (reqBody?.autoCheckinTime) mockCheckinData.autoCheckinTime = reqBody.autoCheckinTime;
+        return new Response(JSON.stringify({ ok: true, overview: mockCheckinData }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/checkin/projects') {
+        return new Response(JSON.stringify({ ok: true, projects: mockCheckinData.openSourceProjects }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
       if (pathname === '/api/chat/agent-summary') {

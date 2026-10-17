@@ -17,6 +17,7 @@ const execFile = promisify(execFileCb);
 import * as vendorQuota from './vendor-quota.mjs';
 import * as accountsMod from './accounts.mjs';
 import * as authMod from './auth.mjs';
+import * as checkinMod from './checkin.mjs';
 
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
@@ -2323,6 +2324,24 @@ export async function start(context) {
         send(200, await vendorQuota.getAllQuotas({ force: true }));
         return;
       }
+      if (request.method === 'GET' && p === '/api/checkin/status') {
+        send(200, await checkinMod.getCheckinOverview());
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/checkin/run') {
+        const body = await readJson();
+        send(200, await checkinMod.runCheckin(body?.platform || 'all'));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/checkin/config') {
+        const body = await readJson();
+        send(200, await checkinMod.updateCheckinConfig(body || {}));
+        return;
+      }
+      if (request.method === 'GET' && p === '/api/checkin/projects') {
+        send(200, { ok: true, projects: checkinMod.OPEN_SOURCE_PROJECTS });
+        return;
+      }
       if (request.method === 'GET' && p === '/api/accounts') {
         send(200, await accountsMod.listAccounts());
         return;
@@ -3063,6 +3082,7 @@ export async function start(context) {
     });
   });
   context.logger.info('miniapp.runtime.listening');
+  checkinMod.startAutoCheckinScheduler();
 
   let disposal;
   const dispose = () => {
