@@ -270,7 +270,8 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       const providers = Object.keys(raw || {}).filter((k) => raw[k] && (raw[k].key || raw[k].access || raw[k].token));
       const first = providers[0] || 'provider';
       const label = `${cleanProfileLabel(first)}-${shortFp}`;
-      return { label, identity: `${first}:${fp}`, display: `${first} (${providers.length} 个提供方)` };
+      // 身份用 provider 集合而非文件指纹：重新写入同一把 Key 不应多出一个账号
+      return { label, identity: `providers:${providers.slice().sort().join('+')}`, display: `${first} (${providers.length} 个提供方)` };
     }
     if (worker === 'cline') {
       // cline 把账号身份放在 secrets.json 的 cline:clineAccountId（内含 idToken），取邮箱作为显示名
@@ -287,7 +288,10 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
         provider = String(prov?.lastUsedProvider || 'provider');
       } catch { /* ignore */ }
       const label = cleanProfileLabel(email) || `${cleanProfileLabel(provider)}-${shortFp}`;
-      return { label, identity: email || fp, display: email || `${provider} (${shortFp})` };
+      // 身份用「邮箱 / provider + 模型」而不是文件指纹：cline 每次 auth 都会重写 token，
+      // 用指纹会导致每次登录都新建一个账号。
+      const identity = email ? `email:${email}` : `provider:${provider}`;
+      return { label, identity, display: email || `${provider} (${shortFp})` };
     }
   } catch { /* fallback below */ }
   const fallbackLabel = `${cleanProfileLabel(worker).slice(0, 8)}-${shortFp}`;
