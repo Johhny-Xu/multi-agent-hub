@@ -44,3 +44,14 @@ test('new workers appear in the brand avatar and theme tables', () => {
   assert.match(HTML, /'opencode':\s*\{\s*color:/, 'opencode theme missing');
   assert.match(HTML, /'cline':\s*\{\s*color:/, 'cline theme missing');
 });
+
+// 单色 currentColor 图标在浅色模式下会继承深色主题的白色，必须有浅色专用的徽章底色
+test('mono-icon workers ship a light-mode avatar badge', () => {
+  for (const agent of ['opencode', 'cline']) {
+    assert.match(
+      HTML,
+      new RegExp(`\\[data-theme="light"\\]\\s*\\.platform-avatar\\[data-agent="${agent}"\\]`),
+      `${agent} has no light-mode avatar badge`,
+    );
+  }
+});

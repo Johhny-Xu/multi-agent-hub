@@ -5409,6 +5409,45 @@ html[data-preset="grid"][data-theme="light"] {
   border-radius: inherit;
 }
 
+/* opencode: currentColor 单色方块标。浅色模式和 Copilot 一样用深色徽章托白标，深色模式用半透明浅底+浅色标 */
+.platform-avatar[data-agent="opencode"],
+.agent-avatar-sm[data-agent="opencode"],
+.empty-avatar[data-agent="opencode"] {
+  background: rgba(203, 213, 225, 0.16) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(203, 213, 225, 0.32) !important;
+}
+[data-palette="light"] .platform-avatar[data-agent="opencode"],
+[data-theme="light"] .platform-avatar[data-agent="opencode"],
+[data-palette="light"] .agent-avatar-sm[data-agent="opencode"],
+[data-theme="light"] .agent-avatar-sm[data-agent="opencode"],
+[data-palette="light"] .empty-avatar[data-agent="opencode"],
+[data-theme="light"] .empty-avatar[data-agent="opencode"] {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.24) !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* Cline: currentColor 机器人标。浅色模式青色徽章用深青描边标（对比 ≥4.5:1），深色模式用半透明青底+亮青标 */
+.platform-avatar[data-agent="cline"],
+.agent-avatar-sm[data-agent="cline"],
+.empty-avatar[data-agent="cline"] {
+  background: rgba(34, 211, 238, 0.16) !important;
+  color: #67e8f9 !important;
+  border: 1px solid rgba(34, 211, 238, 0.34) !important;
+}
+[data-palette="light"] .platform-avatar[data-agent="cline"],
+[data-theme="light"] .platform-avatar[data-agent="cline"],
+[data-palette="light"] .agent-avatar-sm[data-agent="cline"],
+[data-theme="light"] .agent-avatar-sm[data-agent="cline"],
+[data-palette="light"] .empty-avatar[data-agent="cline"],
+[data-theme="light"] .empty-avatar[data-agent="cline"] {
+  background: #ecfeff !important;
+  color: #0e7490 !important;
+  border: 1px solid rgba(14, 116, 144, 0.28) !important;
+}
+
 /* 1. 全局画布与顶栏极简玻璃态 */
 body {
   background-color: var(--gem-bg-canvas) !important;
