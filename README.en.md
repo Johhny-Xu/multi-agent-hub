@@ -31,9 +31,9 @@
 
 ## What it does
 
-Built on standard MCP, native plugins and a sub-agent system, multi-agent-hub gives **9 AI coding Workers** and **6 native hosts** (plus any MCP client) one place to dispatch tasks, collect results, monitor quotas, manage accounts, and run a WebUI console.
+Built on standard MCP, native plugins and a sub-agent system, **multi-agent-hub** gives **11 AI coding Workers** and **6 native hosts** (plus any MCP client) one place to dispatch tasks, collect results, monitor quotas, manage accounts and run a WebUI console.
 
-Any AI client connected to the Hub can hand tasks to other AIs (each running on its own account quota) and share a task queue, mailbox and notes.
+Any AI client connected to the Hub can hand work to another AI: each task runs on the receiving worker's own account quota, while the task queue, mailbox and notes are shared.
 
 Three ways to plug in:
 
@@ -45,10 +45,10 @@ Three ways to plug in:
 
 **Highlights**
 
-- 🤖 **11 Workers, one contract**: Antigravity, CodeBuddy (international / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, plus the new opencode and Cline.
-- 🔌 **6 native hosts**: native sub-agents, slash commands and workflows, with context isolated automatically.
-- 🔐 **OAuth for all 9 vendors inside the WebUI**: log in, log out, save and switch accounts without SSH; login state is read from real on-disk credentials, so there are no fake successes.
-- ⚡ **One-click Worker on/off, synced everywhere**: disabled Workers are rejected before dispatch (`profile_disabled`), so no quota is wasted.
+- 🤖 **11 Workers under one contract**: Antigravity, CodeBuddy (international / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode and Cline.
+- 🔌 **6 native hosts, deeply integrated**: native sub-agents, slash commands and workflows, with context isolated automatically.
+- 🔐 **Log in to all 11 Workers from the WebUI**: nine OAuth vendors plus Cline's device code and opencode API keys; log in, log out, save and switch accounts without SSH, with login state read from real on-disk credentials so there are no fake successes.
+- ⚡ **Switch Workers on or off once, everywhere**: disabled Workers are rejected before dispatch (`profile_disabled`), so no quota is wasted.
 - 🛡️ **Strict terminal states**: empty answers, known abnormal exits and partial answers after a timeout are rejected; the original `ref` is kept and a Worker can never dispatch to itself.
 - 🔄 **Flexible deployment**: same machine or separate; pure Windows, pure Linux, or Windows ↔ Linux (LAN or SSH reverse tunnel).
 - 🔍 **Auto-discovery**: LAN and local Hub broadcast scanning; the MCP bridge reconnects after a config restore; config and credentials live outside the source tree, so upgrades keep task history.
@@ -207,7 +207,7 @@ See [Native host plugins](#native-host-plugins).
 | **Huawei CodeArts / VS Code** | In the IDE's Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.1.carts` / `.vsix`; or `.\install.cmd --component plugins --native-hosts codearts --project <workspace>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
 | **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.1-minimax-plugin.zip` in the desktop or cloud app; CLI: `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
-| **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <workspace>`; registers a local plugin marketplace and writes 9 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
+| **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <workspace>`; registers a local plugin marketplace and writes 11 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
 | **Google Antigravity** | `.\install.cmd --component plugins --native-hosts antigravity`; installs to `~/.gemini/config/plugins/multi-agent-hub`, restart to load | [antigravity](integrations/antigravity/README.md) |
 
@@ -223,7 +223,7 @@ On Linux, replace `.\install.cmd` with `sh install.sh`.
 <details>
 <summary><b>CodeArts notes</b></summary>
 
-Ships 9 sub-agents, 3 slash commands, 1 dispatch skill, 1 Hooks plugin and 8 MCP tools. CodeArts can dispatch to others as a client and be dispatched to as a Worker (`worker="codearts"`, aliases `ca`, `huawei-codearts`).
+Ships 11 sub-agents, 3 slash commands, 1 dispatch skill, 1 Hooks plugin and 8 MCP tools. CodeArts can dispatch to others as a client and be dispatched to as a Worker (`worker="codearts"`, aliases `ca`, `huawei-codearts`).
 
 - **Single call path**: strictly `tool_search → tool_describe → tool_call`; no raw XML tags in prose, so nothing is dispatched twice; one dispatch per task, then the client polls.
 - **Permissions and terminal state**: on a host permission denial it returns `blocked_permission` with the original ref instead of retrying under another tool name; only a non-empty real Worker answer counts as `completed`.
@@ -335,11 +335,11 @@ Enable with `--with-console`; default port `8890`.
 | --- | --- | --- |
 | Windows regressions & DOM assertions | ✅ 32 groups + 7 DOM checks | See `docs/refactor-validation.json`, `tests/console_layout_theme_dom.mjs` |
 | Linux regressions & load tests | ✅ 29 groups + 4,500+ requests | 360 concurrent, 0 errors; see `docs/stage3-stress-report.json` and siblings |
-| Linux production Hub | ✅ Pass | 24 Hub tools, 9 Workers; config, history and auth preserved |
+| Linux production Hub | ✅ Pass | 24 Hub tools, 11 Workers; config, history and auth preserved |
 | Linux Antigravity CLI 1.3.1 | ✅ Real call | Native sub-agent `hub-mimocode` dispatched successfully |
 | Linux ZCode CLI 0.16.9 | ✅ Real call | Follow-up on the original ref returned the right answer |
 | Windows Codex / ZCode | ✅ Real call | Both native sub-agents returned results |
-| Windows Antigravity | ✅ Real call | `hub_status` / `hub_capabilities` list 9 Workers |
+| Windows Antigravity | ✅ Real call | `hub_status` / `hub_capabilities` list 11 Workers |
 | CodeArts native components & channels | ✅ Pass | Windows ↔ Linux LAN and SSH channels working |
 | Linux CodeArts own models | ✅ Real call | GLM-5.2 family completes in seconds; all processes exit cleanly |
 | Windows DSH | ⚠️ Blocked by account balance | Registration passes; model calls return `402 ACCOUNT_QUOTA` |

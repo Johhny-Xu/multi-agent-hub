@@ -21,6 +21,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **SVG 重绘**：`docs/architecture.svg` / `.en.svg` 字号提亮（正文最小 14px，`.micro` 12→14、`.tiny` 13.5→15）、`muted` 对比度加深、子卡片加宽消除文案溢出、Workers 面板改 11 行；`roadmap.svg` / `.en.svg` 同步 1.0.1 焦点。四份图保持纯手写无外部依赖。
 - **测试**：`worker_output_regressions.py` 新增 opencode 事件流与 cline NDJSON 用例；两个原生安装套件的 9→11 期待值对齐。
 
+本版同批合入的控制台与 Worker 打磨：
+
+- **WebUI 登录补齐两种 Worker**：`cline` 走官方 TUI 设备码流程（PTY 提取授权链接与 8 位验证码，浏览器授权后自动入账，也是 cline 免费模型的唯一入口）；`opencode` 用 `provider:api_key` 写入官方 `auth.json` 并以 `opencode auth list` 复核。cline 的 API Key 路径支持裸 Key 按前缀识别厂商，并在落盘后跑一次最小真实调用——官方 `cline auth` 只写配置不校验 Key，不做这步就会「假成功」。
+- **账号档案不再越登越多**：cline / opencode 的身份改用邮箱或 provider 组合，而非凭据文件指纹；重新登录同一 provider 会原地更新，不再每次生出一个 `cline-<hex>` 档案。
+- **失败不再静默**：异步任务失败/超时改为以代理消息展示 `⚠️ 任务未完成（status）`，此前写进默认隐藏的系统消息，界面上看起来像「没回复」。
+- **模型目录按实测校准**：cline-free 旧免费推广已下线，替换为实测可答话的 `openrouter/free`、`nvidia/nemotron-3.5-lightning:free`、`cohere/north-mini-code:free`，以及与 Cline 账号目录一致的 `deepseek/deepseek-v4.1-flash`、`anthropic/claude-sonnet-5.5`。
+- **CLI 缺失提示带路径**：`cli_missing` 现在给出配置的可执行文件路径，并提示「多为 CLI 自更新中断导致安装损坏，重装一次即可」。
+- **cline 单 token 提示词兼容**：其 argv 解析会把无空格的提示词当成子命令，配置末项改为 `{task} `（尾随一个空格）后可正常派发中文短句。
+
 > CLI 本体仍需各自安装并登录（`opencode auth login` / `cline auth`），Hub 只做环境探测与命令调用，不代管安装。
 
 ## [1.0.0] - 2026-10-16
