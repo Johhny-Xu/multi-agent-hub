@@ -1638,7 +1638,8 @@ export async function start(context) {
               await backfillCliSessionId(t, p.dispatchTime || p.posted);
             } else if (status === 'error' || status === 'failed' || status === 'timeout') {
               t.pending = t.pending.filter((x) => x !== p);
-              addMsg(t, 'sys', `异步任务结束但状态为 ${status}: ${String(text).slice(0, 300)}`, { ref: p.ref });
+              // 失败必须让用户看见：sys 角色在默认视图被隐藏，用户会以为「没回复」
+              addMsg(t, 'agent', `⚠️ 任务未完成（${status}）：\n${String(text).slice(0, 800)}`, { ref: p.ref, failed: true });
             }
           } catch { /* 枢纽抖动, 下轮再试 */ }
           finally { pollingPending.delete(p); }
