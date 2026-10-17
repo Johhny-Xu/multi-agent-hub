@@ -1905,6 +1905,28 @@ const CATALOG_MODELS = {
     { id: 'minimax-m3', name: 'MiniMax-M3', credits: '0.25x' },
     { id: 'step-5-preview', name: 'Step-5-Preview', credits: '0.50x' },
   ],
+  // opencode 自带免费档：opencode models 列出的 *-free 系列，无需任何 API Key
+  opencode: [
+    { id: 'opencode/deepseek-v4.1-flash-free', name: 'DeepSeek-V4.1-Flash (free)', tag: '免费' },
+    { id: 'opencode/glm-5.3-flash-free', name: 'GLM-5.3-Flash (free)', tag: '免费' },
+    { id: 'opencode/mimo-v2.6-flash-free', name: 'MiMo-V2.6-Flash (free)', tag: '免费' },
+    { id: 'opencode/longcat-2.5-preview-free', name: 'LongCat-2.5-Preview (free)', tag: '免费' },
+    { id: 'opencode/nemotron-3-ultra-free', name: 'Nemotron-3-Ultra (free)', tag: '免费' },
+    { id: 'opencode/nemotron-3.5-lightning-free', name: 'Nemotron-3.5-Lightning (free)', tag: '免费' },
+    { id: 'opencode/nemotron-3.5-super-vl-free', name: 'Nemotron-3.5-Super-VL (free)', tag: '免费' },
+    { id: 'opencode/space-bunny-free', name: 'Space-Bunny (free)', tag: '免费' },
+    { id: 'opencode/beam-free', name: 'Beam (free)', tag: '免费' },
+    { id: 'opencode/big-pickle', name: 'Big Pickle (free)', tag: '免费' },
+  ],
+  // cline 官方 cline-free 通道：零额度模型（取自 CLI 内置清单 + 客户端实配记录）
+  cline: [
+    { id: 'cline-free/deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash (cline-free)', tag: '免费' },
+    { id: 'cline-free/mimo-v2.6-flash', name: 'MiMo-V2.6-Flash (cline-free)', tag: '免费' },
+    { id: 'cline-free/muse-spark-1.3-contributor', name: 'Muse-Spark-1.3-Contributor (cline-free)', tag: '免费' },
+    { id: 'cline-free/nemotron-3.5-super-vl', name: 'Nemotron-3.5-Super-VL (cline-free)', tag: '免费' },
+    { id: 'cline-free/solar-mini4', name: 'Solar-Mini4 (cline-free)', tag: '免费' },
+    { id: 'cline-free/kat-coder-pro', name: 'Kat-Coder-Pro (cline-free)', tag: '免费' },
+  ],
 };
 
 async function loadAgents() {
