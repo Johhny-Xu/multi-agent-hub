@@ -41,6 +41,7 @@ const AGENT_ALIASES = {
   ca: 'codearts',
   codearts: 'codearts',
   'huawei-codearts': 'codearts',
+  oc: 'opencode',
 };
 const canonicalAgent = (value) => AGENT_ALIASES[String(value || '').trim().toLowerCase()] || String(value || '').trim();
 // 子代理直通端点绑定地址: 默认仅回环; 设 0.0.0.0 才暴露给局域网(无鉴权, 慎用)
