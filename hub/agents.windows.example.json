@@ -203,7 +203,10 @@
       "models": {
         "default": "deepseek/deepseek-v4.1-flash",
         "ds": "deepseek/deepseek-v4.1-flash",
-        "sonnet": "anthropic/claude-sonnet-5.5"
+        "sonnet": "anthropic/claude-sonnet-5.5",
+        "free": "openrouter/free",
+        "nem": "nvidia/nemotron-3.5-lightning:free",
+        "north": "cohere/north-mini-code:free"
       },
       "timeout_arg": "--timeout",
       "workdir_via": "--cwd",

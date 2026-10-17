@@ -2057,11 +2057,14 @@ const CATALOG_MODELS = {
     { id: 'opencode/beam-free', name: 'Beam (free)', tag: '免费' },
     { id: 'opencode/big-pickle', name: 'Big Pickle (free)', tag: '免费' },
   ],
-  // cline 的模型取决于所配 provider / 账号。cline-free 的免费推广活动已于 2026-10-17 结束
-  // （实测全部返回 Free model promotion ended），这里列出 Cline 账号目录里可用的模型。
+  // cline 的模型取决于所配 provider / 账号。cline-free 的旧免费推广已结束（返回 Free model promotion
+  // ended），但目录里 :free 结尾的仍然可用；下面三条是 2026-10-17 实测能答话的免费项。
   cline: [
     { id: 'deepseek/deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', tag: 'Cline 账号', default: true },
     { id: 'anthropic/claude-sonnet-5.5', name: 'Claude-Sonnet-5.5', tag: 'Cline 账号' },
+    { id: 'openrouter/free', name: 'OpenRouter Free', tag: '免费' },
+    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron-3.5-Lightning (free)', tag: '免费' },
+    { id: 'cohere/north-mini-code:free', name: 'North-Mini-Code (free)', tag: '免费' },
   ],
 };
 
