@@ -201,13 +201,9 @@
       ],
       "model_arg": "-m",
       "models": {
-        "default": "",
-        "ds41f": "cline-free/deepseek-v4.1-flash",
-        "mimo26f": "cline-free/mimo-v2.6-flash",
-        "muse13c": "cline-free/muse-spark-1.3-contributor",
-        "nemotron35vl": "cline-free/nemotron-3.5-super-vl",
-        "solar4": "cline-free/solar-mini4",
-        "kat": "cline-free/kat-coder-pro"
+        "default": "deepseek/deepseek-v4.1-flash",
+        "ds": "deepseek/deepseek-v4.1-flash",
+        "sonnet": "anthropic/claude-sonnet-5.5"
       },
       "timeout_arg": "--timeout",
       "workdir_via": "--cwd",

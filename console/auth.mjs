@@ -2057,14 +2057,11 @@ const CATALOG_MODELS = {
     { id: 'opencode/beam-free', name: 'Beam (free)', tag: '免费' },
     { id: 'opencode/big-pickle', name: 'Big Pickle (free)', tag: '免费' },
   ],
-  // cline 官方 cline-free 通道：零额度模型（取自 CLI 内置清单 + 客户端实配记录）
+  // cline 的模型取决于所配 provider / 账号。cline-free 的免费推广活动已于 2026-10-17 结束
+  // （实测全部返回 Free model promotion ended），这里列出 Cline 账号目录里可用的模型。
   cline: [
-    { id: 'cline-free/deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash (cline-free)', tag: '免费' },
-    { id: 'cline-free/mimo-v2.6-flash', name: 'MiMo-V2.6-Flash (cline-free)', tag: '免费' },
-    { id: 'cline-free/muse-spark-1.3-contributor', name: 'Muse-Spark-1.3-Contributor (cline-free)', tag: '免费' },
-    { id: 'cline-free/nemotron-3.5-super-vl', name: 'Nemotron-3.5-Super-VL (cline-free)', tag: '免费' },
-    { id: 'cline-free/solar-mini4', name: 'Solar-Mini4 (cline-free)', tag: '免费' },
-    { id: 'cline-free/kat-coder-pro', name: 'Kat-Coder-Pro (cline-free)', tag: '免费' },
+    { id: 'deepseek/deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', tag: 'Cline 账号', default: true },
+    { id: 'anthropic/claude-sonnet-5.5', name: 'Claude-Sonnet-5.5', tag: 'Cline 账号' },
   ],
 };
 
