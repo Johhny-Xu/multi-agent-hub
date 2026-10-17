@@ -9,6 +9,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [1.0.11] - 2026-10-17
+
+**工作台能打开会话里“说到”的文件**：worker 常在回复里直接写「已生成 /path/to/file.svg」，这类文件不进结构化 artifact，以前在工作台里看不到。本版把「本会话消息中确实出现过、且当前存在」的路径纳入只读白名单，工作台可直接预览图片、打开文本、定位附件。同时收口一轮 WebUI 视觉与交互。
+
+- **新增 `GET /api/artifact/raw`**：二进制/图片直出端点，20MB 上限，按扩展名映射 MIME（`svg` / `png` / `jpg` / `jpeg` / `gif` / `webp` / `bmp` / `ico` / `pdf`），`cache-control: private, max-age=60`。此前 `/api/artifact` 只回文本，图片只能看到路径。
+- **新增 `POST /api/artifact/stat`**：批量确认会话里提到的路径是否真实存在（单次最多 60 条），只回可读普通文件，附 `size` / `mtime` / `raw` 标记，供工作台渲染图片缩略图与文件行。
+- **白名单是收紧后的例外，不是放开**：`/api/artifact` 仍只允许控制台产物与枢纽 `results` 目录；新路径必须同时满足「本会话消息里出现过」「文件当前存在」「扩展名在文本/图片白名单内」三条，扫描结果缓存 3 秒，避免把任意文件读取暴露给 WebUI。
+- **`/api/artifact` 回包补 `path` / `size`**：预览卡片能显示真实路径与体积，不再是只有正文。
+
+工作台与侧栏：
+
+- **「附件与图」补会话内文件**：产物 / 图片 / 附件三类卡片共用一套卡片结构，图片走 `raw` 直出缩略图，附件显示名称、大小与修改时间；点开即预览，不再需要自己去文件管理器找。
+- **单条删除 ×**：20px 圆形半透明深底，hover 变实心红并微放大。删除只从列表移除，**不动服务器原文件**；空态保留「恢复已清理的 N 项」，误删可原地恢复。
+- **子代理卡片拖动排序**：HTML5 拖放，拖动中卡片半透明，`dragover` 按上下半区显示 `drop-before` / `drop-after` 插入线，落下写入 `agent_hub_agent_order` 本地记忆，刷新后保持。`suppressAgentClickUntil` 做 400ms 防误触，拖完不会顺手点开会话。
+- **`opencode` / `cline` 主题色补齐**：两者在 `AGENT_THEMES` 里有颜色，但缺 `.platform-item[data-agent=...]` 规则，卡片一直是默认色。补齐六项变量（`--agent-color` / `glow` / `surface` / `surface-hover` / `surface-active` / `border`）；浅色下 opencode 用深蓝黑徽章托白标（对比 ≈17.9:1）、cline 用浅青底配深青标（≈5.2:1），不刺眼也不糊。
+- **计数徽标统一低对比胶囊**：工作台角标与子代理未读由「实心 accent 圆」「红橙渐变 + 发光 + 2.2s 脉冲」改为 `color-mix(in srgb, accent 15%, transparent)` 底 + accent 文字，去掉渐变、阴影与脉冲。
+- **浮层按钮组钉在窗口最右**：`#chat-head-btns` 改常驻绝对定位，工作台展开时 `translateX(340px)` 抵消对话栏收窄，两态右缘零跳动，过渡曲线与工作台 `width` 同一条；右留白由 20px 收到 12px，顶栏 `.top-actions` 右内边距同步改 12px，于是「主题/连接点/服务器」与「⋯/工作台」两行按钮右缘齐平。
+- **工作台头部三个按钮移除**：删除 / 刷新 / 关闭收进卡片与空态操作；`.wb-head` 固定 `min-height:54px`，浮层按钮组与工作台头部垂直居中（偏差 0），底边留白 11px。
+- **侧栏自动收起不再被焦点卡死**：原判据 `hasFocus = activeEl && sb.contains(activeEl)`，只要在侧栏点过任何按钮，焦点残留就会永久拦住收起。改为仅「正在输入（INPUT/TEXTAREA/SELECT/contenteditable）或键盘焦点（`:focus-visible`）」时保持展开，并在开启自动收起时立刻按当前位置判定一次。
+- **锁图标与文案语义对调**：`.active`（自动收起已开启）原来显示闭锁却写「已开启」，自相矛盾。改为已开启显示开锁，文案统一为「智能悬浮收展 · 已开启」/「常驻展开 · 已锁定」，并补 `aria-label`。
+- **侧栏收起按钮恢复**：此前重构侧栏头部时把 `#btn-toggle-sidebar-collapse` 连容器一起删了，JS 仍在绑空节点。恢复为动作组第一个图标按钮，图标改成「圆角矩形 + 右分割线」的侧边栏样式。
+
+平台与能力：
+
+- **Linux 模板补齐 GitHub Copilot worker**：`hub/agents.example.json` 的 `github-copilot` 原指向 `/usr/local/bin/github-copilot-placeholder`，照抄跑不起来。改为可直接使用的官方 `copilot` 路径（npm 全局安装后通常在 `~/.local/bin/copilot` 或 `/usr/local/bin/copilot`，注释说明按 `which copilot` 改），参数与 Windows 模板一致：`--silent -p {task}`、`--model auto`。安装器本就用 `shutil.which('copilot')` 跨平台探测，登录走 `copilot login --device-code` + GNOME Keyring，Linux 侧无需额外步骤。
+- **`antigravity` / `traecode` 声明附件能力**：`hub/capabilities.json` 补 `attachments.file` / `attachments.image` = `prompt_path`，与两者实际「把路径写进提示词」的行为对齐。
+- **CodeBuddy 图片附件开启方法写进能力说明**：`notes` 补 `--allowedTools Read --permission-mode acceptEdits` 的具体写法，避免只看到「未声明验证」却不知道开关在哪。
+
+版本与一致性：
+
+- **MCP 桥版本号对齐**：7 份 `mcp/server.mjs` 的 `serverInfo.version` 自 `1.0.0` 起就没再跟过项目版本，本版统一到 `1.0.11`，7 份副本仍逐字节一致。
+- **机械对齐**：各清单（`marketplace.json`、各 `plugin.json`、`package.json`）、`console/server.mjs`、`hub/agent_hub.py`、`integrations/codearts/install.py`、`packaging/build.py`、扩展清单与 `extension.js` 兜底值、`RUN_ON_LINUX.md`、四张 SVG 的版本标注、以及测试里的期待值，全部由 `1.0.1` 改为 `1.0.11`。`demo.html` 与 `demo/index.html` 由 `scripts/build_demo.py` 重新生成。
+
 ## [1.0.1] - 2026-10-17
 
 **Worker 池扩容**：新增 `opencode` 与 `cline` 两种官方 CLI Worker，总数由 9 种增至 11 种；README 两张图重绘以提升可读性。

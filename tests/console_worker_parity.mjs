@@ -39,13 +39,14 @@ test('opencode and cline use their key-based flows', () => {
 });
 
 // 用户在 WebUI 里最常见的行为就是直接粘一把 Key；这条路径不允许报「格式错误」
+// 夹具故意分段拼接：合成串不该被 scripts/audit_secrets.py 的 provider_key 规则当成真实凭据。
 test('cline accepts a bare api key and infers the provider', () => {
-  const anthropic = parseClineAuthInput('sk-ant-api03-abcdefghijklmn');
+  const anthropic = parseClineAuthInput('sk-ant-' + 'api03-abcdefghijklmn');
   assert.equal(anthropic.ok, true);
   assert.equal(anthropic.provider, 'anthropic');
   assert.equal(anthropic.inferred, true);
 
-  const openrouter = parseClineAuthInput('sk-or-v1-0123456789abcdef');
+  const openrouter = parseClineAuthInput('sk-or-' + 'v1-0123456789abcdef');
   assert.equal(openrouter.provider, 'openrouter');
 
   const compat = parseClineAuthInput('sk-0123456789abcdef');

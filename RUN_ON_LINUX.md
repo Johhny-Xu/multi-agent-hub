@@ -1,6 +1,6 @@
 # 在 Linux 上运行（交付说明）
 
-本压缩包是 **multi-agent-hub v1.0.1 的完整源码**，解压后可在 Linux 上运行。
+本压缩包是 **multi-agent-hub v1.0.11 的完整源码**，解压后可在 Linux 上运行。
 
 ## 环境要求
 
@@ -12,7 +12,7 @@
 ## 跑起来
 
 ```bash
-cd multi-agent-hub-1.0.1      # 解压后的目录名；git clone 的是 multi-agent-hub
+cd multi-agent-hub-1.0.11      # 解压后的目录名；git clone 的是 multi-agent-hub
 ./install.sh                    # 一键安装：Hub 服务 + WebUI + 已安装宿主的原生插件
 ./install.sh --with-console     # 额外启动 Web 控制台（默认 :8890）
 ```
@@ -80,4 +80,4 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 ## 备注
 
 - 本文件随源码包一起分发，同时由仓库跟踪维护；打包时保持与仓库版本一致即可。
-- 版本 `1.0.1`，开源协议 Apache-2.0，详见 `LICENSE` 与 `README.md`。
+- 版本 `1.0.11`，开源协议 Apache-2.0，详见 `LICENSE` 与 `README.md`。
