@@ -193,11 +193,11 @@
     },
     "cline": {
       "role": "Cline 官方 CLI（--json NDJSON 无头模式）",
-      "description": "填写 npm 全局安装的实际二进制（cline 包按平台分发原生 exe，位于 npm 全局 node_modules 的平台包内）；避免 .cmd shim。需先 cline auth 完成登录。",
+      "description": "填写 npm 全局安装的实际二进制（cline 包按平台分发原生 exe，位于 npm 全局 node_modules 的平台包内）；避免 .cmd shim。需先 cline auth 完成登录。；注意 cline 的 argv 解析要求提示词含空格，cli 末项写作 {task} 加一个尾部空格（无害），否则单字任务会被当成命令名",
       "cli": [
         "C:/PATH/TO/cline.exe",
         "--json",
-        "{task}"
+        "{task} "
       ],
       "model_arg": "-m",
       "models": {

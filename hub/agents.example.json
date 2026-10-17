@@ -100,11 +100,11 @@
     },
     "cline": {
       "role": "Cline 官方 CLI（--json NDJSON 无头模式）",
-      "description": "cline --json 无头执行，输出 NDJSON；cli 路径请替换为本机真实可执行文件。需先 cline auth 完成登录。",
+      "description": "cline --json 无头执行，输出 NDJSON；cli 路径请替换为本机真实可执行文件。需先 cline auth 完成登录。；注意 cline 的 argv 解析要求提示词含空格，cli 末项写作 {task} 加一个尾部空格（无害），否则单字任务会被当成命令名",
       "cli": [
         "/usr/local/bin/cline-placeholder",
         "--json",
-        "{task}"
+        "{task} "
       ],
       "model_arg": "-m",
       "models": {
