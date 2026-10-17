@@ -25,7 +25,7 @@ SERVER_NAME = "multi_agent_hub"
 API_KEY_URL = "https://aistudio.google.com/app/api-keys"
 WORKERS = (
     "antigravity", "codebuddy", "codebuddy-cn", "github-copilot", "mimocode",
-    "minimaxcode", "traecode", "zcode", "codearts",
+    "minimaxcode", "traecode", "zcode", "codearts", "opencode", "cline",
 )
 MCP_TOOLS = ("hub_dispatch", "hub_fetch", "hub_status", "hub_capabilities", "hub_discover")
 REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$")
@@ -79,7 +79,7 @@ def plan_jobs(task: str, workers: list[str] | tuple[str, ...]) -> list[dict[str,
     if not isinstance(task, str) or not task.strip() or len(task) > 100_000:
         raise SetupError("TASK_INVALID: supply a nonempty task of at most 100000 characters")
     if not workers or len(workers) > len(WORKERS) or len(set(workers)) != len(workers):
-        raise SetupError("WORKERS_INVALID: choose one to nine distinct canonical workers")
+        raise SetupError("WORKERS_INVALID: choose one to eleven distinct canonical workers")
     if any(worker not in WORKERS for worker in workers):
         raise SetupError("WORKER_UNKNOWN")
     return [{"worker": worker, "task": task} for worker in workers]

@@ -1,6 +1,6 @@
 # multi-agent-hub for DeepSeek Harness (DSH)
 
-本目录提供独立 MCP 桥、9 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
+本目录提供独立 MCP 桥、11 个 worker 预设与 1 个总线预设、3 个原生工作流脚本，以及直接调用 Hub 的 Node runner。Hub 服务需先启动；worker 的模型、CLI 和认证由 Hub 配置决定。
 
 DSH 包版本为 1.4.0，随 multi-agent-hub 0.9.9 的独立 plugins 安装包分发。客户端与 Hub 可在不同机器；客户端不启动本地 Hub。连接设置统一保存在外部 `client.json`：Windows `%LOCALAPPDATA%/AgentHub/client.json`，Linux `~/.config/agenthub/client.json`（支持 XDG_CONFIG_HOME）。字段为 `url` 和可选 `token`；自定义路径使用 `AGENTHUB_CONFIG`。见[独立安装包](../../packaging/README.md)。
 
@@ -73,7 +73,7 @@ DSH 的 workflow 工具接收 meta、script 和可选 args；script 是带顶层
 | workflows/code-audit.dsh.js | code、timeout_s | CodeBuddy 架构审查成功后启动 Antigravity 安全审查 |
 | workflows/competitive-solve.dsh.js | problem、timeout_s | 两个独立解答均成功后启动一次比较 |
 
-workers 可使用数组或逗号分隔字符串，最多 9 项；timeout_s 默认为 300，范围为大于 0 且不超过 86400 秒。模板使用官方 agent(prompt, { schema, label }) 与 parallel()，检查返回对象的状态、worker、ref 和答案类型。null、失败、未知、未完成及无效 JSON 都不会被字符串化后当成成功。
+workers 可使用数组或逗号分隔字符串，最多 11 项；timeout_s 默认为 300，范围为大于 0 且不超过 86400 秒。模板使用官方 agent(prompt, { schema, label }) 与 parallel()，检查返回对象的状态、worker、ref 和答案类型。null、失败、未知、未完成及无效 JSON 都不会被字符串化后当成成功。
 
 原生子代理由模型执行工具调用，模板通过提示要求只调用一次，并校验结果；它不能保证模型必然遵守工具调用次数。官方普通子代理失败会返回 null，基础设施或脚本错误可能使整次 workflow 失败。[官方引擎实现](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/workflow/workflow-ptc/src/runtime.ts)
 

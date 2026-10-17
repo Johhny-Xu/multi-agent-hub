@@ -2,7 +2,7 @@
   "name": "multi-agent-hub",
   "displayName": "Multi-Agent Hub",
   "description": "Multi-agent orchestration and Hub bridge for CodeArts IDE & VS Code",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "agenthub",
   "license": "Apache-2.0",
   "engines": {
@@ -47,7 +47,7 @@
         },
         {
           "id": "multiAgentHub.workersView",
-          "name": "Workers 状态矩阵 (9 Workers)"
+          "name": "Workers 状态矩阵 (11 Workers)"
         },
         {
           "id": "multiAgentHub.actionsView",

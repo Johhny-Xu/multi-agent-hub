@@ -31,7 +31,7 @@ from availability_store import local_availability, record_outcome, refresh as re
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.0.1"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -165,6 +165,7 @@ AGENT_ALIASES = {
     "trae": "traecode",
     "ca": "codearts",
     "huawei-codearts": "codearts",
+    "oc": "opencode",
 }
 
 

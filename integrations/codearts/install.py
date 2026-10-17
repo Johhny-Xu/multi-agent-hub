@@ -15,11 +15,12 @@ import time
 import uuid
 
 SOURCE = Path(__file__).resolve().parent
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 SERVER_NAME = 'multi-agent-hub'
 MCP_FILES = ('server.mjs', 'hub.mjs', 'ask.mjs', 'login.mjs', 'config.mjs', 'discovery.mjs')
 WORKERS = ('antigravity', 'codebuddy', 'codebuddy-cn', 'github-copilot',
-           'mimocode', 'minimaxcode', 'traecode', 'zcode', 'codearts')
+           'mimocode', 'minimaxcode', 'traecode', 'zcode', 'codearts',
+           'opencode', 'cline')
 
 
 def digest(value):
