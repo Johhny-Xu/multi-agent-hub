@@ -88,6 +88,22 @@ async function syncCopilotKeyringFromMirror() {
 
 const exists = async (p) => { try { await stat(p); return true; } catch { return false; } };
 
+/**
+ * 把 srcHome 下的凭据文件复制进档案目录；缺失的文件跳过（cline 的 secrets.json /
+ * providers.json 由官方 CLI 按需写入，可能只有其一）。返回实际复制数量。
+ */
+async function copyCredFiles(srcHome, relFiles, destDir) {
+  let copied = 0;
+  for (const rel of relFiles) {
+    const base = rel.split('/').pop();
+    const src = join(srcHome, rel);
+    if (!(await exists(src))) continue;
+    await copyFile(src, join(destDir, base));
+    copied += 1;
+  }
+  return copied;
+}
+
 function profileDir(worker, name) {
   return join(ROOT, worker, name);
 }
@@ -425,10 +441,7 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
 
   const dest = profileDir(worker, targetName);
   await mkdir(dest, { recursive: true });
-  for (const rel of relFiles) {
-    const base = rel.split('/').pop();
-    await copyFile(join(HOME, rel), join(dest, base));
-  }
+  await copyCredFiles(HOME, relFiles, dest);
   await writeFile(
     join(dest, 'meta.json'),
     JSON.stringify({ savedAt: new Date().toISOString(), files: relFiles, identity, display, autoAdded: true }, null, 2),
@@ -469,11 +482,13 @@ export async function listAccounts() {
           matchesLive = true;
           for (const rel of relFiles) {
             const base = rel.split('/').pop();
-            try {
-              const liveTxt = await readFile(join(HOME, rel), 'utf-8');
-              const profTxt = await readFile(join(dir, name, base), 'utf-8');
-              if (liveTxt !== profTxt || liveTxt.trim() === '__LOGGED_OUT__') { matchesLive = false; break; }
-            } catch {
+            let liveTxt = null;
+            let profTxt = null;
+            try { liveTxt = await readFile(join(HOME, rel), 'utf-8'); } catch { liveTxt = null; }
+            try { profTxt = await readFile(join(dir, name, base), 'utf-8'); } catch { profTxt = null; }
+            // cline 的两个凭据文件都是可选的：任一侧缺失时跳过该文件，不因此判定不匹配
+            if (worker === 'cline' && (!liveTxt || !profTxt)) continue;
+            if (liveTxt === null || profTxt === null || liveTxt !== profTxt || liveTxt.trim() === '__LOGGED_OUT__') {
               matchesLive = false;
               break;
             }
@@ -563,11 +578,15 @@ async function _addFromSandbox(worker, name, loginId) {
       await writeFile(sbFile, tok, { mode: 0o600 });
     }
   }
+  // cline 的 secrets.json / providers.json 由官方 CLI 按需写入，任一存在即可归档
+  const anyCred = worker === 'cline';
+  let presentCreds = 0;
   for (const rel of rels) {
     const srcFile = join(srcHome, rel);
     try {
       const content = (await readFile(srcFile, 'utf-8')).trim();
       if (!content || content === '__LOGGED_OUT__') throw new Error('empty');
+      presentCreds += 1;
     } catch {
       // codebuddy 新版 CLI 把会话写进 XDG 共享存储而非配置目录：尝试从共享存储镜像出 legacy auth.info
       if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
@@ -581,8 +600,12 @@ async function _addFromSandbox(worker, name, loginId) {
           continue;
         }
       }
+      if (anyCred) continue;
       return { ok: false, error: `尚未检测到新登录凭据（若授权后浏览器跳转到了 localhost 回调地址，请复制浏览器地址栏完整链接粘贴到上方输入框并点击「提交」）` };
     }
+  }
+  if (anyCred && presentCreds === 0) {
+    return { ok: false, error: '尚未检测到新登录凭据：sandbox 里没有 ~/.cline/data 凭据文件，请重新执行登录' };
   }
   // 复用各 worker 专属有效性校验（如 codebuddy 半成品 URL、mimocode 空通道），拦住未完成的授权
   if (!(await isLiveCredValid(worker, rels, srcHome))) {
@@ -627,10 +650,7 @@ async function _addFromSandbox(worker, name, loginId) {
 
   const dest = profileDir(worker, finalName);
   await mkdir(dest, { recursive: true });
-  for (const rel of rels) {
-    const base = rel.split('/').pop();
-    await copyFile(join(srcHome, rel), join(dest, base));
-  }
+  await copyCredFiles(srcHome, rels, dest);
   await writeFile(
     join(dest, 'meta.json'),
     JSON.stringify({ savedAt: new Date().toISOString(), via: 'oauth-add', identity, display }, null, 2),
@@ -648,18 +668,22 @@ async function _switchAccount(worker, name) {
   try { await _autoSyncLiveAccount(worker); } catch { /* ignore */ }
 
   const src = profileDir(worker, name);
+  let archived = 0;
   for (const rel of relFiles) {
     const base = rel.split('/').pop();
-    if (!(await exists(join(src, base)))) return { ok: false, error: `档案缺少凭据文件: ${name}/${base}` };
+    if (await exists(join(src, base))) archived += 1;
   }
+  if (!archived) return { ok: false, error: `档案缺少凭据文件: ${name}` };
   const backupDir = join(ROOT, worker, `.backup-${Date.now()}`);
   await mkdir(backupDir, { recursive: true });
   for (const rel of relFiles) {
-    const liveAbs = join(HOME, rel);
     const base = rel.split('/').pop();
+    const archivedFile = join(src, base);
+    if (!(await exists(archivedFile))) continue;
+    const liveAbs = join(HOME, rel);
     if (await exists(liveAbs)) await copyFile(liveAbs, join(backupDir, base));
     await mkdir(join(HOME, rel, '..'), { recursive: true });
-    await copyFile(join(src, base), liveAbs);
+    await copyFile(archivedFile, liveAbs);
     await chmod(liveAbs, 0o600);
   }
   if (worker === 'github-copilot') {
