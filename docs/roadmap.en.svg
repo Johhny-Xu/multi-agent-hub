@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub roadmap: v1.0.0 is out as the first public release</title>
-  <desc id="roadmap-desc">v1.0.0 is the first public release: the pre-open-source consolidation from 0.9.9.7-0.9.9.9 (source-checkout install chain, Node 20 compatibility, tests decoupled from hosts) is promoted, and the post-review fixes are folded in (MCP bridge serverInfo alignment, packaging version guard, restructured READMEs). Credentials &amp; privacy audit clean, community files complete, GitHub Release and all artifacts published.</desc>
+  <title id="roadmap-title">multi-agent-hub roadmap: v1.0.1 adds opencode / cline Workers, 11 in total</title>
+  <desc id="roadmap-desc">v1.0.1 builds on the first public release v1.0.0 (pre-open-source consolidation, promoted, plus post-review fixes) by adding two official CLI Workers - opencode (oc · run --format json) and cline (--json NDJSON) - raising the Worker total from 9 to 11; the architecture and roadmap diagrams are redrawn in step, and the credentials &amp; privacy audit stays clean.</desc>
   <defs>
     <style>
       .title { font-size:34px; font-weight:700; fill:#0f172a; }
@@ -22,17 +22,17 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub roadmap</text>
-  <text x="64" y="108" class="meta">Updated 2026-10-16 · Current version v1.0.0 · 6 native hosts + any MCP client · Apache-2.0</text>
+  <text x="64" y="108" class="meta">Updated 2026-10-17 · Current version v1.0.1 · 6 native hosts + any MCP client · Apache-2.0</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.0 · current focus</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.1 · current focus</text>
     <rect x="916" y="151" width="268" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">First public release</text>
-    <text x="96" y="227" class="focus">Shipped: clean, installable, deliverable</text>
-    <text x="96" y="262" class="lead">Review fixes folded in · MCP versions aligned · packaging guard · READMEs restructured</text>
+    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">11 Workers total</text>
+    <text x="96" y="227" class="focus">Two new CLI Workers, 11 in total</text>
+    <text x="96" y="262" class="lead">opencode (oc · run --format json) · Cline (cline · --json NDJSON) join the pool</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">Already in place</text>
@@ -47,14 +47,14 @@
 
     <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">What this release ships</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">v1.0.0 published · 9 assets hash-checked</text>
+    <text x="716" y="351" class="body">opencode Worker (oc · run --format json)</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
-    <text x="716" y="384" class="body">MCP bridge aligned in all 7 copies</text>
+    <text x="716" y="384" class="body">Cline Worker (cline · --json NDJSON)</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">Extension builds fail on missing version</text>
+    <text x="716" y="417" class="body">Worker total 9 → 11 · diagrams redrawn</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
-    <text x="716" y="450" class="body">New READMEs: TOC / quick start / ports</text>
-    <text x="692" y="476" class="note">Audit 0 · community files &amp; handover ready.</text>
+    <text x="716" y="450" class="body">v1.0.0 review fixes &amp; artifacts kept</text>
+    <text x="692" y="476" class="note">Audit stays 0 · 1.0.0 launch results still stand.</text>
   </g>
 
   <text x="64" y="541" class="section">Version history</text>
@@ -85,9 +85,9 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.0</text>
-    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">Public release</text>
-    <text x="1024" y="675" class="stage">review fixes in</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.1</text>
+    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">11 Workers</text>
+    <text x="1024" y="675" class="stage">opencode / cline</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->
