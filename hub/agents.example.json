@@ -71,6 +71,39 @@
       "workdir_via": "--add-dir",
       "async_default": true
     },
+    "opencode": {
+      "role": "opencode 官方 CLI（run 非交互模式）",
+      "description": "opencode run 无头执行，--format json 输出事件流；cli 路径请替换为本机真实可执行文件。模型格式 provider/model，需先 opencode auth login。",
+      "cli": [
+        "/usr/local/bin/opencode-placeholder",
+        "run",
+        "--format",
+        "json",
+        "{task}"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": ""
+      },
+      "workdir_via": "--dir",
+      "async_default": true
+    },
+    "cline": {
+      "role": "Cline 官方 CLI（--json NDJSON 无头模式）",
+      "description": "cline --json 无头执行，输出 NDJSON；cli 路径请替换为本机真实可执行文件。需先 cline auth 完成登录。",
+      "cli": [
+        "/usr/local/bin/cline-placeholder",
+        "--json",
+        "{task}"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": ""
+      },
+      "timeout_arg": "--timeout",
+      "workdir_via": "--cwd",
+      "async_default": true
+    },
     "traecode": {
       "role": "桌面版 worker 示例（经专用网关派发, cli 为 null）",
       "description": "桌面版 worker 示例（经专用网关派发, cli 为 null）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",

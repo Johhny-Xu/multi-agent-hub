@@ -18,16 +18,20 @@ from urllib.parse import urlsplit, parse_qsl, urlencode, urlunsplit
 from command_runtime import prepare_command, spawn_owned, terminate_owned
 
 WORKERS = {"codebuddy", "codebuddy-cn", "minimaxcode", "github-copilot",
-           "antigravity", "mimocode", "zcode", "traecode", "codearts"}
+           "antigravity", "mimocode", "zcode", "traecode", "codearts",
+           "opencode", "cline"}
 COMMANDS = {"codebuddy": "codebuddy", "codebuddy-cn": "codebuddy",
             "minimaxcode": "mmx", "github-copilot": "copilot",
             "antigravity": "agy", "mimocode": "mimo", "zcode": "zcode",
-            "traecode": "traecli", "codearts": "codearts"}
+            "traecode": "traecli", "codearts": "codearts",
+            "opencode": "opencode", "cline": "cline"}
 HOSTS = {"codebuddy": ("codebuddy.ai", "copilot.tencent.com"),
          "codebuddy-cn": ("codebuddy.ai", "copilot.tencent.com"),
          "minimaxcode": ("minimax.io", "minimaxi.com", "minimax.cn"),
          "github-copilot": ("github.com",), "zcode": ("z.ai", "bigmodel.cn"),
          "mimocode": ("xiaomimimo.com",),
+         "opencode": ("opencode.ai",),
+         "cline": ("cline.bot",),
          "traecode": ("trae.cn", "trae.ai", "trae.com.cn", "trae.com")}
 ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 ACTIVE = {"preparing", "awaiting_user"}

@@ -19,7 +19,8 @@ NAME = 'multi-agent-hub'
 STATE_NAME = '.multi-agent-hub-install.json'
 MCP_FILES = ('server.mjs', 'hub.mjs', 'ask.mjs', 'login.mjs', 'config.mjs', 'discovery.mjs')
 WORKERS = ('antigravity', 'codebuddy', 'codebuddy-cn', 'github-copilot',
-           'mimocode', 'minimaxcode', 'traecode', 'zcode', 'codearts')
+           'mimocode', 'minimaxcode', 'traecode', 'zcode', 'codearts',
+           'opencode', 'cline')
 SKILLS = ('hub-dispatch', 'hub-status', 'hub-discover', 'hub-login')
 
 

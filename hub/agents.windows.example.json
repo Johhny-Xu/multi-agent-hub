@@ -164,6 +164,39 @@
         }
       }
     },
+    "opencode": {
+      "role": "opencode 官方 CLI（run 非交互模式）",
+      "description": "填写 npm 全局安装的实际二进制（opencode-ai 按平台分发原生 exe，位于 npm 全局 node_modules 的 opencode-* 平台包 bin 目录）；避免 .cmd shim。需先 opencode auth login。",
+      "cli": [
+        "C:/PATH/TO/opencode.exe",
+        "run",
+        "--format",
+        "json",
+        "{task}"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": ""
+      },
+      "workdir_via": "--dir",
+      "async_default": true
+    },
+    "cline": {
+      "role": "Cline 官方 CLI（--json NDJSON 无头模式）",
+      "description": "填写 npm 全局安装的实际二进制（cline 包按平台分发原生 exe，位于 npm 全局 node_modules 的平台包内）；避免 .cmd shim。需先 cline auth 完成登录。",
+      "cli": [
+        "C:/PATH/TO/cline.exe",
+        "--json",
+        "{task}"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": ""
+      },
+      "timeout_arg": "--timeout",
+      "workdir_via": "--cwd",
+      "async_default": true
+    },
     "traecode": {
       "role": "TraeCode 桌面网关",
       "description": "保留已建立的 trae_delegate 桌面通道，需要另外配置 TRAE_GATEWAY。原生 traecli.exe 的登录链路尚未通过完整验证。",
