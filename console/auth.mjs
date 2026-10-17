@@ -220,11 +220,13 @@ export const LOGIN_COMMANDS = {
     callbackHint: '粘贴 provider:api_key，例如 anthropic:sk-ant-xxx',
   },
   'cline': {
+    cmd: [resolveCliBin('cline', join(HOME, '.npm-global', 'bin', 'cline')), 'auth'],
     headless: true,
-    mode: 'cline_key',
+    mode: 'pty_device',
+    ptyAutoEnter: true,
     needsCallbackInput: true,
-    note: 'Cline 官方 CLI 用 provider 与 API Key 认证：可直接粘贴 Key（按 sk-ant-→anthropic、sk-or-v1-→openrouter、sk-→openai 自动识别），也可写成 provider|api_key、provider|model|api_key 或 provider|model|api_key|base_url（如 siliconflow|deepseek-ai/DeepSeek-V3.2-Exp|sk-xxx|https://api.siliconflow.cn/v1）；后端非交互执行 cline auth -p … -k … -m … 落盘，并跑一次最小真实调用确认可用（官方 auth 只写配置、不校验 Key）。若要用 cline-free 免费模型，需先在服务器终端 cline auth 走官方账号 OAuth',
-    callbackHint: '直接粘贴 API Key 即可；兼容网关请用 provider|model|key|base_url',
+    note: '点开下方 Cline 设备授权链接并输入面板显示的验证码，授权完成后 CLI 会自动写入 ~/.cline 并加入账号列表（cline-free 免费模型必须走这条路）。若想用 API Key，直接在下方输入框粘贴（裸 Key 或 provider|model|key|base_url），后端会改用非交互方式写入并做一次真实调用校验',
+    callbackHint: '浏览器授权完成后会话会自己结束并自动入账；要加 API Key 账号时在此粘贴',
   },
 };
 
@@ -950,7 +952,7 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
     const cleanEnv = { ...process.env, HOME: targetHome, DISPLAY: '', BROWSER: 'echo', TERM: 'xterm-256color', NO_COLOR: '1' };
     delete cleanEnv.CI;
     const ptyScript = [
-      'import os, pty, signal, sys',
+      'import os, pty, select, signal, sys',
       'pid, fd = pty.fork()',
       'if pid == 0:',
       '    os.execvp(sys.argv[1], sys.argv[1:])',
@@ -961,12 +963,22 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
       '    signal.signal(_s, _forward)',
       'try:',
       '    while True:',
-      '        try:',
-      '            data = os.read(fd, 4096)',
+      '        ready, _, _ = select.select([fd, 0], [], [], 1.0)',
+      '        if fd in ready:',
+      '            try:',
+      '                data = os.read(fd, 4096)',
+      '            except OSError:',
+      '                break',
       '            if not data: break',
       '            os.write(1, data)',
-      '        except OSError:',
-      '            break',
+      '        if 0 in ready:',
+      '            try:',
+      '                typed = os.read(0, 1024)',
+      '            except OSError:',
+      '                typed = b""',
+      '            if typed:',
+      '                try: os.write(fd, typed)',
+      '                except OSError: pass',
       'finally:',
       '    try: os.close(fd)',
       '    except OSError: pass',
@@ -983,6 +995,18 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
     entry.ownGroup = ownGroup;
     child.stdout.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
     child.stderr.on('data', (d) => { entry.buf += d.toString(); trim(entry); });
+    // cline auth 先显示「Sign in with Cline / ClinePass / ChatGPT / 自带 Key」菜单，默认项即账号登录。
+    // TUI 进入原始模式的时机不定，单次回车可能落在初始化前，所以按条件重试几次。
+    if (spec.ptyAutoEnter) {
+      const alreadyMoved = () => /Signing in|Your code|authkit\.cline|device\?user_code/i.test(stripAnsi(entry.buf));
+      [2500, 5000, 8000].forEach((delay) => {
+        const timer = setTimeout(() => {
+          if (alreadyMoved() || entry.exited) return;
+          try { child.stdin?.write('\r'); } catch { /* 子进程已退出 */ }
+        }, delay);
+        timer.unref?.();
+      });
+    }
     child.on('exit', async (code) => {
       if (worker === 'github-copilot' && code === 0) {
         try {
@@ -1411,14 +1435,16 @@ export function pollLogin(loginId) {
   const urls = cleanOut.match(URL_RE) || [];
   const deviceMatch = cleanOut.match(/(?:code|设备码)[:：\s]+([A-Z0-9]{4,8}-[A-Z0-9]{4,8})/i)
     || cleanOut.match(/\b([A-Z0-9]{4}-[A-Z0-9]{4})\b/);
-  const extractedUrl = urls.find((u) => /auth|oauth|login|device|token|authorize|iam/i.test(u)) || urls[0] || null;
+  // TUI 在链接后面紧贴边框字符（│ ─ ╯ …），URL_RE 会把它们一起吃掉，这里在第一个边框字符处截断
+  const needsUrl = (u) => u ? u.split(/[│┃┌┐└┘├┤┬┴┼─╭╮╰╯]/)[0].trim() : u;
+  const extractedUrl = urls.map(needsUrl).find((u) => /auth|oauth|login|device|token|authorize|iam/i.test(u)) || null;
   return {
     ok: true,
     worker: e.worker,
     mode: e.mode,
     region: e.region || null,
     output: cleanOut.slice(-1600),
-    url: e.authUrl || extractedUrl,
+    url: needsUrl(e.authUrl) || extractedUrl,
     secondaryUrl: e.secondaryUrl || null,
     deviceCode: e.deviceCode || (deviceMatch ? deviceMatch[1] : null),
     needsCallbackInput: !!e.needsCallbackInput,
@@ -1599,7 +1625,19 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         };
       }
 
-      // 6. cline: provider|api_key（可选 model / base_url）→ cline auth 非交互落盘
+      // 6. cline: PTY 设备码会话中的非 Key 输入转给 TUI；粘贴 API Key 则走非交互落盘
+      if (e.worker === 'cline' && e.mode === 'pty_device') {
+        const looksLikeKey = /^(sk-|gsk_|AIza|xai-|hf[-_])/i.test(input) || /^[A-Za-z0-9._-]{2,40}\s*[|:].{8,}$/.test(input);
+        if (!looksLikeKey) {
+          if (e.proc && e.proc.stdin && !e.exited) {
+            try { e.proc.stdin.write(input + '\r'); } catch { /* 子进程已退出 */ }
+            return { ok: true, worker: 'cline', note: '已发送到登录终端' };
+          }
+          return { ok: false, worker: 'cline', error: '登录终端已结束，请重新点击「登录」发起一次授权' };
+        }
+      }
+
+      // 6b. cline: provider|api_key（可选 model / base_url）→ cline auth 非交互落盘
       if (e.worker === 'cline') {
         const parsed = parseClineAuthInput(input);
         if (!parsed.ok) return { ok: false, worker: 'cline', error: parsed.error };

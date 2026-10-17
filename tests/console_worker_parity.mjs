@@ -28,7 +28,10 @@ test('every login entry carries a mode and instructions', () => {
 test('opencode and cline use their key-based flows', () => {
   assert.equal(LOGIN_COMMANDS.opencode.mode, 'opencode_key');
   assert.equal(LOGIN_COMMANDS.opencode.needsCallbackInput, true);
-  assert.equal(LOGIN_COMMANDS.cline.mode, 'cline_key');
+  // cline 走官方 TUI 的设备码授权（链接+验证码直接进面板），API Key 作为同一会话的备选输入
+  assert.equal(LOGIN_COMMANDS.cline.mode, 'pty_device');
+  assert.equal(LOGIN_COMMANDS.cline.ptyAutoEnter, true);
+  assert.ok(Array.isArray(LOGIN_COMMANDS.cline.cmd) && LOGIN_COMMANDS.cline.cmd.includes('auth'));
   assert.equal(LOGIN_COMMANDS.cline.needsCallbackInput, true);
   // 凭据文件必须指向官方 CLI 自己的落盘位置
   assert.deepEqual(WORKER_CRED_FILES.opencode, ['.local/share/opencode/auth.json']);
