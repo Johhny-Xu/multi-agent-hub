@@ -21,7 +21,7 @@ import * as authMod from './auth.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')

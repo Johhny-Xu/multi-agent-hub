@@ -1,10 +1,10 @@
 {
   "name": "agenthub-workers",
-  "version": "1.0.0",
-  "description": "Bridge nine multi-agent-hub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
+  "version": "1.0.1",
+  "description": "Bridge eleven multi-agent-hub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
   "description_i18n": {
-    "en": "Bridge nine multi-agent-hub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
-    "zh-CN": "把 multi-agent-hub 全部 9 个 worker 桥接为 ZCode 原生子智能体；提供派发/回收 MCP、官方登录链接与状态（hub_login）、并发调度技能、/hub-status 与 /hub-login。"
+    "en": "Bridge eleven multi-agent-hub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
+    "zh-CN": "把 multi-agent-hub 全部 11 个 worker 桥接为 ZCode 原生子智能体；提供派发/回收 MCP、官方登录链接与状态（hub_login）、并发调度技能、/hub-status 与 /hub-login。"
   },
   "author": {
     "name": "multi-agent-hub Contributors"

@@ -29,6 +29,8 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 （前两版发版时它们仍标注 `0.9.9.6`），新增 `docs/HANDOVER_20261016.md` 完整交接文档，
 并按方法论实测修掉两处 SVG 文字溢出。版本号机械对齐，无功能改动。
 
+`v1.0.1`（2026-10-17）：Worker 池扩容与配图重绘。新增 `opencode`（别名 `oc`，`run --format json` 事件流）与 `cline`（`--json` NDJSON）两种官方 CLI Worker，总数 9→11：配置模板（Linux / Windows / 极简）、`capabilities.json` 能力声明、`login_manager.py` 三张表、`output_parser.py` 的 `say`/`run_result` 识别、三套 agents 目录的路由代理、Antigravity SDK 与两个安装器的 `WORKERS` 清单、VS Code 扩展矩阵全部对齐。`docs/architecture.svg` 与 `roadmap.svg` 中英四份重绘：正文字号提亮、对比度加深、Workers 面板扩至 11 行。两者 CLI 仍需各自安装登录（`opencode auth login` / `cline auth`），WebUI OAuth 仍只覆盖原有 9 家。
+
 `v1.0.0`（2026-10-16）：首个公开正式版。把开源前的三段收口（`0.9.9.7` / `0.9.9.8` / `0.9.9.9`）转正的同时完成最后一道清理：`scripts/audit_secrets.py` 移除已退役的 hub-token 规则（该 token 已完成轮换，旧值不再具有任何效力）；两份 README 补记 TraeClaw 致谢；`docs/HANDOVER_20261016.md` 的凭据路径提示脱敏；新增 `CODE_OF_CONDUCT.md`（贡献者公约，改编自 Contributor Covenant 2.1）。版本号机械对齐，无功能改动。
 
 `v0.9.9.8`（2026-10-16）：补齐 `v0.9.9.7` 收口的另一半，来自对同一份源码包的另一路独立修复，两者改动完全不重叠（各 14 个文件）。修复 Node 20 下五个 DOM/ZCode 驱动因缺全局 `WebSocket` 而崩溃（内置 WebSocket 自 Node 21.2 才加入）、进程组归属与信号回收、PTY 登录脚本改用 `pty.fork()` 并透传退出码；补齐非作者机器上的路径发现（`agents.json`、CLI 可执行文件、codebuddy 会话目录、结果目录多候选）；`install.py` 增加源码目录构建能力；`login_manager_smoke` 与宿主解耦（交接文档待办项）。

@@ -1,6 +1,6 @@
 # agenthub-workers
 
-将 `multi-agent-hub` 的 9 个外部 worker 桥接为宿主原生插件能力（Skill + 自包含 stdio MCP + 原生子代理）。宿主模型负责任务划分与结果验收，worker 的 CLI、模型与认证在 Hub 主机上执行。
+将 `multi-agent-hub` 的 11 个外部 worker 桥接为宿主原生插件能力（Skill + 自包含 stdio MCP + 原生子代理）。宿主模型负责任务划分与结果验收，worker 的 CLI、模型与认证在 Hub 主机上执行。
 
 本插件包采用多清单零冲突共存结构，**一个目录同时原生适配四大插件规范**：
 - **MiniMax Plugin V1（MiniMax Code 桌面端 / MiniMax Agent 云端）**：[`.minimax-plugin/plugin.json`](./.minimax-plugin/plugin.json) + [`hub-bridge.mcp.json`](./hub-bridge.mcp.json) + [`skills/dispatch-hub/SKILL.md`](./skills/dispatch-hub/SKILL.md)
@@ -8,7 +8,7 @@
 - **ZCode IDE / CLI**：[`.zcode-plugin/plugin.json`](./.zcode-plugin/plugin.json)
 - **Agent Plugins Specification v1.0.0 (`agent-plugins.org`)**：[`plugin.json`](./plugin.json)
 
-## 原生组件（9 大 Worker）
+## 原生组件（11 大 Worker）
 
 | Agent 类型 | worker |
 | --- | --- |
@@ -21,6 +21,8 @@
 | `agenthub-workers:mimocode` | `mimocode` |
 | `agenthub-workers:traecode` | `traecode` |
 | `agenthub-workers:codearts` | `codearts` |
+| `agenthub-workers:opencode` | `opencode`（别名 `oc`） |
+| `agenthub-workers:cline` | `cline` |
 
 模型与工具能力以 Hub 配置及 `hub_capabilities` 返回为准。别名由桥归一；国际版和国内版使用独立官方登录。`skills/dispatch-hub/SKILL.md` 提供并发协作与多代理调度指导；`commands/` 提供 `hub-status`、`hub-login`、`hub-discover`。
 
@@ -54,7 +56,7 @@ server 名为 `hub-bridge`；宿主会给工具名添加插件命名空间。
 
 ### 1. MiniMax Code / MiniMax Agent 加载方式
 - **MiniMax Plugin V1（桌面端导入 / 官方 Marketplace 提交）**：
-  - 直接导入独立插件包 `agenthub-workers-1.0.0-minimax-plugin.zip`（ZIP 根目录直接包含 `.minimax-plugin/plugin.json`），或在 GitHub 提交表单中指定仓库子目录 `plugins/agenthub-workers`。
+  - 直接导入独立插件包 `agenthub-workers-1.0.1-minimax-plugin.zip`（ZIP 根目录直接包含 `.minimax-plugin/plugin.json`），或在 GitHub 提交表单中指定仓库子目录 `plugins/agenthub-workers`。
 - **MiniMax Code CLI (`mcode`) 本地加载**：
   - 使用 `mcode --plugin-dir /path/to/plugins/agenthub-workers` 或通过仓库根目录一键安装脚本 `install.cmd` / `./install.sh` 自动注册。
 

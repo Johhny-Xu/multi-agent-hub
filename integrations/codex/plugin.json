@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "agenthub-workers",
-  "version": "1.0.0",
-  "description": "Codex workflows, read-only Hub discovery and an MCP bridge to nine multi-agent-hub workers.",
+  "version": "1.0.1",
+  "description": "Codex workflows, read-only Hub discovery and an MCP bridge to eleven multi-agent-hub workers.",
   "author": {
     "name": "multi-agent-hub Contributors"
   },
@@ -11,7 +11,7 @@
     "com.openai": {
       "interface": {
         "displayName": "multi-agent-hub Workers",
-        "shortDescription": "Coordinate nine external workers through a self-hosted Hub.",
+        "shortDescription": "Coordinate eleven external workers through a self-hosted Hub.",
         "longDescription": "Dispatch work once, retain result references, and collect verified results with research, implementation review, and consultation workflows.",
         "developerName": "multi-agent-hub Contributors",
         "category": "Developer Tools"

@@ -9,6 +9,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [1.0.1] - 2026-10-17
+
+**Worker 池扩容**：新增 `opencode` 与 `cline` 两种官方 CLI Worker，总数由 9 种增至 11 种；README 两张图重绘以提升可读性。
+
+- **新增 `opencode` worker（别名 `oc`）**：`opencode run --format json` 无头执行，模型参数 `-m provider/model`、工作目录 `--dir`、附件 `--file`。`--format json` 输出的是事件流（`text` / `tool_use` / `step_start` / `step_finish` 逐行 JSON），按 per-part 快照归并成最终答案；已声明 `answer_snapshots` 语义，不声明未经验证的 thinking 控制。
+- **新增 `cline` worker**：`cline --json` 无头执行，模型参数 `-m`、超时 `--timeout`、工作目录 `--cwd`，附件以 `@路径` 写入提示词。输出为 NDJSON（`say` / `ask` / `agent_event` + 终结 `run_result`），`output_parser.py` 新增该形状的识别与 `run_result` 优先级；自动批准沿用 CLI 自身配置，Hub 不代传 `--yolo`。
+- **能力与登录表扩展**：`hub/capabilities.json` 补两份声明；`hub/login_manager.py` 的 `WORKERS` / `COMMANDS` / `HOSTS` 加入两行。两者暂无 WebUI OAuth 流程，`hub_login` 按既有兜底返回官方登录指引（`opencode auth login` / `cline auth`），不在对话中索取密钥。
+- **配置模板**：`agents.example.json`（Linux）、`agents.windows.example.json`、`agents.minimal.example.json` 同步加入两个条目；Windows 模板要求指向 npm 平台包里的原生 exe，避开 `.cmd` shim 差异。
+- **原生插件与子代理**：三套 agents 目录（`plugins/agenthub-workers`、`integrations/antigravity`、`integrations/codearts`）各补 `opencode` / `cline` 路由代理；`integrations/antigravity/native.py`、`integrations/codearts/install.py` 的 `WORKERS` 清单与 Antigravity SDK 白名单同步；VS Code 扩展的 Worker 矩阵与模型树补齐两项。
+- **SVG 重绘**：`docs/architecture.svg` / `.en.svg` 字号提亮（正文最小 14px，`.micro` 12→14、`.tiny` 13.5→15）、`muted` 对比度加深、子卡片加宽消除文案溢出、Workers 面板改 11 行；`roadmap.svg` / `.en.svg` 同步 1.0.1 焦点。四份图保持纯手写无外部依赖。
+- **测试**：`worker_output_regressions.py` 新增 opencode 事件流与 cline NDJSON 用例；两个原生安装套件的 9→11 期待值对齐。
+
+> CLI 本体仍需各自安装并登录（`opencode auth login` / `cline auth`），Hub 只做环境探测与命令调用，不代管安装。
+
 ## [1.0.0] - 2026-10-16
 
 **首个公开正式版**。把开源前的三段收口（`0.9.9.7` / `0.9.9.8` / `0.9.9.9`）正式转正，并完成最后一道清理：凭据与隐私面清零，社区文件补齐。

@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "agenthub-workers",
-  "version": "1.0.0",
-  "description": "Bridge nine multi-agent-hub workers with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, and concurrent dispatch skills.",
+  "version": "1.0.1",
+  "description": "Bridge eleven multi-agent-hub workers with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, and concurrent dispatch skills.",
   "author": {
     "name": "multi-agent-hub Contributors"
   },

@@ -5,7 +5,7 @@
 ## 包含什么
 
 - `plugin.json`：Antigravity 原生插件清单。
-- `agents/hub-*.md`：9 个原生路由子代理，对应每种 worker。
+- `agents/hub-*.md`：11 个原生路由子代理，对应每种 worker。
 - `skills/hub-{dispatch,status,discover,login}/SKILL.md`：4 个可通过 slash 命令调用的工作流。
 - `mcp_config.json` 和 `mcp/`：7 个 Hub 工具，复用项目的 MCP 桥。
 - `native.py`：Windows / Linux 安装、备份、归属检查及只读磁盘检查。
@@ -42,7 +42,7 @@ python3 integrations/antigravity/native.py --config "$HOME/.config/agenthub/clie
 python3 integrations/antigravity/native.py --inspect
 ```
 
-此命令仅检查磁盘中的清单、组件数及安装后变更，不证明宿主已加载。**首次新建插件目录后需重启 Antigravity**，然后在 Customizations 的 Installed 页面确认插件、9 个 agents、4 个 skills 和 1 个 MCP server。CLI 1.3.1 的 `agy plugin list` 只列导入记录，`agents` 也不能证明仅供子代理使用的条目是否载入；列表为空不等于目录插件失效。可先用 `agy plugin validate <插件目录>` 检查格式，再通过新会话实际调用本插件工具或 `hub-mimocode` 子代理确认加载。本安装器不会另行安装 CLI。
+此命令仅检查磁盘中的清单、组件数及安装后变更，不证明宿主已加载。**首次新建插件目录后需重启 Antigravity**，然后在 Customizations 的 Installed 页面确认插件、11 个 agents、4 个 skills 和 1 个 MCP server。CLI 1.3.1 的 `agy plugin list` 只列导入记录，`agents` 也不能证明仅供子代理使用的条目是否载入；列表为空不等于目录插件失效。可先用 `agy plugin validate <插件目录>` 检查格式，再通过新会话实际调用本插件工具或 `hub-mimocode` 子代理确认加载。本安装器不会另行安装 CLI。
 
 0.9.9 的 Linux CLI 实测已通过原生 `hub-mimocode` 子代理派发和原 ref 续查；Windows 桌面仍需用户重启后确认。两端完整范围见 [0.9.9 交付记录](https://github.com/Johhny-Xu/multi-agent-hub/blob/v0.9.9/docs/release-0.9.9.md)。
 

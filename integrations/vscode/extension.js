@@ -16,7 +16,9 @@ const STANDARD_WORKERS = [
   { id: 'minimaxcode', name: 'MiniMax', defaultModel: 'MiniMax-M3.1-Flash-Preview', desc: 'MiniMax 当季旗舰图文与代码分析 (M3.1 Flash / M3)' },
   { id: 'traecode', name: 'TraeCode', defaultModel: 'GLM-5.3-FlashX', desc: '字节 TraeCode 任务调度 (20 款官方模型, 0.06x ~ 1.50x 折扣倍率)' },
   { id: 'zcode', name: 'ZCode', defaultModel: 'GLM-5.3-Flash', desc: '智谱 ZCode 编程代理' },
-  { id: 'codearts', name: 'CodeArts (码道)', defaultModel: 'GLM-5.2', desc: '华为云码道官方企业级模型 (4 款已验证高可用模型, 0.70x)' }
+  { id: 'codearts', name: 'CodeArts (码道)', defaultModel: 'GLM-5.2', desc: '华为云码道官方企业级模型 (4 款已验证高可用模型, 0.70x)' },
+  { id: 'opencode', name: 'opencode', defaultModel: '', desc: 'opencode run --format json 无头模式 (provider/model 继承本地配置)' },
+  { id: 'cline', name: 'Cline', defaultModel: '', desc: 'Cline CLI --json 无头模式 (Cline 登录或自带 Key)' }
 ];
 
 // Refined model catalog per worker
@@ -96,6 +98,12 @@ const WORKER_MODELS = {
     'GLM-5.2-ArkTS-SPARK (0.70x)',
     'OpenPangu-2.0-Pro (0.70x)',
     'OpenPangu-2.0-Flash (0.35x)'
+  ],
+  opencode: [
+    '按 opencode 配置 (provider/model)'
+  ],
+  cline: [
+    '按 cline 配置 (provider/model)'
   ]
 };
 
@@ -315,7 +323,7 @@ function updateStatusBar(st) {
 
   if (st && st.connected) {
     statusBarItem.text = `$(radio-tower) Hub: 在线 (${st.latency || 0}ms)`;
-    statusBarItem.tooltip = `Multi-Agent Hub 在线 (v${st.version || '0.9.9'})\n端点: ${st.url}\n9 种 Worker 适配器已就绪\n(点击查看状态与快捷菜单)`;
+    statusBarItem.tooltip = `Multi-Agent Hub 在线 (v${st.version || '0.9.9'})\n端点: ${st.url}\n11 种 Worker 适配器已就绪\n(点击查看状态与快捷菜单)`;
   } else {
     statusBarItem.text = `$(alert) Hub: 离线`;
     const reason = (st && (st.error || st.reason)) ? (st.error || st.reason) : '尚未连接';
@@ -515,7 +523,7 @@ async function discoverHubs() {
     if (res.ok && res.data) {
       candidates.push({
         label: `$(vm) 本机 Hub (127.0.0.1:${port})`,
-        description: `v${res.data.version || '1.0.0'} · 免密可用`,
+        description: `v${res.data.version || '1.0.1'} · 免密可用`,
         detail: `端点: http://127.0.0.1:${port}/mcp`,
         url: `http://127.0.0.1:${port}/mcp`,
         host: '127.0.0.1',
@@ -532,7 +540,7 @@ async function discoverHubs() {
     if (res.ok && res.data && !candidates.some((c) => c.url.includes(ip))) {
       candidates.push({
         label: `$(server) 局域网 Hub (${ip}:8765)`,
-        description: `v${res.data.version || '1.0.0'} · 自动免密配对`,
+        description: `v${res.data.version || '1.0.1'} · 自动免密配对`,
         detail: `端点: http://${ip}:8765/mcp`,
         url: `http://${ip}:8765/mcp`,
         host: ip,
@@ -609,7 +617,7 @@ function activate(context) {
       const st = await refreshAllStatus();
       if (st.connected) {
         vscode.window.showInformationMessage(
-          `Multi-Agent Hub 连接正常！\n版本: ${st.version} | 延时: ${st.latency}ms\n地址: ${st.url}\n已准备 9 种 Worker 适配。`
+          `Multi-Agent Hub 连接正常！\n版本: ${st.version} | 延时: ${st.latency}ms\n地址: ${st.url}\n已准备 11 种 Worker 适配。`
         );
       } else {
         const pick = await vscode.window.showErrorMessage(
