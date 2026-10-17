@@ -109,7 +109,7 @@ def main():
                ("zcode_rpc", [node, "--test", "tests/zcode_rpc.test.mjs"]),
                ("codearts_native_plugin", [node, "--test", "tests/codearts_native_plugin.mjs"]),
                ("native_plugin_config", [node, "--test", "tests/native_plugins_config.mjs", "tests/native_plugins_contract.mjs", "tests/client_config.test.mjs"]),
-               ("console", [node, "--test", "tests/console_smoke.mjs", "tests/console_capabilities_dom.mjs", "tests/console_capabilities_core.mjs", "tests/console_worker_parity.mjs"]),
+               ("console", [node, "--test", "tests/console_smoke.mjs", "tests/console_capabilities_dom.mjs", "tests/console_capabilities_core.mjs", "tests/console_worker_parity.mjs", "tests/console_client_syntax.mjs"]),
                ("dsh_workflows", [node, "--test", "tests/dsh_workflows.test.mjs", "tests/dsh_connection.test.mjs"])]
     if os.name == "nt":
         groups += [("windows_bus", [sys.executable, "tests/windows_dispatch_smoke.py", "--report", str(options.report.with_name(options.report.stem + "-windows-bus.json"))]),
