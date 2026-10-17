@@ -73,7 +73,7 @@ class NativeInstall(unittest.TestCase):
         inventory = native.inspect(self.home)
         self.assertTrue(inventory['installed'])
         self.assertTrue(inventory['owned'])
-        self.assertEqual(inventory['agents'], 9)
+        self.assertEqual(inventory['agents'], 11)
         self.assertEqual(inventory['skills'], 4)
         self.assertEqual(inventory['modified'], [])
 

@@ -6,7 +6,7 @@ import { MultiAgentHubPlugin, ROUTING_INSTRUCTIONS, isHubDispatch } from '../int
 // the host-specific tool route and permission boundary present in each entry.
 const agentRoot = new URL('../integrations/codearts/agents/', import.meta.url);
 const agentFiles = (await readdir(agentRoot)).filter(name => /^hub-.*\.md$/.test(name));
-assert.equal(agentFiles.length, 9);
+assert.equal(agentFiles.length, 11);
 const guidance = [
   ['hook', ROUTING_INSTRUCTIONS],
   ['skill', await readFile(new URL('../integrations/codearts/skills/dispatch-hub/SKILL.md', import.meta.url), 'utf8')],

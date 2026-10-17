@@ -2,7 +2,7 @@
 name: dispatch-hub
 description: Delegate self-contained tasks through multi-agent-hub workers, coordinate independent work and collect real results in CodeArts Agent.
 ---
-Use the registered multi-agent-hub MCP tools and native hub-* agents. The nine worker IDs are antigravity, codebuddy, codebuddy-cn, github-copilot, mimocode, minimaxcode, traecode, zcode and codearts.
+Use the registered multi-agent-hub MCP tools and native hub-* agents. The eleven worker IDs are antigravity, codebuddy, codebuddy-cn, github-copilot, mimocode, minimaxcode, traecode, zcode, codearts, opencode and cline.
 
 **Mandatory Calling Path & Single Dispatch (强制调用准则)**:
 1. When invoking multi-agent-hub MCP tools in CodeArts, **strictly and exclusively follow the single calling path**: `tool_search → tool_describe → tool_call`.

@@ -38,7 +38,7 @@ class NativeInstall(unittest.TestCase):
         self.assertFalse(self.plugin.exists())
         report = self.run_install(apply=True)
         self.assertTrue(report['ok'])
-        self.assertEqual(len(list((self.home / 'agents').glob('*.md'))), 9)
+        self.assertEqual(len(list((self.home / 'agents').glob('*.md'))), 11)
         self.assertEqual(len(list((self.home / 'commands').glob('*.md'))), 3)
         ide = json.loads(self.settings.read_text())['mcpServers']['multi-agent-hub']
         cli = json.loads((self.home / 'codearts_cli.jsonc').read_text())['mcp']['multi-agent-hub']

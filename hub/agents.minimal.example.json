@@ -1,5 +1,5 @@
 {
-  "_comment": "极简配置示例：仅启用 MiniMax CLI (minimaxcode) 与 TraeCode 桌面端 (traecode)。本项目完全支持按需启用，无需配齐全部 9 个 Agent！",
+  "_comment": "极简配置示例：仅启用 MiniMax CLI (minimaxcode) 与 TraeCode 桌面端 (traecode)。本项目完全支持按需启用，无需配齐全部 11 个 Agent！",
   "agents": {
     "minimaxcode": {
       "role": "文本/问答 worker (MiniMax CLI)",

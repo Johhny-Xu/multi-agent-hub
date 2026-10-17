@@ -113,5 +113,18 @@ class WorkerOutputTests(unittest.TestCase):
         final = {"type":"message","role":"assistant","sessionId":"test","content":"answer","providerData":{"messageId":"b","stepSeq":2,"usage":{"outputTokensDetails":[{"reasoning_tokens":0}]}}}
         self.assertEqual(parse_usage(lines(event,final)), {"reasoning_tokens":10})
 
+    def test_opencode_event_stream_and_cline_ndjson(self):
+        opencode = lines({"type":"step_start","sessionID":"ses","part":{"type":"step-start"}},
+            {"type":"text","sessionID":"ses","part":{"id":"p1","messageID":"m1","type":"text","text":"Hello"}},
+            {"type":"text","sessionID":"ses","part":{"id":"p1","messageID":"m1","type":"text","text":"Hello world"}},
+            {"type":"step_finish","sessionID":"ses","part":{"type":"step-finish","tokens":{"input":3,"output":2}}})
+        self.assertEqual(parse_output(opencode), {"text":"Hello world","error":None})
+        cline = lines({"type":"say","say":"text","text":"partial","ts":1},
+            {"type":"say","say":"text","text":"Final answer","ts":2},
+            {"type":"run_result","text":"Final answer","ts":3})
+        self.assertEqual(parse_output(cline), {"text":"Final answer","error":None})
+        self.assertEqual(parse_output(lines({"type":"run_result","text":"Done","ts":2},{"type":"say","say":"text","text":"Done (stdout)","ts":3}))["text"], "Done")
+        self.assertEqual(parse_output(lines({"type":"run_result","text":"","error":"API key missing","ts":4}))["error"], "API key missing")
+
 if __name__ == "__main__":
     unittest.main()

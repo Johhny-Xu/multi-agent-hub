@@ -310,5 +310,57 @@
     "notes": "Use the official CodeArts configured default model unless a locally declared model is explicitly selected. CLI presence, OAuth records and exit code zero do not establish successful authentication or model execution."
   },
   "antigravity": {},
-  "traecode": {}
+  "traecode": {},
+  "opencode": {
+    "stream": {
+      "on": {
+        "args": [
+          "--format",
+          "json"
+        ]
+      },
+      "off": {
+        "args": [
+          "--format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "cli",
+        "flag": "--file"
+      },
+      "image": {
+        "mode": "cli",
+        "flag": "--file"
+      }
+    },
+    "stream_semantics": "answer_snapshots",
+    "notes": "opencode run --format json emits an event stream; text parts arrive as per-part snapshots keyed by messageID. Thinking display is a --thinking flag, not a provider reasoning guarantee, so no thinking control is declared."
+  },
+  "cline": {
+    "stream": {
+      "on": {
+        "args": [
+          "--json"
+        ]
+      },
+      "off": {
+        "args": [
+          "--json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "prompt_path"
+      },
+      "image": {
+        "mode": "prompt_path"
+      }
+    },
+    "stream_semantics": "answer_snapshots",
+    "notes": "cline --json streams NDJSON say/agent_event lines with a final run_result carrying the answer text. Attachments are delivered as @path mentions in the prompt. Auto-approval follows the CLI's own configuration; the hub does not pass --yolo."
+  }
 }

@@ -152,6 +152,14 @@ def _known(value):
         return isinstance(value.get("data"), dict) and ("timestamp" in value or "id" in value)
     if typ in ("text", "reasoning", "tool_use", "step_start", "step_finish", "error"):
         return "sessionID" in value and (isinstance(value.get("part"), dict) or typ == "error" and isinstance(value.get("error"), dict))
+    # Cline CLI --json NDJSON lines: say/ask carry the visible text, agent_event
+    # wraps streaming payloads, and run_result closes the run with the answer.
+    if typ in ("say", "ask"):
+        return isinstance(value.get("text"), str) and isinstance(value.get("ts"), (int, float))
+    if typ == "run_result":
+        return isinstance(value.get("text"), str)
+    if typ == "agent_event":
+        return isinstance(value.get("event"), dict)
     return isinstance(value.get("response"), str) and "sessionId" in value and any(key in value for key in ("traceId", "projection", "usage"))
 
 
@@ -288,6 +296,18 @@ def parse_output(raw, stderr=""):
                 mimo_parts[part.get("id", str(len(mimo_parts)))] = part["text"]
         elif typ == "error":
             error = _error_text(record.get("error")) or "CLI reported an error event"
+        elif typ == "run_result":
+            if isinstance(record.get("text"), str):
+                final = record["text"]
+            if record.get("error"):
+                error = _error_text(record.get("error"))
+        elif typ in ("say", "ask"):
+            if record.get("say", "text") == "text" and isinstance(record.get("text"), str):
+                last_assistant = record["text"]
+        elif typ == "agent_event":
+            event = record.get("event", {})
+            if isinstance(event.get("text"), str):
+                last_assistant = event["text"]
         elif typ is None and "response" in record:
             final = record["response"]
             projection = record.get("projection", {})
