@@ -223,8 +223,8 @@ export const LOGIN_COMMANDS = {
     headless: true,
     mode: 'cline_key',
     needsCallbackInput: true,
-    note: 'Cline 官方 CLI 用 provider 与 API Key 认证：粘贴 provider|api_key、provider|model|api_key 或 provider|model|api_key|base_url（如 anthropic|claude-sonnet-4-6|sk-ant-...），后端非交互执行 cline auth -p … -k … 落盘；也可在服务器终端运行 cline auth 走官方 OAuth',
-    callbackHint: '粘贴 provider|api_key 或 provider|model|api_key',
+    note: 'Cline 官方 CLI 用 provider 与 API Key 认证：可直接粘贴 Key（按 sk-ant-→anthropic、sk-or-v1-→openrouter、sk-→openai 自动识别），也可写成 provider|api_key、provider|model|api_key 或 provider|model|api_key|base_url（如 siliconflow|deepseek-ai/DeepSeek-V3.2-Exp|sk-xxx|https://api.siliconflow.cn/v1）；后端非交互执行 cline auth -p … -k … -m … 落盘，并跑一次最小真实调用确认可用（官方 auth 只写配置、不校验 Key）。若要用 cline-free 免费模型，需先在服务器终端 cline auth 走官方账号 OAuth',
+    callbackHint: '直接粘贴 API Key 即可；兼容网关请用 provider|model|key|base_url',
   },
 };
 
@@ -284,6 +284,85 @@ function runCliWithHome(bin, args, home, timeoutMs = 90_000) {
   });
 }
 
+/** Cline 的 Key 前缀 → provider：粘裸 Key 时按此推断，避免用户必须先背 provider id */
+const CLINE_KEY_PROVIDERS = [
+  [/^sk-ant-/, 'anthropic'],
+  [/^sk-or-v1-/, 'openrouter'],
+  [/^gsk_/, 'groq'],
+  [/^AIza/, 'gemini'],
+  [/^xai-/, 'xai'],
+  [/^hf_/, 'huggingface'],
+  [/^sk-proj-/, 'openai'],
+  [/^sk-/, 'openai'], // 其余 sk- 归为 OpenAI 兼容通道（SiliconFlow 等网关同样以 sk- 开头）
+];
+
+/**
+ * 解析 Cline 登录输入。支持：
+ *   provider|api_key
+ *   provider|model|api_key
+ *   provider|model|api_key|base_url
+ *   provider:api_key / provider api_key
+ *   裸 api_key（按前缀推断 provider）
+ * @returns {{ok: true, provider: string, model: string, apiKey: string, baseUrl: string, inferred: boolean} | {ok: false, error: string}}
+ */
+export function parseClineAuthInput(rawInput) {
+  const raw = String(rawInput || '').trim();
+  if (!raw) return { ok: false, error: '请粘贴 API Key，或使用 provider|api_key 形式' };
+  const piped = raw.split('|').map((s) => s.trim()).filter(Boolean);
+  let provider = '';
+  let model = '';
+  let apiKey = '';
+  let baseUrl = '';
+  if (piped.length === 2) { [provider, apiKey] = piped; }
+  else if (piped.length === 3) { [provider, model, apiKey] = piped; }
+  else if (piped.length >= 4) { [provider, model, apiKey, baseUrl] = piped; }
+
+  let inferred = false;
+  if (!provider) {
+    const single = piped[0] || raw;
+    const head = single.split(':')[0];
+    if (single.includes(':') && /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/.test(head) && !/^sk-/.test(single)) {
+      // provider:key（Key 自身以 sk- 开头时不要误判成 provider）
+      provider = head;
+      apiKey = single.slice(single.indexOf(':') + 1).trim();
+    } else if (/\s+/.test(single) && single.split(/\s+/).filter(Boolean).length === 2) {
+      [provider, apiKey] = single.split(/\s+/).filter(Boolean);
+    } else {
+      apiKey = single;
+      const hit = CLINE_KEY_PROVIDERS.find(([re]) => re.test(apiKey));
+      provider = hit ? hit[1] : '';
+      inferred = !!provider;
+    }
+  }
+
+  if (!apiKey || !/^\S{8,}$/.test(apiKey)) {
+    return { ok: false, error: 'API Key 不完整（至少 8 位、不能含空格），请重新粘贴完整 Key' };
+  }
+  if (!provider) {
+    return {
+      ok: false,
+      error: '无法从 Key 前缀判断厂商：请在 Key 前加 provider，例如 anthropic|sk-ant-xxx、openai|sk-xxx、openrouter|sk-or-v1-xxx',
+    };
+  }
+  return { ok: true, provider, model, apiKey, baseUrl, inferred };
+}
+
+/**
+ * cline auth 的快捷认证（-p + -k）强制要求 --modelid，未给模型时按厂商取官方示例默认值。
+ * 没有可靠默认值的厂商返回空串，由调用方要求用户补充模型。
+ */
+const CLINE_DEFAULT_MODELS = {
+  anthropic: 'claude-sonnet-4-6',
+  'openai-native': 'gpt-5',
+  openai: 'gpt-5',
+  gemini: 'gemini-3-pro',
+  'cline-free': 'cline-free/deepseek-v4.1-flash',
+};
+
+export function clineDefaultModel(provider) {
+  return CLINE_DEFAULT_MODELS[String(provider || '').trim().toLowerCase()] || '';
+}
+
 /**
  * cline 官方 CLI 把凭据写在 ~/.cline/data 下；secrets.json 或 providers.json 任一非空即视为已落盘。
  * @returns {Promise<boolean>}
@@ -296,6 +375,19 @@ async function isClineCredWritten(baseHome) {
     } catch { /* 文件不存在则继续看下一个 */ }
   }
   return false;
+}
+
+/**
+ * cline auth 只把配置写入 ~/.cline，并不会校验 Key 是否可用（假 Key 也会返回 0）。
+ * 所以落盘后再跑一次最小真实调用，只有拿到答案才算认证成功——不制造假成功。
+ * @returns {Promise<{ ok: boolean, code: number, text: string }>}
+ */
+async function verifyClineCredential(bin, home, model, timeoutMs = 120_000) {
+  const run = await runCliWithHome(bin, ['--json', '-m', model, 'reply with the single word OK'], home, timeoutMs);
+  const text = stripAnsi(run.stdout + run.stderr);
+  const authFailure = /Unauthorized|invalid[_ ]api[_ ]key|authentication (?:failed|required)|\b401\b|\b403\b|insufficient|quota/i.test(text)
+    || /"type"\s*:\s*"error"/.test(text);
+  return { ok: run.code === 0 && !authFailure, code: run.code, text };
 }
 
 function getMimoKeyName(targetHome) {
@@ -1509,30 +1601,25 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
 
       // 6. cline: provider|api_key（可选 model / base_url）→ cline auth 非交互落盘
       if (e.worker === 'cline') {
-        let provider = '';
-        let model = '';
-        let apiKey = '';
-        let baseUrl = '';
-        const parts = input.split('|').map((s) => s.trim()).filter(Boolean);
-        if (parts.length === 2) { [provider, apiKey] = parts; }
-        else if (parts.length === 3) { [provider, model, apiKey] = parts; }
-        else if (parts.length >= 4) { [provider, model, apiKey, baseUrl] = parts; }
-        else if (input.includes(':')) {
-          const idx = input.indexOf(':');
-          provider = input.slice(0, idx).trim();
-          apiKey = input.slice(idx + 1).trim();
-        }
-        if (!provider || !/^\S{8,}$/.test(apiKey)) {
-          return { ok: false, error: '格式应为 provider|api_key 或 provider|model|api_key' };
+        const parsed = parseClineAuthInput(input);
+        if (!parsed.ok) return { ok: false, worker: 'cline', error: parsed.error };
+        const { provider, apiKey, baseUrl } = parsed;
+        // cline 的快捷认证强制要求 --modelid：未指定时按厂商取默认值，取不到就明确要求补模型
+        const model = parsed.model || clineDefaultModel(provider);
+        if (!model) {
+          return {
+            ok: false,
+            worker: 'cline',
+            error: `cline 需要同时指定模型：请写成 ${provider}|模型ID|Key（例如 ${provider}|<model-id>|${apiKey.slice(0, 4)}…）`,
+          };
         }
         const clBin = resolveCliBin('cline', join(HOME, '.npm-global', 'bin', 'cline'));
-        const args = ['auth', '-p', provider, '-k', apiKey];
-        if (model) args.push('-m', model);
+        const args = ['auth', '-p', provider, '-k', apiKey, '-m', model];
         if (baseUrl) args.push('-b', baseUrl);
         // 密钥只经 argv 传给官方 CLI，不落日志
         const clRun = await runCliWithHome(clBin, args, e.targetHome, 90_000);
         const clText = stripAnsi(clRun.stdout + clRun.stderr);
-        e.buf += `\n[cline] cline auth 退出码=${clRun.code}${clRun.timeout ? '（超时）' : ''}\n`;
+        e.buf += `\n[cline] provider=${provider} / model=${model}${parsed.inferred ? '（provider 由 Key 前缀推断）' : ''}，cline auth 退出码=${clRun.code}${clRun.timeout ? '（超时）' : ''}\n`;
         if (clRun.code !== 0) {
           return { ok: false, worker: 'cline', error: `cline auth 失败: ${clText.slice(-300) || clRun.error || '未知错误'}` };
         }
@@ -1541,7 +1628,18 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
           e.buf += '[cline] ! 未检测到 ~/.cline 凭据文件\n';
           return { ok: false, worker: 'cline', error: 'cline auth 已返回成功，但未检测到 ~/.cline 凭据文件，请在服务器终端手动执行 cline auth 复核' };
         }
-        e.buf += '[cline] ✓ ~/.cline 凭据已写入\n';
+        e.buf += '[cline] ✓ ~/.cline 凭据已写入，开始最小真实调用校验…\n';
+        const verify = await verifyClineCredential(clBin, e.targetHome, model);
+        if (!verify.ok) {
+          e.buf += `[cline] ! 校验调用失败（exit=${verify.code}）：${verify.text.slice(-200)}\n`;
+          return {
+            ok: false,
+            worker: 'cline',
+            error: `凭据已写入但真实调用失败，未加入账号列表：${verify.text.slice(-200) || `exit=${verify.code}`}`
+              + (provider === 'openai' && !baseUrl ? '（若是兼容网关的 Key，请用 provider|model|key|base_url 形式）' : ''),
+          };
+        }
+        e.buf += '[cline] ✓ 真实调用通过\n';
         const clAcc = await finalizeLoginAccount(e, prefName || provider);
         if (clAcc && clAcc.ok === false) return { ok: false, worker: e.worker, error: clAcc.error || '凭据归档失败，请重试或稍候再检测' };
         const clName = clAcc?.name || e.savedAccountName || '';
@@ -1554,6 +1652,9 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
           worker: 'cline',
           accountName: clName,
           note: clName ? `Cline 认证成功，已自动添加并切换至账号「${clName}」` : `Cline 凭据已写入并生效（provider: ${provider}）`,
+          ...(parsed.inferred && provider === 'openai' && !baseUrl
+            ? { hint: '已按 openai 官方端点处理；若这是 SiliconFlow 等兼容网关的 Key，请用 provider|model|key|base_url 重新提交' }
+            : {}),
         };
       }
 
