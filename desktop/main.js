@@ -23,6 +23,27 @@ let currentBackendPort = 8890;
 let crashRestartCount = 0;
 const MAX_CRASH_RESTARTS = 1; // 崩溃自动重启至多 1 次
 let isAppQuitting = false;
+let cleanupDone = false;
+
+// ============================================================================
+// 0. 日志落盘
+// 打包后 stdout 看不见（GUI 子系统进程不接控制台），用户报障时没有任何凭据。
+// 主进程与后端的输出统一追加到 <userData>/logs/main-YYYYMMDD.log，按天自然滚动。
+// ============================================================================
+const LOG_DIR = path.join(app.getPath('userData'), 'logs');
+function appendLog(level, line) {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    const d = new Date();
+    const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    fs.appendFileSync(path.join(LOG_DIR, `main-${ymd}.log`), `${d.toISOString()} [${level}] ${line}\n`);
+  } catch { /* 日志失败不能影响主流程 */ }
+}
+const _log = console.log.bind(console);
+const _err = console.error.bind(console);
+const _fmt = (a) => a.map((x) => (typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })())).join(' ');
+console.log = (...a) => { const l = _fmt(a); _log(l); appendLog('info', l); };
+console.error = (...a) => { const l = _fmt(a); _err(l); appendLog('error', l); };
 
 // ============================================================================
 // 2. 运行时路径解析
@@ -260,7 +281,8 @@ function createMainWindow(port) {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // preload 只 require('electron')，不开 Node 集成也能跑，开沙箱更安全
+      sandbox: true,
       webSecurity: true,
     },
   });
@@ -276,6 +298,23 @@ function createMainWindow(port) {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     mainWindow.focus();
+  });
+
+  // 首屏加载失败不能只停在 show:false——用户会看到一个"没反应"的进程。
+  // 常见诱因：后端刚就绪窗口就 loadURL，或后端崩溃重启换了端口。重试 3 次后强制亮窗。
+  let loadRetries = 0;
+  mainWindow.webContents.on('did-fail-load', (event, code, desc, url, isMain) => {
+    if (!isMain || isAppQuitting) return;
+    if (loadRetries < 3) {
+      loadRetries++;
+      console.warn(`[main] 页面加载失败(${code} ${desc})，1.5s 后重试 ${loadRetries}/3: ${url}`);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) void mainWindow.loadURL(targetUrl);
+      }, 1500);
+    } else {
+      console.error('[main] 页面连续加载失败，强制显示窗口');
+      if (!mainWindow.isVisible()) mainWindow.show();
+    }
   });
 
   // 拦截外链点击，统一使用系统默认浏览器打开，保障客户端安全
@@ -383,8 +422,13 @@ app.on('window-all-closed', () => {
   }
 });
 
+// before-quit / will-quit / exit 会连着触发三次，cleanup 只做一次；
+// stopBackend 自身也有 null 守卫，这里再加闸门避免重复 postMessage / kill。
 const cleanupAndExit = () => {
+  if (cleanupDone) return;
+  cleanupDone = true;
   isAppQuitting = true;
+  appendLog('info', 'app cleanup: stopping backend');
   stopBackend();
 };
 
@@ -392,4 +436,3 @@ app.on('before-quit', cleanupAndExit);
 app.on('will-quit', cleanupAndExit);
 process.on('SIGINT', () => { cleanupAndExit(); process.exit(0); });
 process.on('SIGTERM', () => { cleanupAndExit(); process.exit(0); });
-process.on('exit', cleanupAndExit);
