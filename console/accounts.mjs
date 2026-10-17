@@ -41,7 +41,7 @@ const ACCOUNTS_WRITE_LOCK = 'accounts-write';
 
 /**
  * worker → 该账号身份对应的凭据文件（相对 HOME）。
- * 全部 9 个 worker 均支持档案保存、自动归档、切换与沙箱添加账号。
+ * 全部 11 个 worker 均支持档案保存、自动归档、切换与沙箱添加账号。
  */
 export const WORKER_CRED_FILES = {
   'codebuddy': ['.codebuddy/auth.info'],
@@ -53,6 +53,8 @@ export const WORKER_CRED_FILES = {
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
   'mimocode': ['.local/share/mimocode/auth.json'],
   'github-copilot': ['.config/github-copilot/copilot-token'],
+  'opencode': ['.local/share/opencode/auth.json'],
+  'cline': ['.cline/data/secrets.json', '.cline/data/settings/providers.json'],
 };
 
 /** 同步 github-copilot 的 gnome-keyring 与本地镜像文件 */
@@ -247,6 +249,30 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       const display = ak.length > 8 ? `AK:${ak.slice(0, 4)}…${ak.slice(-4)}` : label;
       return { label, identity: ak || fp, display };
     }
+    if (worker === 'opencode') {
+      const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
+      const providers = Object.keys(raw || {}).filter((k) => raw[k] && (raw[k].key || raw[k].access || raw[k].token));
+      const first = providers[0] || 'provider';
+      const label = `${cleanProfileLabel(first)}-${shortFp}`;
+      return { label, identity: `${first}:${fp}`, display: `${first} (${providers.length} 个提供方)` };
+    }
+    if (worker === 'cline') {
+      // cline 把账号身份放在 secrets.json 的 cline:clineAccountId（内含 idToken），取邮箱作为显示名
+      let email = '';
+      try {
+        const secrets = JSON.parse((await readFile(join(baseHome, '.cline/data/secrets.json'), 'utf-8')).replace(/^\uFEFF/, ''));
+        const acct = JSON.parse(String(secrets['cline:clineAccountId'] || '{}'));
+        const claims = decodeJwtPayload(acct.idToken || '') || {};
+        email = String(claims.email || acct.email || '').trim();
+      } catch { /* 无 OAuth 账号时按 provider 命名 */ }
+      let provider = 'provider';
+      try {
+        const prov = JSON.parse((await readFile(join(baseHome, '.cline/data/settings/providers.json'), 'utf-8')).replace(/^\uFEFF/, ''));
+        provider = String(prov?.lastUsedProvider || 'provider');
+      } catch { /* ignore */ }
+      const label = cleanProfileLabel(email) || `${cleanProfileLabel(provider)}-${shortFp}`;
+      return { label, identity: email || fp, display: email || `${provider} (${shortFp})` };
+    }
   } catch { /* fallback below */ }
   const fallbackLabel = `${cleanProfileLabel(worker).slice(0, 8)}-${shortFp}`;
   return { label: fallbackLabel, identity: fp, display: fallbackLabel };
@@ -255,16 +281,28 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
 /** 检查指定 HOME 下某 worker 是否存在有效凭据 */
 async function isLiveCredValid(worker, relFiles, baseHome = HOME) {
   if (!relFiles || !relFiles.length) return false;
+  // cline 的 secrets.json / providers.json 由官方 CLI 按需写入，任一存在且非空即视为已登录
+  const anyOf = worker === 'cline';
+  let present = 0;
   for (const rel of relFiles) {
     const abs = join(baseHome, rel);
-    if (!(await exists(abs))) return false;
+    if (!(await exists(abs))) {
+      if (anyOf) continue;
+      return false;
+    }
     try {
       const txt = (await readFile(abs, 'utf-8')).trim();
-      if (!txt || txt === '__LOGGED_OUT__') return false;
-      if (worker === 'mimocode') {
+      if (!txt || txt === '__LOGGED_OUT__') {
+        if (anyOf) continue;
+        return false;
+      }
+      if (worker === 'mimocode' || worker === 'opencode') {
         const d = JSON.parse(txt.replace(/^\uFEFF/, ''));
         const keys = Object.keys(d || {}).filter((k) => d[k] && (d[k].key || d[k].access || d[k].token));
-        if (!keys.length) return false;
+        if (!keys.length) {
+          if (anyOf) continue;
+          return false;
+        }
       }
       if (worker === 'codebuddy' || worker === 'codebuddy-cn') {
         // 未完成授权时 auth.accessToken 可能是 https://...started?state=... 跳转 URL 半成品，不算有效凭据
@@ -272,11 +310,13 @@ async function isLiveCredValid(worker, relFiles, baseHome = HOME) {
         const tok = String(d?.auth?.accessToken || '').trim();
         if (!tok || tok.startsWith('http')) return false;
       }
+      present += 1;
     } catch {
+      if (anyOf) continue;
       return false;
     }
   }
-  return true;
+  return anyOf ? present > 0 : true;
 }
 
 /**
@@ -503,7 +543,7 @@ async function _saveAccount(worker, name) {
   return { ok: true, worker, name: finalName, identity, display, savedAt: new Date().toISOString() };
 }
 
-/** 全部 9 个 worker 均支持沙箱隔离添加新账号 */
+/** 全部 11 个 worker 均支持沙箱隔离添加新账号 */
 export const SANDBOX_CRED_FILES = { ...WORKER_CRED_FILES };
 
 /** 沙箱添加账号：把沙箱 HOME 里新生成的凭据快照成档案并立即切换 */

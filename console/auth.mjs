@@ -1,6 +1,6 @@
 // @ts-check
-// Multi-Agent Hub WebUI 9-Worker 全量 OAuth 登录 / 退出 / 回调认证 / 模型管理模块（零第三方依赖）
-// 支持全部 9 个子代理 100% 通过 WebUI 完成 OAuth 授权登录、退出、沙箱添加新账号与回调/Token 认证：
+// Multi-Agent Hub WebUI 11-Worker 登录 / 退出 / 回调认证 / 模型管理模块（零第三方依赖）
+// 支持全部 11 个子代理通过 WebUI 完成登录、退出、沙箱添加新账号与回调/Token 认证：
 // 1. minimaxcode    : Python PTY 包装 mmx auth login --recommend --region=cn（提取设备码与链接）+ 支持粘贴 API Key
 // 2. codebuddy      : 官方 codebuddy --acp (external) JSON-RPC authenticate，秒级提取 _codebuddy.ai/authUrl 并自动落盘
 // 3. codebuddy-cn   : 官方 codebuddy --acp (internal) JSON-RPC authenticate，秒级提取 copilot.tencent.com 链接并自动落盘
@@ -10,6 +10,8 @@
 // 7. traecode       : 官方 Trae GetLoginGuidance + ExchangeToken OAuth 授权流（www.trae.cn / www.trae.ai + 回调链接/JWT 落盘）
 // 8. zcode          : 官方 ZCode CLI Polling OAuth（zcode.z.ai/api/v1/oauth/cli/init + 自动轮询 poll + enc:v1 加密落盘）
 // 9. codearts       : 华为云 IAM 访问密钥页面引导 + WebUI 内联 AK/SK 认证落盘
+// 10. opencode      : provider:api_key 直写官方 ~/.local/share/opencode/auth.json，并用 opencode auth list 复核
+// 11. cline         : provider|api_key 非交互执行官方 cline auth -p/-k/-m/-b，校验 ~/.cline 凭据后归档
 
 import { spawn, execFile as execFileCb } from 'node:child_process';
 import { createDecipheriv, createDiffieHellman, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
@@ -143,7 +145,7 @@ function zcodeProviderOf(region) {
   return String(region || '').trim().toLowerCase() === 'intl' ? 'zai' : 'bigmodel';
 }
 
-// ---------------------------------------------------------------- 登录命令表（全部 9 个 Worker 均支持 WebUI 登录）
+// ---------------------------------------------------------------- 登录命令表（全部 11 个 Worker 均支持 WebUI 登录）
 export const LOGIN_COMMANDS = {
   'minimaxcode': {
     cmd: [resolveCliBin('mmx', join(HOME, '.npm-global', 'bin', 'mmx')), 'auth', 'login', '--recommend', '--region=cn'],
@@ -210,6 +212,20 @@ export const LOGIN_COMMANDS = {
     note: '点击下方链接前往华为云 IAM 控制台获取访问密钥（AK/SK），在下方输入 AK 与 SK（格式 AK:SK 或分别填入）并点击「提交完成认证」',
     callbackHint: '输入格式：AK:SK（例如 XXXXxxxx:xxxxSecretxxxx）',
   },
+  'opencode': {
+    headless: true,
+    mode: 'opencode_key',
+    needsCallbackInput: true,
+    note: 'opencode 官方 CLI 用「提供方 + API Key」认证：在下方按 provider:api_key 格式粘贴（如 anthropic:sk-ant-...、siliconflow:sk-...、openrouter:sk-or-...），后端写入 ~/.local/share/opencode/auth.json 并用 opencode auth list 复核；也可直接在服务器终端运行 opencode auth login 走浏览器授权',
+    callbackHint: '粘贴 provider:api_key，例如 anthropic:sk-ant-xxx',
+  },
+  'cline': {
+    headless: true,
+    mode: 'cline_key',
+    needsCallbackInput: true,
+    note: 'Cline 官方 CLI 用 provider 与 API Key 认证：粘贴 provider|api_key、provider|model|api_key 或 provider|model|api_key|base_url（如 anthropic|claude-sonnet-4-6|sk-ant-...），后端非交互执行 cline auth -p … -k … 落盘；也可在服务器终端运行 cline auth 走官方 OAuth',
+    callbackHint: '粘贴 provider|api_key 或 provider|model|api_key',
+  },
 };
 
 /** 各 worker 退出时需要移走的凭据文件（相对 HOME） */
@@ -223,12 +239,63 @@ const LOGOUT_FILES = {
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
   'mimocode': ['.local/share/mimocode/auth.json'],
   'github-copilot': ['.config/github-copilot/copilot-token'],
+  'opencode': ['.local/share/opencode/auth.json'],
+  'cline': ['.cline/data/secrets.json', '.cline/data/settings/providers.json'],
 };
 
 function stripAnsi(str) {
   return String(str || '')
     .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
     .replace(/\x1B\][^\x07]*(\x07|\x1B\\)/g, '');
+}
+
+/**
+ * 在指定 HOME 下执行一次官方 CLI（不经过 shell，超时即回收进程）。
+ * opencode / cline 的 WebUI 认证都靠官方 CLI 自身落盘，这里只做「调用 + 复核」。
+ * @returns {Promise<{ code: number, stdout: string, stderr: string, timeout?: boolean, error?: string }>}
+ */
+function runCliWithHome(bin, args, home, timeoutMs = 90_000) {
+  return new Promise((resolve) => {
+    const isWinWrapper = process.platform === 'win32' && /\.(cmd|bat)$/i.test(bin);
+    const child = spawn(bin, args, {
+      env: { ...process.env, HOME: home, NO_COLOR: '1', CI: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWinWrapper,
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (code, extra = {}) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr, ...extra });
+    };
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      finish(-1, { timeout: true });
+    }, timeoutMs);
+    timer.unref?.();
+    child.stdout?.on('data', (d) => { stdout += d; });
+    child.stderr?.on('data', (d) => { stderr += d; });
+    child.on('error', (err) => finish(-1, { error: err.message }));
+    child.on('close', (code) => finish(typeof code === 'number' ? code : -1));
+  });
+}
+
+/**
+ * cline 官方 CLI 把凭据写在 ~/.cline/data 下；secrets.json 或 providers.json 任一非空即视为已落盘。
+ * @returns {Promise<boolean>}
+ */
+async function isClineCredWritten(baseHome) {
+  for (const rel of ['.cline/data/secrets.json', '.cline/data/settings/providers.json']) {
+    try {
+      const txt = (await readFile(join(baseHome, rel), 'utf-8')).trim();
+      if (txt && txt !== '__LOGGED_OUT__' && txt !== '{}') return true;
+    } catch { /* 文件不存在则继续看下一个 */ }
+  }
+  return false;
 }
 
 function getMimoKeyName(targetHome) {
@@ -1211,6 +1278,18 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
     return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, url: entry.authUrl, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
   }
 
+  // ---------------- 分支 8：opencode / cline 的 provider + API Key 认证流
+  if (spec.mode === 'opencode_key' || spec.mode === 'cline_key') {
+    if (spec.mode === 'opencode_key') {
+      entry.authUrl = 'https://opencode.ai/docs/providers';
+      entry.buf = '[opencode] 在下方输入 provider:api_key 并提交（provider 用 opencode 官方 id，如 anthropic / siliconflow / openrouter），后端写入 auth.json 后用 opencode auth list 复核。\n';
+    } else {
+      entry.authUrl = 'https://app.cline.bot/';
+      entry.buf = '[cline] 在下方输入 provider|api_key（可选 provider|model|api_key|base_url）并提交，后端执行 cline auth 非交互写入。\n';
+    }
+    return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, url: entry.authUrl, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
+  }
+
   return { ok: false, error: `未知的登录模式: ${spec.mode}` };
 }
 
@@ -1390,7 +1469,95 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         };
       }
 
-      // 5. CodeArts: AK/SK
+      // 5. opencode: provider:api_key 直写官方 auth.json（随后用官方 CLI 复核）
+      if (e.worker === 'opencode') {
+        const parsed = input.match(/^([A-Za-z0-9][A-Za-z0-9._-]{0,39})\s*[:|]\s*(\S{8,})$/)
+          || input.match(/^([A-Za-z0-9][A-Za-z0-9._-]{0,39})\s+(\S{8,})$/);
+        if (!parsed) return { ok: false, error: '格式应为 provider:api_key（例如 anthropic:sk-ant-xxx）' };
+        const provider = parsed[1].toLowerCase();
+        const apiKey = parsed[2].trim();
+        const authFile = join(e.targetHome, '.local', 'share', 'opencode', 'auth.json');
+        await mkdir(dirname(authFile), { recursive: true });
+        let authData = {};
+        try { authData = JSON.parse((await readFile(authFile, 'utf-8')).replace(/^\uFEFF/, '')); } catch { authData = {}; }
+        authData[provider] = { type: 'api', key: apiKey };
+        await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
+        e.buf += `\n[opencode] ✓ API Key 已写入 ${authFile}\n`;
+        // 用官方 CLI 复核 provider 是否被识别；拼错时明确失败，不伪装成功
+        const ocBin = resolveCliBin('opencode', join(HOME, '.npm-global', 'bin', 'opencode'));
+        const ocCheck = await runCliWithHome(ocBin, ['auth', 'list'], e.targetHome, 30_000);
+        const ocText = stripAnsi(ocCheck.stdout + ocCheck.stderr);
+        if (ocCheck.code !== 0 || !new RegExp(provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(ocText)) {
+          e.buf += `[opencode] ! opencode auth list 未能确认 provider（exit=${ocCheck.code}）\n`;
+          return { ok: false, worker: 'opencode', error: `provider「${provider}」未被 opencode 官方 CLI 识别，请核对 provider id（参考 opencode.ai/docs/providers）` };
+        }
+        e.buf += `[opencode] ✓ opencode auth list 已确认 provider ${provider}\n`;
+        const ocAcc = await finalizeLoginAccount(e, prefName || provider);
+        if (ocAcc && ocAcc.ok === false) return { ok: false, worker: e.worker, error: ocAcc.error || '凭据归档失败，请重试或稍候再检测' };
+        const ocName = ocAcc?.name || e.savedAccountName || '';
+        clearQuotaCache('opencode');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
+        return {
+          ok: true,
+          worker: 'opencode',
+          accountName: ocName,
+          note: ocName ? `opencode 认证成功，已自动添加并切换至账号「${ocName}」` : `opencode 凭据已写入并生效（provider: ${provider}）`,
+        };
+      }
+
+      // 6. cline: provider|api_key（可选 model / base_url）→ cline auth 非交互落盘
+      if (e.worker === 'cline') {
+        let provider = '';
+        let model = '';
+        let apiKey = '';
+        let baseUrl = '';
+        const parts = input.split('|').map((s) => s.trim()).filter(Boolean);
+        if (parts.length === 2) { [provider, apiKey] = parts; }
+        else if (parts.length === 3) { [provider, model, apiKey] = parts; }
+        else if (parts.length >= 4) { [provider, model, apiKey, baseUrl] = parts; }
+        else if (input.includes(':')) {
+          const idx = input.indexOf(':');
+          provider = input.slice(0, idx).trim();
+          apiKey = input.slice(idx + 1).trim();
+        }
+        if (!provider || !/^\S{8,}$/.test(apiKey)) {
+          return { ok: false, error: '格式应为 provider|api_key 或 provider|model|api_key' };
+        }
+        const clBin = resolveCliBin('cline', join(HOME, '.npm-global', 'bin', 'cline'));
+        const args = ['auth', '-p', provider, '-k', apiKey];
+        if (model) args.push('-m', model);
+        if (baseUrl) args.push('-b', baseUrl);
+        // 密钥只经 argv 传给官方 CLI，不落日志
+        const clRun = await runCliWithHome(clBin, args, e.targetHome, 90_000);
+        const clText = stripAnsi(clRun.stdout + clRun.stderr);
+        e.buf += `\n[cline] cline auth 退出码=${clRun.code}${clRun.timeout ? '（超时）' : ''}\n`;
+        if (clRun.code !== 0) {
+          return { ok: false, worker: 'cline', error: `cline auth 失败: ${clText.slice(-300) || clRun.error || '未知错误'}` };
+        }
+        const credOK = await isClineCredWritten(e.targetHome);
+        if (!credOK) {
+          e.buf += '[cline] ! 未检测到 ~/.cline 凭据文件\n';
+          return { ok: false, worker: 'cline', error: 'cline auth 已返回成功，但未检测到 ~/.cline 凭据文件，请在服务器终端手动执行 cline auth 复核' };
+        }
+        e.buf += '[cline] ✓ ~/.cline 凭据已写入\n';
+        const clAcc = await finalizeLoginAccount(e, prefName || provider);
+        if (clAcc && clAcc.ok === false) return { ok: false, worker: e.worker, error: clAcc.error || '凭据归档失败，请重试或稍候再检测' };
+        const clName = clAcc?.name || e.savedAccountName || '';
+        clearQuotaCache('cline');
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
+        return {
+          ok: true,
+          worker: 'cline',
+          accountName: clName,
+          note: clName ? `Cline 认证成功，已自动添加并切换至账号「${clName}」` : `Cline 凭据已写入并生效（provider: ${provider}）`,
+        };
+      }
+
+      // 7. CodeArts: AK/SK
       if (e.worker === 'codearts') {
         let ak = String(extra.ak || '').trim();
         let sk = String(extra.sk || '').trim();
@@ -1586,7 +1753,7 @@ export function cancelAllLogins() {
   }
 }
 
-// ---------------------------------------------------------------- 退出登录（全部 9 个 Worker）
+// ---------------------------------------------------------------- 退出登录（全部 11 个 Worker）
 export async function logout(worker) {
   const files = LOGOUT_FILES[worker];
   if (!files) return { ok: false, error: `该 worker 无可退出的凭据文件: ${worker}` };
