@@ -176,7 +176,17 @@
       ],
       "model_arg": "-m",
       "models": {
-        "default": ""
+        "default": "",
+        "ds41f": "opencode/deepseek-v4.1-flash-free",
+        "glm53f": "opencode/glm-5.3-flash-free",
+        "mimo26f": "opencode/mimo-v2.6-flash-free",
+        "longcat": "opencode/longcat-2.5-preview-free",
+        "nemotron3u": "opencode/nemotron-3-ultra-free",
+        "nemotron35l": "opencode/nemotron-3.5-lightning-free",
+        "nemotron35vl": "opencode/nemotron-3.5-super-vl-free",
+        "bunny": "opencode/space-bunny-free",
+        "beam": "opencode/beam-free",
+        "pickle": "opencode/big-pickle"
       },
       "workdir_via": "--dir",
       "async_default": true
@@ -191,7 +201,13 @@
       ],
       "model_arg": "-m",
       "models": {
-        "default": ""
+        "default": "",
+        "ds41f": "cline-free/deepseek-v4.1-flash",
+        "mimo26f": "cline-free/mimo-v2.6-flash",
+        "muse13c": "cline-free/muse-spark-1.3-contributor",
+        "nemotron35vl": "cline-free/nemotron-3.5-super-vl",
+        "solar4": "cline-free/solar-mini4",
+        "kat": "cline-free/kat-coder-pro"
       },
       "timeout_arg": "--timeout",
       "workdir_via": "--cwd",
