@@ -762,18 +762,22 @@ export async function start(context) {
     return Object.fromEntries(Object.entries(document.workers).map(([agent, worker]) => {
       const catalogList = MODEL_CATALOG[agent] || [];
       const workerModels = worker.models || [];
+      // worker.models 只覆盖 agents.json 别名表里出现过的模型；目录里其余条目
+      // 的可用性只能来自「实际派发过的结果」，否则一个被套餐拒绝的模型会永远显示可用。
+      const failures = worker.failures || {};
       const defaultModelId = worker.default_model || catalogList.find((m) => m.default)?.id || (workerModels.find((m) => m.default)?.id) || null;
 
       // 1. 以 MODEL_CATALOG 为基准（若该 worker 存在预设目录），完整保留所有模型及 credits、tag、default 属性
       const models = catalogList.map((cat) => {
         const matched = workerModels.find((wm) => wm.id === cat.id || (wm.aliases && wm.aliases.includes(cat.id)));
+        const blocked = failures[cat.id]?.blocking ? failures[cat.id] : null;
         const isDefault = (cat.id === defaultModelId) || (!defaultModelId && cat.default === true);
         const isAvailable = matched
           ? (worker.availability.enabled && matched.availability.enabled)
-          : (worker.availability.enabled);
+          : (worker.availability.enabled && !blocked);
         const reason = matched
           ? (matched.availability.reason || worker.availability.reason || '')
-          : (worker.availability.enabled ? '' : (worker.availability.reason || 'Worker 离线或不可用'));
+          : (blocked ? blocked.reason : (worker.availability.enabled ? '' : (worker.availability.reason || 'Worker 离线或不可用')));
         const capability = matched || {
           id: cat.id,
           aliases: [],

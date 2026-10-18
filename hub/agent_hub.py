@@ -27,7 +27,7 @@ from command_runtime import atomic_write_json, positive_timeout, prepare_command
 from state_store import StateFileLock, safe_component
 from result_store import read_result, update_result
 from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task, platform_name, public_model_capabilities, resolve_model
-from availability_store import local_availability, record_outcome, refresh as refresh_availability, signature as profile_signature
+from availability_store import local_availability, recorded as recorded_failures, record_outcome, refresh as refresh_availability, signature as profile_signature
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
@@ -688,6 +688,10 @@ def _tool_hub_capabilities_impl(args):
         workers[agent] = {"configured": is_configured, "default_model": default_model,
                           "model_selection": bool(profile.get("model_arg")),
                           "availability": local_availability(agent, profile, None), "models": models,
+                          # 客户端目录里可能声明了别名表之外的模型（如控制台的 MODEL_CATALOG），
+                          # 它们只能靠「实际派发过什么」来判断。这里把同一份限时失败记录一并给出，
+                          # 让客户端对被套餐拒绝/模型不存在的条目置灰，而不是继续当可用模型派发。
+                          "failures": recorded_failures(STATE, agent, profile),
                           "thinking": defaults["thinking"]["allowed"],
                           "stream": "stdout_progress" if profile.get("cli") else "gui_snapshot",
                           "attachments": {kind: item.get("mode") for kind, item in defaults["attachments"].items() if item["supported"]}}

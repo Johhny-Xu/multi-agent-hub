@@ -35,3 +35,4 @@ dist/
 # desktop shell build artifacts
 desktop/node_modules/
 desktop/dist/
+desktop/dist-*/

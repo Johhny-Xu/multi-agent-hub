@@ -161,3 +161,30 @@ def local_availability(worker, profile, model, directory=None):
             if failure["blocking"]:
                 result.update(enabled=False, code=failure["code"], reason=failure["reason"])
     return result
+
+
+def recorded(directory, worker, profile):
+    """Every failure recorded for this worker, keyed by model id.
+
+    local_availability() only answers for models named in the profile's alias
+    map. A worker may advertise far more models than that (the console catalog),
+    and those can only be judged from what actually happened when they were
+    dispatched. This exposes the same expiring records so a caller can mark
+    "recorded but undeclared" models the same way.
+    """
+    if directory is None:
+        return {}
+    path = _path(directory)
+    with StateFileLock(path.with_suffix(".lock")):
+        items = dict(_read(path)["workers"].get(worker) or {})
+    now = time.time()
+    result = {}
+    for model, item in items.items():
+        if not isinstance(item, dict) or item.get("profile_signature") not in (None, signature(profile)):
+            continue
+        code = item.get("code")
+        if code not in REASONS:
+            continue
+        result[model] = {"code": code, "reason": REASONS[code],
+                         "blocking": code in BLOCKING and item.get("expires_at", 0) > now}
+    return result

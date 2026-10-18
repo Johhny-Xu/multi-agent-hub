@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "hub"))
 import agent_hub as hub
 import async_worker as worker
-from availability_store import BLOCKING, REASONS, classify_failure, local_availability, record_outcome, refresh, signature
+from availability_store import BLOCKING, REASONS, classify_failure, local_availability, recorded, record_outcome, refresh, signature
 from output_parser import parse_output
 from task_contract import capabilities, cleanup_attachments, prepare_task, public_model_capabilities
 
@@ -126,6 +126,20 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(classify_failure("error", "MODEL_UNAVAILABLE"), "model_unavailable")
         self.assertEqual(classify_failure("error", "MODEL_SELECTION_NOT_APPLIED"), "model_unavailable")
         self.assertIsNone(classify_failure("completed", "A document discusses invalid API key and MODEL_UNAVAILABLE"))
+
+    def test_failures_are_visible_for_models_outside_the_alias_map(self):
+        """目录里的模型多数不在 agents.json 别名表里，只能靠派发记录判断可用性。"""
+        profile = {"cli": [sys.executable, "fixture.py", "{task}"], "models": {"default": "declared"}, "model_arg": "--model"}
+        sig = signature(profile)
+        self.assertEqual(recorded(self.base, "antigravity", profile), {})
+        record_outcome(self.base, "antigravity", "undeclared-model", "error", "400 model [undeclared-model] is not allowed for user type [free]", sig)
+        record_outcome(self.base, "antigravity", "declared", "completed", "ok", sig)
+        rows = recorded(self.base, "antigravity", profile)
+        self.assertEqual(rows["undeclared-model"]["code"], "plan_blocked")
+        self.assertTrue(rows["undeclared-model"]["blocking"])
+        self.assertNotIn("declared", rows)
+        # 配置变了以后旧记录不能继续生效
+        self.assertEqual(recorded(self.base, "antigravity", dict(profile, model_arg="--m")), {})
 
     def test_plan_rejection_is_separated_from_a_missing_model(self):
         # 两种 400 长得很像，但处置完全不同：换账号就能用 vs 换账号也没用。
