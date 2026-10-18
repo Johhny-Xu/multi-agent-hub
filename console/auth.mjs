@@ -1657,16 +1657,44 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         if (parsed.note) e.buf += `[opencode] ${parsed.note}\n`;
         const authFile = join(e.targetHome, '.local', 'share', 'opencode', 'auth.json');
         await mkdir(dirname(authFile), { recursive: true });
+        // auth.json 是「一个文件装 N 个 provider」的凭据库，而这里跑在隔离 HOME 里：
+        // 只读沙箱会得到 {}，写回去就把用户之前加的 provider 全冲掉（实测：先加 siliconflow 再加 opencode，
+        // 第二个 key 会把第一个抹掉）。所以以线上 auth.json 为底，再叠沙箱里已写的内容。
+        const liveAuthFile = join(HOME, '.local', 'share', 'opencode', 'auth.json');
+        /** @type {Record<string, any>} */
         let authData = {};
-        try { authData = JSON.parse((await readFile(authFile, 'utf-8')).replace(/^\uFEFF/, '')); } catch { authData = {}; }
+        for (const f of [liveAuthFile, authFile]) {
+          try {
+            const parsedFile = JSON.parse((await readFile(f, 'utf-8')).replace(/^\uFEFF/, ''));
+            if (parsedFile && typeof parsedFile === 'object' && !Array.isArray(parsedFile)) authData = { ...authData, ...parsedFile };
+          } catch { /* 文件不存在或内容损坏时跳过 */ }
+        }
         // 覆盖前留一份备份：别把已经登录好的条目写坏
         try {
           const prev = (await readFile(authFile, 'utf-8')).trim();
           if (prev) await writeFile(`${authFile}.bak`, prev, { mode: 0o600 });
         } catch { /* 首次写入没有旧文件 */ }
+        try {
+          const prevLive = (await readFile(liveAuthFile, 'utf-8')).trim();
+          if (prevLive) await writeFile(`${liveAuthFile}.bak`, prevLive, { mode: 0o600 });
+        } catch { /* 线上还没有 auth.json */ }
+        const prevKey = authData[provider] && (authData[provider].key || authData[provider].access);
+        const overwroteKey = !!prevKey && prevKey !== apiKey;
         authData[provider] = { type: 'api', key: apiKey };
-        await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
-        e.buf += `\n[opencode] ✓ API Key 已写入 ${authFile}\n`;
+        const payload = JSON.stringify(authData, null, 2) + '\n';
+        await writeFile(authFile, payload, { mode: 0o600 });
+        if (liveAuthFile !== authFile) {
+          await mkdir(dirname(liveAuthFile), { recursive: true });
+          await writeFile(liveAuthFile, payload, { mode: 0o600 });
+        }
+        const others = Object.keys(authData).filter((p) => p !== provider);
+        e.buf += `\n[opencode] ✓ API Key 已写入 ${liveAuthFile}\n`;
+        e.buf += `[opencode] 当前共 ${Object.keys(authData).length} 个 provider：${Object.keys(authData).join(' / ')}\n`;
+        if (overwroteKey) {
+          // 同一 provider 只能存一把 Key，旧的一定会被换掉；不说明白用户会以为「加了两个只剩一个」
+          e.buf += `[opencode] ! provider「${provider}」原本已有 Key，已用新 Key 覆盖（auth.json 里同一 provider 只存一把；要并存请换一个 provider 名，写成 provider:api_key）\n`;
+        }
+        if (others.length) e.buf += `[opencode] 已保留原有 provider：${others.join(' / ')}\n`;
         // 用官方 CLI 复核 provider 是否被识别；识别不到只警告，不把已经写好的凭据判成失败
         const ocBin = resolveCliBin('opencode', join(HOME, '.npm-global', 'bin', 'opencode'));
         const ocCheck = await runCliWithHome(ocBin, ['auth', 'list'], e.targetHome, 30_000);

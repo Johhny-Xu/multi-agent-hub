@@ -183,8 +183,11 @@ export function formatProvidersDisplay(providers) {
   const lead = list.includes('opencode') ? 'opencode' : list[0];
   const rest = list.filter((p) => p !== lead);
   if (!rest.length) return lead;
-  if (rest.length <= 2) return [lead, ...rest].join(' + ');
-  return `${lead} 等 ${list.length} 个提供方`;
+  // 多个 provider 时补一句「几把 Key」：auth.json 一个 provider 存一把，
+  // 用户加了两个 Key 却只看到一个名字时会以为丢了一个
+  const suffix = `（${list.length} 把 Key）`;
+  if (rest.length <= 2) return [lead, ...rest].join(' + ') + suffix;
+  return `${lead} 等 ${list.length} 个 provider${suffix}`;
 }
 
 /**

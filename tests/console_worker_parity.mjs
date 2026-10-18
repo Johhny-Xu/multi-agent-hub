@@ -144,10 +144,10 @@ test('provider-set display names never bake in a bogus count', async () => {
   // 单提供方不带任何后缀：旧实现会写成「opencode (1 个提供方)」，读起来自相矛盾
   assert.equal(formatProvidersDisplay(['opencode']), 'opencode');
   assert.equal(formatProvidersDisplay(['siliconflow']), 'siliconflow');
-  // opencode 优先当主名，其余并列展开
-  assert.equal(formatProvidersDisplay(['siliconflow', 'opencode']), 'opencode + siliconflow');
-  assert.equal(formatProvidersDisplay(['a', 'opencode', 'b']), 'opencode + a + b');
-  assert.equal(formatProvidersDisplay(['a', 'opencode', 'b', 'c']), 'opencode 等 4 个提供方');
+  // opencode 优先当主名，其余并列展开；多个 provider 时补「几把 Key」避免用户以为丢了一个
+  assert.equal(formatProvidersDisplay(['siliconflow', 'opencode']), 'opencode + siliconflow（2 把 Key）');
+  assert.equal(formatProvidersDisplay(['a', 'opencode', 'b']), 'opencode + a + b（3 把 Key）');
+  assert.equal(formatProvidersDisplay(['a', 'opencode', 'b', 'c']), 'opencode 等 4 个 provider（4 把 Key）');
   assert.equal(formatProvidersDisplay([]), 'provider');
 
   // 可变异身份 = 描述的是「这份凭据文件」而不是独立账号，只用来判定历史快照
