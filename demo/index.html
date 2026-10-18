@@ -1965,34 +1965,52 @@
   }
   .checkin-cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
     gap: 14px;
-    margin-top: 10px;
+    margin-top: 12px;
   }
   .checkin-card {
-    background: var(--gem-surface-low, #f8fafc);
-    border: 1px solid var(--gem-border, #e2e8f0);
-    border-radius: 10px;
-    padding: 14px 16px;
+    background: var(--gem-surface-low, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--gem-border, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 16px 18px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 12px;
-    transition: all .2s ease;
+    gap: 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(8px);
+    transition: all .22s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .checkin-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: transparent;
+    transition: background .2s ease;
   }
   .checkin-card:hover {
-    border-color: var(--gem-border-strong, #94a3b8);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    border-color: var(--gem-border-strong, rgba(99, 102, 241, 0.35));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
   }
   .checkin-card.highlight-card {
-    border-color: rgba(99, 102, 241, 0.4);
-    background: linear-gradient(180deg, rgba(99, 102, 241, 0.04) 0%, var(--gem-surface-low, #f8fafc) 100%);
+    border-color: rgba(99, 102, 241, 0.35);
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.06) 0%, var(--gem-surface-low, rgba(255, 255, 255, 0.03)) 100%);
+  }
+  .checkin-card.highlight-card::before {
+    background: linear-gradient(90deg, #6366f1, #a855f7);
   }
   .checkin-card-top {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
   }
   .checkin-card-brand {
     display: flex;
@@ -2000,73 +2018,119 @@
     gap: 10px;
   }
   .checkin-brand-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
     flex-shrink: 0;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15);
   }
-  .checkin-brand-icon.wb-icon { background: rgba(59, 130, 246, 0.15); }
-  .checkin-brand-icon.trae-icon { background: rgba(168, 85, 247, 0.15); }
-  .checkin-brand-icon.ca-icon { background: rgba(239, 68, 68, 0.15); }
+  .checkin-brand-icon.wb-icon {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.35));
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  .checkin-brand-icon.trae-icon {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(126, 34, 206, 0.35));
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+  }
+  .checkin-brand-icon.ca-icon {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35));
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
   .checkin-brand-title {
     font-size: 13.5px;
     font-weight: 600;
     color: var(--gem-text, #0f172a);
+    line-height: 1.25;
   }
   .checkin-brand-tag {
     font-size: 11px;
     color: var(--gem-text-muted, #64748b);
+    margin-top: 2px;
   }
   .checkin-status-badge {
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 8px;
+    padding: 3px 10px;
     border-radius: 999px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.2px;
+  }
+  .checkin-status-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
   }
   .checkin-status-badge.status-success {
-    background: rgba(16, 185, 129, 0.15);
+    background: rgba(16, 185, 129, 0.12);
     color: #10b981;
     border: 1px solid rgba(16, 185, 129, 0.3);
   }
+  .checkin-status-badge.status-success::before {
+    background: #10b981;
+    box-shadow: 0 0 6px #10b981;
+  }
   .checkin-status-badge.status-already {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(59, 130, 246, 0.12);
     color: #3b82f6;
     border: 1px solid rgba(59, 130, 246, 0.3);
   }
+  .checkin-status-badge.status-already::before {
+    background: #3b82f6;
+  }
   .checkin-status-badge.status-pending {
-    background: rgba(245, 158, 11, 0.15);
+    background: rgba(245, 158, 11, 0.12);
     color: #f59e0b;
     border: 1px solid rgba(245, 158, 11, 0.3);
   }
+  .checkin-status-badge.status-pending::before {
+    background: #f59e0b;
+    box-shadow: 0 0 6px #f59e0b;
+  }
   .checkin-status-badge.status-failed {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.12);
     color: #ef4444;
     border: 1px solid rgba(239, 68, 68, 0.3);
   }
+  .checkin-status-badge.status-failed::before {
+    background: #ef4444;
+  }
   .checkin-status-badge.status-unconfigured {
-    background: rgba(148, 163, 184, 0.15);
-    color: #64748b;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--gem-text-muted, #64748b);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+  }
+  .checkin-status-badge.status-unconfigured::before {
+    background: #94a3b8;
   }
   .checkin-card-meta {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 7px;
     font-size: 12px;
-    padding: 8px 10px;
-    background: var(--gem-bg-card, #ffffff);
-    border-radius: 6px;
-    border: 1px solid var(--gem-border, #e2e8f0);
+    padding: 10px 12px;
+    background: var(--gem-bg-card, rgba(0, 0, 0, 0.15));
+    border-radius: 8px;
+    border: 1px solid var(--gem-border, rgba(255, 255, 255, 0.06));
   }
   .checkin-meta-row {
     display: flex;
     justify-content: space-between;
-    gap: 6px;
+    gap: 8px;
+    line-height: 1.4;
   }
   .checkin-meta-row .c-label {
     color: var(--gem-text-muted, #64748b);
@@ -2089,110 +2153,84 @@
   .checkin-card-foot {
     display: flex;
     gap: 8px;
-    margin-top: 4px;
+    margin-top: 2px;
   }
   .checkin-card-foot .qa-btn {
     flex: 1;
     font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 7px;
   }
-  .checkin-projects-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 10px;
-  }
-  .checkin-project-group-title {
-    font-size: 13px;
+  .checkin-card-foot .btn-do-checkin {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #ffffff;
     font-weight: 600;
-    color: var(--gem-text, #0f172a);
-    margin-top: 4px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.28);
   }
-  .checkin-project-card {
-    background: var(--gem-surface-low, #f8fafc);
-    border: 1px solid var(--gem-border, #e2e8f0);
-    border-radius: 8px;
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  .checkin-card-foot .btn-do-checkin:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4f46e5, #4338ca);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
   }
-  .checkin-project-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .checkin-project-title {
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .checkin-project-title a {
-    color: var(--gem-accent, #6366f1);
-    text-decoration: none;
-  }
-  .checkin-project-title a:hover {
-    text-decoration: underline;
-  }
-  .checkin-project-tags {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-  .checkin-project-tag {
-    font-size: 10.5px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: var(--gem-surface-high, #e2e8f0);
-    color: var(--gem-text-muted, #475569);
-  }
-  .checkin-project-desc {
-    font-size: 12px;
-    color: var(--gem-text, #334155);
-    line-height: 1.5;
+  .checkin-card-foot .btn-do-checkin:disabled {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--gem-text-muted, #94a3b8);
+    box-shadow: none;
+    cursor: default;
   }
   .checkin-log-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 10px;
-    max-height: 320px;
+    gap: 8px;
+    margin-top: 12px;
+    max-height: 380px;
     overflow-y: auto;
+    padding-right: 4px;
   }
   .checkin-log-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
     font-size: 12px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    background: var(--gem-surface-low, #f8fafc);
-    border: 1px solid var(--gem-border, #e2e8f0);
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--gem-surface-low, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--gem-border, rgba(255, 255, 255, 0.06));
+    transition: border-color .15s ease;
   }
-  .checkin-log-item .log-time {
+  .checkin-log-item:hover {
+    border-color: var(--gem-border-strong, rgba(99, 102, 241, 0.3));
+  }
+  .checkin-log-time {
     color: var(--gem-text-muted, #64748b);
     font-family: monospace;
     font-size: 11px;
     white-space: nowrap;
+    flex-shrink: 0;
   }
-  .checkin-log-item .log-plat {
+  .checkin-log-plat-badge {
+    font-size: 11px;
     font-weight: 600;
-    color: var(--gem-text, #0f172a);
+    padding: 2px 8px;
+    border-radius: 999px;
     white-space: nowrap;
+    flex-shrink: 0;
   }
-  .checkin-log-item .log-msg {
+  .checkin-log-msg {
     flex: 1;
     color: var(--gem-text, #334155);
     word-break: break-all;
+    line-height: 1.4;
   }
   .checkin-log-empty {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--gem-text-muted, #64748b);
     text-align: center;
-    padding: 24px;
+    padding: 36px 16px;
+    background: var(--gem-surface-low, rgba(255, 255, 255, 0.02));
+    border-radius: 8px;
+    border: 1px dashed var(--gem-border, rgba(255, 255, 255, 0.08));
   }
 
   /* 自定义背景固定图层与毛玻璃支持 */
@@ -9177,7 +9215,6 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
               </div>
               <div class="checkin-nav-tabs">
                 <button type="button" class="checkin-tab-btn active" data-tab="grid">打卡面板</button>
-                <button type="button" class="checkin-tab-btn" data-tab="projects">开源项目与接口原理</button>
                 <button type="button" class="checkin-tab-btn" data-tab="history">签到日志 (<span id="checkin-hist-count">0</span>)</button>
               </div>
             </div>
@@ -9208,21 +9245,21 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                   </div>
                 </div>
 
-                <!-- 2. Trae (免客户端) -->
+                <!-- 2. Trae (免客户端 / CDP直连) -->
                 <div class="checkin-card highlight-card" id="card-checkin-traecode">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
                       <div class="checkin-brand-icon trae-icon">TR</div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">ByteDance Trae Work</div>
-                        <div class="checkin-brand-tag">免客户端直连 (Headless) · 每日 200 Credits</div>
+                        <div class="checkin-brand-tag">免客户端直签 / CDP直连 · 每日 200 Credits</div>
                       </div>
                     </div>
                     <span class="checkin-status-badge status-pending" id="badge-trae">检测中...</span>
                   </div>
                   <div class="checkin-card-meta">
                     <div class="checkin-meta-row"><span class="c-label">凭据关联:</span><span class="c-val" id="cred-trae">正在探测...</span></div>
-                    <div class="checkin-meta-row"><span class="c-label">免客户端:</span><span class="c-val tip">直接调用 api.trae.cn，无需打开 Trae 客户端</span></div>
+                    <div class="checkin-meta-row"><span class="c-label">打卡模式:</span><span class="c-val tip">CDP 客户端直控 / API 无感直签双轨保障</span></div>
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-trae">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">累计奖励:</span><span class="c-val highlight" id="reward-trae">-</span></div>
                   </div>
@@ -9257,14 +9294,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
               </div>
             </div>
 
-            <!-- Tab 2: 开源项目与接口原理 -->
-            <div class="checkin-tab-content" id="checkin-tab-projects" hidden>
-              <div class="checkin-projects-wrap" id="checkin-projects-container">
-                <!-- 由 JS 渲染详细项目卡片与接口原理 -->
-              </div>
-            </div>
-
-            <!-- Tab 3: 签到历史日志 -->
+            <!-- Tab 2: 签到历史日志 -->
             <div class="checkin-tab-content" id="checkin-tab-history" hidden>
               <div class="checkin-log-list" id="checkin-log-container">
                 <div class="checkin-log-empty">暂无签到历史记录</div>
@@ -10954,13 +10984,21 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
   function bubbleFor(agentName, m) {
     var role = m.role === 'me' ? 'user' : (m.role === 'sys' ? 'system' : 'agent');
     var b = el('div', 'bubble ' + role + (role === 'agent' ? ' md' : ''));
-    var bh = el('div', 'bhead');
-    bh.appendChild(el('span', null, role === 'user' ? '我' : role === 'system' ? '系统' : agentName));
-    bh.appendChild(el('span', null, threadMeta(m.ts)));
-    if (m.tok && role !== 'agent') bh.appendChild(el('span', 'tok-chip', '≈' + m.tok + ' tok'));
+
+    // 元信息存入 title 悬停查看，彻底删除气泡顶部的冗余行，实现极简现代对话流
+    var metaTime = threadMeta(m.ts);
+    var roleTitle = role === 'user' ? '我' : (role === 'system' ? '系统' : (agentName || '智能体'));
+    b.title = roleTitle + (metaTime ? ' · ' + metaTime : '') + (m.tok && role !== 'agent' ? ' · ≈' + m.tok + ' tok' : '');
+
+    // 仅系统消息保留轻量头部
+    if (role === 'system') {
+      var bh = el('div', 'bhead');
+      bh.appendChild(el('span', null, '系统'));
+      if (metaTime) bh.appendChild(el('span', null, metaTime));
+      b.appendChild(bh);
+    }
 
     var displayText = (role === 'agent') ? stripExitSuffix(m.text) : m.text;
-    b.appendChild(bh);
 
   // ---------------- 思考过程提取与自动折叠
   function parseThinking(text, m) {
@@ -16496,11 +16534,9 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     const tabBtns = card.querySelectorAll('.checkin-tab-btn');
     const tabContents = {
       grid: document.getElementById('checkin-tab-grid'),
-      projects: document.getElementById('checkin-tab-projects'),
       history: document.getElementById('checkin-tab-history')
     };
     const histCountSpan = document.getElementById('checkin-hist-count');
-    const projectsContainer = document.getElementById('checkin-projects-container');
     const logContainer = document.getElementById('checkin-log-container');
     const overallPill = document.getElementById('checkin-overall-pill');
 
@@ -16557,10 +16593,10 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         }
       }
 
-      // 2. Trae (免客户端)
+      // 2. Trae (免客户端 / CDP直连)
       if (p.traecode) {
         const isSigned = p.traecode.status === 'success' || p.traecode.status === 'already';
-        updateBadge('badge-trae', p.traecode.status, p.traecode.status === 'success' ? '免客户端已签' : (p.traecode.status === 'already' ? '今日已签' : (p.traecode.status === 'pending' ? '今日待打卡' : (p.traecode.status === 'failed' ? '凭据过期/异常' : '未关联凭据'))));
+        updateBadge('badge-trae', p.traecode.status, p.traecode.status === 'success' ? '今日已签到' : (p.traecode.status === 'already' ? '今日已签' : (p.traecode.status === 'pending' ? '今日待打卡' : (p.traecode.status === 'failed' ? '凭据过期/异常' : '未关联凭据'))));
         const credEl = document.getElementById('cred-trae');
         if (credEl) credEl.textContent = p.traecode.source || '未关联凭据';
         const msgEl = document.getElementById('msg-trae');
@@ -16607,58 +16643,19 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         } else {
           logContainer.innerHTML = history.map(item => {
             const platName = item.platform === 'workbuddy' ? '腾讯 WorkBuddy' : (item.platform === 'traecode' ? 'ByteDance Trae' : '华为云 CodeArts');
-            const stColor = item.status === 'success' ? '#10b981' : (item.status === 'already' ? '#3b82f6' : (item.status === 'pending' ? '#f59e0b' : '#ef4444'));
+            const platBg = item.platform === 'workbuddy' ? 'rgba(59, 130, 246, 0.15)' : (item.platform === 'traecode' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(239, 68, 68, 0.15)');
+            const platColor = item.platform === 'workbuddy' ? '#60a5fa' : (item.platform === 'traecode' ? '#c084fc' : '#f87171');
+            const isErr = item.status === 'failed';
             return `
               <div class="checkin-log-item">
-                <span class="log-time">${escapeHtml(item.time || '')}</span>
-                <span class="log-plat" style="color:${stColor}">${escapeHtml(platName)}</span>
-                <span class="log-msg">${escapeHtml(item.message || '')}</span>
+                <span class="checkin-log-time">${escapeHtml(item.time || '')}</span>
+                <span class="checkin-log-plat-badge" style="background:${platBg};color:${platColor};border:1px solid ${platColor}44">${escapeHtml(platName)}</span>
+                <span class="checkin-log-msg" style="color:${isErr ? '#f87171' : 'var(--gem-text)'}">${escapeHtml(item.message || '')}</span>
               </div>
             `;
           }).join('');
         }
       }
-
-      // 渲染开源项目参考
-      renderProjects(data.openSourceProjects);
-    };
-
-    // 渲染开源项目卡片与接口原理
-    const renderProjects = (projects) => {
-      if (!projectsContainer || !projects) return;
-
-      const groups = [
-        { key: 'workbuddy', title: '腾讯 WorkBuddy / CodeBuddy 自动签到开源项目与接口原理', icon: '[WB]' },
-        { key: 'traecode', title: 'ByteDance Trae 免客户端直签 (Headless) 开源项目与接口原理', icon: '[TR]' },
-        { key: 'codearts', title: '华为云 CodeArts (码道) 自动签到与福利 Token 领取开源项目', icon: '[CA]' }
-      ];
-
-      projectsContainer.innerHTML = groups.map(g => {
-        const list = projects[g.key] || [];
-        const apiDesc = g.key === 'traecode'
-          ? '<div style="font-size:11.5px;color:var(--gem-text-muted,#64748b);background:rgba(99,102,241,0.06);padding:8px 10px;border-radius:6px;border:1px dashed rgba(99,102,241,0.2);"><b>免客户端直签机制：</b>直接复用本地 <code>~/.trae-cn/trae-jwt-token</code>，向官方云端 <code>https://api.trae.cn/trae/api/v2/ug/checkin_credits/claim</code> 发起带设备指纹的 HTTP POST 请求，彻底摆脱 Electron 客户端运行依赖。</div>'
-          : (g.key === 'workbuddy'
-            ? '<div style="font-size:11.5px;color:var(--gem-text-muted,#64748b);background:rgba(59,130,246,0.06);padding:8px 10px;border-radius:6px;border:1px dashed rgba(59,130,246,0.2);"><b>加油站打卡机制：</b>读取 <code>~/.codebuddy-cn/auth.info</code> 或 WorkBuddy 共享会话，向 <code>https://www.codebuddy.cn/v2/billing/meter/daily-checkin</code> 提交幂等打卡，自动获取积分与连续签到天数。</div>'
-            : '<div style="font-size:11.5px;color:var(--gem-text-muted,#64748b);background:rgba(239,68,68,0.06);padding:8px 10px;border-radius:6px;border:1px dashed rgba(239,68,68,0.2);"><b>码道福利领取机制：</b>复用 <code>codearts-auth.env</code> 中的 AK/SK 或开发者会话 Token，联动华为云开发者空间与福利通道完成每日算力与模型配额激活。</div>');
-
-        return `
-          <div class="checkin-project-group">
-            <div class="checkin-project-group-title">${g.icon} ${g.title}</div>
-            ${apiDesc}
-            <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
-              ${list.map(p => `
-                <div class="checkin-project-card">
-                  <div class="checkin-project-head">
-                    <span class="checkin-project-title"><a href="${p.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.name)} ↗</a></span>
-                    <div class="checkin-project-tags">${(p.tags || []).map(t => `<span class="checkin-project-tag">${escapeHtml(t)}</span>`).join('')}</div>
-                  </div>
-                  <div class="checkin-project-desc">${escapeHtml(p.description)}</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `;
-      }).join('');
     };
 
     // 请求状态

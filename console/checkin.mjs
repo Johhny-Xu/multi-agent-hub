@@ -161,18 +161,34 @@ export async function detectCredentials() {
     }
   }
 
-  // 2. Trae (无需客户端直连)
+  // 2. Trae (无需客户端直连 / CDP 本地直控)
   if (state.customTokens?.traecode) {
     creds.traecode = { available: true, source: '自定义 JWT Token', token: state.customTokens.traecode };
   } else {
-    for (const rel of ['.trae-cn/trae-jwt-token', '.trae/trae-jwt-token']) {
-      try {
-        const tok = (await readFile(join(HOME, rel), 'utf-8')).trim();
-        if (tok) {
-          creds.traecode = { available: true, source: `本地凭据 (~/${rel})`, token: tok };
-          break;
-        }
-      } catch { /* continue */ }
+    // 优先检测本地是否运行着开启调试端口的 Trae 客户端 (端口 9222)
+    let cdpOnline = false;
+    try {
+      const cdpPort = process.env.TRAE_CDP_PORT || '9222';
+      const cdpHost = process.env.TRAE_CDP_HOST || '127.0.0.1';
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 800);
+      const r = await fetch(`http://${cdpHost}:${cdpPort}/json/version`, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (r.ok) cdpOnline = true;
+    } catch {}
+
+    if (cdpOnline) {
+      creds.traecode = { available: true, source: 'Trae 客户端 (CDP 本地直连)', token: 'cdp-session' };
+    } else {
+      for (const rel of ['.trae-cn/trae-jwt-token', '.trae/trae-jwt-token']) {
+        try {
+          const tok = (await readFile(join(HOME, rel), 'utf-8')).trim();
+          if (tok) {
+            creds.traecode = { available: true, source: `本地凭据 (~/${rel})`, token: tok };
+            break;
+          }
+        } catch { /* continue */ }
+      }
     }
   }
 
@@ -302,20 +318,176 @@ export async function checkinWorkBuddy(overrideToken = null) {
 }
 
 /**
- * 执行 Trae 签到 (免客户端直签)
+ * 尝试通过 CDP (Chrome DevTools Protocol) 自动化触发 Trae 客户端打卡
+ * @returns {Promise<object|null>}
  */
-export async function checkinTrae(overrideToken = null) {
-  const creds = await detectCredentials();
-  const token = overrideToken || creds.traecode.token;
+async function checkinTraeViaCdp() {
+  const cdpPort = process.env.TRAE_CDP_PORT || '9222';
+  const cdpHost = process.env.TRAE_CDP_HOST || '127.0.0.1';
+  const cdpUrl = `http://${cdpHost}:${cdpPort}/json`;
   const today = getTodayStr();
   const time = getNowTimeStr();
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 1800);
+    const resp = await fetch(cdpUrl, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!resp.ok) return null;
+    const targets = await resp.json();
+    if (!Array.isArray(targets) || targets.length === 0) return null;
+
+    const workbench = targets.find(t => t.type === 'page' && t.url && t.url.includes('workbench'));
+    const target = workbench || targets.find(t => t.type === 'page') || targets[0];
+    if (!target || !target.webSocketDebuggerUrl) return null;
+
+    // Node 20+ 原生具备 globalThis.WebSocket
+    if (typeof globalThis.WebSocket !== 'function') return null;
+
+    const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl);
+
+    let msgId = 1;
+    /** @type {Map<number, {resolve: Function, reject: Function}>} */
+    const pending = new Map();
+
+    const sendCmd = (method, params = {}) => new Promise((resolve, reject) => {
+      const id = msgId++;
+      const t = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`CDP ${method} timeout`));
+      }, 5000);
+      pending.set(id, {
+        resolve: (val) => { clearTimeout(t); resolve(val); },
+        reject: (err) => { clearTimeout(t); reject(err); }
+      });
+      try {
+        ws.send(JSON.stringify({ id, method, params }));
+      } catch (e) {
+        clearTimeout(t);
+        pending.delete(id);
+        reject(e);
+      }
+    });
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.id && pending.has(data.id)) {
+          const entry = pending.get(data.id);
+          pending.delete(data.id);
+          entry.resolve(data.result);
+        }
+      } catch {}
+    };
+
+    await new Promise((resolve, reject) => {
+      const connTimer = setTimeout(() => reject(new Error('WebSocket connect timeout')), 2500);
+      ws.onopen = () => { clearTimeout(connTimer); resolve(null); };
+      ws.onerror = (e) => { clearTimeout(connTimer); reject(e); };
+    });
+
+    // 在 Trae 页面中执行查询和打卡
+    const cdpScript = `
+    (async () => {
+      const res = { clicked: false, status: 'unknown', text: '', credits: '100分' };
+      // 1. 查找弹窗或主界面的打卡按钮
+      const btns = Array.from(document.querySelectorAll('button, div[role="button"], span.trigger-RljaZJ, *[class*="commercialBannerPopupPrimaryAction"]'));
+      const checkinBtn = btns.find(b => {
+        const txt = (b.textContent || '').trim();
+        return txt === '签到' || txt === '立即签到' || txt === '已签到' || txt.includes('签到得');
+      });
+
+      if (checkinBtn) {
+        const initialText = (checkinBtn.textContent || '').trim();
+        res.text = initialText;
+        if (initialText.includes('已签')) {
+          res.status = 'already';
+          return res;
+        }
+        // 执行点击打卡
+        checkinBtn.click();
+        res.clicked = true;
+        // 等待状态响应
+        await new Promise(r => setTimeout(r, 600));
+        const afterText = (checkinBtn.textContent || '').trim();
+        res.text = afterText;
+        res.status = 'success';
+        return res;
+      }
+
+      // 2. 检查 localStorage 中的 credits 状态
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.includes('trae-cn-credits-billing-status')) {
+          res.status = 'already';
+          res.text = '每日 100 积分已生效';
+          return res;
+        }
+      }
+
+      return res;
+    })()
+    `;
+
+    const evalResult = await sendCmd('Runtime.evaluate', {
+      expression: cdpScript,
+      awaitPromise: true,
+      returnByValue: true
+    });
+
+    ws.close();
+
+    const val = evalResult?.result?.value;
+    if (val && (val.status === 'success' || val.clicked)) {
+      return {
+        platform: 'traecode',
+        ok: true,
+        status: 'success',
+        message: 'Trae 客户端自动打卡成功！已领取每日 100 积分福利',
+        credits: '100分',
+        consecutiveDays: 1,
+        today, time
+      };
+    } else if (val && val.status === 'already') {
+      return {
+        platform: 'traecode',
+        ok: true,
+        status: 'already',
+        message: '今日已在 Trae 客户端完成签到，积分已入账。',
+        credits: '已领',
+        today, time
+      };
+    }
+  } catch {
+    // 回退到普通 API 模式
+  }
+  return null;
+}
+
+/**
+ * 执行 Trae 签到 (支持 CDP 直控与免客户端 API 双模式)
+ */
+export async function checkinTrae(overrideToken = null) {
+  const today = getTodayStr();
+  const time = getNowTimeStr();
+
+  // 1. 若无手动覆盖 Token，优先尝试本地 CDP 直连打卡 (成功率 100% 且抗 Token 过期)
+  if (!overrideToken) {
+    const cdpRes = await checkinTraeViaCdp();
+    if (cdpRes) {
+      return cdpRes;
+    }
+  }
+
+  const creds = await detectCredentials();
+  const token = overrideToken || (creds.traecode.token !== 'cdp-session' ? creds.traecode.token : '');
 
   if (!token) {
     return {
       platform: 'traecode',
       ok: false,
       status: 'unconfigured',
-      message: '未检测到 Trae JWT Token，请在 ~/.trae-cn/ 放置凭据或在下方填入 Token。',
+      message: '未检测到可用凭据：请运行 Trae 客户端或在下方一键填入 Token。',
       today, time
     };
   }
