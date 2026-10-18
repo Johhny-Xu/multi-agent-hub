@@ -8065,7 +8065,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
             </div>
             <div class="checkin-head-actions">
               <button type="button" class="qa-btn" id="btn-checkin-refresh" title="刷新各平台打卡与凭据状态">↻ 刷新状态</button>
-              <button type="button" class="qa-btn qa-primary" id="btn-checkin-all" title="一键对所有可用平台执行签到打卡">⚡ 一键全签</button>
+              <button type="button" class="qa-btn qa-primary" id="btn-checkin-all" title="一键对所有可用平台执行签到打卡">一键全签</button>
             </div>
           </div>
           <div class="settings-card-body">
@@ -8093,7 +8093,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                 <div class="checkin-card" id="card-checkin-workbuddy">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon wb-icon">🐧</div>
+                      <div class="checkin-brand-icon wb-icon">WB</div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">腾讯 WorkBuddy / CodeBuddy</div>
                         <div class="checkin-brand-tag">Buddy 加油站 · 每日积分与盲盒</div>
@@ -8116,7 +8116,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                 <div class="checkin-card highlight-card" id="card-checkin-traecode">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon trae-icon">⚡</div>
+                      <div class="checkin-brand-icon trae-icon">TR</div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">ByteDance Trae Work</div>
                         <div class="checkin-brand-tag">免客户端直连 (Headless) · 每日 200 Credits</div>
@@ -8140,7 +8140,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                 <div class="checkin-card" id="card-checkin-codearts">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon ca-icon">🌸</div>
+                      <div class="checkin-brand-icon ca-icon">CA</div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">华为云 CodeArts (码道)</div>
                         <div class="checkin-brand-tag">码道福利 / 开发者空间每日算力包</div>
@@ -8943,6 +8943,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     usage: null,
     usageLoaded: false,
     view: 'thread',
+    _threadReqSeq: 0,
     atts: []
   };
 
@@ -9343,9 +9344,11 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       renderPlatformList();
     }
 
+    var seq = ++chat._threadReqSeq;
     var url = '/api/chat/thread?agent=' + encodeURIComponent(name);
     if (targetSessionId) url += '&session=' + encodeURIComponent(targetSessionId);
     return api(url).then(function (r) {
+      if (seq !== chat._threadReqSeq) return;
       chat.full[name] = r.thread;
       chat.activeSessionId = r.activeSessionId || (r.thread ? r.thread.id : null);
       chat.sessions = r.sessions || [];
@@ -9362,6 +9365,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       }
       renderThreadView();
     }).catch(function (e) {
+      if (seq !== chat._threadReqSeq) return;
       toast(e.message, true);
     });
   }
@@ -9403,7 +9407,9 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         chat.threads.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
         renderPlatformList();
         if (touchedActive && chat.activeAgent) {
+          var seq = ++chat._threadReqSeq;
           api('/api/chat/thread?agent=' + encodeURIComponent(chat.activeAgent) + (chat.activeSessionId ? '&session=' + encodeURIComponent(chat.activeSessionId) : '')).then(function (rr) {
+            if (seq !== chat._threadReqSeq) return;
             if (rr.thread) {
               chat.full[chat.activeAgent] = rr.thread;
               chat.activeSessionId = rr.activeSessionId || rr.thread.id;
@@ -9480,7 +9486,48 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
 
     host.textContent = '';
     var displayMsgs = showSysMsgs ? msgs : msgs.filter(function (m) { return m && m.role !== 'sys'; });
-    var pendingCount = (t && t.pending ? t.pending.length : 0);
+
+    // 智能剔除已完结或无效 pending
+    var pendingItems = (t && Array.isArray(t.pending)) ? t.pending.filter(function (p) {
+      if (!p) return false;
+      // 1. 如果消息列表中已存在与该 ref 匹配的回复或错误记录，则任务已完结
+      if (p.ref && msgs.some(function (m) { return m && m.ref && m.ref === p.ref; })) return false;
+      if (p.taskId && msgs.some(function (m) { return m && m.text && m.text.indexOf(p.taskId) !== -1; })) return false;
+      // 2. 超时守卫: 任务派发超过 10 分钟且消息列表已有 agent 回复，说明已归档
+      var pTime = p.dispatchTime || p.posted || p.firstSeen || 0;
+      if (pTime && (Date.now() - pTime > 10 * 60 * 1000)) return false;
+      return true;
+    }) : [];
+
+    // 对话轮次完结守卫:
+    // 如果最后一条回答是 agent 回复/任务完成/失败报错，且该回复之后没有新的用户输入，
+    // 则说明当前对话轮次已经结束，绝不展示任何孤立/幽灵执行中提示
+    var lastUserMsg = null;
+    var lastAgentMsg = null;
+    for (var mi = msgs.length - 1; mi >= 0; mi--) {
+      var mm = msgs[mi];
+      if (!mm) continue;
+      if (!lastAgentMsg && (mm.role === 'agent' || mm.failed || (mm.text && mm.text.indexOf('任务未完成') !== -1))) {
+        lastAgentMsg = mm;
+      }
+      if (!lastUserMsg && mm.role === 'me') {
+        lastUserMsg = mm;
+      }
+      if (lastUserMsg && lastAgentMsg) break;
+    }
+
+    if (lastAgentMsg && (!lastUserMsg || (lastAgentMsg.ts || 0) >= (lastUserMsg.ts || 0))) {
+      var hasNewerPending = pendingItems.some(function (p) {
+        var pTime = p.dispatchTime || p.posted || p.firstSeen || 0;
+        return pTime > (lastAgentMsg.ts || 0);
+      });
+      if (!hasNewerPending) {
+        pendingItems = [];
+      }
+    }
+
+    if (t) t.pending = pendingItems;
+    var pendingCount = pendingItems.length;
 
     if (!displayMsgs.length && !pendingCount) {
       var emptyBox = el('div', 'chat-empty-state');
@@ -10894,7 +10941,12 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       return loadThreads().then(function () {
         return selectPlatform(agent, chat.activeSessionId);
       });
-    }).catch(function (e) { toast(e.message, true); }).finally(function () {
+    }).catch(function (e) {
+      toast(e.message, true);
+      if (chat.activeAgent === agent) {
+        selectPlatform(agent, chat.activeSessionId);
+      }
+    }).finally(function () {
       chat.sending = false;
       updateModelSummaryUI();
     });
@@ -10970,18 +11022,25 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       '附件: 点击附件或粘贴图片, ≤8MB、最多 4 个; 文本类文件内容会自动内联进任务; 图片对远程 worker 只以本机路径提示。'
     ].join('\n'));
   }
+  var _chatEventTimer = null;
   function onChatEvent(d) {
-    pollUpdates();
-    if (d && (d.agent === chat.activeAgent || (d.threadId && (d.threadId === chat.activeSessionId || d.threadId === 'th-' + chat.activeAgent)))) {
-      if (chat.activeAgent) {
+    if (!d) return;
+    if (d.agent === chat.activeAgent || (d.threadId && (d.threadId === chat.activeSessionId || d.threadId === 'th-' + chat.activeAgent))) {
+      clearTimeout(_chatEventTimer);
+      _chatEventTimer = setTimeout(function () {
+        if (!chat.activeAgent) return;
+        var seq = ++chat._threadReqSeq;
         api('/api/chat/thread?agent=' + encodeURIComponent(chat.activeAgent) + (chat.activeSessionId ? '&session=' + encodeURIComponent(chat.activeSessionId) : '')).then(function (r) {
+          if (seq !== chat._threadReqSeq) return;
           if (r.thread) {
             chat.full[chat.activeAgent] = r.thread;
             chat.sessions = r.sessions || [];
             renderThreadView();
           }
         });
-      }
+      }, 50);
+    } else {
+      pollUpdates();
     }
   }
   function loadUsage() {
@@ -15473,9 +15532,9 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       if (!projectsContainer || !projects) return;
 
       const groups = [
-        { key: 'workbuddy', title: '腾讯 WorkBuddy / CodeBuddy 自动签到开源项目与接口原理', icon: '🐧' },
-        { key: 'traecode', title: 'ByteDance Trae 免客户端直签 (Headless) 开源项目与接口原理', icon: '⚡' },
-        { key: 'codearts', title: '华为云 CodeArts (码道) 自动签到与福利 Token 领取开源项目', icon: '🌸' }
+        { key: 'workbuddy', title: '腾讯 WorkBuddy / CodeBuddy 自动签到开源项目与接口原理', icon: '[WB]' },
+        { key: 'traecode', title: 'ByteDance Trae 免客户端直签 (Headless) 开源项目与接口原理', icon: '[TR]' },
+        { key: 'codearts', title: '华为云 CodeArts (码道) 自动签到与福利 Token 领取开源项目', icon: '[CA]' }
       ];
 
       projectsContainer.innerHTML = groups.map(g => {
@@ -15573,7 +15632,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         checkinAllBtn.textContent = '全签中...';
         executeCheckin('all', checkinAllBtn).finally(() => {
           checkinAllBtn.disabled = false;
-          checkinAllBtn.textContent = '⚡ 一键全签';
+          checkinAllBtn.textContent = '一键全签';
         });
       });
     }

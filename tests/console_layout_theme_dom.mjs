@@ -63,12 +63,10 @@ test('index.html contains custom background layer and settings card with presets
   assert.ok(html.includes('data-preset="shell"'), 'Must have shell preset');
   assert.ok(html.includes('data-preset="aurora"'), 'Must have aurora preset');
   assert.ok(html.includes('data-preset="dusk"'), 'Must have dusk preset');
-  assert.ok(html.includes('data-preset="cyber"'), 'Must have cyber preset');
   assert.ok(html.includes('data-preset="grid"'), 'Must have grid preset');
   assert.ok(html.includes('data-preset="custom"'), 'Must have custom preset');
   assert.ok(html.includes('[data-preset="aurora"][data-theme="light"]'), 'Aurora must have a light palette');
   assert.ok(html.includes('[data-preset="dusk"][data-theme="light"]'), 'Dusk must have a light palette');
-  assert.ok(html.includes('[data-preset="cyber"][data-theme="light"]'), 'Cyber must have a light palette');
   assert.ok(html.includes('[data-preset="grid"][data-theme="light"]'), 'Grid must have a light palette');
   assert.ok(html.includes('--preset-bg:'), 'Gradient presets must define --preset-bg');
 

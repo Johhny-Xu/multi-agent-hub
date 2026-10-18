@@ -1269,7 +1269,12 @@ export async function start(context) {
     }
     const entry = getAgentEntry(thread.agent, false);
     if (entry) entry.updated = thread.updated;
-    if (role === 'agent') thread.unread = (thread.unread || 0) + 1;
+    if (role === 'agent') {
+      thread.unread = (thread.unread || 0) + 1;
+      if (Array.isArray(thread.pending)) {
+        if (ref) thread.pending = thread.pending.filter((p) => p.ref !== ref);
+      }
+    }
     saveConv();
     broadcast({ type: 'chat', threadId: thread.id, agent: thread.agent, role });
     return msg;
@@ -1431,6 +1436,9 @@ export async function start(context) {
   async function deliverAgentReply(thread, fullText, tag, ref) {
     if (!thread) return;
     const theRef = ref || extractDispatchRef(fullText);
+    if (theRef && Array.isArray(thread.pending)) {
+      thread.pending = thread.pending.filter((p) => p.ref !== theRef);
+    }
     const msgs = Array.isArray(thread.messages) ? thread.messages : [];
     if (theRef && msgs.some((m) => m.ref === theRef)) return;
     if (theRef && deliveringRefs.has(theRef)) return;
@@ -1620,9 +1628,14 @@ export async function start(context) {
         const pend = (t.pending || []).filter((p) => p.kind === 'ref');
         for (const p of pend) {
           if (pollingPending.has(p)) continue;
-          if (tsNow() - (p.firstSeen || p.posted) > 30 * 60_000) {
+          // 若消息中已存在对应 ref 的 agent 或错误回复，直接剔除 pending
+          if (Array.isArray(t.messages) && t.messages.some((m) => m && m.ref === p.ref)) {
             t.pending = t.pending.filter((x) => x !== p);
-            addMsg(t, 'sys', `ref ${p.ref} 超过 30 分钟未回, 已停止跟踪（可到「任务队列/异步任务」手动查询）。`);
+            continue;
+          }
+          if (tsNow() - (p.firstSeen || p.posted) > 15 * 60_000) {
+            t.pending = t.pending.filter((x) => x !== p);
+            addMsg(t, 'sys', `ref ${p.ref} 超过 15 分钟未回, 已停止跟踪（可到「任务队列/异步任务」手动查询）。`);
             continue;
           }
           pollingPending.add(p);
@@ -2459,7 +2472,12 @@ export async function start(context) {
               updated: active.updated || entry.updated,
               unread: active.unread !== undefined ? active.unread : totalUnread,
               totalUnread,
-              pending: (active.pending || []).length,
+              pending: (active.pending || []).filter((pend) => {
+                if (!pend) return false;
+                if (pend.ref && messages.some((m) => m && m.ref === pend.ref)) return false;
+                if (pend.taskId && messages.some((m) => m && m.text && m.text.includes(pend.taskId))) return false;
+                return true;
+              }).length,
               msgCount: messages.length,
               traeSession: !!active.traeSession,
               cliSessionId: active.cliSessionId || null,
@@ -2478,6 +2496,16 @@ export async function start(context) {
         if (sessionId && entry && t && entry.activeSessionId !== sessionId) {
           entry.activeSessionId = sessionId;
           saveConv();
+        }
+        if (t && Array.isArray(t.pending) && Array.isArray(t.messages)) {
+          const beforeLen = t.pending.length;
+          t.pending = t.pending.filter((pend) => {
+            if (!pend) return false;
+            if (pend.ref && t.messages.some((m) => m && m.ref === pend.ref)) return false;
+            if (pend.taskId && t.messages.some((m) => m && m.text && m.text.includes(pend.taskId))) return false;
+            return true;
+          });
+          if (t.pending.length !== beforeLen) saveConv();
         }
         const sessions = entry ? (entry.sessions || []).map((s) => ({
           id: s.id,
@@ -2522,6 +2550,7 @@ export async function start(context) {
           const active = sessions.find((s) => s.id === entry.activeSessionId) || sessions[0] || entry;
           const latestUpdated = Math.max(entry.updated || 0, ...(sessions.map((s) => s.updated || 0)));
           if (latestUpdated > since) {
+            const actMsgs = Array.isArray(active.messages) ? active.messages : [];
             changed.push({
               id: active.id || entry.id,
               agent: entry.agent,
@@ -2529,7 +2558,12 @@ export async function start(context) {
               sessionCount: sessions.length || 1,
               updated: latestUpdated,
               unread: active.unread || 0,
-              pending: (active.pending || []).length,
+              pending: (active.pending || []).filter((pend) => {
+                if (!pend) return false;
+                if (pend.ref && actMsgs.some((m) => m && m.ref === pend.ref)) return false;
+                if (pend.taskId && actMsgs.some((m) => m && m.text && m.text.includes(pend.taskId))) return false;
+                return true;
+              }).length,
               msgCount: (active.messages || []).length,
             });
           }
