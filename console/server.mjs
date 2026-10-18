@@ -225,7 +225,13 @@ export function normalizeCapabilities(value) {
         stream: { supported: model.stream?.supported === true, semantics: publicReason(model.stream?.semantics), reason: publicReason(model.stream?.reason) }, attachments,
       };
     });
-    workers[name] = { configured: worker.configured === true, default_model: typeof worker.default_model === 'string' ? worker.default_model : null, availability: ready, models };
+    // 别名表之外的模型没有 models 条目，只能靠这份「实际派发失败」记录判断可用性。
+    const failures = {};
+    for (const [modelId, failure] of Object.entries(objectValue(worker.failures) ? worker.failures : {})) {
+      if (!/^[\w.:/-]{1,160}$/.test(modelId) || !objectValue(failure)) continue;
+      failures[modelId] = { code: publicReason(failure.code), reason: publicReason(failure.reason), blocking: failure.blocking === true };
+    }
+    workers[name] = { configured: worker.configured === true, default_model: typeof worker.default_model === 'string' ? worker.default_model : null, availability: ready, models, failures };
   }
   return { schema_version: 2, platform: publicReason(value.platform) || 'unknown', workers,
     attachment_limit_bytes: Number(value.attachment_limit_bytes) > 0 ? Number(value.attachment_limit_bytes) : 1024 * 1024 };
@@ -247,6 +253,10 @@ export function taskCapability(document, agent, model, options = {}) {
   if (!selected) {
     const catModel = (MODEL_CATALOG[agent] || []).find((m) => m.id === requested);
     if (!catModel) return fail(`当前 Hub 未配置模型 ${requested || '(默认模型未知)'}`);
+    // 目录里有、能力文档里没有的模型只能看实际派发记录；否则被套餐拒绝的模型
+    // 会被无条件放行，派一次失败一次。
+    const blocked = worker.failures?.[requested];
+    if (blocked?.blocking) return fail(blocked.reason || `模型 ${requested} 当前不可用`);
     return { allowed: true, model: requested, capability: { id: requested, available: true } };
   }
   if (!selected.availability.enabled) return fail(selected.availability.reason || '选定模型当前不可用');

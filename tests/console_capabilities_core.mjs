@@ -20,6 +20,7 @@ profile={"cli":[sys.executable,"-c","pass"],"model_arg":"--model","models":{"def
 hub.STATE=Path(sys.argv[2])
 hub._load_agents=lambda:{"probe":profile}
 record_outcome(hub.STATE,"probe","synthetic","error","model not found",signature(profile))
+record_outcome(hub.STATE,"probe","undeclared","error","400 model [undeclared] is not allowed for user type [free]",signature(profile))
 print(hub.tool_hub_capabilities({}))
 `;
     const executable = process.env.HUB_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
@@ -31,6 +32,11 @@ print(hub.tool_hub_capabilities({}))
     assert.equal(taskCapability(document, 'probe', 'alias', { thinking: 'on', stream: true, attachments: [{ mime_type: 'text/plain' }] }).allowed, true);
     assert.equal(taskCapability(document, 'probe', 'alias', { thinking: 'off' }).allowed, false);
     assert.deepEqual(document.workers.probe.models[1].attachments.file.content_types, ['text/plain; charset=utf-8']);
+    // 别名表之外的模型不会出现在 models 里，但失败记录必须透到控制台，否则无法置灰
+    assert.ok(!document.workers.probe.models.some((model) => model.id === 'undeclared'));
+    assert.equal(document.workers.probe.failures.undeclared.blocking, true);
+    assert.match(document.workers.probe.failures.undeclared.reason, /套餐/);
+    assert.equal(taskCapability(document, 'probe', 'undeclared').allowed, false);
     assert.ok(!JSON.stringify(document).includes('SYNTHETIC_NOT_PUBLIC'));
   } finally {
     const target = resolve(directory);

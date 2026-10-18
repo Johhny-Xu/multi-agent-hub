@@ -23,7 +23,7 @@ const selection = (id, { on = true, off = true, stream = true, image = true, fil
 function fixture(models = [selection('fixture')]) {
   const nodes = new Map();
   class Element {
-    children = []; style = { setProperty() {} }; value = ''; hidden = false; disabled = false; attributes = {}; listeners = {};
+    children = []; style = { setProperty() {} }; value = ''; hidden = false; disabled = false; attributes = {}; listeners = {}; dataset = {};
     constructor(tag) { this.tagName = tag; }
     set textContent(value) { this.text = String(value); this.children = []; }
     get textContent() { return this.text || ''; }
@@ -31,6 +31,18 @@ function fixture(models = [selection('fixture')]) {
     setAttribute(key, value) { this.attributes[key] = value; }
     addEventListener(name, callback) { this.listeners[name] = callback; }
     querySelector(selector) { const value = /value="([^"]+)"/.exec(selector)?.[1]; return this.children.find((child) => child.value === value) || null; }
+    // 真实 DOM 有 classList；桩里补上，否则 updateCapabilityUI 一碰高亮就抛错，
+    // 整组能力测试只能停在“没跑到断言”的状态。
+    get classList() {
+      const node = this;
+      const tokens = () => String(node.className || '').split(/\s+/).filter(Boolean);
+      const write = (list) => { node.className = list.join(' '); };
+      return {
+        add(...names) { const list = tokens(); for (const name of names) if (!list.includes(name)) list.push(name); write(list); },
+        remove(...names) { write(tokens().filter((token) => !names.includes(token))); },
+        contains(name) { return tokens().includes(name); },
+      };
+    }
   }
   const $ = (selector) => { if (!nodes.has(selector)) nodes.set(selector, new Element('div')); return nodes.get(selector); };
   const el = (tag, className, text) => { const node = new Element(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
