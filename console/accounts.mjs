@@ -169,6 +169,38 @@ export function cleanProfileLabel(raw) {
 }
 
 /**
+ * provider 集合型身份（opencode 的 auth.json）→ 人类可读的显示名。
+ * 规则：1 个提供方就写它自己的名字；2~3 个并列写出来；更多则写「主提供方 等 N 个」。
+ * 之前这里固定拼「(N 个提供方)」，单提供方也会带上后缀，且旧档案把字符串写死在 meta.json 里，
+ * 于是升级后列表仍显示「opencode (1 个提供方)」这种自相矛盾的文案。
+ * @param {string[]} providers
+ * @returns {string}
+ */
+export function formatProvidersDisplay(providers) {
+  const list = (Array.isArray(providers) ? providers : []).map((p) => cleanProfileLabel(p)).filter(Boolean);
+  if (!list.length) return 'provider';
+  // OpenCode Zen 登录后会多一条 opencode，展示时以它为主，而不是永远显示第一条 siliconflow
+  const lead = list.includes('opencode') ? 'opencode' : list[0];
+  const rest = list.filter((p) => p !== lead);
+  if (!rest.length) return lead;
+  if (rest.length <= 2) return [lead, ...rest].join(' + ');
+  return `${lead} 等 ${list.length} 个提供方`;
+}
+
+/**
+ * 身份方案是否「可变异」：这类身份描述的是**当前这一份凭据文件**的属性，
+ * 而不是某个独立账号，所以一旦与线上不一致，只说明它是旧快照，不可能是「另一个账号」。
+ * 邮箱 / UID / AK 这类稳定身份不在此列——它们不一致代表真的是不同账号，必须保留。
+ * @param {string} identity
+ */
+export function isMutableIdentity(identity) {
+  const s = String(identity || '');
+  if (!s) return false;
+  if (s.startsWith('providers:') || s.startsWith('mmx:')) return true;
+  return /^[0-9a-f]{12}$/.test(s); // 纯文件指纹
+}
+
+/**
  * 从凭据文件中提取可读的账号标识名称与唯一身份 ID（绝不暴露密钥明文）
  * @param {string} worker
  * @param {string} [baseHome]
@@ -238,8 +270,13 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       const acctRaw = raw?.account ?? raw?.oauth?.account ?? null;
       const acctStr = typeof acctRaw === 'string' ? acctRaw : (acctRaw?.email || acctRaw?.name || acctRaw?.username || acctRaw?.user_name || acctRaw?.nick || '');
       const uname = cleanProfileLabel(acctStr || raw?.email || raw?.user?.email || raw?.user?.name || '');
-      const label = uname || `mmx-${reg}-${shortFp}`;
-      return { label, identity: uname || fp, display: acctStr || raw?.email || raw?.user?.email || label };
+      // mmx 的 config.json 只有 region + token，逐字节指纹每次刷新 token 都会变，
+      // 用它当身份会让一个号在列表里不断裂档；而 mmx 一个 region 只有一个槽位，
+      // 所以身份用 mmx:<region>（有账号名时带上），跨 token 刷新保持稳定。
+      const label = uname || `mmx-${reg}`;
+      // 回退时给个人能读懂的名字；不要拿指纹当展示名，否则前端脱敏后变成 mm***eb，等于没名字
+      const regionText = reg === 'cn' ? '中国区' : String(reg).toUpperCase();
+      return { label, identity: uname ? `mmx:${reg}:${uname}` : `mmx:${reg}`, display: acctStr || raw?.email || raw?.user?.email || `MiniMax · ${regionText}` };
     }
     if (worker === 'mimocode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
@@ -268,10 +305,12 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
     if (worker === 'opencode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
       const providers = Object.keys(raw || {}).filter((k) => raw[k] && (raw[k].key || raw[k].access || raw[k].token));
-      const first = providers[0] || 'provider';
-      const label = `${cleanProfileLabel(first)}-${shortFp}`;
+      const sorted = providers.slice().sort();
+      // 登录 OpenCode Zen 后 auth.json 里会多一条 opencode，展示名要以它为主，而不是永远显示第一条 siliconflow
+      const label = `${cleanProfileLabel(providers.includes('opencode') ? 'opencode' : (providers[0] || 'opencode'))}-${shortFp}`;
       // 身份用 provider 集合而非文件指纹：重新写入同一把 Key 不应多出一个账号
-      return { label, identity: `providers:${providers.slice().sort().join('+')}`, display: `${first} (${providers.length} 个提供方)` };
+      const display = formatProvidersDisplay(sorted);
+      return { label, identity: `providers:${sorted.join('+')}`, display };
     }
     if (worker === 'cline') {
       // cline 把账号身份放在 secrets.json 的 cline:clineAccountId（内含 idToken），取邮箱作为显示名
@@ -407,9 +446,12 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
       const metaPath = join(dir, chosen, 'meta.json');
       let meta = {};
       try { meta = JSON.parse((await readFile(metaPath, 'utf-8')).replace(/^\uFEFF/, '')); } catch { meta = {}; }
-      if (!meta.identity || !meta.display) {
-        meta.identity = meta.identity || identity;
-        meta.display = meta.display || display;
+      // 走到这里说明档案里的凭据与线上逐字节一致，所以探测出来的 identity / display 就是它的真值。
+      // 旧版本会把「mmx-cn-5cc0eb」这种目录名或「opencode (1 个提供方)」写死进 meta，只在字段缺失时补齐
+      // 会永远留着脏值，因此这里按真值同步（note 是用户字段，不动）。
+      if (meta.identity !== identity || meta.display !== display) {
+        meta.identity = identity;
+        meta.display = display;
         meta.savedAt = meta.savedAt || new Date().toISOString();
         await writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
       }
@@ -420,15 +462,52 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
 
   // 2. 检查是否同一账号身份 (identity) 刷新了 OAuth Token（若是且未强制指定别的名称，则原地更新该档案）
   let targetName = cleanPref || '';
+  const liveFp = await fingerprint(relFiles);
+  let activeName = '';
+  try { activeName = (await readFile(join(dir, '.active'), 'utf-8')).trim(); } catch { activeName = ''; }
+  const metas = [];
+  for (const name of names) {
+    let meta = null;
+    try { meta = JSON.parse((await readFile(join(dir, name, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, '')); } catch { meta = null; }
+    metas.push({ name, meta });
+  }
+  // 当前生效的档案优先参与匹配，避免把所有候选都并到某个旧档案里
+  metas.sort((a, b) => (b.name === activeName ? 1 : 0) - (a.name === activeName ? 1 : 0));
+
   if (!targetName && identity) {
-    for (const name of names) {
-      try {
-        const meta = JSON.parse((await readFile(join(dir, name, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, ''));
-        if (meta?.identity && meta.identity === identity) {
-          targetName = name;
-          break;
-        }
-      } catch { /* ignore */ }
+    const exact = metas.find((m) => m.meta?.identity && m.meta.identity === identity);
+    if (exact) targetName = exact.name;
+  }
+  // 2b. opencode 这类「provider 集合」身份：给同一账号新增一个 provider 会让集合从 {a} 变成 {a,b}，
+  //     按「旧集合是新集合的子集」认定为同一账号，原地更新，而不是再裂出一个账号
+  if (!targetName && String(identity).startsWith('providers:')) {
+    const cur = new Set(String(identity).slice('providers:'.length).split('+').filter(Boolean));
+    const superset = metas.find((m) => {
+      const old = String(m.meta?.identity || '');
+      if (!old.startsWith('providers:')) return false;
+      const prev = old.slice('providers:'.length).split('+').filter(Boolean);
+      return prev.length > 0 && prev.every((p) => cur.has(p));
+    });
+    if (superset) targetName = superset.name;
+  }
+  // 2c. 身份只能靠文件指纹的 worker（minimaxcode / copilot 等）token 刷新后指纹必变；
+  //     若该 worker 只有一个「机器自动加的」档案，就原地更新它，避免一个号裂成两个。
+  //     有真实身份（邮箱/UID/AK/provider 集合）的 worker 不走这条，避免把另一个账号覆盖掉。
+  if (!targetName && identity && identity === liveFp) {
+    const autoOnes = metas.filter((m) => m.meta?.autoAdded === true);
+    if (autoOnes.length === 1) targetName = autoOnes[0].name;
+  }
+  // 2d. 单槽位 worker（minimaxcode：一个 region 只有一份 config.json）身份从「文件指纹」升级成
+  //     mmx:<region> 之后，旧档案的 identity 还是指纹，按身份匹配必然落空。
+  //     这里按「同 worker 下取 savedAt 最新的一份复用」兜底，让身份迁移不额外裂出新档案。
+  if (!targetName && String(identity).startsWith('mmx:')) {
+    const sameScheme = metas.filter((m) => {
+      const id = String(m.meta?.identity || '');
+      return id.startsWith('mmx:') || /^[0-9a-f]{12}$/.test(id);
+    });
+    if (sameScheme.length) {
+      sameScheme.sort((a, b) => String(b.meta?.savedAt || '').localeCompare(String(a.meta?.savedAt || '')));
+      targetName = sameScheme[0].name;
     }
   }
 
@@ -463,10 +542,11 @@ export async function listAccounts() {
     for (const [worker, relFiles] of Object.entries(WORKER_CRED_FILES)) {
       const livePresent = await isLiveCredValid(worker, relFiles, HOME);
       let syncedActiveName = '';
+      let syncedIdentity = '';
       if (livePresent) {
         try {
           const sr = await _autoSyncLiveAccount(worker);
-          if (sr?.ok && sr.name) syncedActiveName = sr.name;
+          if (sr?.ok && sr.name) { syncedActiveName = sr.name; syncedIdentity = String(sr.identity || ''); }
         } catch { /* ignore */ }
       }
       const liveFp = await fingerprint(relFiles);
@@ -498,13 +578,25 @@ export async function listAccounts() {
             }
           }
         }
+        // provider 集合 / 单槽位这类「可变异身份」的显示名在 meta.json 里可能早已固化过时
+        // （例如升级前写死的「opencode (1 个提供方)」），这里按 identity 现算一遍，不再信任旧字符串
+        let display = meta?.display || meta?.identity || name;
+        const metaId = String(meta?.identity || '');
+        if (metaId.startsWith('providers:')) {
+          display = formatProvidersDisplay(metaId.slice('providers:'.length).split('+').filter(Boolean));
+        }
+        // 旧快照判定：身份方案本身可变（provider 集合 / mmx 槽位 / 文件指纹），且与线上当前身份不一致
+        // —— 只可能是同一份凭据的历史快照，不是「另一个账号」，列表默认收起
+        const stale = !matchesLive && !!livePresent && isMutableIdentity(metaId)
+          && !!syncedIdentity && metaId !== syncedIdentity;
         rawProfiles.push({
           name,
           savedAt: meta?.savedAt || null,
           note: meta?.note || null,
           identity: meta?.identity || null,
-          display: meta?.display || meta?.identity || name,
+          display,
           matchesLive,
+          stale,
         });
       }
 
@@ -522,14 +614,17 @@ export async function listAccounts() {
         ...rest,
         active: rest.name === activeWinner,
       }));
-      // 将当前生效账号排在第一位，方便用户在列表与卡片上一眼看到
-      profiles.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || a.name.localeCompare(b.name));
+      // 当前生效账号置顶；历史快照沉底，避免「我只登录了一个号却看到两个」的错觉
+      profiles.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)
+        || (a.stale ? 1 : 0) - (b.stale ? 1 : 0)
+        || a.name.localeCompare(b.name));
 
       workers[worker] = {
         credFiles: relFiles,
         livePresent,
         liveFingerprint: liveFp,
         activeAccount: activeWinner || null,
+        staleCount: profiles.filter((p) => p.stale).length,
         profiles,
       };
     }

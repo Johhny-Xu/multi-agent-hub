@@ -58,7 +58,36 @@
       "standard"
     ],
     "stream_semantics": "answer_deltas",
-    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified. To enable image attachments: add \"--allowedTools Read --permission-mode acceptEdits\" to the agent CLI (grants Read + auto-accepted edits)."
+    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified. To enable image attachments: add \"--allowedTools Read --permission-mode acceptEdits\" to the agent CLI (grants Read + auto-accepted edits).",
+    "permission": {
+      "description": "--permission-mode",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--permission-mode",
+            "plan"
+          ],
+          "desc": "plan 模式只允许读与规划，不落盘改文件"
+        },
+        "edit": {
+          "label": "受控编辑",
+          "args": [
+            "--permission-mode",
+            "acceptEdits"
+          ],
+          "desc": "文件编辑自动通过，其余工具仍需确认"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--permission-mode",
+            "bypassPermissions"
+          ],
+          "desc": "跳过所有确认（高危操作仍会询问）"
+        }
+      }
+    }
   },
   "codebuddy-cn": {
     "stream": {
@@ -119,7 +148,36 @@
       "standard"
     ],
     "stream_semantics": "answer_deltas",
-    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified. To enable image attachments: add \"--allowedTools Read --permission-mode acceptEdits\" to the agent CLI (grants Read + auto-accepted edits)."
+    "notes": "Force official standard agent so remembered PTC/REPL does not hide Read. UTF-8 files use official stdin JSON; images require the verified Read path and explicit narrow headless authorization. Direct deepseek stdin images are not declared verified. To enable image attachments: add \"--allowedTools Read --permission-mode acceptEdits\" to the agent CLI (grants Read + auto-accepted edits).",
+    "permission": {
+      "description": "--permission-mode",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--permission-mode",
+            "plan"
+          ],
+          "desc": "plan 模式只允许读与规划，不落盘改文件"
+        },
+        "edit": {
+          "label": "受控编辑",
+          "args": [
+            "--permission-mode",
+            "acceptEdits"
+          ],
+          "desc": "文件编辑自动通过，其余工具仍需确认"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--permission-mode",
+            "bypassPermissions"
+          ],
+          "desc": "跳过所有确认（高危操作仍会询问）"
+        }
+      }
+    }
   },
   "github-copilot": {
     "thinking": {
@@ -160,7 +218,20 @@
       }
     },
     "notes": "auto exposes default thinking only. Per-model thinking controls must be explicitly verified and declared in the local profile.",
-    "stream_semantics": "answer_deltas"
+    "stream_semantics": "answer_deltas",
+    "permission": {
+      "description": "--allow-all-tools",
+      "modes": {
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--allow-all-tools",
+            "--allow-all-paths"
+          ],
+          "desc": "放行所有工具与任意路径（无只读开关）"
+        }
+      }
+    }
   },
   "mimocode": {
     "stream": {
@@ -320,6 +391,35 @@
       "image": {
         "mode": "prompt_path"
       }
+    },
+    "permission": {
+      "description": "--mode",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--mode",
+            "plan"
+          ],
+          "desc": "只规划不改文件"
+        },
+        "edit": {
+          "label": "受控编辑",
+          "args": [
+            "--mode",
+            "accept-edits"
+          ],
+          "desc": "自动接受文件编辑"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--mode",
+            "auto"
+          ],
+          "desc": "全自动，跳过确认"
+        }
+      }
     }
   },
   "traecode": {
@@ -358,7 +458,27 @@
       }
     },
     "stream_semantics": "answer_snapshots",
-    "notes": "opencode run --format json emits an event stream; text parts arrive as per-part snapshots keyed by messageID. Thinking display is a --thinking flag, not a provider reasoning guarantee, so no thinking control is declared."
+    "notes": "opencode run --format json emits an event stream; text parts arrive as per-part snapshots keyed by messageID. Thinking display is a --thinking flag, not a provider reasoning guarantee, so no thinking control is declared.",
+    "permission": {
+      "description": "--agent plan",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--agent",
+            "plan"
+          ],
+          "desc": "切换到 plan agent，只读不改文件"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--auto"
+          ],
+          "desc": "自动批准未被显式禁止的权限"
+        }
+      }
+    }
   },
   "cline": {
     "stream": {
@@ -382,6 +502,25 @@
       }
     },
     "stream_semantics": "answer_snapshots",
-    "notes": "cline --json streams NDJSON say/agent_event lines with a final run_result carrying the answer text. Attachments are delivered as @path mentions in the prompt. Auto-approval follows the CLI's own configuration; the hub does not pass --yolo."
+    "notes": "cline --json streams NDJSON say/agent_event lines with a final run_result carrying the answer text. Attachments are delivered as @path mentions in the prompt. Auto-approval follows the CLI's own configuration; the hub does not pass --yolo.",
+    "permission": {
+      "description": "--plan / --yolo",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--plan"
+          ],
+          "desc": "plan 模式只读"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--yolo"
+          ],
+          "desc": "yolo 自动批准受限工具集"
+        }
+      }
+    }
   }
 }

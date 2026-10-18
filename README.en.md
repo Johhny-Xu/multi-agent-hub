@@ -2,119 +2,116 @@
 
 **English** · [简体中文](README.md)
 
-> A local dispatch hub for AI agents: it turns the AI coding CLIs scattered across your machines into one Worker pool you can delegate to and collaborate with.
+**multi-agent-hub** is a local dispatch hub that turns 11 scattered AI coding CLIs (**Workers** — the tools that execute delegated tasks) into one shared worker pool. If you juggle CodeBuddy, Copilot, Antigravity, TraeCode, and other CLIs, you no longer have to switch tools and re-explain your prompt when one account hits its quota limit — your current AI client can hand the task straight to another AI.
 
 ![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 11 Workers under one scheduler](docs/architecture.en.svg)
 
 **Current version: v1.0.12** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
+| Connection Mode | Best For | What You Do |
+| --- | --- | --- |
+| **Any MCP Client** | Cursor, Claude Desktop, Windsurf, Cline / Roo Code, Continue, and any client supporting MCP (Model Context Protocol, an open standard for connecting AI clients to external tools) | Add one MCP URL (`http://127.0.0.1:8790/mcp`) |
+| **6 Native Host Plugins** | Codex, ZCode, MiniMax Code (including Claude Code / Agent Plugins 1.0), DeepSeek Harness (DSH), Huawei CodeArts, and Antigravity (**Hosts** — the primary clients where you start tasks) | Run the installer to register dedicated `hub-*.md` sub-agents (helper agents running in isolated context), skills, and slash commands |
+| **Zero-Client WebUI** | Machines without an IDE or AI client installed | Open the built-in three-pane WebUI (`http://localhost:8890`) to chat, dispatch, and monitor |
+
+**Key Capabilities**
+
+- 🤖 **Dispatch to 11 Workers under one contract**: Run tasks across Antigravity, CodeBuddy (International / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode, and Cline; each task uses the target Worker's own quota while sharing one task queue, mailbox, and note board.
+- 🔌 **Auto-configure 6 native hosts**: The installer writes native sub-agents, slash commands, and workflows automatically, keeping sub-agent context isolated from your main chat.
+- 🔐 **Log in and switch accounts for all 11 Workers in the WebUI**: Supports 9 OAuth vendors, Cline device-code auth, and opencode API keys; log in, log out, save multiple accounts, and switch in one click without SSH, verifying real on-disk credentials so fake logins never pass.
+- ⚡ **Toggle Workers on or off across every client at once**: Disabling a Worker in the console blocks dispatch requests immediately (`profile_disabled`) before any quota is spent.
+- 🛡️ **Reject empty or truncated answers**: Filters out blank replies, known crash exits, and partial output after timeouts; preserves the original task `ref` (persistent tracking ID) and blocks any Worker from dispatching tasks to itself.
+- 🔄 **Deploy on one machine or split across machines**: Runs on Windows, Linux, or Windows ↔ Linux over LAN or SSH reverse tunnels; keeps config and credentials outside the repo directory so upgrades never wipe task history.
+- 🔍 **Scan the LAN and auto-reconnect**: Clients discover available Hubs via UDP broadcast and reconnect automatically after config changes.
+- 🖥️ **Preview offline in a single file**: Open `demo.html` in any browser to try the full three-pane console without starting a backend.
+
 ---
 
 ## Contents
 
-- [What it does](#what-it-does)
-- [Quick start](#quick-start)
-- [Choose how to connect](#choose-how-to-connect)
-- [Native host plugins](#native-host-plugins)
-- [Workers and default models](#workers-and-default-models)
-- [MCP tools and task contract](#mcp-tools-and-task-contract)
-- [Web console](#web-console)
-- [Verification status](#verification-status)
-- [Data flow and security](#data-flow-and-security)
-- [Prebuilt packages](#prebuilt-packages)
-- [Development and testing](#development-and-testing)
-- [Version history](#version-history)
-- [Documentation](#documentation)
-- [Acknowledgements](#acknowledgements)
+1. [Up and Running in 30 Seconds](#up-and-running-in-30-seconds)
+2. [Choose How to Connect](#choose-how-to-connect)
+3. [Native Host Plugin Setup](#native-host-plugin-setup)
+4. [Supported Workers and Default Models](#supported-workers-and-default-models)
+5. [MCP Tools and Task Contract](#mcp-tools-and-task-contract)
+6. [Inside the Web Console](#inside-the-web-console)
+7. [Verification Status and Boundaries](#verification-status-and-boundaries)
+8. [Data Flow and Security](#data-flow-and-security)
+9. [Prebuilt Packages, Development, and Testing](#prebuilt-packages-development-and-testing)
+10. [Version History, Documentation, and License](#version-history-documentation-and-license)
 
 ---
 
-## What it does
+## Up and Running in 30 Seconds
 
-Built on standard MCP, native plugins and a sub-agent system, **multi-agent-hub** gives **11 AI coding Workers** and **6 native hosts** (plus any MCP client) one place to dispatch tasks, collect results, monitor quotas, manage accounts and run a WebUI console.
-
-Any AI client connected to the Hub can hand work to another AI: each task runs on the receiving worker's own account quota, while the task queue, mailbox and notes are shared.
-
-Three ways to plug in:
-
-| Mode | For | What you do |
-| --- | --- | --- |
-| **Any MCP client** | Cursor, Claude Desktop, Windsurf, Cline / Roo Code, Continue, … | Paste one MCP URL |
-| **6 native hosts** | Codex, ZCode, MiniMax Code (plus Claude Code / Agent Plugins 1.0), DeepSeek Harness (DSH), Huawei CodeArts, Antigravity | Run the installer; it adds dedicated `hub-*.md` sub-agents, skills and slash commands |
-| **Zero-client** | No IDE or AI client at all | Open the built-in three-pane WebUI and chat, dispatch and monitor there |
-
-**Highlights**
-
-- 🤖 **11 Workers under one contract**: Antigravity, CodeBuddy (international / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode and Cline.
-- 🔌 **6 native hosts, deeply integrated**: native sub-agents, slash commands and workflows, with context isolated automatically.
-- 🔐 **Log in to all 11 Workers from the WebUI**: nine OAuth vendors plus Cline's device code and opencode API keys; log in, log out, save and switch accounts without SSH, with login state read from real on-disk credentials so there are no fake successes.
-- ⚡ **Switch Workers on or off once, everywhere**: disabled Workers are rejected before dispatch (`profile_disabled`), so no quota is wasted.
-- 🛡️ **Strict terminal states**: empty answers, known abnormal exits and partial answers after a timeout are rejected; the original `ref` is kept and a Worker can never dispatch to itself.
-- 🔄 **Flexible deployment**: same machine or separate; pure Windows, pure Linux, or Windows ↔ Linux (LAN or SSH reverse tunnel).
-- 🔍 **Auto-discovery**: LAN and local Hub broadcast scanning; the MCP bridge reconnects after a config restore; config and credentials live outside the source tree, so upgrades keep task history.
-- 🖥️ **Offline demo**: `demo.html` is a single zero-dependency file that runs the full console without a backend.
-
----
-
-## Quick start
+Three commands start the Hub scheduler, launch the Web console, and register native plugins for any supported hosts already on your machine.
 
 ### Requirements
 
-- **Python 3.8+** (3.11+ to install the Codex native plugin)
-- **Node.js 20+** (MCP bridge and Web console)
-- Each Worker's **official vendor CLI, already logged in** (e.g. `agy`, `cb`, `trae`, `codearts`). The installer only probes the environment and invokes commands; it does not register accounts or log in for you.
+- **Python 3.8+** (**3.11+** required to install the Codex native plugin)
+- **Node.js 20+** (runs the local MCP bridge and Web console)
+- **Official vendor CLIs logged in** for the Workers you plan to use (such as `agy`, `cb`, `trae`, `codearts`). The installer probes your environment and invokes CLIs, but does not register vendor accounts for you.
 
-### Up and running in three steps
+### Start Commands
+
+**Linux / macOS**
 
 ```bash
-# 1. Get the code
 git clone https://github.com/Johhny-Xu/multi-agent-hub.git
 cd multi-agent-hub
-
-# 2. Install and start the Hub + Web console + native plugins for hosts already on this machine
-sh install.sh --with-console          # Windows: .\install.cmd --with-console
-
-# 3. Open the console
-#    http://localhost:8890
+sh install.sh --with-console
 ```
 
-- You can also download `agenthub-1.0.12-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), unzip it and run the same command.
-- Run from a source checkout, the installer first builds a release bundle in a temp directory, so no manual packaging is needed.
-- Day to day: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
-- Just want to look around? Open `demo.html` in a browser.
+**Windows (PowerShell / CMD)**
 
-> 💡 Prefer `sh install.sh` over `./install.sh`: it still works when an unzip tool drops the exec bit (`Permission denied`). See [RUN_ON_LINUX.md](RUN_ON_LINUX.md).
+```powershell
+git clone https://github.com/Johhny-Xu/multi-agent-hub.git
+cd multi-agent-hub
+.\install.cmd --with-console
+```
 
-### Default ports
+**What You See When It Succeeds**
 
-| Port | Service | Used by |
+- Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 11 Worker status cards on the right).
+- You can also download `agenthub-1.0.12-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
+- Daily start and stop: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
+- Want to preview the UI first? Open `demo.html` directly in your browser.
+
+> 💡 On Linux, run `sh install.sh` rather than `./install.sh` so installation still works if an archive utility strips executable permissions (`Permission denied`). See [RUN_ON_LINUX.md](RUN_ON_LINUX.md).
+
+### Default Ports
+
+| Port | Service | Purpose and Clients |
 | --- | --- | --- |
-| `8765` | **Hub** (`http://<host>:8765/mcp`, token required) | Native plugins, cross-machine clients |
-| `8890` | **Web console** (needs `--with-console`) | Your browser |
-| `8790` | **Console's built-in sub-agent MCP endpoint** (`http://127.0.0.1:8790/mcp`, starts with the console) | Generic MCP clients, no plugin needed |
+| `8765` | **Hub Core Service** (`http://<host>:8765/mcp`) | Requires a bearer **Token** (authentication key); used by the 6 native host plugins and cross-machine clients |
+| `8890` | **Web Console** (enabled with `--with-console`) | Open `http://localhost:8890` in a browser to manage accounts, quotas, Worker switches, and direct chats |
+| `8790` | **Built-in Sub-agent MCP Endpoint** (`http://127.0.0.1:8790/mcp`) | Starts alongside the console; lets Cursor, Windsurf, and other generic MCP clients connect without a plugin |
 
 ---
 
-## Choose how to connect
+## Choose How to Connect
 
-### Option 0: let your AI install it (recommended)
+You can paste a single prompt into your current AI assistant to let it install everything, or set up a single-machine, plugin-free, or cross-machine deployment yourself.
 
-Copy the matching sentence to the AI assistant you are using; it will clone, install and configure everything.
+### Option 0: Let Your AI Install It (Recommended)
+
+Copy the matching prompt below and send it to your AI assistant; it will clone the repo, run the installer, and verify the connection.
 
 <details>
-<summary><b>Any native host</b> (Antigravity / CodeArts / ZCode / Codex / DSH / MiniMax Code)</summary>
+<summary><b>Generic prompt for any native host</b> (Antigravity / CodeArts / ZCode / Codex / DSH / MiniMax Code)</summary>
 
 ```text
-Clone https://github.com/Johhny-Xu/multi-agent-hub.git, read its README.md, and based on the client I am using run install.cmd (Windows) or sh install.sh (Linux/macOS) to install the Multi-Agent Hub service and this client's native plugin (sub-agents, skills and MCP bridge). Then call hub_status to verify the connection.
+Clone https://github.com/Johhny-Xu/multi-agent-hub.git, read its README.md, and based on the client I am using run install.cmd (Windows) or sh install.sh (Linux/macOS) to install the Multi-Agent Hub service and this client's native plugin (sub-agents, skills, and MCP bridge). Then call hub_status to verify the connection.
 ```
+
 </details>
 
 <details>
-<summary><b>Per client</b></summary>
+<summary><b>Host-specific prompts</b> (replace <code>&lt;current project path&gt;</code> with your workspace directory)</summary>
 
 - **Google Antigravity**
   ```text
-  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd (sh install.sh on Linux) with --native-hosts antigravity to install the Multi-Agent Hub native plugin and its 9 hub-* sub-agents into ~/.gemini/config/plugins/multi-agent-hub, and start the Hub service.
+  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd (sh install.sh on Linux) with --native-hosts antigravity to install the Multi-Agent Hub native plugin and its 11 hub-* sub-agents into ~/.gemini/config/plugins/multi-agent-hub, and start the Hub service.
   ```
 - **Huawei CodeArts (IDE / CLI)**
   ```text
@@ -122,11 +119,11 @@ Clone https://github.com/Johhny-Xu/multi-agent-hub.git, read its README.md, and 
   ```
 - **MiniMax Code (`mcode`) / Claude Code**
   ```text
-  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, start its Multi-Agent Hub service, and load the repository's plugins/agenthub-workers directory as a native plugin (including .minimax-plugin/plugin.json, .claude-plugin/plugin.json, hub-bridge.mcp.json and the dispatch-hub skill) into this client.
+  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, start its Multi-Agent Hub service, and load the repository's plugins/agenthub-workers directory as a native plugin (including .minimax-plugin/plugin.json, .claude-plugin/plugin.json, hub-bridge.mcp.json, and the dispatch-hub skill) into this client.
   ```
 - **ZCode (IDE / CLI)**
   ```text
-  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd --native-hosts zcode (sh install.sh on Linux) to register the plugins/agenthub-workers native plugin (9 external Worker sub-agents plus the MCP bridge) with my ZCode environment, and start the Hub.
+  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd --native-hosts zcode (sh install.sh on Linux) to register the plugins/agenthub-workers native plugin (11 external Worker sub-agents plus the MCP bridge) with my ZCode environment, and start the Hub.
   ```
 - **OpenAI Codex**
   ```text
@@ -136,12 +133,13 @@ Clone https://github.com/Johhny-Xu/multi-agent-hub.git, read its README.md, and 
   ```text
   Clone https://github.com/Johhny-Xu/multi-agent-hub.git and run install.cmd --native-hosts dsh (sh install.sh on Linux), or mount the native presets and workflow plugin with dsh plugin add file:./integrations/dsh.
   ```
+
 </details>
 
 <details>
 <summary><b>Generic MCP clients</b> (Cursor / Windsurf / Claude Desktop / Cline / Roo Code / Continue)</summary>
 
-With a Hub and console already running:
+When a Hub and console are already running:
 
 ```text
 Add a Streamable HTTP MCP server named "multi-agent-hub" with URL http://127.0.0.1:8790/mcp to this client's MCP config (replace with the server's IP if it runs on the LAN), then call the subagent_agents tool to list the available external sub-agents.
@@ -152,18 +150,19 @@ From scratch:
 ```text
 Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd --with-console (sh install.sh --with-console on Linux) to start the Multi-Agent Hub and Web console (:8890 / :8790), then write http://127.0.0.1:8790/mcp into this client's MCP config.
 ```
+
 </details>
 
-### Option 1: one-click local install
+### Option 1: All-in-One Local Setup
 
-For a single development machine where you want the Hub, the console and plugins for every installed IDE in one go. Follow [Quick start](#quick-start): the installer checks the environment and detects and registers Codex, ZCode, DSH, CodeArts and Antigravity native plugins and sub-agents.
+Best when you code on a single machine and want the Hub, Web console, and plugins for every installed IDE configured in one step. Run the commands in [Up and Running in 30 Seconds](#up-and-running-in-30-seconds); the installer automatically detects and registers Codex, ZCode, DSH, CodeArts, and Antigravity plugins and sub-agents.
 
-### Option 2: any MCP client, no plugin
+### Option 2: Direct MCP Connection Without Plugins
 
-For Cursor, Claude Desktop, Windsurf, Cline / Roo Code / Continue and similar. Start the console with `--with-console`, then either:
+Best for Cursor, Claude Desktop, Windsurf, Cline / Roo Code, and Continue. Start the console with `--with-console`, then connect in either of two ways:
 
-- click **Copy this text (send it to your agent)** on the console's "Sub-agent endpoint" card and paste it to your AI, which writes the config itself; or
-- add it by hand:
+1. In the console at `http://localhost:8890`, click **Copy this text (send it to your agent)** on the "Sub-agent endpoint" card and paste the prompt to your AI assistant;
+2. Or add the endpoint to your client's MCP config file manually:
 
 ```json
 {
@@ -173,290 +172,274 @@ For Cursor, Claude Desktop, Windsurf, Cline / Roo Code / Continue and similar. S
 }
 ```
 
-Tools: `subagent_run` (waits server-side; large output is written to disk and only a summary returns), `subagent_result`, `subagent_artifact`, `subagent_agents`.
+This exposes 4 tools: `subagent_run` (waits server-side for completion, saves large outputs to disk, and returns a concise summary so your main chat context stays clean), `subagent_result`, `subagent_artifact`, and `subagent_agents`.
 
-### Option 3: cross-machine (server + workstation)
+### Option 3: Cross-Machine Setup (Server + Workstation)
 
-Run the Hub and Workers on a home server, NAS or cloud host, and write code on another machine.
+Best when you run the Hub and vendor CLIs on a home server, NAS, or cloud VM and write code on a laptop. Replace `<SERVER_IP>` with your server's IP address and `<TOKEN_FILE_PATH>` with the local path to your copied `hub-token.txt`.
 
 ```bash
-# Server: listen on the LAN and enable the console (a random token file hub-token.txt is generated in the external config dir)
+# 1. Server (Linux): listen on the LAN and start the console; generates a random hub-token.txt in the external config dir
 sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 ```
 
 ```powershell
-# Client: point at the server and its token
-.\install.cmd --component plugins --url http://SERVER_IP:8765/mcp --token-file C:\private\hub-token.txt
+# 2. Client (Windows): pair with the server using its URL and the copied token file
+.\install.cmd --component plugins --url http://<SERVER_IP>:8765/mcp --token-file <TOKEN_FILE_PATH>
 ```
 
-- **Auto-discovery**: without `--url`, the client scans the LAN by UDP broadcast and lets you pick a Hub.
-- **Switch Hubs later**: run `connect.cmd` (Linux: `sh connect.sh`).
-- **Not on the same LAN**: use an SSH reverse tunnel, e.g. `ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 user@SERVER`.
-- **Run as a Linux service**: add `--systemd-user` to register a user-level systemd unit (Hub only, no console in this mode).
-
-### Option 4: install a single host's plugin
-
-See [Native host plugins](#native-host-plugins).
+- **LAN auto-discovery**: Omit `--url` on the client to scan the LAN via UDP broadcast and pick a Hub interactively.
+- **Switch Hubs anytime**: Run `connect.cmd` (Linux: `sh connect.sh`).
+- **Connect across networks**: Forward the port over an SSH reverse tunnel, e.g. `ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 <USER>@<SERVER_IP>`.
+- **Run as a Linux background service**: Add `--systemd-user` on the server to register a user-level systemd unit (runs the Hub core service only, without the Web console).
 
 ---
 
-## Native host plugins
+## Native Host Plugin Setup
 
-| Host | How to install | Docs |
+To install a plugin for just one host, import the prebuilt package or run the targeted command below (replace `<workspace path>` with your project directory; on Linux, replace `.\install.cmd` with `sh install.sh`).
+
+| Native Host | Installation Method | Documentation |
 | --- | --- | --- |
-| **Huawei CodeArts / VS Code** | In the IDE's Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.12.carts` / `.vsix`; or `.\install.cmd --component plugins --native-hosts codearts --project <workspace>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.12-minimax-plugin.zip` in the desktop or cloud app; CLI: `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
-| **ZCode IDE / CLI** | `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
-| **OpenAI Codex** | `.\install.cmd --component plugins --native-hosts codex --project <workspace>`; registers a local plugin marketplace and writes 11 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
-| **DeepSeek Harness (DSH)** | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
-| **Google Antigravity** | `.\install.cmd --component plugins --native-hosts antigravity`; installs to `~/.gemini/config/plugins/multi-agent-hub`, restart to load | [antigravity](integrations/antigravity/README.md) |
-
-On Linux, replace `.\install.cmd` with `sh install.sh`.
+| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.12.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.12-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **ZCode IDE / CLI** | Run `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **OpenAI Codex** | Run `.\install.cmd --component plugins --native-hosts codex --project <workspace path>` to register a local plugin marketplace and write 11 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
+| **DeepSeek Harness (DSH)** | Run `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or run `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
+| **Google Antigravity** | Run `.\install.cmd --component plugins --native-hosts antigravity` to install into `~/.gemini/config/plugins/multi-agent-hub`, then restart the client | [antigravity](integrations/antigravity/README.md) |
 
 <details>
-<summary><b>Antigravity notes</b></summary>
+<summary><b>Antigravity native plugin and optional Python SDK notes</b></summary>
 
-- The native plugin ships `plugin.json`, 9 agents (`agents/*.md`), 4 skills (`skills/*/SKILL.md`) and an `mcp_config.json` with 8 bridge tools.
-- The optional Python SDK is pinned to `google-antigravity==0.1.21` and provides typed `SubagentConfig` plus serial / parallel orchestration. The installed wheel has no `beta.run_workflow`, and SDK API auth is separate from the IDE / CLI login.
+- The native plugin installs `plugin.json`, 11 sub-agents (`agents/*.md`), 4 skills (`skills/*/SKILL.md`), and an `mcp_config.json` exposing 8 bridge tools.
+- The optional Python SDK is pinned to `google-antigravity==0.1.21` and provides typed `SubagentConfig` and serial / parallel orchestration. Note that the published wheel does not include `beta.run_workflow`, and SDK API authentication is separate from IDE / CLI logins.
+
 </details>
 
 <details>
-<summary><b>CodeArts notes</b></summary>
+<summary><b>CodeArts two-way integration and workspace switching</b></summary>
 
-Ships 11 sub-agents, 3 slash commands, 1 dispatch skill, 1 Hooks plugin and 8 MCP tools. CodeArts can dispatch to others as a client and be dispatched to as a Worker (`worker="codearts"`, aliases `ca`, `huawei-codearts`).
+The CodeArts native package includes 11 sub-agents, 3 slash commands, 1 dispatch skill, 1 Hooks plugin, and 8 MCP tools. CodeArts can both dispatch tasks as a host and accept tasks as a Worker (`worker="codearts"`, aliases `ca`, `huawei-codearts`).
 
-- **Single call path**: strictly `tool_search → tool_describe → tool_call`; no raw XML tags in prose, so nothing is dispatched twice; one dispatch per task, then the client polls.
-- **Permissions and terminal state**: on a host permission denial it returns `blocked_permission` with the original ref instead of retrying under another tool name; only a non-empty real Worker answer counts as `completed`.
-- **Windows CLI detection**: finds the official `installers/bin/codearts.exe` and uses its own `cli-data` directory and session database, never the IDE's; "folder not trusted" maps to `CODEARTS_PERMISSION_REQUIRED`.
-- **Linux process cleanup**: driver and Hub share a process group, so cancel or timeout reclaims every descendant.
+- **Single call path**: Follows `tool_search → tool_describe → tool_call`; blocks raw XML tags in prose to prevent double dispatch; dispatches each task once and polls thereafter.
+- **Permission handling and terminal state**: Returns `blocked_permission` with the original `ref` immediately if the host denies permission rather than retrying under another tool name; marks a task `completed` only when the Worker returns a non-empty answer.
+- **Windows CLI isolation**: Targets the official `installers/bin/codearts.exe` binary with its own `cli-data` directory and session database, separate from the IDE; reports untrusted folders as `CODEARTS_PERMISSION_REQUIRED`.
+- **Linux process group cleanup**: Runs the driver and Hub in one process group so cancellations and timeouts terminate every child process cleanly.
 
-Install only the CodeArts plugin and connect to a remote Hub:
+Install only the CodeArts plugin and connect to a remote Hub (replace `<workspace path>`, `<SERVER_IP>`, and `<TOKEN_FILE_PATH>`):
 
 ```powershell
-.\install.cmd --component plugins --native-hosts codearts --project C:\Work\my-project --url http://SERVER:8765/mcp --token-file C:\private\hub-token.txt
+.\install.cmd --component plugins --native-hosts codearts --project <workspace path> --url http://<SERVER_IP>:8765/mcp --token-file <TOKEN_FILE_PATH>
 ```
 
 ```bash
-sh install.sh --component plugins --native-hosts codearts --codearts-target cli --url http://SERVER:8765/mcp --token-file /private/hub-token.txt
+sh install.sh --component plugins --native-hosts codearts --codearts-target cli --url http://<SERVER_IP>:8765/mcp --token-file <TOKEN_FILE_PATH>
 ```
 
-`--project` must point at the workspace the IDE actually has open (or use `--codearts-ide-settings` for the MCP settings file). Reload the IDE or restart the CLI afterwards.
+`--project` must point to the workspace directory open in the IDE (or pass `--codearts-ide-settings` to point directly to the MCP settings file). Reload the IDE window or restart the CLI after installation.
 
-**After switching workspaces** (reuses the external `client.json`, no token re-entry):
+**Reconnect after switching workspaces** (reuses your external `client.json` without re-entering the token; replace `<new workspace path>`):
 
 ```powershell
-python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/client.json" --ide-settings "C:/Work/new-project/.codeartsdoer/mcp/mcp_settings.json" --target ide --apply
+python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/client.json" --ide-settings "<new workspace path>/.codeartsdoer/mcp/mcp_settings.json" --target ide --apply
 ```
 
-Then run "Developer: Reload Window" in the IDE and verify with `/hub-status`. See the [CodeArts package docs](integrations/codearts/README.md).
+Then run "Developer: Reload Window" in the IDE and test with `/hub-status`. See the [CodeArts package docs](integrations/codearts/README.md).
+
 </details>
 
 ---
 
-## Workers and default models
+## Supported Workers and Default Models
 
-| Worker | Default model | Notes |
+The Hub schedules all 11 Workers below. The table shows default models for **fresh installations**; upgrading an existing server keeps your configured models intact.
+
+| Worker | Default Model | Specs and Auth Notes |
 | --- | --- | --- |
-| **Antigravity** | gemini-3.8-flash-medium | 6 models kept, incl. 3.8 Flash (High/Medium), 3.1 Pro High, Claude 4.6 (Sonnet/Opus); multimodal |
-| **CodeBuddy** (China) | deepseek-v4.1-flash (x0.11) | 13 coding models with official credit multipliers x0.06–x2.00; XDG shared session storage |
-| **CodeBuddy** (international) | deepseek-v4.1-flash | 18 mainstream models; file tools need real permissions |
-| **GitHub Copilot** | auto | Official model choice; WebUI device-code login and GNOME Keyring |
-| **MiMo** | xiaomi/mimo-v2.6-flash (26f) | 4 V2.6 models; API key separate from Xiaomi OAuth identity |
-| **MiniMax** | MiniMax-M3 | M3 (1M context) and M3.1-Flash-Preview (512K), one-click switch |
-| **TraeCode** | GLM-5.3-FlashX (0.31x) | 20 official models, multipliers 0.06x–1.50x; dual-region PKCE OAuth and TraeClaw gateway |
-| **ZCode** | GLM-5.3-Flash | China (BigModel) / international (Z.ai) regions; `enc:v1:` AES-256-GCM on disk |
-| **CodeArts** | GLM-5.2 (0.70x) | 4 enterprise models (GLM-5.2, GLM-5.2-ArkTS-SPARK, OpenPangu-2.0-Pro/Flash); Linux CLI loads AK/SK automatically |
-
-These are defaults for **new installs**; existing servers keep their configured models.
+| **Antigravity** | `gemini-3.8-flash-medium` | 6 curated models including 3.8 Flash (High/Medium), 3.1 Pro High, and Claude 4.6 (Sonnet/Opus); supports multimodal input |
+| **CodeBuddy** (China) | `deepseek-v4.1-flash` (x0.11) | 13 coding models labeled with official credit multipliers (x0.06–x2.00); shares XDG session storage |
+| **CodeBuddy** (International) | `deepseek-v4.1-flash` | 18 mainstream models; file read/write tools require actual filesystem permissions |
+| **GitHub Copilot** | `auto` | Uses official model selection; supports WebUI device-code login and Linux GNOME Keyring credentials |
+| **MiMo** | `xiaomi/mimo-v2.6-flash` (26f) | 4 V2.6 models; keeps API key auth separate from Xiaomi OAuth identity |
+| **MiniMax** | `MiniMax-M3` | One-click switch between M3 (1M context) and M3.1-Flash-Preview (512K context) |
+| **TraeCode** | `GLM-5.3-FlashX` (0.31x) | 20 official models with 0.06x–1.50x credit multipliers; dual-region PKCE OAuth and TraeClaw gateway |
+| **ZCode** | `GLM-5.3-Flash` | China (BigModel) and International (Z.ai) regions; encrypts stored credentials with `enc:v1:` AES-256-GCM |
+| **CodeArts** | `GLM-5.2` (0.70x) | 4 enterprise models (GLM-5.2, GLM-5.2-ArkTS-SPARK, OpenPangu-2.0-Pro/Flash); Linux CLI auto-loads AK/SK |
+| **opencode** | Official CLI default | Configure API keys in the WebUI, parse NDJSON event streams, and display a dedicated brand accent color |
+| **Cline** | Official CLI default | Authorize via device code in the WebUI, parse NDJSON event streams, and display a dedicated brand accent color |
 
 ---
 
-## MCP tools and task contract
+## MCP Tools and Task Contract
 
-Host plugins expose **8 tools** through the MCP bridge:
+Every native host plugin exposes the same **8 MCP tools** through the local bridge and enforces a single contract for attachments and working directories.
 
 | Tool | Purpose |
 | --- | --- |
-| `hub_ask` | Dispatch and wait for the result |
-| `hub_dispatch` | Dispatch only; returns a `ref` immediately |
-| `hub_fetch` | Fetch a result by `ref` |
-| `hub_status` | Worker online / enabled status |
-| `hub_capabilities` | Model capabilities (thinking / streaming / attachments) |
-| `hub_login` | Check or start a Worker login |
-| `hub_discover` | Read-only discovery of available Hubs |
-| `hub_set_status` | Enable / disable a Worker (synced everywhere) |
+| `hub_ask` | Dispatch a task and wait for the final answer |
+| `hub_dispatch` | Dispatch asynchronously and return a persistent `ref` immediately |
+| `hub_fetch` | Poll task status or retrieve the final result by `ref` |
+| `hub_status` | List online and enabled states for all 11 Workers |
+| `hub_capabilities` | Query supported models, thinking levels, streaming, and attachment limits |
+| `hub_login` | Check login status or start a login flow for a Worker |
+| `hub_discover` | Scan the local machine and LAN for available Hubs (read-only) |
+| `hub_set_status` | Enable or disable a Worker and sync the state across all clients |
 
-Every host follows the same task contract:
+**Three Task Contract Rules**
 
-- **Attachments**: `files` takes at most 8 files, 1 MiB total, staged on the Hub.
-- **Working directory**: `cwd` is a directory **on the Hub's host**; client paths are never mapped silently.
-- **Tracking**: an accepted task returns a persistent `ref`; poll it with `hub_fetch` instead of dispatching again. `completed` means the task finished — whether the answer is correct is still for the caller to check.
-- Full parameters: [task options](docs/task-options.md).
+1. **Attachment limit**: `files` accepts up to 8 files totaling at most 1 MiB, staged on the Hub host.
+2. **Working directory**: `cwd` always refers to a path **on the Hub's host machine**; client paths are never mapped automatically.
+3. **Result tracking and verification**: Accepted tasks return a persistent `ref` — poll with `hub_fetch` instead of re-dispatching. A `completed` state means the Worker exited cleanly with a non-empty answer; the caller is still responsible for verifying the output. See [Task Options](docs/task-options.md) for all parameters.
 
 ---
 
-## Web console
+## Inside the Web Console
 
-Enable with `--with-console`; default port `8890`.
+Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispatch tasks, switch accounts, check quotas, and inspect local files from one screen.
 
-| Feature | What it does |
+| Module | What You Can Do |
 | --- | --- |
-| **Three panes** | Slim activity bar + platform session tree + immersive chat, with a collapsible right-hand workbench; bottom navigation on mobile |
-| **Smart reveal / collapse** | Top bar, activity bar and sidebar expand and hide with the cursor; the top-left brand anchor toggles auto-collapse vs pinned and remembers it |
-| **Themes** | Mocha, Shell, Aurora, Dusk, Cyber, Grid — each in light and dark (12 total), WCAG AA calibrated |
-| **Custom wallpaper** | Uploading a wallpaper switches the whole UI to translucent glass |
-| **Sub-agent accent** | Send button, progress bar and menus follow the active sub-agent's brand colour |
-| **Accounts and quotas** | OAuth for 9 vendors, instant account switching; live quota monitoring (60 s cache, request coalescing) |
-| **Worker on/off** | A switch on each card, persisted to `agents.json` and applied everywhere |
-| **Archive** | Cross-platform aggregation, filter, search, one-click restore, two-step confirm before deleting |
-| **Sub-agent MCP endpoint** | `:8790/mcp`, with one-click copy of the URL or a ready-to-send agent prompt |
-| **Clipboard fallback** | Works on plain-HTTP LAN addresses where `navigator.clipboard` is blocked |
+| **Three-Pane Workbench & File Preview** | Browse the platform session tree on the left, chat in the center, and open local files mentioned in the conversation inside the collapsible right-hand workbench (supports artifact, image, and attachment previews plus single-item deletion) |
+| **11-Worker Login & Account Switching** | Complete logins for 9 OAuth vendors, Cline device codes, and opencode API keys directly in the browser; log out, save multiple accounts, and switch in one click without SSH |
+| **Live Quotas & Worker Switches** | Monitor remaining quota per account (60 s cache with request coalescing); toggle Workers on or off on each card (saved to `agents.json` and synced everywhere) and drag cards to reorder |
+| **Smart Reveal / Collapse** | Top bar, activity bar, and session sidebar expand when your cursor approaches and hide when it leaves; click the top-left brand icon to pin or unpin the layout |
+| **12 Themes & Glass Wallpaper** | Switch between Mocha, Shell, Aurora, Dusk, Cyber, and Grid in light or dark mode (all WCAG AA contrast-calibrated); upload a custom wallpaper to switch the UI to translucent glass |
+| **Sub-agent Accent Colors** | The send button, context progress bar, and secondary menus adopt the active Worker's brand color (including opencode and Cline accents) |
+| **Cross-Platform Session Archive** | Search and filter archived chats across platforms, restore sessions in one click, and confirm twice before permanent deletion |
+| **Sub-agent MCP Endpoint Card** | Copy the `:8790/mcp` URL or a ready-to-send setup prompt in one click; includes an automatic clipboard fallback when accessed over plain-HTTP LAN IPs |
 
 <details>
-<summary><b>Interaction details (for frontend developers)</b></summary>
+<summary><b>Frontend layout and interaction details</b></summary>
 
-- Brand anchor `#brand-logo-pin` (`z-index: 120`) never hides. Trigger zones: top bar `Y ≤ 38px`, activity bar `X ≤ 42px`; 90 ms anti-misfire on reveal, 650 ms debounce on collapse; stays pinned while a modal is open, an input is focused or the session sidebar is expanded.
-- The sidebar trigger zone is its full footprint (`X ≤ 324px` at a `1440px` viewport); cards are single-line, with `/api/chat/agent-summary` summaries mounted on demand.
-- Top bar `z-index: 100` and chat header `z-index: 50` have their own stacking contexts, so dropdowns are never clipped by code blocks or the workbench.
-- Glass: under `body.has-custom-bg`, `backdrop-filter: blur(20px~24px) saturate(180%~190%)`; neutral surfaces unify to `--gem-bg-card`, and `--gem-surface-high` is kept only for interactive states and the progress track.
-- `--agent-accent` drives the send button, context progress bar and `#panel-chat` second-level menus; model names stay in body colour `--gem-text`.
-- The whole status bar is clickable and opens a display picker (model, latency, TPS, tokens, quota); the model drawer has thinking-level and streaming switches.
-- The footer shows `v1.0.12`, overridable by the backend's `snap.version`.
-- Offline demo: `scripts/build_demo.py` + `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
+- Brand anchor `#brand-logo-pin` (`z-index: 120`) stays visible at all times. Trigger zones: top bar `Y ≤ 38px`, activity bar `X ≤ 42px`, with a 90 ms reveal delay and 650 ms collapse debounce; bars remain pinned while a modal is open, an input is focused, or the sidebar is expanded; top-bar and floating button right edges align.
+- The sidebar trigger zone spans its full footprint (`X ≤ 324px` on a `1440px` viewport); session cards render on a single line and load `/api/chat/agent-summary` summaries on demand.
+- Top bar (`z-index: 100`) and chat header (`z-index: 50`) maintain independent stacking contexts so dropdowns are never clipped by code blocks or the workbench.
+- Glass mode (`body.has-custom-bg`) applies `backdrop-filter: blur(20px~24px) saturate(180%~190%)`, unifies neutral surfaces to `--gem-bg-card`, and reserves `--gem-surface-high` for hover states and the progress track.
+- `--agent-accent` styles the send button, context progress bar, and `#panel-chat` secondary menus while keeping model names in body color `--gem-text`.
+- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.12` (overridable by backend `snap.version`).
+- Offline demo build: `scripts/build_demo.py` and `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
+
 </details>
 
 ---
 
-## Verification status
+## Verification Status and Boundaries
 
-> **Regression tests are not paid end-to-end runs.** Passing regressions prove the framework logic; they do not mean every vendor, model or host has completed a real paid task.
+> **Important: Passing regression tests does not mean paid end-to-end runs on every commercial model.** The automated checks below verify the scheduling engine, MCP bridge, and process lifecycle; they do not guarantee that every vendor, model, or host has run a paid task under your account.
 
-| Item | Result | Notes |
+| Verification Item | Result | Verifiable Evidence and Report Path |
 | --- | --- | --- |
-| Windows regressions & DOM assertions | ✅ 32 groups + 7 DOM checks | See `docs/refactor-validation.json`, `tests/console_layout_theme_dom.mjs` |
-| Linux regressions & load tests | ✅ 29 groups + 4,500+ requests | 360 concurrent, 0 errors; see `docs/stage3-stress-report.json` and siblings |
-| Linux production Hub | ✅ Pass | 24 Hub tools, 11 Workers; config, history and auth preserved |
-| Linux Antigravity CLI 1.3.1 | ✅ Real call | Native sub-agent `hub-mimocode` dispatched successfully |
-| Linux ZCode CLI 0.16.9 | ✅ Real call | Follow-up on the original ref returned the right answer |
-| Windows Codex / ZCode | ✅ Real call | Both native sub-agents returned results |
-| Windows Antigravity | ✅ Real call | `hub_status` / `hub_capabilities` list 11 Workers |
-| CodeArts native components & channels | ✅ Pass | Windows ↔ Linux LAN and SSH channels working |
-| Linux CodeArts own models | ✅ Real call | GLM-5.2 family completes in seconds; all processes exit cleanly |
-| Windows DSH | ⚠️ Blocked by account balance | Registration passes; model calls return `402 ACCOUNT_QUOTA` |
-| Windows CodeArts IDE | ⚠️ Partial | Dispatch succeeds, but the host denies the follow-up `hub_fetch` |
-| Windows standalone CodeArts CLI | ⚠️ Not yet accepted | Blocked by folder trust |
-| Linux Codex & DSH CLI | ❌ Not installed | Not tested; no pass claimed |
+| Windows Regressions & DOM Assertions | ✅ 32 suites + 7 DOM checks passed | See `docs/refactor-validation.json` and `tests/console_layout_theme_dom.mjs` |
+| Linux Regressions & Load Tests | ✅ 29 suites + 4,500+ requests passed | 360 concurrent requests with 0 errors; see `docs/stage3-stress-report.json` |
+| Linux Production Hub Upgrade | ✅ Passed | Loaded 24 Hub tools and 11 Workers while preserving external config, task history, and auth |
+| Linux Antigravity CLI 1.3.1 | ✅ Real call passed | Dispatched through native sub-agent `hub-mimocode` and returned a live answer |
+| Linux ZCode CLI 0.16.9 | ✅ Real call passed | Polled the original `ref` and returned the expected answer |
+| Windows Codex / ZCode Native Plugins | ✅ Real call passed | Both native sub-agents dispatched tasks and returned answers |
+| Windows Antigravity Native Plugin | ✅ Real call passed | `hub_status` and `hub_capabilities` returned all 11 Workers |
+| CodeArts Native Components & Channels | ✅ Passed | Verified Windows ↔ Linux LAN and SSH reverse tunnel connections |
+| Linux CodeArts Built-in Models | ✅ Real call passed | Completed GLM-5.2 calls in seconds and exited all child processes cleanly |
+| Windows DSH Host | ⚠️ Blocked by account balance | Plugin registration passed; model invocation returned `402 ACCOUNT_QUOTA` |
+| Windows CodeArts IDE Host | ⚠️ Partial pass | Initial dispatch succeeded, but the IDE host blocked the follow-up `hub_fetch` call |
+| Windows Standalone CodeArts CLI | ⚠️ Not yet accepted | Blocked by the Windows folder-trust prompt |
+| Linux Codex & DSH CLI | ❌ Not installed | Binaries were not installed on the Linux test host; no pass claimed |
 
-<details>
-<summary><b>Boundaries</b></summary>
+**Operational Boundaries**
 
-1. **Native plugin vs optional SDK**: the Antigravity native plugin has completed real calls; the optional Python SDK is an external orchestration library whose current wheel lacks `beta.run_workflow` and whose auth is separate from the host login.
-2. **CodeArts auth**: an IDE login does not make the standalone CLI callable, and other vendors' logins cannot stand in for Huawei account permissions. Only default thinking and non-streaming text are enabled.
-3. **Privacy**: a client choosing one Hub is not a multi-Hub federation; prompts and attachments still go to the matching model vendor.
+1. **Antigravity native plugin vs. optional SDK**: The native plugin has completed live calls; the optional Python SDK is an external orchestration library whose current wheel lacks `beta.run_workflow` and uses separate API credentials from the host login.
+2. **CodeArts credential isolation**: Logging into the CodeArts IDE does not authorize the standalone CLI, and credentials from other vendors cannot substitute for Huawei account permissions; only default thinking and non-streaming text are enabled.
+3. **Single-Hub targeting**: A client connects to one selected Hub at a time rather than a multi-Hub federation.
 
-Full receipts, source hashes and failure records: [0.9.9 acceptance record](docs/release-0.9.9.md); CodeArts follow-up: [2026-10-10 record](docs/codearts-ide-followup.md).
-</details>
+For full receipts, source hashes, and failure logs, see the [0.9.9 Acceptance Record](docs/release-0.9.9.md) and the [CodeArts IDE Follow-up](docs/codearts-ide-followup.md).
 
 ---
 
-## Data flow and security
+## Data Flow and Security
 
-- **Path**: `host client → local MCP bridge → Hub → official CLI / kernel → model vendor API`.
-- **Not an offline model**: the Hub only routes and executes; prompts and attachments go to each vendor through its official CLI.
-- **Credential isolation**: tokens, API keys and session data live outside the source tree and are never committed.
-- **Transport**: the Bearer token only authenticates; across the internet use an HTTPS reverse proxy, VPN or SSH tunnel.
-- To report a vulnerability, see [SECURITY.md](SECURITY.md).
+The Hub routes tasks and manages CLI processes locally or on your private server while keeping credentials outside the repository.
+
+- **Data path**: `Host Client → Local MCP Bridge → Hub Service → Official Vendor CLI / Kernel → Model Vendor API`.
+- **Not an offline LLM**: The Hub does not run inference itself; prompts and attachments are sent to the selected model vendor through its official CLI.
+- **Credential isolation**: Hub bearer tokens, API keys, OAuth tokens, and session histories are stored in external OS config directories outside the repository and are never committed to Git.
+- **Network transport**: The bearer token authenticates requests but does not encrypt traffic; when exposing a Hub across the internet, put it behind an HTTPS reverse proxy, VPN, or SSH tunnel.
+- To report a security vulnerability, follow the process in [SECURITY.md](SECURITY.md).
 
 ---
 
-## Prebuilt packages
+## Prebuilt Packages, Development, and Testing
 
-| File | Use it for |
+### Prebuilt Release Packages
+
+Every release includes `SHA256SUMS` checksums and can be downloaded from Releases or built from source:
+
+| File | Target Use Case |
 | --- | --- |
-| `agenthub-1.0.12-both.zip` | Client and Hub on one machine (recommended) |
-| `agenthub-1.0.12-plugins.zip` | A workstation that only writes code |
-| `agenthub-1.0.12-hub.zip` | A server that only runs Workers |
-| `agenthub-workers-1.0.12-minimax-plugin.zip` | MiniMax Code desktop / cloud (Plugin V1) |
-| `multi-agent-hub-1.0.12.carts` / `.vsix` | Huawei CodeArts IDE, VS Code and compatible editors |
+| `agenthub-1.0.12-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
+| `agenthub-1.0.12-plugins.zip` | Install host plugins on a coding workstation only |
+| `agenthub-1.0.12-hub.zip` | Run the Hub and Workers on a dedicated server only |
+| `agenthub-workers-1.0.12-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
+| `multi-agent-hub-1.0.12.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
 
-Build them yourself: `python packaging/build.py --output <dir outside the repo> --component all`. All options: [packaging/README.md](packaging/README.md).
+### Development and Test Commands
 
----
-
-## Development and testing
+Run these commands from the repository root (replace `<output dir outside repo>` with a path such as `../agenthub-releases`):
 
 ```bash
-# Full isolated regression run (no model charges)
+# 1. Run the full isolated regression suite (sandboxed, zero model charges)
 python tests/run_regressions.py --report docs/local-validation.json
 
-# Console DOM / theme / reveal-collapse assertions
+# 2. Run Web console DOM, theme contrast, and reveal/collapse assertions
 node --test tests/console_layout_theme_dom.mjs
 
-# Scan the tree and Git history for leaked credentials
+# 3. Audit the working tree and full Git history for leaked secrets
 python scripts/audit_secrets.py --history
 
-# Rebuild the offline demo after editing console/client/index.html
+# 4. Rebuild the single-file offline demo after editing console/client/index.html
 python scripts/build_demo.py
 
-# Build release packages (outside the repo)
-python packaging/build.py --output ../agenthub-releases
+# 5. Build all release packages (output directory must be outside the repo)
+python packaging/build.py --output <output dir outside repo> --component all
 ```
 
-Optional: with these two installed, the real-SDK / real-CLI cases that are otherwise skipped also run:
+To enable the real-SDK and real-CLI integration tests that are skipped by default, install:
 
 ```bash
 pip install google-antigravity==0.1.21
 npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 ```
 
-Contribution rules (pre-commit checks, commit message format) are in [CONTRIBUTING.md](CONTRIBUTING.md); see also the [Code of Conduct](CODE_OF_CONDUCT.md).
+Before submitting patches, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Full packaging flags are documented in [packaging/README.md](packaging/README.md).
 
 ---
 
-## Version history
+## Version History, Documentation, and License
 
-| Version | Focus |
+### Recent Releases
+
+| Version | Highlights |
 | --- | --- |
-| **1.0.12** | Workbench opens local files the conversation mentioned (artifact/image/attachment preview plus per-item removal), draggable sub-agent cards with opencode/cline accent colours, header and floating button row right edges aligned; the Linux template now ships a usable GitHub Copilot worker |
-| 1.0.1 | Adds the opencode and Cline Workers (11 total): config templates, capability declarations, NDJSON event-stream parsing, native sub-agents and every count aligned; both diagrams redrawn with larger type and higher contrast |
-| 1.0.0 | First public release: audit cleanup, TraeClaw credit, handover docs scrubbed, Code of Conduct added, post-review fixes folded in |
-| 0.9.9.9 | Redrawn architecture and roadmap diagrams, handover record |
-| 0.9.9.8 | Node 20 WebSocket compatibility, path discovery for login and console, tests decoupled from hosts; contributing guide, security policy and English README |
-| 0.9.9.7 | Linux source install fixes: lost exec bits, install from a checkout, loopback requests hijacked by a proxy |
-| 0.9.9.3 – 0.9.9.6 | 9-Worker login state-detection refactor; systematic WebUI polish, 6 themes, glassmorphism and smart reveal/collapse |
+| **1.0.12** | Workbench opens local files mentioned in chat (artifact, image, and attachment previews plus single-item deletion); draggable sub-agent cards with opencode and Cline brand colors; aligned top-bar and floating button right edges; added a working GitHub Copilot Worker entry to the Linux template |
+| **1.0.1** | Added opencode and Cline Workers (11 total) with config templates, capability declarations, NDJSON stream parsing, and native sub-agents; redrew architecture and roadmap SVGs with larger text and higher contrast |
+| **1.0.0** | First public release: full secret audit cleanup, TraeClaw attribution, sanitized handover docs, Code of Conduct, and release review fixes |
+| **0.9.9.7 – 0.9.9.9** | Fixed Linux source install exec-bit loss and loopback proxy hijacking; added Node 20 WebSocket compatibility, English README, security policy, contributing guide, and updated diagrams |
+| **0.9.9.3 – 0.9.9.6** | Rebuilt on-disk login verification across Workers; shipped the three-pane WebUI, 6 light/dark themes, glass wallpaper mode, and smart reveal/collapse |
 
 ![multi-agent-hub roadmap](docs/roadmap.en.svg)
 
-Full details: [CHANGELOG.md](CHANGELOG.md) and [version history](docs/version-history.md).
+See [CHANGELOG.md](CHANGELOG.md) and [Version History](docs/version-history.md) for the complete log.
 
----
+### Documentation Index
 
-## Documentation
+- **Setup & Options**: [Running on Linux](RUN_ON_LINUX.md) · [Packaging & Installer Options](packaging/README.md) · [Task Options](docs/task-options.md)
+- **Host Integration Guides**: [Codex](integrations/codex/README.md) · [ZCode / MiniMax Code](plugins/agenthub-workers/README.md) · [DSH](integrations/dsh/README.md) · [Antigravity](integrations/antigravity/README.md) · [CodeArts Native Plugin](integrations/codearts/README.md) · [CodeArts IDE & VS Code Extension](integrations/vscode/README.md)
+- **CodeArts Deep Dives**: [Two-Way Integration & Auth Boundaries](docs/codearts-compatibility.md) · [CodeArts IDE Follow-up](docs/codearts-ide-followup.md) · [Using Existing Model Routes](docs/codearts-custom-provider.md)
+- **Acceptance & Handover**: [0.9.9 Acceptance Record](docs/release-0.9.9.md) · [Network Discovery Acceptance (v0.8)](docs/release-0.8.md) · [Development Handover](docs/HANDOVER_20261016.md)
 
-**Getting started and deployment**
-- [Running on Linux](RUN_ON_LINUX.md)
-- [Packaging and all installer options](packaging/README.md)
-- [Task options](docs/task-options.md)
+### Acknowledgements
 
-**Host integrations**
-- [Codex](integrations/codex/README.md) · [ZCode / MiniMax Code](plugins/agenthub-workers/README.md) · [DSH](integrations/dsh/README.md) · [Antigravity](integrations/antigravity/README.md)
-- [CodeArts native plugin](integrations/codearts/README.md) · [CodeArts IDE & VS Code extension](integrations/vscode/README.md)
-- [CodeArts two-way integration and auth boundaries](docs/codearts-compatibility.md) · [CodeArts IDE follow-up](docs/codearts-ide-followup.md) · [CodeArts with existing model routes](docs/codearts-custom-provider.md)
+- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) for the brand SVG icons used in the console and sub-agent avatars.
+- [TraeClaw](https://github.com/firerlAGI/TraeClaw) for the local bridge and CDP/DOM automation powering the `trae_delegate` channel.
+- Huawei CodeArts, Google Antigravity, Tencent CodeBuddy, GitHub Copilot, Xiaomi MiMo, MiniMax, ByteDance Trae, Z.ai, opencode, Cline, their official CLIs, and everyone who contributed feedback.
 
-**Releases and acceptance**
-- [Changelog](CHANGELOG.md) · [Version history](docs/version-history.md)
-- [0.9.9 acceptance record](docs/release-0.9.9.md) · [Network discovery acceptance (v0.8)](docs/release-0.8.md)
-- [Development handover](docs/HANDOVER_20261016.md)
+### License
 
----
-
-## Acknowledgements
-
-- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons): brand SVG icons used for the console and sub-agent avatars.
-- [TraeClaw](https://github.com/firerlAGI/TraeClaw): the local bridge and CDP/DOM automation behind the `trae_delegate` channel.
-- Huawei CodeArts, Google Antigravity, Tencent CodeBuddy, GitHub Copilot, Xiaomi MiMo, MiniMax, ByteDance Trae, Z.ai and their official CLIs and ecosystems.
-- Everyone who sent feedback and suggestions.
-
-## License
-
-[Apache License 2.0](LICENSE): use, modify and distribute freely; derivative works must keep the copyright notice, license text and a statement of changes.
+Licensed under the [Apache License 2.0](LICENSE): you may use, modify, and distribute this software freely, provided that derivative works retain the copyright notice, license text, and a statement of changes.

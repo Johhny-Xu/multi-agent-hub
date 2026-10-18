@@ -216,8 +216,8 @@ export const LOGIN_COMMANDS = {
     headless: true,
     mode: 'opencode_key',
     needsCallbackInput: true,
-    note: 'opencode 官方 CLI 用「提供方 + API Key」认证：在下方按 provider:api_key 格式粘贴（如 anthropic:sk-ant-...、siliconflow:sk-...、openrouter:sk-or-...），后端写入 ~/.local/share/opencode/auth.json 并用 opencode auth list 复核；也可直接在服务器终端运行 opencode auth login 走浏览器授权',
-    callbackHint: '粘贴 provider:api_key，例如 anthropic:sk-ant-xxx',
+    note: '把 API Key 粘进来直接提交即可，不用管格式：带 provider 前缀（anthropic:sk-ant-...）就原样采用，裸 Key 会按前缀自动识别（oc_sk_ → opencode、sk-ant- → anthropic、sk-or-v1- → openrouter），识别不出就按 opencode 写入并在日志里提示。后端写入 ~/.local/share/opencode/auth.json 后用 opencode auth list 复核；也可在服务器终端运行 opencode providers login 走浏览器授权',
+    callbackHint: '直接粘贴 API Key 即可（oc_sk-… / sk-ant-… / sk-or-v1-… 自动识别），也可写成 provider:api_key',
   },
   'cline': {
     cmd: [resolveCliBin('cline', join(HOME, '.npm-global', 'bin', 'cline')), 'auth'],
@@ -299,6 +299,62 @@ const CLINE_KEY_PROVIDERS = [
 ];
 
 /**
+ * opencode 的 Key 前缀 → provider：粘裸 Key 时按此推断，免得用户先背 provider id。
+ * 注意：这里只用来「猜」，猜不中也不拦——统一走默认 provider 并提示，不做格式校验。
+ */
+const OPENCODE_KEY_PROVIDERS = [
+  [/^oc_sk_/i, 'opencode'],      // OpenCode Zen 自家 Key
+  [/^oc_/i, 'opencode'],
+  [/^sk-ant-/i, 'anthropic'],
+  [/^sk-or-v1-/i, 'openrouter'],
+  [/^gsk_/i, 'groq'],
+  [/^AIza/, 'gemini'],
+  [/^xai-/i, 'xai'],
+  [/^hf_/i, 'huggingface'],
+  [/^sk-proj-/i, 'openai'],
+  [/^sk-svcacct-/i, 'openai'],
+];
+
+/** opencode 猜不中前缀时的兜底 provider（OpenCode Zen 是这套 CLI 的默认通道） */
+const OPENCODE_DEFAULT_PROVIDER = 'opencode';
+
+/**
+ * 解析 opencode 登录输入。**不做格式校验**，只要不是空、不是回调链接就收：
+ *   provider:api_key / provider|api_key / provider api_key  → 原样采用
+ *   裸 api_key                                             → 按前缀猜 provider，猜不中给默认值
+ * @returns {{ok:true, provider:string, apiKey:string, note:string} | {ok:false, error:string}}
+ */
+export function parseOpencodeAuthInput(rawInput) {
+  const raw = String(rawInput || '').trim().replace(/^[`"']+|[`"']+$/g, '');
+  if (!raw) return { ok: false, error: '请粘贴 API Key' };
+  // 回调链接不是 Key：写进 auth.json 只会得到一条无效凭据，明确提示改走终端 OAuth
+  if (/^https?:\/\//i.test(raw) || /(?:^|[?&])(?:code|authCode)=/i.test(raw)) {
+    return { ok: false, error: 'opencode 不支持回调链接：请直接粘贴 API Key，或在服务器终端运行 opencode providers login 走浏览器授权' };
+  }
+  const explicit = raw.match(/^([A-Za-z0-9][A-Za-z0-9._-]{0,39})\s*[:|]\s*(\S{2,})$/);
+  if (explicit) {
+    return { ok: true, provider: explicit[1].toLowerCase(), apiKey: explicit[2].trim(), note: '' };
+  }
+  // 「provider key」空格形式：只有当第一段不像 Key 前缀时才当 provider，
+  // 否则（如 "oc_sk_abc def" 是被换行打断的同一个 Key）整段拼成一个 Key
+  const spaceParts = raw.split(/\s+/).filter(Boolean);
+  const firstLooksLikeKey = OPENCODE_KEY_PROVIDERS.some(([re]) => re.test(spaceParts[0] || ''));
+  if (spaceParts.length === 2 && !firstLooksLikeKey) {
+    return { ok: true, provider: spaceParts[0].toLowerCase(), apiKey: spaceParts[1], note: '' };
+  }
+  const apiKey = raw.replace(/\s+/g, ''); // 复制时被换行/空格打断的 Key 直接拼回去
+  const hit = OPENCODE_KEY_PROVIDERS.find(([re]) => re.test(apiKey));
+  const provider = hit ? hit[1] : OPENCODE_DEFAULT_PROVIDER;
+  const note = hit
+    ? `未写 provider，已按 Key 前缀识别为「${provider}」`
+    : /^sk-/i.test(apiKey)
+      // sk- 是多家通用前缀（siliconflow / deepseek / openai 都用），不硬猜，写默认值并把风险说清楚
+      ? `未识别厂商前缀（sk- 开头可能是 siliconflow / deepseek / openai），已按默认 provider「${provider}」写入；若调用报 401，改用 siliconflow:${apiKey.slice(0, 6)}… 重贴`
+      : `未识别 Key 前缀，已按默认 provider「${provider}」写入；若不对请用 provider:api_key 重贴`;
+  return { ok: true, provider, apiKey, note };
+}
+
+/**
  * 解析 Cline 登录输入。支持：
  *   provider|api_key
  *   provider|model|api_key
@@ -327,7 +383,9 @@ export function parseClineAuthInput(rawInput) {
       // provider:key（Key 自身以 sk- 开头时不要误判成 provider）
       provider = head;
       apiKey = single.slice(single.indexOf(':') + 1).trim();
-    } else if (/\s+/.test(single) && single.split(/\s+/).filter(Boolean).length === 2) {
+    } else if (/\s+/.test(single) && single.split(/\s+/).filter(Boolean).length === 2
+      && !CLINE_KEY_PROVIDERS.some(([re]) => re.test(single.split(/\s+/).filter(Boolean)[0]))) {
+      // 第二段像 Key 时才算 provider + key；否则是被换行打断的同一个 Key，走下面的整段拼接
       [provider, apiKey] = single.split(/\s+/).filter(Boolean);
     } else {
       apiKey = single;
@@ -337,16 +395,19 @@ export function parseClineAuthInput(rawInput) {
     }
   }
 
-  if (!apiKey || !/^\S{8,}$/.test(apiKey)) {
-    return { ok: false, error: 'API Key 不完整（至少 8 位、不能含空格），请重新粘贴完整 Key' };
+  // 不做格式校验：粘多段/带换行的 Key 直接拼回去，长度也不再卡
+  apiKey = String(apiKey || '').replace(/\s+/g, '');
+  if (!apiKey) {
+    return { ok: false, error: '请粘贴 API Key' };
   }
+  let note = '';
   if (!provider) {
-    return {
-      ok: false,
-      error: '无法从 Key 前缀判断厂商：请在 Key 前加 provider，例如 anthropic|sk-ant-xxx、openai|sk-xxx、openrouter|sk-or-v1-xxx',
-    };
+    // 猜不中就落到 openai 兼容通道，由 cline CLI 自己给出真正的错误，不在前端拦
+    provider = 'openai';
+    inferred = true;
+    note = '未能识别厂商前缀，已按 openai 兼容通道提交，实际错误以 cline 返回为准';
   }
-  return { ok: true, provider, model, apiKey, baseUrl, inferred };
+  return { ok: true, provider, model, apiKey, baseUrl, inferred, note };
 }
 
 /**
@@ -1398,10 +1459,10 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
   if (spec.mode === 'opencode_key' || spec.mode === 'cline_key') {
     if (spec.mode === 'opencode_key') {
       entry.authUrl = 'https://opencode.ai/docs/providers';
-      entry.buf = '[opencode] 在下方输入 provider:api_key 并提交（provider 用 opencode 官方 id，如 anthropic / siliconflow / openrouter），后端写入 auth.json 后用 opencode auth list 复核。\n';
+      entry.buf = '[opencode] 直接粘贴 API Key 并提交即可（不校验格式）。带前缀写成 provider:api_key 会原样采用；裸 Key 自动识别：oc_sk_ → opencode、sk-ant- → anthropic、sk-or-v1- → openrouter，识别不出按 opencode 写入。后端写入 auth.json 后用 opencode auth list 复核。\n';
     } else {
       entry.authUrl = 'https://app.cline.bot/';
-      entry.buf = '[cline] 在下方输入 provider|api_key（可选 provider|model|api_key|base_url）并提交，后端执行 cline auth 非交互写入。\n';
+      entry.buf = '[cline] 直接粘贴 API Key 并提交即可（不校验格式）；需要指定厂商/模型时再写 provider|model|api_key|base_url。后端执行 cline auth 非交互写入。\n';
     }
     return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, url: entry.authUrl, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
   }
@@ -1589,27 +1650,33 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
 
       // 5. opencode: provider:api_key 直写官方 auth.json（随后用官方 CLI 复核）
       if (e.worker === 'opencode') {
-        const parsed = input.match(/^([A-Za-z0-9][A-Za-z0-9._-]{0,39})\s*[:|]\s*(\S{8,})$/)
-          || input.match(/^([A-Za-z0-9][A-Za-z0-9._-]{0,39})\s+(\S{8,})$/);
-        if (!parsed) return { ok: false, error: '格式应为 provider:api_key（例如 anthropic:sk-ant-xxx）' };
-        const provider = parsed[1].toLowerCase();
-        const apiKey = parsed[2].trim();
+        const parsed = parseOpencodeAuthInput(input);
+        if (!parsed.ok) return { ok: false, worker: 'opencode', error: parsed.error };
+        const provider = parsed.provider;
+        const apiKey = parsed.apiKey;
+        if (parsed.note) e.buf += `[opencode] ${parsed.note}\n`;
         const authFile = join(e.targetHome, '.local', 'share', 'opencode', 'auth.json');
         await mkdir(dirname(authFile), { recursive: true });
         let authData = {};
         try { authData = JSON.parse((await readFile(authFile, 'utf-8')).replace(/^\uFEFF/, '')); } catch { authData = {}; }
+        // 覆盖前留一份备份：别把已经登录好的条目写坏
+        try {
+          const prev = (await readFile(authFile, 'utf-8')).trim();
+          if (prev) await writeFile(`${authFile}.bak`, prev, { mode: 0o600 });
+        } catch { /* 首次写入没有旧文件 */ }
         authData[provider] = { type: 'api', key: apiKey };
         await writeFile(authFile, JSON.stringify(authData, null, 2) + '\n', { mode: 0o600 });
         e.buf += `\n[opencode] ✓ API Key 已写入 ${authFile}\n`;
-        // 用官方 CLI 复核 provider 是否被识别；拼错时明确失败，不伪装成功
+        // 用官方 CLI 复核 provider 是否被识别；识别不到只警告，不把已经写好的凭据判成失败
         const ocBin = resolveCliBin('opencode', join(HOME, '.npm-global', 'bin', 'opencode'));
         const ocCheck = await runCliWithHome(ocBin, ['auth', 'list'], e.targetHome, 30_000);
         const ocText = stripAnsi(ocCheck.stdout + ocCheck.stderr);
-        if (ocCheck.code !== 0 || !new RegExp(provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(ocText)) {
-          e.buf += `[opencode] ! opencode auth list 未能确认 provider（exit=${ocCheck.code}）\n`;
-          return { ok: false, worker: 'opencode', error: `provider「${provider}」未被 opencode 官方 CLI 识别，请核对 provider id（参考 opencode.ai/docs/providers）` };
+        const ocSeen = ocCheck.code === 0 && new RegExp(provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(ocText);
+        if (ocSeen) {
+          e.buf += `[opencode] ✓ opencode auth list 已确认 provider ${provider}\n`;
+        } else {
+          e.buf += `[opencode] ! opencode auth list 未列出 provider「${provider}」（exit=${ocCheck.code}）；凭据已写入，如调用报错请核对 provider id（参考 opencode.ai/docs/providers）\n`;
         }
-        e.buf += `[opencode] ✓ opencode auth list 已确认 provider ${provider}\n`;
         const ocAcc = await finalizeLoginAccount(e, prefName || provider);
         if (ocAcc && ocAcc.ok === false) return { ok: false, worker: e.worker, error: ocAcc.error || '凭据归档失败，请重试或稍候再检测' };
         const ocName = ocAcc?.name || e.savedAccountName || '';
@@ -1935,9 +2002,10 @@ export async function logout(worker) {
 
 // ---------------------------------------------------------------- CodeArts AK/SK
 async function _saveCodeArtsToHome(targetHome, ak, sk) {
-  if (!/^[\w-]{8,128}$/.test(ak) || !/^[\w-]{8,128}$/.test(sk)) {
-    return { ok: false, error: 'AK/SK 格式不合法（仅限字母数字-_，长度 8~128）' };
-  }
+  // 不做格式校验：只清掉粘贴带入的空白，是否可用由 CodeArts 自己判定
+  ak = String(ak || '').replace(/\s+/g, '');
+  sk = String(sk || '').replace(/\s+/g, '');
+  if (!ak || !sk) return { ok: false, error: '请同时填写 AK 与 SK' };
   const envFile = join(targetHome, '.config', 'agenthub-codearts', 'codearts-auth.env');
   await mkdir(dirname(envFile), { recursive: true });
   const body = `# Multi-Agent Hub CodeArts AK/SK (written via WebUI ${new Date().toISOString()})\nCODEARTS_CLI_AK=${ak}\nCODEARTS_CLI_SK=${sk}\n`;
@@ -1955,9 +2023,28 @@ async function _saveCodeArts(ak, sk) {
 }
 
 // ---------------------------------------------------------------- 模型管理
+/**
+ * 同一 model id 挂着多个别名时，挑一个最适合当显示名的：
+ * 与 id 末段同形（忽略大小写与标点）> 含大写（更像正式名）> 不做 id 那种长串
+ */
+function pickDisplayAlias(id, aliases) {
+  const bare = String(id).split('/').pop();
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const ranked = (aliases || []).map((a) => {
+    let score = 0;
+    if (norm(a) === norm(bare)) score += 4;
+    if (/[A-Z]/.test(a)) score += 2;
+    if (a === id) score -= 1;
+    if (String(a).length > 24) score -= 3;
+    return { a, score };
+  }).sort((x, y) => y.score - x.score);
+  return ranked.length ? ranked[0].a : bare;
+}
+
 const CATALOG_MODELS = {
   codearts: [
-    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x', default: true },
+    { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.70x', default: true },
+    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x' },
     { id: 'huaweicloud-maas/glm-5.2-sft-harmony', name: 'GLM-5.2-ArkTS-SPARK', credits: '0.70x' },
     { id: 'huaweicloud-maas/openpangu-2.0-pro', name: 'OpenPangu-2.0-Pro', credits: '0.70x' },
     { id: 'huaweicloud-maas/openpangu-2.0-flash', name: 'OpenPangu-2.0-Flash', credits: '0.35x' },
@@ -2122,16 +2209,25 @@ export async function listModels() {
       seenIds.add(cat.id);
     }
 
+    // 同一个 id 常挂多个别名（GLM-5.3 就有 GLM-5.3 / glm5.3 / gm5.3 / glm-5.3 / huaweicloud-maas/glm-5.3），
+    // 按 id 归并成一行、别名收进 aliases，否则同款模型会在列表里刷出 5 个
+    const aliasGroups = new Map();
     for (const [alias, id] of Object.entries(rawModels)) {
       if (alias === 'default' || !id) continue;
       if (seenIds.has(id)) continue;
+      if (!aliasGroups.has(id)) aliasGroups.set(id, []);
+      aliasGroups.get(id).push(alias);
+    }
+    for (const [id, aliasList] of aliasGroups) {
+      const displayAlias = pickDisplayAlias(id, aliasList);
       merged.push({
-        alias,
+        alias: displayAlias,
         id,
-        name: alias === id ? id : `${alias} (${id})`,
+        name: displayAlias,
         credits: null,
         tag: '自定义',
-        aliases: [alias],
+        aliases: aliasList,
+        removableAliases: aliasList.filter((a) => a !== displayAlias && a !== id),
         custom: true,
         isDefault: id === defaultId,
       });

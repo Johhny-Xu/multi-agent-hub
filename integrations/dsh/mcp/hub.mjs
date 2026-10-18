@@ -42,6 +42,8 @@ const ALIASES = {
   trae: "traecode", traecode: "traecode",
   zcode: "zcode",
   ca: "codearts", codearts: "codearts", "huawei-codearts": "codearts",
+  cline: "cline",
+  oc: "opencode", opencode: "opencode",
 };
 
 export const CANONICAL = [...new Set(Object.values(ALIASES))].sort();

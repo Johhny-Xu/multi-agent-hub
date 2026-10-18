@@ -2,107 +2,102 @@
 
 [English](README.en.md) · **简体中文**
 
-> 一个本地多 AI Agent 调度枢纽：把散落在各处的 AI 编码 CLI 统一成一个可派活、可协作的 Worker 池。
+**multi-agent-hub** 是一个本地多 AI Agent 调度枢纽，把电脑上散落的 11 种 AI 编码 CLI（被调度的执行端，下称 **Worker**）合成一个共享任务池。如果你同时装着 CodeBuddy、Copilot、Antigravity、TraeCode 等多家工具，它让你不用在某个账号额度见底时手动切工具、重讲一遍需求——当前客户端可以直接把活派给另一个 AI 接着干。
 
 ![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，11 种 Worker 统一调度](docs/architecture.svg)
 
 **当前版本：v1.0.12** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
+| 接入形态 | 适用场景 | 你需要做的操作 |
+| --- | --- | --- |
+| **任意 MCP 客户端直连** | Cursor、Claude Desktop、Windsurf、Cline / Roo Code、Continue 等支持 MCP（Model Context Protocol，模型上下文协议）的客户端 | 填一个 MCP URL（`http://127.0.0.1:8790/mcp`） |
+| **6 款原生宿主插件** | Codex、ZCode、MiniMax Code（含 Claude Code / Agent Plugins 1.0）、DeepSeek Harness (DSH)、华为 CodeArts、Antigravity 等发起任务的宿主（Host） | 运行安装脚本，自动注册专属子代理 `hub-*.md`（在独立上下文中替主对话跑任务的分身）、技能与斜杠命令 |
+| **零客户端独立使用** | 机器上没装 IDE 或 AI 客户端 | 打开内置三栏式 WebUI（`http://localhost:8890`），直接对话、派发与监控 |
+
+**核心亮点**
+
+- 🤖 **一套契约调度 11 种 Worker**：覆盖 Antigravity、CodeBuddy（国际版 / 国内版）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode 与 Cline，任务各自消耗对应账号额度，共享同一任务队列、邮箱与协作笔记。
+- 🔌 **6 款原生宿主免手配参数**：安装器自动写入原生子代理、斜杠命令与工作流，子代理上下文与主会话自动隔离。
+- 🔐 **WebUI 内完成全部 11 个 Worker 登录与切号**：同时支持 9 家 OAuth、Cline 设备码授权、opencode API Key 三条路径；免 SSH 登录、登出、多账号保存与秒切，仅凭落盘真实凭据判定登录态，杜绝假成功。
+- ⚡ **一键启停 Worker，全端立即生效**：在控制台关闭某个 Worker 后，所有客户端的派发请求在执行前即被拦截（返回 `profile_disabled`），不白扣额度。
+- 🛡️ **严格终态判定，拒绝半截结果**：自动拦截空回答、已知异常退出和超时后的残缺回答；全程保留原任务 `ref`（任务追踪编号），且禁止 Worker 给自己递归派活。
+- 🔄 **支持单机与跨机混合部署**：支持纯 Windows、纯 Linux、Windows ↔ Linux（局域网直连或 SSH 反向通道）；配置与凭据存放在源码目录外，升级版本不丢历史。
+- 🔍 **局域网自动发现与断线重连**：客户端可通过 UDP 广播自动扫描局域网内的 Hub；配置恢复后 MCP 桥自动重连。
+- 🖥️ **单文件离线预览**：双击仓库根目录的 `demo.html` 即可在浏览器体验完整三栏控制台，无需启动后端。
+
 ---
 
 ## 目录
 
-- [它能做什么](#它能做什么)
-- [快速开始](#快速开始)
-- [选择接入方式](#选择接入方式)
-- [原生宿主插件](#原生宿主插件)
-- [Worker 与默认模型](#worker-与默认模型)
-- [统一 MCP 工具与任务契约](#统一-mcp-工具与任务契约)
-- [Web 控制台](#web-控制台)
-- [实测状态](#实测状态)
-- [数据流向与安全](#数据流向与安全)
-- [预打包文件](#预打包文件)
-- [开发与测试](#开发与测试)
-- [版本演进](#版本演进)
-- [文档导航](#文档导航)
-- [致谢](#致谢)
+1. [30 秒上手](#30-秒上手)
+2. [三种接入方式怎么选](#三种接入方式怎么选)
+3. [原生宿主插件安装](#原生宿主插件安装)
+4. [支持的 Worker 与默认模型](#支持的-worker-与默认模型)
+5. [MCP 工具与任务契约](#mcp-工具与任务契约)
+6. [Web 控制台能看什么](#web-控制台能看什么)
+7. [实测状态与边界](#实测状态与边界)
+8. [数据流向与安全](#数据流向与安全)
+9. [预打包文件与开发测试](#预打包文件与开发测试)
+10. [版本演进、文档导航与协议](#版本演进文档导航与协议)
 
 ---
 
-## 它能做什么
+## 30 秒上手
 
-**multi-agent-hub** 基于标准 MCP 协议、原生插件与子代理体系，为 **11 种 AI 编码 Worker** 与 **6 款原生宿主**（及任意 MCP 客户端）提供统一的任务派发、结果回传、配额监控、账号管理和 WebUI 管理大盘。
-
-接入 Hub 的任意 AI 客户端都能把任务派给其他 AI 执行：各自走自己的账号额度，同时共享任务队列、邮箱与协作笔记。
-
-按接入方式分三类：
-
-| 形态               | 适合谁                                                                                                        | 你需要做的                              |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| **任意 MCP 客户端直连** | Cursor、Claude Desktop、Windsurf、Cline / Roo Code、Continue 等                                                 | 填一个 MCP URL                        |
-| **6 款原生宿主深度适配**  | Codex、ZCode、MiniMax Code（含 Claude Code / Agent Plugins 1.0）、DeepSeek Harness (DSH)、华为 CodeArts、Antigravity | 运行安装器，自动装好专属子代理 `hub-*.md`、技能与斜杠命令 |
-| **零客户端独立使用**     | 没有 IDE / AI 客户端时                                                                                           | 打开内置的三栏式 WebUI，直接对话、派发与监控          |
-
-**核心亮点**
-
-- 🤖 **统一接入 11 种 Worker**：一套契约覆盖 Antigravity、CodeBuddy（国际 / 国内）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode 与 Cline。
-- 🔌 **深度适配 6 款原生宿主**：原生子代理、斜杠命令与工作流，上下文自动隔离，免手动配参数。
-- 🔐 **WebUI 内完成 11 个 Worker 的登录**：9 家 OAuth、cline 设备码授权、opencode API Key 三条路径并存；免 SSH 授权、登出、多账号保存与秒切，以真实凭据落盘判定登录状态，不报假成功。
-- ⚡ **一键启停 Worker，全端同步**：被禁用的 Worker 在派发前即被拦截（`profile_disabled`），不浪费额度。
-- 🛡️ **严格执行终态判定**：拒绝空回答、已知异常退出和超时后的半截回答；保留原任务 `ref`，禁止 Worker 给自己重复派发。
-- 🔄 **灵活部署**：同机或分离部署；纯 Windows、纯 Linux、Windows ↔ Linux（局域网直连或 SSH 反向通道）均可。
-- 🔍 **自动发现**：局域网 / 本机 Hub 广播扫描，配置恢复后 MCP 桥自动重连；配置与凭据独立于源码，升级不丢任务历史。
-- 🖥️ **离线 Demo**：`demo.html` 单文件、零依赖，无需后端即可体验完整控制台。
-
----
-
-## 快速开始
+三步命令即可在本地同时拉起 Hub 调度服务、Web 控制台，并自动为本机已有的宿主装好插件。
 
 ### 环境要求
 
-- **Python 3.8+**（安装 Codex 原生插件需 3.11+）
-- **Node.js 20+**（MCP 桥接与 Web 控制台）
-- 各 Worker 对应厂商的**官方 CLI 及其登录态**（如 `agy`、`cb`、`trae`、`codearts`）。安装器只负责环境探测和指令调用，不包含账号注册与自动登录。
+- **Python 3.8+**（若需安装 Codex 原生插件需 **3.11+**）
+- **Node.js 20+**（用于运行本地 MCP 桥接与 Web 控制台）
+- 各 Worker 对应的**厂商官方 CLI 及其登录态**（如 `agy`、`cb`、`trae`、`codearts`）。安装器负责探测环境与调用命令，不会替你注册账号。
 
-### 三步跑起来
+### 启动命令
+
+**Linux / macOS**
 
 ```bash
-# 1. 获取代码
 git clone https://github.com/Johhny-Xu/multi-agent-hub.git
 cd multi-agent-hub
-
-# 2. 安装并启动 Hub + Web 控制台 + 本机已有宿主的原生插件
-sh install.sh --with-console          # Windows：.\install.cmd --with-console
-
-# 3. 打开控制台
-#    http://localhost:8890
+sh install.sh --with-console
 ```
 
-- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.12-both.zip` 解压后执行同样的命令。
-- 在源码目录直接执行时，安装器会先在临时目录构建发行包再安装，无需手动打包。
+**Windows (PowerShell / CMD)**
+
+```powershell
+git clone https://github.com/Johhny-Xu/multi-agent-hub.git
+cd multi-agent-hub
+.\install.cmd --with-console
+```
+
+**安装成功后你能看到什么**
+
+- 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 11 张 Worker 状态卡片）。
+- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.12-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
-- 想先看看界面：直接用浏览器打开仓库里的 `demo.html`。
+- 只想先看界面：直接用浏览器打开仓库里的 `demo.html`。
 
-> 💡 用 `sh install.sh` 而不是 `./install.sh`，可以避免某些解压工具丢失执行位导致的 `Permission denied`。详见 [RUN\_ON\_LINUX.md](RUN_ON_LINUX.md)。
+> 💡 Linux 下请用 `sh install.sh` 而非 `./install.sh`，可避免解压工具丢失可执行权限导致的 `Permission denied`。详见 [RUN_ON_LINUX.md](RUN_ON_LINUX.md)。
 
-### 两个默认端口，别搞混
+### 三个默认端口对照
 
-| 端口     | 服务                                                       | 什么时候用           |
-| ------ | -------------------------------------------------------- | --------------- |
-| `8765` | **Hub**（`http://<host>:8765/mcp`，需要 Token）               | 原生插件、跨机连接       |
-| `8890` | **Web 控制台**（需 `--with-console`）                          | 浏览器管理大盘         |
-| `8790` | **控制台内置的子代理 MCP 端点**（`http://127.0.0.1:8790/mcp`，随控制台启动） | 通用 MCP 客户端免插件直连 |
+| 端口 | 服务名称 | 用途与接入方 |
+| --- | --- | --- |
+| `8765` | **Hub 核心服务**（`http://<host>:8765/mcp`） | 需携带 Token（鉴权令牌）访问；供 6 款原生宿主插件及跨机客户端连接 |
+| `8890` | **Web 控制台**（需加 `--with-console`） | 浏览器打开 `http://localhost:8890`，用于管理账号、额度、Worker 开关与直接对话 |
+| `8790` | **控制台内置子代理 MCP 端点**（`http://127.0.0.1:8790/mcp`） | 随控制台一同启动；供 Cursor、Windsurf 等通用 MCP 客户端免插件直连 |
 
 ---
 
-## 选择接入方式
+## 三种接入方式怎么选
 
-### 方案零：一句话交给你的 AI 自动安装（推荐）
+你可以把安装命令直接交给正在使用的 AI 助手自动执行，也可以按单机、免插件或跨机场景手动配置。
 
-把下面对应的一句话复制给你正在用的 AI 助手，它会自动克隆、安装并配置。
+### 方案零：复制一句话交给 AI 自动安装（推荐）
+
+把下面对应场景的一段话发给你正在使用的 AI 客户端，它会自动完成克隆、安装与连通性验证。
 
 <details>
-
 <summary><b>原生宿主通用版</b>（Antigravity / CodeArts / ZCode / Codex / DSH / MiniMax Code）</summary>
 
 ```text
@@ -112,8 +107,7 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 </details>
 
 <details>
-
-<summary><b>分客户端精准版</b></summary>
+<summary><b>分客户端精准版</b>（需要将 <code>&lt;当前项目路径&gt;</code> 替换为你的实际工作区目录）</summary>
 
 - **Google Antigravity**
   ```text
@@ -143,7 +137,6 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 </details>
 
 <details>
-
 <summary><b>通用 MCP 客户端版</b>（Cursor / Windsurf / Claude Desktop / Cline / Roo Code / Continue）</summary>
 
 已有运行中的 Hub 与控制台：
@@ -152,7 +145,7 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 请帮我在当前客户端的 MCP 配置文件中添加名为 "multi-agent-hub" 的 Streamable HTTP MCP 服务，URL 为 http://127.0.0.1:8790/mcp（若为局域网服务器请替换为对应 IP），配置完成后调用 subagent_agents 工具查看当前可用的外部子代理列表。
 ```
 
-从零开始：
+从零开始安装并接入：
 
 ```text
 请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，执行里面的 install.cmd --with-console（Linux 用 sh install.sh --with-console）启动 Multi-Agent Hub 与 Web 控制台服务（:8890 / :8790），然后把 http://127.0.0.1:8790/mcp 自动写入我当前客户端的 MCP 配置文件中。
@@ -160,16 +153,16 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 
 </details>
 
-### 方案一：本机一键安装
+### 方案一：本机一键全量安装
 
-适合在一台电脑上开发，希望一次配齐 Hub、控制台和已安装 IDE 的插件。按 [快速开始](#快速开始) 执行即可：安装器会自动检查环境，并探测注册本机上的 Codex、ZCode、DSH、CodeArts、Antigravity 原生插件与子代理。
+适合在一台电脑上写代码，希望一次配齐 Hub、控制台和本机所有已装 IDE 的原生插件。直接执行 [30 秒上手](#30-秒上手) 中的命令即可，安装器会自动探测并注册本机的 Codex、ZCode、DSH、CodeArts、Antigravity 插件与子代理。
 
 ### 方案二：任意 MCP 客户端免插件直连
 
-适合 Cursor、Claude Desktop、Windsurf、Cline / Roo Code / Continue 等。先用 `--with-console` 启动控制台，然后二选一：
+适合 Cursor、Claude Desktop、Windsurf、Cline / Roo Code、Continue 等客户端。先用 `--with-console` 启动控制台，再任选一种方式配置：
 
-- 在控制台「子代理接入端点」卡片点 **【复制本文（发给Agent配置）】**，把提示词发给 AI，它会自己写好配置；
-- 或手动写入：
+1. 在 `http://localhost:8890` 控制台的「子代理接入端点」卡片点击 **【复制本文（发给Agent配置）】**，把提示词粘贴给你的 AI 自动写配置；
+2. 或手动在客户端 MCP 配置文件中加入：
 
 ```json
 {
@@ -179,304 +172,274 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 }
 ```
 
-可用工具：`subagent_run`（服务端等结果，大产物落盘只回摘要，不占会话上下文）、`subagent_result`、`subagent_artifact`、`subagent_agents`。
+接入后可调用 4 个工具：`subagent_run`（服务端等待结果，大体积产物自动落盘并只回传摘要，不挤占主对话上下文）、`subagent_result`、`subagent_artifact`、`subagent_agents`。
 
-### 方案三：跨机部署（服务端 + 个人电脑）
+### 方案三：跨机分离部署（服务器跑 Worker + 个人电脑写代码）
 
-适合在家庭服务器、NAS 或云主机上集中运行 Hub 和 Worker，在另一台电脑上写代码。
+适合把 Hub 和各家 CLI 集中装在家庭服务器、NAS 或云主机上，在主力笔记本上写代码。需要将 `<SERVER_IP>` 替换为服务器 IP，将 `<TOKEN_FILE_PATH>` 替换为保存 `hub-token.txt` 的本地路径。
 
 ```bash
-# 服务端：监听局域网并开启控制台（会在外部配置目录自动生成随机令牌 hub-token.txt）
+# 1. 服务端（Linux）：监听局域网并开启控制台，外部配置目录会自动生成随机令牌文件 hub-token.txt
 sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 ```
 
-
-
 ```powershell
-# 客户端：指定服务器与令牌完成配对
-.\install.cmd --component plugins --url http://SERVER_IP:8765/mcp --token-file C:\private\hub-token.txt
+# 2. 客户端（Windows）：指定服务器地址与拷贝过来的令牌文件完成配对
+.\install.cmd --component plugins --url http://<SERVER_IP>:8765/mcp --token-file <TOKEN_FILE_PATH>
 ```
 
-- **自动发现**：客户端不指定 `--url` 时会 UDP 广播扫描局域网内的 Hub，交互选择即可。
-- **切换 Hub**：之后随时运行 `connect.cmd`（Linux：`sh connect.sh`）。
-- **不在同一局域网**：用 SSH 反向通道，例如 `ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 user@SERVER`。
-- **Linux 常驻**：加 `--systemd-user` 注册为用户级 systemd 服务（该模式仅支持 Hub，不含控制台）。
-
-### 方案四：只给某一个宿主装插件
-
-见下一节 [原生宿主插件](#原生宿主插件)。
+- **局域网自动发现**：客户端不传 `--url` 时，会通过 UDP 广播扫描局域网内的 Hub 并提供列表供交互选择。
+- **随时切换连接的 Hub**：运行 `connect.cmd`（Linux：`sh connect.sh`）。
+- **跨公网 / 异地连接**：通过 SSH 反向通道转发，例如 `ssh -N -R 127.0.0.1:18765:127.0.0.1:8765 <USER>@<SERVER_IP>`.
+- **Linux 后台常驻**：安装服务端时追加 `--systemd-user` 可注册为用户级 systemd 服务（该模式仅托管 Hub 核心服务，不含 Web 控制台）。
 
 ---
 
-## 原生宿主插件
+## 原生宿主插件安装
 
-| 宿主                             | 安装方式                                                                                                                                                             | 说明文档                                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **华为 CodeArts / VS Code**      | IDE 扩展面板「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.12.carts` / `.vsix`；或 `.\install.cmd --component plugins --native-hosts codearts --project <工作区>`                | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | 桌面端 / 云端导入 `agenthub-workers-1.0.12-minimax-plugin.zip`；CLI：`mcode --plugin-dir ./plugins/agenthub-workers`                                                       | [agenthub-workers](plugins/agenthub-workers/README.md)                                |
-| **ZCode IDE / CLI**            | `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}`               | [agenthub-workers](plugins/agenthub-workers/README.md)                                |
-| **OpenAI Codex**               | `.\install.cmd --component plugins --native-hosts codex --project <工作区>`，自动注册本地插件市场并把 11 个子代理写入 `.codex/agents/`                                                 | [codex](integrations/codex/README.md)                                                 |
-| **DeepSeek Harness (DSH)**     | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md)                                                     |
-| **Google Antigravity**         | `.\install.cmd --component plugins --native-hosts antigravity`，安装到 `~/.gemini/config/plugins/multi-agent-hub`，重启生效                                               | [antigravity](integrations/antigravity/README.md)                                     |
+如果你只想给某一款宿主单独安装插件，可按宿主的插件机制导入预打包扩展或执行定向命令（命令中的 `<工作区路径>` 需替换为你的项目目录，Linux 下将 `.\install.cmd` 换为 `sh install.sh`）。
 
-Linux 下把 `.\install.cmd` 换成 `sh install.sh` 即可。
+| 原生宿主 | 安装方式 | 详细文档 |
+| --- | --- | --- |
+| **华为 CodeArts / VS Code** | 在 IDE 扩展面板选择「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.12.carts` / `.vsix` / `.cloudide`；或执行 `.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | 桌面端或云端导入 `agenthub-workers-1.0.12-minimax-plugin.zip`；CLI 启动：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **ZCode IDE / CLI** | 执行 `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 中配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **OpenAI Codex** | 执行 `.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`，自动注册本地插件市场并将 11 个子代理写入 `.codex/agents/` | [codex](integrations/codex/README.md) |
+| **DeepSeek Harness (DSH)** | 执行 `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或运行 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
+| **Google Antigravity** | 执行 `.\install.cmd --component plugins --native-hosts antigravity`，自动安装到 `~/.gemini/config/plugins/multi-agent-hub`，重启客户端生效 | [antigravity](integrations/antigravity/README.md) |
 
 <details>
+<summary><b>Antigravity 原生插件与可选 SDK 说明</b></summary>
 
-<summary><b>Antigravity 补充说明</b></summary>
-
-- 原生插件包含 `plugin.json`、11 个代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）及含 8 个桥接工具的 `mcp_config.json`。
-- 可选 Python SDK 锁定 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与串并行编排。注意：已安装的 wheel 不含 `beta.run_workflow`；SDK 的 API 鉴权独立于 IDE/CLI 登录。
+- 原生插件包含 `plugin.json`、11 个子代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）以及内置 8 个桥接工具的 `mcp_config.json`。
+- 可选 Python SDK 锁定版本 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与串并行编排能力。注意：当前已发布的官方 wheel 包不含 `beta.run_workflow`，且 SDK 的 API 鉴权与 IDE/CLI 登录态相互独立。
 
 </details>
 
 <details>
+<summary><b>CodeArts 双向集成与换工作区说明</b></summary>
 
-<summary><b>CodeArts 补充说明</b></summary>
+CodeArts 原生包内含 11 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 8 个 MCP 工具。它既能作为宿主调度其他 AI，也能作为 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
 
-包含 11 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 8 个 MCP 工具；既能作为客户端调度别人，也能作为 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
+- **单一调用路径**：严格按 `tool_search → tool_describe → tool_call` 执行；禁止在正文中直接输出 XML 标签，防止双重派发；每个任务只派发一次，后续通过轮询获取结果。
+- **权限拦截与终态判定**：遇到宿主权限拒绝时立即返回 `blocked_permission` 与原始 `ref`，不会换工具名盲目重试；仅将非空的真实 Worker 回复判定为 `completed`。
+- **Windows CLI 独立识别**：精准定位官方 `installers/bin/codearts.exe`，使用独立的 `cli-data` 目录与会话数据库，不与 IDE 混用；遇到“文件夹未被信任”时明确归类为 `CODEARTS_PERMISSION_REQUIRED`。
+- **Linux 进程树回收**：驱动与 Hub 使用统一进程组，任务取消或超时时彻底回收所有子孙进程。
 
-- **单一调用路径**：严格遵循 `tool_search → tool_describe → tool_call`；禁止在正文中直出 XML 标签，杜绝双重派发；单任务只派发一次，之后由客户端轮询。
-- **权限与终态**：遇宿主权限拒绝时立即返回 `blocked_permission` 与原始 ref，不换工具名重试；只以非空的真实 Worker 回答判定 `completed`。
-- **Windows CLI 识别**：精准识别官方 `installers/bin/codearts.exe`，使用独立 `cli-data` 目录与会话数据库，不与 IDE 混淆；“文件夹未被信任”归类为 `CODEARTS_PERMISSION_REQUIRED`。
-- **Linux 进程回收**：驱动与 Hub 统一进程组，取消或超时时彻底回收后代进程。
-
-仅安装 CodeArts 插件并连接远端 Hub：
+仅安装 CodeArts 插件并连接远端 Hub（替换 `<工作区路径>`、`<SERVER_IP>` 和 `<TOKEN_FILE_PATH>`）：
 
 ```powershell
-.\install.cmd --component plugins --native-hosts codearts --project C:\Work\my-project --url http://SERVER:8765/mcp --token-file C:\private\hub-token.txt
+.\install.cmd --component plugins --native-hosts codearts --project <工作区路径> --url http://<SERVER_IP>:8765/mcp --token-file <TOKEN_FILE_PATH>
 ```
 
 ```bash
-sh install.sh --component plugins --native-hosts codearts --codearts-target cli --url http://SERVER:8765/mcp --token-file /private/hub-token.txt
+sh install.sh --component plugins --native-hosts codearts --codearts-target cli --url http://<SERVER_IP>:8765/mcp --token-file <TOKEN_FILE_PATH>
 ```
 
-`--project` 应指向 IDE 实际打开的工作区，也可用 `--codearts-ide-settings` 指定 MCP 配置文件；安装后重载 IDE 或重启 CLI。
+`--project` 必须指向 IDE 实际打开的工作区目录，也可通过 `--codearts-ide-settings` 直接指定 MCP 配置文件路径；安装后请重载 IDE 窗口或重启 CLI。
 
-**换工作区后重新登记**（无需重新输入 Token，复用外部 `client.json`）：
+**切换工作区后快速重连**（直接复用外部 `client.json`，无需重填 Token，将 `<新工作区路径>` 替换为新项目路径）：
 
 ```powershell
-python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/client.json" --ide-settings "C:/Work/new-project/.codeartsdoer/mcp/mcp_settings.json" --target ide --apply
+python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/client.json" --ide-settings "<新工作区路径>/.codeartsdoer/mcp/mcp_settings.json" --target ide --apply
 ```
 
-然后在 IDE 中执行“开发人员：重新加载窗口”，用 `/hub-status` 验证。详见 [CodeArts 原生包文档](integrations/codearts/README.md#换工作区后连接-hub)。
+随后在 IDE 中执行“开发人员：重新加载窗口”，输入 `/hub-status` 验证。详见 [CodeArts 原生包文档](integrations/codearts/README.md#换工作区后连接-hub)。
 
 </details>
 
 ---
 
-## Worker 与默认模型
+## 支持的 Worker 与默认模型
 
-| Worker             | 默认模型                         | 要点                                                                                |
-| ------------------ | ---------------------------- | --------------------------------------------------------------------------------- |
-| **Antigravity**    | gemini-3.8-flash-medium      | 保留 3.8 Flash (High/Medium)、3.1 Pro High、Claude 4.6 (Sonnet/Opus) 等 6 款；支持多模态      |
-| **CodeBuddy**（国内版） | deepseek-v4.1-flash (x0.11)  | 13 款代码模型，标注官方积分倍率 x0.06 ~ x2.00；对齐 XDG 共享会话存储                                     |
-| **CodeBuddy**（国际版） | deepseek-v4.1-flash          | 18 款主流模型；文件工具需实际权限                                                                |
-| **GitHub Copilot** | auto                         | 沿用官方选型；支持 WebUI 设备码登录与 GNOME Keyring                                              |
-| **MiMo**           | xiaomi/mimo-v2.6-flash (26f) | 4 款 V2.6 选型；API Key 与小米 OAuth 身份分离                                                |
-| **MiniMax**        | MiniMax-M3                   | M3（1M 上下文）与 M3.1-Flash-Preview（512K）一键切换                                          |
-| **TraeCode**       | GLM-5.3-FlashX (0.31x)       | 20 款官方模型，倍率 0.06x ~ 1.50x；双区 PKCE OAuth 与 TraeClaw 网关                             |
-| **ZCode**          | GLM-5.3-Flash                | 国内（BigModel）/ 国际（Z.ai）双区；`enc:v1:` AES-256-GCM 加密落盘                               |
-| **CodeArts**       | GLM-5.2 (0.70x)              | 4 款企业模型（GLM-5.2、GLM-5.2-ArkTS-SPARK、OpenPangu-2.0-Pro/Flash）；Linux CLI 自动加载 AK/SK |
+Hub 统一管理以下 11 种 Worker；表中所列为**全新安装**时的默认模型，升级已有服务器会保留你原有的模型配置。
 
-
-上表是**新安装**的默认值；已有服务器会保留原模型配置。
-
----
-
-## 统一 MCP 工具与任务契约
-
-宿主插件通过 MCP 桥暴露 **8 个工具**：
-
-| 工具                 | 作用                     |
-| ------------------ | ---------------------- |
-| `hub_ask`          | 派发并等待结果                |
-| `hub_dispatch`     | 只派发，立即返回 `ref`         |
-| `hub_fetch`        | 凭 `ref` 查询结果           |
-| `hub_status`       | 查看 Worker 在线与启停状态      |
-| `hub_capabilities` | 查询模型能力（思考 / 流式 / 附件）   |
-| `hub_login`        | 查询或发起 Worker 登录        |
-| `hub_discover`     | 只读发现可用 Hub             |
-| `hub_set_status`   | 启用 / 禁用某个 Worker（全端同步） |
-
-所有宿主遵循同一套任务契约：
-
-- **附件**：`files` 最多 8 个文件，总量不超过 1 MiB，在 Hub 端暂存。
-- **工作目录**：`cwd` 指 **Hub 所在主机**的目录，不会自动映射客户端路径。
-- **结果跟踪**：受理后返回持久化 `ref`，用 `hub_fetch` 轮询，不要重复派发。`completed` 只代表执行完成，答案是否正确仍需调用方验收。
-- 完整参数见 [任务选项说明](docs/task-options.md)。
+| Worker | 默认模型 | 规格与鉴权要点 |
+| --- | --- | --- |
+| **Antigravity** | `gemini-3.8-flash-medium` | 内置 3.8 Flash (High/Medium)、3.1 Pro High、Claude 4.6 (Sonnet/Opus) 等 6 款模型；支持多模态输入 |
+| **CodeBuddy**（国内版） | `deepseek-v4.1-flash` (x0.11) | 覆盖 13 款代码模型，标注官方积分倍率 x0.06 ~ x2.00；对齐 XDG 共享会话存储 |
+| **CodeBuddy**（国际版） | `deepseek-v4.1-flash` | 覆盖 18 款主流模型；调用文件读写工具时需具备对应目录实际权限 |
+| **GitHub Copilot** | `auto` | 沿用官方选型策略；支持 WebUI 设备码登录与 Linux GNOME Keyring 凭据读取 |
+| **MiMo** | `xiaomi/mimo-v2.6-flash` (26f) | 提供 4 款 V2.6 模型；API Key 鉴权与小米 OAuth 账号身份相互独立 |
+| **MiniMax** | `MiniMax-M3` | 支持在 M3（1M 上下文）与 M3.1-Flash-Preview（512K 上下文）之间一键切换 |
+| **TraeCode** | `GLM-5.3-FlashX` (0.31x) | 覆盖 20 款官方模型，积分倍率 0.06x ~ 1.50x；支持国内 / 国际双区 PKCE OAuth 与 TraeClaw 网关 |
+| **ZCode** | `GLM-5.3-Flash` | 支持国内（BigModel）与国际（Z.ai）双区；凭据采用 `enc:v1:` AES-256-GCM 加密落盘 |
+| **CodeArts** | `GLM-5.2` (0.70x) | 覆盖 4 款企业模型（GLM-5.2、GLM-5.2-ArkTS-SPARK、OpenPangu-2.0-Pro/Flash）；Linux CLI 自动加载 AK/SK |
+| **opencode** | 官方 CLI 默认模型 | 支持在 WebUI 内直接配置 API Key 鉴权、解析 NDJSON 事件流与专属主题色 |
+| **Cline** | 官方 CLI 默认模型 | 支持在 WebUI 内通过设备码完成授权、解析 NDJSON 事件流与专属主题色 |
 
 ---
 
-## Web 控制台
+## MCP 工具与任务契约
 
-用 `--with-console` 启用，默认端口 `8890`。
+所有原生宿主插件均通过本地 MCP 桥暴露相同的 **8 个标准工具**，并遵循统一的附件与目录契约。
 
-| 能力             | 说明                                                                          |
-| -------------- | --------------------------------------------------------------------------- |
-| **三栏布局**       | 极窄活动栏 + 平台会话树 + 沉浸式对话，右侧可折叠工作台；移动端改为底部导航                                    |
-| **智能收展**       | 顶栏、活动栏、侧栏随光标自动展开 / 收起；左上角品牌锚点可切换“自动收展 / 常驻”并记住选择                            |
-| **主题**         | Mocha、Shell、Aurora、Dusk、Cyber、Grid 6 套预设，各有深 / 浅两种（共 12 种），通过 WCAG AA 对比度校准 |
-| **自定义壁纸**      | 上传壁纸后全局切换为毛玻璃半透明风格                                                          |
-| **子代理主题色**     | 发送按钮、进度条与二级菜单跟随当前子代理品牌色                                                     |
-| **账号与额度**      | 11 个 Worker 登录（含 cline 设备码 / opencode Key）、多账号秒切；实时额度监控（60s 缓存 + 并发合并）      |
-| **Worker 启停**  | 卡片内开关，状态写入 `agents.json` 并全端生效                                              |
-| **会话归档**       | 跨平台聚合、筛选、搜索、一键复原，删除前二次确认                                                    |
-| **子代理 MCP 端点** | `:8790/mcp`，一键复制 URL 或“发给 Agent 的配置提示词”                                     |
-| **剪贴板兼容**      | 局域网 IP（非安全上下文）下自动降级，复制始终可用                                                  |
+| 工具名 | 用途 |
+| --- | --- |
+| `hub_ask` | 派发任务并阻塞等待最终回答 |
+| `hub_dispatch` | 异步派发任务，立即返回持久化任务编号 `ref` |
+| `hub_fetch` | 凭 `ref` 轮询任务状态或取回最终结果 |
+| `hub_status` | 查看全部 11 种 Worker 的在线状态与启停开关 |
+| `hub_capabilities` | 查询各 Worker 支持的模型、思考档位、流式与附件能力 |
+| `hub_login` | 查询登录态或发起指定 Worker 的登录流程 |
+| `hub_discover` | 只读扫描局域网与本机可用的 Hub 实例 |
+| `hub_set_status` | 启用或禁用指定 Worker（写入配置并全端同步） |
+
+**任务契约三原则**
+
+1. **附件上限**：`files` 单次最多附带 8 个文件，总大小不超过 1 MiB，发送后在 Hub 端暂存。
+2. **工作目录归属**：`cwd` 指 **Hub 所在服务器**上的目录路径，不会自动映射客户端本机路径。
+3. **结果跟踪与验收**：任务受理后返回持久化 `ref`，请用 `hub_fetch` 轮询，切勿重复派发；状态为 `completed` 仅代表进程正常返回非空回答，代码与逻辑是否正确仍由调用方验收。完整参数见 [任务选项说明](docs/task-options.md)。
+
+---
+
+## Web 控制台能看什么
+
+启动时加上 `--with-console` 即可通过 `http://localhost:8890` 访问内置控制台，在一个页面里完成对话派活、切号、查额度与看产物。
+
+| 模块 | 你能直接做的操作 |
+| --- | --- |
+| **三栏工作台与文件预览** | 左侧切换平台会话树、中间沉浸式对话、右侧折叠工作台；工作台直连会话中提到的本地文件，支持产物、图片、附件在线预览与单条删除 |
+| **11 个 Worker 登录与秒切** | 直接在网页里完成 9 家 OAuth、Cline 设备码与 opencode API Key 登录、登出、保存多账号并一键切换，无需 SSH 进服务器敲命令 |
+| **实时额度监控与启停开关** | 查看各账号剩余额度（60 秒缓存 + 并发请求合并）；拨动卡片开关即可启用或禁用 Worker（落盘 `agents.json` 全端生效），卡片支持拖拽排序 |
+| **智能收展与品牌锚点** | 顶栏、活动栏、会话侧栏随光标靠近自动展开、移开自动收起；点击左上角品牌图标可一键切换“自动收展 / 常驻固定”并记住偏好 |
+| **12 套主题与毛玻璃壁纸** | 内置 Mocha、Shell、Aurora、Dusk、Cyber、Grid 6 套配色（各含深色 / 浅色，全部通过 WCAG AA 对比度校准）；上传自定义壁纸后全局自动切换为半透明毛玻璃视图 |
+| **子代理品牌色联动** | 发送按钮、上下文进度条与二级菜单自动跟随当前选中 Worker 的品牌主题色（含 opencode 与 Cline 专属配色） |
+| **跨平台会话归档** | 聚合搜索、按平台筛选历史会话，支持一键复原归档会话，删除前强制二次确认 |
+| **子代理 MCP 端点卡片** | 一键复制 `:8790/mcp` 接入地址或“发给 Agent 的自动配置提示词”；在非 HTTPS 的局域网 IP 访问时剪贴板自动降级，保证复制按钮始终可用 |
 
 <details>
+<summary><b>前端布局与交互实现细节</b></summary>
 
-<summary><b>交互细节（给前端开发者）</b></summary>
-
-- 品牌锚点 `#brand-logo-pin`（`z-index: 120`）永不隐藏；顶栏触发区 `Y ≤ 38px`、活动栏 `X ≤ 42px`，90ms 防误触展开、650ms 防抖收起；弹窗打开、输入聚焦或会话侧栏展开时保持常驻。
-- 侧栏触发区为完整占位宽度（`1440px` 视口下 `X ≤ 324px`）；卡片单行化，按需挂载 `/api/chat/agent-summary` 摘要。
-- 顶栏 `z-index: 100`、会话头 `z-index: 50` 独立层叠，下拉菜单不会被代码块或工作台截断。
-- 毛玻璃：`body.has-custom-bg` 下 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一为 `--gem-bg-card`，`--gem-surface-high` 仅用于交互态与进度条轨道。
-- 子代理色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名保持正文色 `--gem-text`。
-- 状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉支持思考档位与流式开关。
-- 页脚右侧显示版本号 `v1.0.12`，可被后端 `snap.version` 覆盖。
-- 离线 Demo：`scripts/build_demo.py` + `scripts/demo_engine.js` 生成 `demo.html` 与 `demo/index.html`。
+- 品牌锚点 `#brand-logo-pin`（`z-index: 120`）永不隐藏；顶栏触发区为 `Y ≤ 38px`、活动栏为 `X ≤ 42px`，设 90ms 防误触展开与 650ms 防抖收起；弹窗打开、输入框聚焦或侧栏展开时保持常驻；顶栏与浮层按钮右缘严格对齐。
+- 侧栏触发区覆盖完整占位宽度（`1440px` 视口下 `X ≤ 324px`）；会话卡片单行化展示，按需挂载 `/api/chat/agent-summary` 摘要。
+- 顶栏 `z-index: 100`、会话头 `z-index: 50` 独立层叠上下文，下拉菜单不会被代码块或右侧工作台截断。
+- 毛玻璃模式：`body.has-custom-bg` 下启用 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一收敛为 `--gem-bg-card`，`--gem-surface-high` 仅用于悬浮交互态与进度条轨道。
+- 子代理色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名称保持正文色 `--gem-text`。
+- 底部状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉内置思考档位与流式输出开关；页脚右侧显示版本号 `v1.0.12`（可被后端 `snap.version` 动态覆盖）。
+- 离线 Demo 构建：运行 `scripts/build_demo.py`（配合 `scripts/demo_engine.js`）可同步生成 `demo.html` 与 `demo/index.html`。
 
 </details>
 
 ---
 
-## 实测状态
+## 实测状态与边界
 
-> **回归测试 ≠ 全量付费实测。** 下表的回归通过证明框架逻辑正确，不代表每个服务商、模型或宿主都已跑通真实付费任务。
+> **重要声明：回归测试通过 ≠ 所有商业模型均已完成付费实测。** 下表中的自动化回归与压测证明调度框架、协议桥接与进程管理逻辑正确，不代表每个第三方厂商、模型或宿主都在你的账号环境下跑通了付费任务。
 
-| 项目                          | 结果                  | 说明                                                                     |
-| --------------------------- | ------------------- | ---------------------------------------------------------------------- |
-| Windows 回归 & DOM 断言         | ✅ 32 组 + 7 项 DOM    | 见 `docs/refactor-validation.json`、`tests/console_layout_theme_dom.mjs` |
-| Linux 回归 & 压测               | ✅ 29 组 + 4,500 余次压测 | 360 并发 0 报错；见 `docs/stage3-stress-report.json` 等                       |
-| Linux 生产 Hub                | ✅ 通过                | 24 个 Hub 工具、11 种 Worker；配置、历史与鉴权平滑保留                                   |
-| Linux Antigravity CLI 1.3.1 | ✅ 真实调用              | 原生子代理 `hub-mimocode` 派发成功                                              |
-| Linux ZCode CLI 0.16.9      | ✅ 真实调用              | 原 ref 续查返回正确答案                                                         |
-| Windows Codex / ZCode       | ✅ 真实调用              | 两种原生子代理均返回结果                                                           |
-| Windows Antigravity         | ✅ 真实调用              | `hub_status` / `hub_capabilities` 返回 11 种 Worker                       |
-| CodeArts 原生组件与通道            | ✅ 通过                | Windows ↔ Linux 局域网与 SSH 通道正常                                          |
-| Linux CodeArts 自身模型         | ✅ 真实调用              | GLM-5.2 系列秒级完成，进程全部安全退出                                                |
-| Windows DSH                 | ⚠️ 账号余额受阻           | 注册通过；模型调用返回 `402 ACCOUNT_QUOTA`                                        |
-| Windows CodeArts IDE        | ⚠️ 部分通过             | 派发成功，但 IDE 后续 `hub_fetch` 被宿主拒绝                                        |
-| Windows 独立 CodeArts CLI     | ⚠️ 未通过模型验收          | 受文件夹信任限制                                                               |
-| Linux Codex & DSH CLI       | ❌ 未安装               | 未执行实测，不作通过宣称                                                           |
+| 验证项目 | 实测结论 | 可核对事实与报告路径 |
+| --- | --- | --- |
+| Windows 自动化回归 & DOM 断言 | ✅ 32 组回归 + 7 项 DOM 通过 | 报告见 `docs/refactor-validation.json`、测试脚本 `tests/console_layout_theme_dom.mjs` |
+| Linux 自动化回归 & 并发压测 | ✅ 29 组回归 + 4,500+ 次压测通过 | 360 并发 0 报错；报告见 `docs/stage3-stress-report.json` |
+| Linux 生产环境 Hub 升级 | ✅ 通过 | 完整加载 24 个 Hub 工具、11 种 Worker；外部配置、任务历史与鉴权平滑保留 |
+| Linux Antigravity CLI 1.3.1 | ✅ 真实调用通过 | 通过原生子代理 `hub-mimocode` 派发并拿回真实模型回答 |
+| Linux ZCode CLI 0.16.9 | ✅ 真实调用通过 | 凭原任务 `ref` 续查并拿回正确回答 |
+| Windows Codex / ZCode 原生插件 | ✅ 真实调用通过 | 两种原生子代理均成功派发并返回结果 |
+| Windows Antigravity 原生插件 | ✅ 真实调用通过 | `hub_status` 与 `hub_capabilities` 正常返回全部 11 种 Worker 状态 |
+| CodeArts 原生组件与跨机通道 | ✅ 通过 | Windows ↔ Linux 局域网直连与 SSH 反向通道均连通 |
+| Linux CodeArts 自身模型调用 | ✅ 真实调用通过 | GLM-5.2 系列秒级返回，取消或完成后子进程全部干净退出 |
+| Windows DSH 宿主调用 | ⚠️ 受阻于测试账号余额 | 插件注册通过；发起模型调用时远端返回 `402 ACCOUNT_QUOTA` |
+| Windows CodeArts IDE 宿主 | ⚠️ 部分通过 | 首次派发成功，但 IDE 宿主随后拒绝了 `hub_fetch` 轮询权限 |
+| Windows 独立 CodeArts CLI | ⚠️ 未通过模型验收 | 受限于 Windows 端工作区文件夹信任弹窗拦截 |
+| Linux Codex & DSH CLI | ❌ 未安装 | 测试机未安装对应二进制文件，未执行实测，不做通过宣称 |
 
-<details>
+**使用边界说明**
 
-<summary><b>边界说明</b></summary>
+1. **Antigravity 原生插件 vs 可选 SDK**：原生插件已跑通真实派发；可选 Python SDK 属于外部编排库，当前官方 wheel 不含 `beta.run_workflow`，且鉴权与宿主登录态隔离。
+2. **CodeArts 鉴权隔离**：在 CodeArts IDE 内登录不等于独立 CLI 自动获得调用权限；其他厂商的登录态也不能替代华为账号的 AK/SK 或 OAuth 权限；当前仅开放默认思考档位与非流式文本。
+3. **非跨 Hub 联邦**：一个客户端同一时间指向一个选定的 Hub，并非多 Hub 联邦网络。
 
-1. **原生插件 vs 可选 SDK**：Antigravity 原生插件已跑通真实调用；可选 Python SDK 是外部编排库，当前 wheel 无 `beta.run_workflow`，鉴权与宿主登录隔离。
-2. **CodeArts 鉴权**：IDE 登录不代表独立 CLI 可调用；其他服务的登录态不能替代华为账号权限。当前仅开放默认思考与非流式文本。
-3. **隐私**：客户端选定单个 Hub 并非跨 Hub 联邦；提示词与附件仍会发送给对应模型服务商。
-
-完整回执、源码哈希与失败记录见 [0.9.9 验收记录](docs/release-0.9.9.md)；CodeArts 后续跟进见 [2026-10-10 跟进记录](docs/codearts-ide-followup.md)。
-
-</details>
+完整验收回执、源码哈希与失败日志见 [0.9.9 验收记录](docs/release-0.9.9.md) 及 [CodeArts IDE 跟进记录](docs/codearts-ide-followup.md)。
 
 ---
 
 ## 数据流向与安全
 
-- **数据链路**：`宿主客户端 → 本地 MCP 桥 → Hub → 官方 CLI / 内核 → 模型服务商 API`。
-- **不是离线模型**：Hub 只做路由与执行代理，提示词和附件会随官方 CLI 发往各服务商。
-- **凭据隔离**：Token、API Key 与会话数据都存放在源码目录之外，绝不入库。
-- **传输安全**：Bearer Token 只负责鉴权；跨公网请配合 HTTPS 反向代理、VPN 或 SSH 隧道。
-- 漏洞报告请见 [SECURITY.md](SECURITY.md)。
+Hub 仅在本地或你的私有服务器内做协议转换与进程调度，所有凭据均与代码仓库物理隔离。
+
+- **完整数据链路**：`宿主客户端 → 本地 MCP 桥 → Hub 服务 → 厂商官方 CLI / 内核 → 对应模型服务商 API`。
+- **不是离线大模型**：Hub 本身不推理，你的提示词与附件最终会通过你所选 Worker 的官方 CLI 发往对应模型厂商。
+- **凭据物理隔离**：Hub 访问 Token、各厂商 API Key、OAuth 凭据与会话历史全部存放在源码目录外的系统配置目录中，绝不写入 Git 仓库。
+- **公网传输建议**：Bearer Token 仅用于接口鉴权，不加密报文；若跨公网部署，请务必配合 HTTPS 反向代理、VPN 或 SSH 隧道使用。
+- 发现安全漏洞请按 [SECURITY.md](SECURITY.md) 中的流程私密报告。
 
 ---
 
-## 预打包文件
+## 预打包文件与开发测试
 
-| 文件                                          | 适用场景                                |
-| ------------------------------------------- | ----------------------------------- |
-| `agenthub-1.0.12-both.zip`                   | 客户端与 Hub 在同一台机器（最推荐）                |
-| `agenthub-1.0.12-plugins.zip`                | 只写代码的客户端电脑                          |
-| `agenthub-1.0.12-hub.zip`                    | 只跑 Worker 的服务器                      |
-| `agenthub-workers-1.0.12-minimax-plugin.zip` | MiniMax Code 桌面端 / 云端（Plugin V1 规范） |
-| `multi-agent-hub-1.0.12.carts` / `.vsix`     | 华为 CodeArts IDE、VS Code 及兼容编辑器      |
+### 预打包发行文件
 
-自行构建：`python packaging/build.py --output <仓库外目录> --component all`。完整参数见 [packaging/README.md](packaging/README.md)。
+所有发行包均附带 `SHA256SUMS` 校验文件，可直接从 Releases 下载或自行构建：
 
----
+| 文件名 | 适用场景 |
+| --- | --- |
+| `agenthub-1.0.12-both.zip` | 客户端与 Hub 装在同一台电脑（最常用） |
+| `agenthub-1.0.12-plugins.zip` | 仅在个人电脑上安装各宿主客户端插件 |
+| `agenthub-1.0.12-hub.zip` | 仅在服务器上部署 Hub 与 Worker 调度端 |
+| `agenthub-workers-1.0.12-minimax-plugin.zip` | 导入 MiniMax Code 桌面端或云端（符合 Plugin V1 规范） |
+| `multi-agent-hub-1.0.12.vsix` / `.carts` / `.cloudide` | 导入华为 CodeArts IDE、VS Code 及兼容云端 / 桌面编辑器 |
 
-## 开发与测试
+### 常用开发与测试命令
+
+在仓库根目录下可执行以下自检与打包命令（将 `<仓库外输出目录>` 替换为实际路径，如 `../agenthub-releases`）：
 
 ```bash
-# 全量隔离回归（不产生模型费用）
+# 1. 运行全量隔离回归测试（纯本地沙箱，不消耗任何模型额度）
 python tests/run_regressions.py --report docs/local-validation.json
 
-# 控制台 DOM / 主题 / 收展断言
+# 2. 运行 Web 控制台 DOM 结构、主题对比度与收展交互断言
 node --test tests/console_layout_theme_dom.mjs
 
-# 扫描源码与 Git 历史中的凭据泄漏
+# 3. 扫描工作区源码与全部 Git 历史，确保无凭据泄漏
 python scripts/audit_secrets.py --history
 
-# 改了 console/client/index.html 后重建离线 Demo
+# 4. 修改 console/client/index.html 后重新生成单文件离线 Demo
 python scripts/build_demo.py
 
-# 构建分发包（输出到仓库外）
-python packaging/build.py --output ../agenthub-releases
+# 5. 构建全套分发包（必须输出到仓库外目录）
+python packaging/build.py --output <仓库外输出目录> --component all
 ```
 
-可选：安装下面两个依赖后，原本跳过的真实 SDK / CLI 用例也会执行：
+如需运行默认跳过的真实 SDK / CLI 集成用例，可额外安装：
 
 ```bash
 pip install google-antigravity==0.1.21
 npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 ```
 
-贡献约定（提交前检查、提交信息规范）见 [CONTRIBUTING.md](CONTRIBUTING.md)，行为准则见 [CODE\_OF\_CONDUCT.md](CODE_OF_CONDUCT.md)。
+提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)，打包参数详见 [packaging/README.md](packaging/README.md)。
 
 ---
 
-## 版本演进
+## 版本演进、文档导航与协议
 
-| 版本                | 重点                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| **1.0.12**        | 工作台直连会话里提到的本地文件（产物/图片/附件预览与单条删除）、子代理卡片拖动排序与 opencode/cline 主题色、顶栏与浮层按钮右缘对齐；Linux 模板补齐 GitHub Copilot worker |
-| 1.0.1             | 新增 opencode 与 Cline 两种 Worker（共 11 种）：配置模板、能力声明、NDJSON 事件流解析、原生子代理与各处数量对齐；架构图与进度图重绘，小字号与对比度全面提亮 |
-| 1.0.0             | 首个公开正式版：审计清理、致谢 TraeClaw、交接文档脱敏、补齐贡献者公约、发布线审校修复                                                 |
-| 0.9.9.9           | 重画架构图与进度图，补交接文档                                                                                 |
-| 0.9.9.8           | Node 20 WebSocket 兼容、登录与控制台路径发现、测试与宿主解耦；补齐贡献指南、安全政策与英文 README                                   |
-| 0.9.9.7           | 修复 Linux 源码安装链路：执行位丢失、源码目录直接安装、回环请求被代理劫持                                                        |
-| 0.9.9.3 ~ 0.9.9.6 | 9 Worker 登录状态检测重构；WebUI 体系化打磨、6 套主题、毛玻璃与智能收展                                                    |
+### 近期版本演进
+
+| 版本 | 核心变更 |
+| --- | --- |
+| **1.0.12** | 右侧工作台直连会话提及的本地文件（支持产物 / 图片 / 附件预览与单条删除）；子代理卡片支持拖拽排序并补齐 opencode / Cline 品牌色；对齐顶栏与浮层按钮右缘；Linux 配置模板补齐可用 GitHub Copilot Worker |
+| **1.0.1** | 新增 opencode 与 Cline 两种 Worker（总计 11 种），补齐配置模板、能力声明、NDJSON 事件流解析与原生子代理；重绘中英架构图与路线图，放大字号并提升对比度 |
+| **1.0.0** | 首个公开正式版：完成全仓凭据审计清理、致谢 TraeClaw、交接文档脱敏、补充贡献者公约与发布线审校修复 |
+| **0.9.9.7 ~ 0.9.9.9** | 修复 Linux 源码安装执行位丢失与回环代理劫持；兼容 Node 20 WebSocket；补齐英文 README、安全政策、贡献指南与新版 SVG 图表 |
+| **0.9.9.3 ~ 0.9.9.6** | 重构 Worker 登录态落盘判定逻辑；完成 WebUI 三栏架构、6 套深浅主题、毛玻璃壁纸与智能收展交互 |
 
 ![multi-agent-hub 进度图](docs/roadmap.svg)
 
-完整记录见 [CHANGELOG.md](CHANGELOG.md) 与 [版本历史](docs/version-history.md)。
+完整变更记录见 [CHANGELOG.md](CHANGELOG.md) 与 [版本历史](docs/version-history.md)。
 
----
+### 文档导航
 
-## 文档导航
+- **部署与参数**：[Linux 运行说明](RUN_ON_LINUX.md) · [安装包构建与完整参数](packaging/README.md) · [统一任务选项](docs/task-options.md)
+- **宿主插件指南**：[Codex](integrations/codex/README.md) · [ZCode / MiniMax Code](plugins/agenthub-workers/README.md) · [DSH](integrations/dsh/README.md) · [Antigravity](integrations/antigravity/README.md) · [CodeArts 原生插件](integrations/codearts/README.md) · [CodeArts IDE & VS Code 扩展](integrations/vscode/README.md)
+- **CodeArts 专题**：[双向接入与认证边界](docs/codearts-compatibility.md) · [CodeArts IDE 跟进记录](docs/codearts-ide-followup.md) · [接入已有模型路由](docs/codearts-custom-provider.md)
+- **验收与交接**：[0.9.9 验收记录](docs/release-0.9.9.md) · [网络自动发现验收（v0.8）](docs/release-0.8.md) · [开发交接记录](docs/HANDOVER_20261016.md)
 
-**入门与部署**
+### 致谢
 
-- [Linux 运行说明](RUN_ON_LINUX.md)
-- [安装包构建与完整参数](packaging/README.md)
-- [统一任务选项](docs/task-options.md)
+- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons)：提供控制台与子代理头像使用的品牌 SVG 图标。
+- [TraeClaw](https://github.com/firerlAGI/TraeClaw)：提供 `trae_delegate` 通道依赖的本地桥接与 CDP/DOM 自动化方案。
+- Huawei CodeArts、Google Antigravity、Tencent CodeBuddy、GitHub Copilot、Xiaomi MiMo、MiniMax、ByteDance Trae、Z.ai、opencode、Cline 等官方 CLI 与开放生态，以及所有提交反馈的开发者。
 
-**宿主集成**
+### 开源协议
 
-- [Codex](integrations/codex/README.md) · [ZCode / MiniMax Code](plugins/agenthub-workers/README.md) · [DSH](integrations/dsh/README.md) · [Antigravity](integrations/antigravity/README.md)
-- [CodeArts 原生插件](integrations/codearts/README.md) · [CodeArts IDE & VS Code 扩展](integrations/vscode/README.md)
-- [CodeArts 双向接入与认证边界](docs/codearts-compatibility.md) · [CodeArts IDE 跟进](docs/codearts-ide-followup.md) · [CodeArts 接入已有模型路由](docs/codearts-custom-provider.md)
-
-**版本与验收**
-
-- [更新日志](CHANGELOG.md) · [版本历史](docs/version-history.md)
-- [0.9.9 验收记录](docs/release-0.9.9.md) · [网络自动发现验收（v0.8）](docs/release-0.8.md)
-- [开发交接记录](docs/HANDOVER_20261016.md)
-
----
-
-## 致谢
-
-- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons)：控制台与子代理头像使用的品牌 SVG 图标。
-- [TraeClaw](https://github.com/firerlAGI/TraeClaw)：`trae_delegate` 通道所依赖的本地桥接与 CDP/DOM 自动化。
-- Huawei CodeArts、Google Antigravity、Tencent CodeBuddy、GitHub Copilot、Xiaomi MiMo、MiniMax、ByteDance Trae、Z.ai 等官方 CLI 与开放生态。
-- 所有提供反馈与建议的开发者。
-
-## 开源协议
-
-[Apache License 2.0](LICENSE)：允许使用、修改与分发；衍生作品须保留版权声明、许可证文本及修改说明。
+本项目基于 [Apache License 2.0](LICENSE) 开源：允许自由使用、修改与分发；衍生作品须保留原始版权声明、许可证文本及修改说明。

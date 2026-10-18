@@ -91,7 +91,8 @@ const DISPATCH_OVERRIDES = { traecode: { tool: 'trae_delegate', asyncFlag: { wai
  */
 const MODEL_CATALOG = {
   codearts: [
-    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x', default: true },
+    { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.70x', default: true },
+    { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x' },
     { id: 'huaweicloud-maas/glm-5.2-sft-harmony', name: 'GLM-5.2-ArkTS-SPARK', credits: '0.70x' },
     { id: 'huaweicloud-maas/openpangu-2.0-pro', name: 'OpenPangu-2.0-Pro', credits: '0.70x' },
     { id: 'huaweicloud-maas/openpangu-2.0-flash', name: 'OpenPangu-2.0-Flash', credits: '0.35x' },
@@ -206,11 +207,22 @@ export function normalizeCapabilities(value) {
         attachments[kind] = { supported: option?.supported === true, mode: publicReason(option?.mode), reason: publicReason(option?.reason),
           content_types: (Array.isArray(option?.content_types) ? option.content_types : []).filter((item) => typeof item === 'string').map(publicReason).slice(0, 16) };
       }
+      const permModes = model.permission && typeof model.permission === 'object' ? model.permission : {};
+      const permLabels = {};
+      const permDescs = {};
+      for (const mode of ['readonly', 'edit', 'full']) {
+        if (typeof permModes.labels?.[mode] === 'string') permLabels[mode] = publicReason(permModes.labels[mode]);
+        if (typeof permModes.descriptions?.[mode] === 'string') permDescs[mode] = publicReason(permModes.descriptions[mode]);
+      }
       return {
         id: model.id.slice(0, 180), aliases: (Array.isArray(model.aliases) ? model.aliases : []).filter((a) => typeof a === 'string').slice(0, 40),
         availability: availability(model.availability, ready),
         thinking: { allowed: ['default', ...(Array.isArray(model.thinking?.allowed) ? model.thinking.allowed : []).filter((mode) => ['on', 'off'].includes(mode))],
           default: 'default', reasons: { on: publicReason(model.thinking?.reasons?.on), off: publicReason(model.thinking?.reasons?.off) } },
+        permission: {
+          allowed: ['default', ...(Array.isArray(permModes.allowed) ? permModes.allowed : []).filter((mode) => ['readonly', 'edit', 'full'].includes(mode))],
+          default: 'default', labels: permLabels, descriptions: permDescs, scope: publicReason(permModes.scope),
+        },
         stream: { supported: model.stream?.supported === true, semantics: publicReason(model.stream?.semantics), reason: publicReason(model.stream?.reason) }, attachments,
       };
     });
@@ -227,6 +239,7 @@ export function taskCapability(document, agent, model, options = {}) {
     if (options[key] !== undefined && options[key] !== null && options[key] !== '') return fail(`${key} 不是已验证的运行控制`);
   }
   if (options.thinking !== undefined && !['default', 'on', 'off'].includes(options.thinking)) return fail('thinking 必须为 default/on/off');
+  if (options.permission !== undefined && !['default', 'readonly', 'edit', 'full'].includes(options.permission)) return fail('permission 必须为 default/readonly/edit/full');
   if (options.stream !== undefined && typeof options.stream !== 'boolean') return fail('stream 必须是布尔值');
   const worker = document?.workers?.[agent];
   if (!worker?.configured || !worker.availability?.enabled) return fail(worker?.availability?.reason || '该 worker 尚无可用的能力信息或运行通道');
@@ -240,6 +253,11 @@ export function taskCapability(document, agent, model, options = {}) {
   if (!selected.availability.enabled) return fail(selected.availability.reason || '选定模型当前不可用');
   const thinking = options.thinking || 'default';
   if (options.thinking && !selected.thinking.allowed.includes(thinking)) return fail(selected.thinking.reasons[thinking] || `选定模型不支持 thinking=${thinking}`);
+  const permission = options.permission || 'default';
+  if (permission !== 'default' && !(selected.permission?.allowed || []).includes(permission)) {
+    const modes = (selected.permission?.allowed || ['default']).join('/');
+    return fail(`${agent} 不支持编辑权限模式 ${permission}（该通道可选 ${modes}）`);
+  }
   if (options.stream === true && !selected.stream.supported) return fail(selected.stream.reason || '该通道尚未验证流式正文输出');
   if (options.attachments !== undefined && !Array.isArray(options.attachments)) return fail('attachments 必须是数组');
   for (const attachment of options.attachments || []) {
@@ -1476,6 +1494,7 @@ export async function start(context) {
     const taskOptions = {
       ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
       ...(options.effort ? { effort: options.effort } : {}),
+      ...(options.permission ? { permission: options.permission } : {}),
       ...(options.stream !== undefined ? { stream: options.stream } : {}),
       ...(direct && atts.length ? { attachments: await portableAttachments(atts) } : {}),
     };
@@ -1917,6 +1936,7 @@ export async function start(context) {
       ...(model ? { model } : {}),
       ...(opts.thinking !== undefined ? { thinking: opts.thinking } : {}),
       ...(opts.effort ? { effort: opts.effort } : {}),
+      ...(opts.permission ? { permission: opts.permission } : {}),
       ...(opts.stream !== undefined ? { stream: opts.stream } : {}),
       ...(opts.attachments !== undefined ? { attachments: opts.attachments } : {}),
       ...(Number(opts.timeout_s) > 0 ? { timeout_s: Number(opts.timeout_s) } : {}),
@@ -2758,7 +2778,7 @@ export async function start(context) {
           const portable = await portableAttachments(uploadAttachments(body.attachments));
           const options = { ...body, attachments: portable };
           await requireTaskCapability(agent, model, options);
-          const taskOptions = { thinking: body.thinking || 'default', ...(body.effort ? { effort: body.effort } : {}), stream: body.stream === true,
+          const taskOptions = { thinking: body.thinking || 'default', ...(body.effort ? { effort: body.effort } : {}), ...(body.permission ? { permission: body.permission } : {}), stream: body.stream === true,
             ...(portable.length ? { attachments: portable } : {}), ...(model ? { model } : {}), ...(to ? { timeout_s: to } : {}) };
           const ov = DISPATCH_OVERRIDES[agent];
           const text = await mutate('dispatch', () => (ov
@@ -2965,11 +2985,12 @@ export async function start(context) {
           const contextTier = typeof body.contextTier === 'string' && body.contextTier.trim() ? body.contextTier.trim().slice(0, 32) : undefined;
           const autoTier = typeof body.autoTier === 'string' && body.autoTier.trim() ? body.autoTier.trim().slice(0, 32) : undefined;
           if (body.thinking !== undefined && !['default', 'on', 'off'].includes(body.thinking)) throw badReq('thinking 无效');
+          const permission = typeof body.permission === 'string' && ['readonly', 'edit', 'full'].includes(body.permission) ? body.permission : undefined;
           if (body.stream !== undefined && typeof body.stream !== 'boolean') throw badReq('stream 必须是布尔值');
           // 附件：客户端先经 /api/upload 落盘，这里只认 url 白名单与元数据
           const attachments = uploadAttachments(body.attachments);
           try {
-            const thread = await chatSend(agent, text, mode, model, attachments, sessionId, { effort, contextTier, autoTier, thinking: body.thinking, stream: body.stream });
+            const thread = await chatSend(agent, text, mode, model, attachments, sessionId, { effort, contextTier, autoTier, thinking: body.thinking, stream: body.stream, permission });
             send(200, { thread: { id: thread.id, agent: thread.agent } });
           } catch (err) {
             const e = new Error(sanitizeHubError(err && err.message));

@@ -13,6 +13,8 @@ MAX_ATTACHMENTS = 8
 OPTIONS_SCHEMA = {
     "thinking": {"type": "string", "enum": ["default", "on", "off"], "default": "default"},
     "effort": {"type": "string", "enum": ["low", "medium", "high", "max"]},
+    # 文件编辑权限：各 worker 用自家 CLI 的开关实现（见 capabilities.json 的 permission.modes）
+    "permission": {"type": "string", "enum": ["default", "readonly", "edit", "full"]},
     "stream": {"type": "boolean", "default": False},
     "attachments": {"type": "array", "maxItems": MAX_ATTACHMENTS, "items": {
         "type": "object", "properties": {"name": {"type": "string"}, "mime_type": {"type": "string"}, "data_base64": {"type": "string"}},
@@ -154,7 +156,15 @@ def public_model_capabilities(agent, profile, model):
                 attachments[kind]["content_types"] = ["text/plain; charset=utf-8"]
         else:
             attachments[kind]["reason"] = reason
-    return {"thinking": {"allowed": thinking, "default": "default", "reasons": reasons}, "stream": stream, "attachments": attachments}
+    perm_modes = (caps.get("permission") or {}).get("modes") or {}
+    permission = {
+        "allowed": ["default"] + [k for k in ("readonly", "edit", "full") if isinstance(perm_modes.get(k), dict)],
+        "default": "default",
+        "labels": {k: (v.get("label") or k) for k, v in perm_modes.items() if isinstance(v, dict)},
+        "descriptions": {k: (v.get("desc") or "") for k, v in perm_modes.items() if isinstance(v, dict)},
+        "scope": (caps.get("permission") or {}).get("description") or "",
+    }
+    return {"thinking": {"allowed": thinking, "default": "default", "reasons": reasons}, "stream": stream, "attachments": attachments, "permission": permission}
 
 
 def _mode_config(value, label):
@@ -202,6 +212,19 @@ def prepare_task(agent, profile, args, directory):
         requested = aliases.get(requested, requested)
         if config.get("models") and requested not in config["models"]:
             raise UnsupportedCapability("UNSUPPORTED: thinking mode has not been verified for this model")
+        extra.extend(more)
+        env.update(values)
+    permission_mode = str(args.get("permission") or "default")
+    if permission_mode not in ("default", "readonly", "edit", "full"):
+        raise ValueError("permission must be default/readonly/edit/full")
+    if permission_mode != "default":
+        # 每家 CLI 的开关都不一样，统一查 capabilities.json 里该 worker 自己的 permission.modes
+        conf = ((caps.get("permission") or {}).get("modes") or {}).get(permission_mode)
+        if not isinstance(conf, dict):
+            modes = (caps.get("permission") or {}).get("modes") or {}
+            allowed = "/".join(["default"] + [k for k in ("readonly", "edit", "full") if k in modes])
+            raise UnsupportedCapability("UNSUPPORTED: " + agent + " 不支持编辑权限模式 " + permission_mode + "（可选 " + allowed + "）")
+        more, values = _mode_config(conf, agent + " permission=" + permission_mode)
         extra.extend(more)
         env.update(values)
     output_mode = (caps.get("stream") or {}).get("on" if stream else "off")

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { LOGIN_COMMANDS, parseClineAuthInput } = await import('../console/auth.mjs');
+const { LOGIN_COMMANDS, parseClineAuthInput, parseOpencodeAuthInput } = await import('../console/auth.mjs');
 const { WORKER_CRED_FILES } = await import('../console/accounts.mjs');
 
 const WORKERS = [
@@ -70,13 +70,66 @@ test('cline still honours explicit provider forms', () => {
   assert.equal(parseClineAuthInput('openai sk-1234567890').provider, 'openai');
 });
 
-test('cline rejects an unidentifiable or truncated key with a usable message', () => {
+// 用户明确要求：API Key 登录不许再做格式校验把人挡在外面，
+// 猜不中厂商就落默认值 + 提示，真正的对错交给官方 CLI 返回。
+test('cline never blocks on key format', () => {
   const unknown = parseClineAuthInput('zzz-not-a-key');
-  assert.equal(unknown.ok, false);
-  assert.match(unknown.error, /provider/);
-  const short = parseClineAuthInput('sk-1');
-  assert.equal(short.ok, false);
-  assert.match(short.error, /不完整/);
+  assert.equal(unknown.ok, true);
+  assert.equal(unknown.provider, 'openai');
+  assert.match(unknown.note, /厂商|openai/);
+
+  const shortKey = parseClineAuthInput('sk-1');
+  assert.equal(shortKey.ok, true);
+  assert.equal(shortKey.apiKey, 'sk-1');
+
+  // 复制时被换行打断的 Key 拼回一个整体，不会把前半段当成 provider
+  const wrapped = parseClineAuthInput('sk-ant-' + 'abc\n  defgh');
+  assert.equal(wrapped.provider, 'anthropic');
+  assert.equal(wrapped.apiKey, 'sk-ant-abcdefgh');
+
+  // 真的什么都没填才报错
+  assert.equal(parseClineAuthInput('   ').ok, false);
+});
+
+test('opencode accepts a bare api key and infers the provider', () => {
+  const zen = parseOpencodeAuthInput('oc_sk_' + 'abcdef0123456789');
+  assert.equal(zen.ok, true);
+  assert.equal(zen.provider, 'opencode');
+  assert.equal(zen.apiKey, 'oc_sk_abcdef0123456789');
+
+  assert.equal(parseOpencodeAuthInput('sk-ant-' + 'api03-abcdefghijklmn').provider, 'anthropic');
+  assert.equal(parseOpencodeAuthInput('sk-or-' + 'v1-0123456789abcdef').provider, 'openrouter');
+  assert.equal(parseOpencodeAuthInput('gsk_' + '0123456789abcdef').provider, 'groq');
+});
+
+test('opencode never blocks: unknown prefix falls back with a notice', () => {
+  const unknown = parseOpencodeAuthInput('zzz-not-a-key');
+  assert.equal(unknown.ok, true);
+  assert.equal(unknown.provider, 'opencode');
+  assert.match(unknown.note, /默认 provider/);
+
+  // sk- 属通用前缀，不硬猜，提示可改成 siliconflow 重贴
+  const skKey = parseOpencodeAuthInput('sk-' + '0123456789abcdef');
+  assert.equal(skKey.ok, true);
+  assert.match(skKey.note, /siliconflow/);
+
+  // provider:key 原样采用
+  assert.deepEqual(
+    (({ provider, apiKey }) => ({ provider, apiKey }))(parseOpencodeAuthInput('siliconflow:sk-1234567890')),
+    { provider: 'siliconflow', apiKey: 'sk-1234567890' },
+  );
+  // provider key 空格形式
+  assert.equal(parseOpencodeAuthInput('anthropic sk-ant-1234567890').provider, 'anthropic');
+  // 被换行打断的同一个 Key 不被误判成 provider + key
+  const wrapped = parseOpencodeAuthInput('oc_sk_' + 'abcdef\n  0123456789');
+  assert.equal(wrapped.provider, 'opencode');
+  assert.equal(wrapped.apiKey, 'oc_sk_abcdef0123456789');
+
+  // 空输入、回调链接才拦（写进 auth.json 只会得到无效凭据）
+  assert.equal(parseOpencodeAuthInput('').ok, false);
+  const url = parseOpencodeAuthInput('https://opencode.ai/auth/callback?code=abc123');
+  assert.equal(url.ok, false);
+  assert.match(url.error, /providers login/);
 });
 
 test('cline falls back to a documented default model per provider', async () => {
@@ -84,4 +137,25 @@ test('cline falls back to a documented default model per provider', async () => 
   assert.equal(clineDefaultModel('anthropic'), 'claude-sonnet-4-6');
   assert.equal(clineDefaultModel('OpenAI'), 'gpt-5');
   assert.equal(clineDefaultModel('siliconflow'), '');
+});
+
+test('provider-set display names never bake in a bogus count', async () => {
+  const { formatProvidersDisplay, isMutableIdentity } = await import('../console/accounts.mjs');
+  // 单提供方不带任何后缀：旧实现会写成「opencode (1 个提供方)」，读起来自相矛盾
+  assert.equal(formatProvidersDisplay(['opencode']), 'opencode');
+  assert.equal(formatProvidersDisplay(['siliconflow']), 'siliconflow');
+  // opencode 优先当主名，其余并列展开
+  assert.equal(formatProvidersDisplay(['siliconflow', 'opencode']), 'opencode + siliconflow');
+  assert.equal(formatProvidersDisplay(['a', 'opencode', 'b']), 'opencode + a + b');
+  assert.equal(formatProvidersDisplay(['a', 'opencode', 'b', 'c']), 'opencode 等 4 个提供方');
+  assert.equal(formatProvidersDisplay([]), 'provider');
+
+  // 可变异身份 = 描述的是「这份凭据文件」而不是独立账号，只用来判定历史快照
+  assert.equal(isMutableIdentity('providers:opencode'), true);
+  assert.equal(isMutableIdentity('mmx:cn'), true);
+  assert.equal(isMutableIdentity('5cc0eb9e0749'), true);
+  // 稳定身份不一致代表真的是另一个账号，绝不能被当成快照收起
+  assert.equal(isMutableIdentity('someone@example.com'), false);
+  assert.equal(isMutableIdentity('uid-123456'), false);
+  assert.equal(isMutableIdentity(''), false);
 });
