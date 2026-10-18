@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-hub-codearts",
-  "version": "1.0.12",
+  "version": "1.0.14",
   "private": true,
   "type": "module",
   "description": "Native CodeArts Agent plugin, agents, commands and MCP client for multi-agent-hub",

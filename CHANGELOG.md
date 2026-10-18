@@ -9,6 +9,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [1.0.14] - 2026-10-19
+
+**86 个模型逐个实跑一遍**，把「界面上有、派下去必失败」的模型和「失败却说不清原因」的链路一起修掉；同时收口移动端布局。
+
+### 移动端
+- **设置卡片标题被压成竖排**：桌面是「标题 ←→ 两个按钮」的 `justify-content: space-between` 单行，390px 下标题只剩 51px 宽，「平台每日签到与福利中枢」逐字竖排。改为移动端 `display: block`，标题独占一行、按钮另起一行等宽铺满。
+- **打卡卡片把数字劈开**：`.c-val` 是 `text-align: right` + `word-break: break-all`，长句右对齐成锯齿，还把「1000积分」断成「领100 / 0积分」。改为标签一行、值一行、左对齐，`word-break: normal`。
+- **320px 宽下「发送」被挤到换行**：`.model-picker-wrap` 固定 `max-width: 320px`，按钮只剩 53px，两个字竖排并溢出容器。改为 `composer-bar-right` 整行独占、`max-width: none`，模型名超长走省略号。
+- **自动签到开关挤成窄柱**：`.checkin-control-bar` 加 `flex-wrap`，开关与说明分两行。
+
+### 模型链路（实测 86 个模型后修复）
+- **CLI 真实报错被吞掉**：CLI 退出码为 0 但 stdout 为空时，诊断常常只写在 stderr（实测 `400 model [primary-model] is not allowed for user type [personal_free_user]`）。同步路径（`hub/agent_hub.py`）与异步路径（`hub/async_worker.py`）都把 stderr 丢掉，只回一句「CLI 已退出但没有可验证的回答」，上层无法判断原因，模型永远显示可用并反复失败。现在两条路径都保留 stderr 末行诊断。
+- **新增失败归类 `plan_blocked`**：区分「这个 model id 不存在」（`model_unavailable`）与「id 存在但当前账号套餐无权使用」（`plan_blocked`），后者进 `BLOCKING`，控制台会把该模型置灰并给出「请升级套餐或改用其它模型」，而不是继续当可用模型派发。
+- 补充 `model_unavailable` 识别：`not recognized as a known model`、`invalid model selection`、`reasoning effort value is not supported`；`region_restricted` 补 `not available in your country`。
+- **模型目录纠错**（`MODEL_CATALOG`，`console/server.mjs` 与 `console/auth.mjs` 两份同源）：
+  - antigravity：`gemini-3.1-pro-high` 在 `agy models` 中不存在，换成真实存在的 `gemini-3.8-flash-low`；`agents.json` 的 `pro` 别名同步改为 `low`。
+  - mimocode：`mimo-v2.6-pro` / `mimo-v2.6-pro-ultraspeed` 漏了 provider 前缀（实测 `Model not found`），改为 `xiaomi/mimo-v2.6-pro` / `xiaomi/mimo-v2.6-pro-ultraspeed`；删掉 `mimo models` 里不存在的 `siliconflow-cn/deepseek-ai/DeepSeek-V4-Flash` 别名。
+  - codebuddy：删掉服务端返回 `service info not found` 的 `deep-model`。
+- **实测口径**：`hub_dispatch_cli` / `trae_delegate` 逐模型派发同一道可校验题（13×7 → 91），每模型独立超时 170s。
+
+| 结果 | 数量 | 说明 |
+| --- | --- | --- |
+| 通过 | 53 | 真实返回 `91` |
+| 不适用 | 19 | traecode 走 GUI 通道，`_check_gui_options` 明确拒绝非默认模型，属设计约束 |
+| 失败 | 14 | 全部有明确根因，已在上文修复或归类 |
+
+### 版本
+- 版本号 1.0.13 → **1.0.14**（`console/server.mjs`、`hub/agent_hub.py`、`.zcode-plugin/marketplace.json`、5 个 integration 的 `mcp/server.mjs`、控制台 footer、`desktop/package.json`）。
+
 ## [1.0.13] - 2026-10-19
 
 **签到从「看起来成功」变成「真的成功」**，同时修掉账号档案与多 Key 场景下的一批数据问题。
