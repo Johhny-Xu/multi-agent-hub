@@ -13,7 +13,7 @@ class TestExtensionPackaging(unittest.TestCase):
     def setUpClass(cls):
         cls.repo_root = Path(__file__).resolve().parent.parent
         cls.dist_dir = cls.repo_root / "integrations" / "vscode" / "dist"
-        if not (cls.dist_dir / "multi-agent-hub-1.0.11.vsix").exists():
+        if not (cls.dist_dir / "multi-agent-hub-1.0.12.vsix").exists():
             import subprocess, sys
             cls._created_dist = not cls.dist_dir.exists()
             subprocess.run([sys.executable, str(cls.repo_root / "packaging" / "package_extensions.py")], check=True)
@@ -25,9 +25,9 @@ class TestExtensionPackaging(unittest.TestCase):
             shutil.rmtree(cls.dist_dir, ignore_errors=True)
 
     def setUp(self):
-        self.vsix = self.dist_dir / "multi-agent-hub-1.0.11.vsix"
-        self.carts = self.dist_dir / "multi-agent-hub-1.0.11.carts"
-        self.cloudide = self.dist_dir / "multi-agent-hub-1.0.11.cloudide"
+        self.vsix = self.dist_dir / "multi-agent-hub-1.0.12.vsix"
+        self.carts = self.dist_dir / "multi-agent-hub-1.0.12.carts"
+        self.cloudide = self.dist_dir / "multi-agent-hub-1.0.12.cloudide"
 
     def test_artifacts_exist(self):
         self.assertTrue(self.vsix.exists(), "VSIX artifact missing")
@@ -49,7 +49,7 @@ class TestExtensionPackaging(unittest.TestCase):
                 with zf.open("extension/package.json") as f:
                     pkg_data = json.load(f)
                     self.assertEqual(pkg_data["name"], "multi-agent-hub")
-                    self.assertEqual(pkg_data["version"], "1.0.11")
+                    self.assertEqual(pkg_data["version"], "1.0.12")
                     self.assertEqual(pkg_data["publisher"], "agenthub")
 
                 # Validate [Content_Types].xml

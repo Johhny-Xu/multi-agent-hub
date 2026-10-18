@@ -3,7 +3,7 @@
 > 目录源：`C:\Users\Johhny\Desktop\agenthub\hark`  
 > 同步时间：2026-10-18 10:38  
 > 基准提交：`bb9bbf3` (`fix(chat,checkin): remove bubble bhead for minimal dialogue, eliminate third-party project references, and enhance check-in logic with CDP and refined UI`)  
-> 版本：v1.0.11
+> 版本：v1.0.12
 
 ---
 

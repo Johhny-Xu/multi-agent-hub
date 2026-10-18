@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 1.0.11：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 11 种 Worker 统一调度</title>
+  <title id="architecture-title">multi-agent-hub 1.0.12：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 11 种 Worker 统一调度</title>
   <desc id="architecture-desc">任意支持 MCP 的客户端均可直接接入调度；为 Codex、ZCode、MiniMaxCode (Claude Code)、DSH、CodeArts、Antigravity 提供原生深度适配（子代理/命令/技能/工作流）；即使没有客户端，也能通过内置 WebUI 控制台独立管理与对话（支持品牌锚点常驻、顶栏/活动栏/侧栏智能悬浮收展、6 大深浅双模预设、自定义壁纸毛玻璃与子代理主题色贯通）。支持同机或跨机连接，11 种 Worker 官方内核统一调度，遵循 Apache License 2.0。本版新增 opencode / cline 两种 Worker，Worker 总数达 11 种。</desc>
   <defs>
     <style>
@@ -21,7 +21,7 @@
   <rect width="1280" height="1040" rx="24" fill="#f8fafc"/>
   <text x="32" y="58" class="title">multi-agent-hub · 一张图看懂任务怎样运行</text>
   <rect x="1112" y="26" width="136" height="40" rx="20" fill="#dbeafe"/>
-  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v1.0.11</text>
+  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v1.0.12</text>
   <text x="32" y="94" class="body muted">任意 MCP 客户端直连 · 6 款原生深度宿主 · 零客户端 WebUI 独立管理 · 11 种官方 Worker · Apache-2.0 协议</text>
 
   <!-- Read from left to right; each arrow carries tasks and their results. -->
@@ -133,5 +133,5 @@
   <text x="56" y="926" class="heading blue">模型服务商 · 实际的数据流</text>
   <text x="56" y="958" class="body">客户端 / WebUI → Hub → 官方 CLI → 模型服务商；长内容以本机文件形式交付，不进会话上下文。</text>
   <text x="56" y="989" class="small muted">账号与模型需单独配置；Antigravity 与 MiniMaxCode 均支持原生客户端插件与 Worker 双重角色。</text>
-  <text x="32" y="1025" class="small muted">当前源码 v1.0.11 · 新增 opencode / cline 两种 Worker，Worker 总数达 11 种 · 遵循 Apache License 2.0（保留原作者版权）</text>
+  <text x="32" y="1025" class="small muted">当前源码 v1.0.12 · 新增 opencode / cline 两种 Worker，Worker 总数达 11 种 · 遵循 Apache License 2.0（保留原作者版权）</text>
 </svg>

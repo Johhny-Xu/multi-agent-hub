@@ -6,7 +6,7 @@
 
 ![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，11 种 Worker 统一调度](docs/architecture.svg)
 
-**当前版本：v1.0.11** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
+**当前版本：v1.0.12** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -78,7 +78,7 @@ sh install.sh --with-console          # Windows：.\install.cmd --with-console
 #    http://localhost:8890
 ```
 
-- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.11-both.zip` 解压后执行同样的命令。
+- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.12-both.zip` 解压后执行同样的命令。
 - 在源码目录直接执行时，安装器会先在临时目录构建发行包再安装，无需手动打包。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
 - 想先看看界面：直接用浏览器打开仓库里的 `demo.html`。
@@ -212,8 +212,8 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 宿主                             | 安装方式                                                                                                                                                             | 说明文档                                                                                  |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **华为 CodeArts / VS Code**      | IDE 扩展面板「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.11.carts` / `.vsix`；或 `.\install.cmd --component plugins --native-hosts codearts --project <工作区>`                | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | 桌面端 / 云端导入 `agenthub-workers-1.0.11-minimax-plugin.zip`；CLI：`mcode --plugin-dir ./plugins/agenthub-workers`                                                       | [agenthub-workers](plugins/agenthub-workers/README.md)                                |
+| **华为 CodeArts / VS Code**      | IDE 扩展面板「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.12.carts` / `.vsix`；或 `.\install.cmd --component plugins --native-hosts codearts --project <工作区>`                | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | 桌面端 / 云端导入 `agenthub-workers-1.0.12-minimax-plugin.zip`；CLI：`mcode --plugin-dir ./plugins/agenthub-workers`                                                       | [agenthub-workers](plugins/agenthub-workers/README.md)                                |
 | **ZCode IDE / CLI**            | `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}`               | [agenthub-workers](plugins/agenthub-workers/README.md)                                |
 | **OpenAI Codex**               | `.\install.cmd --component plugins --native-hosts codex --project <工作区>`，自动注册本地插件市场并把 11 个子代理写入 `.codex/agents/`                                                 | [codex](integrations/codex/README.md)                                                 |
 | **DeepSeek Harness (DSH)**     | `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md)                                                     |
@@ -335,7 +335,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 - 毛玻璃：`body.has-custom-bg` 下 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一为 `--gem-bg-card`，`--gem-surface-high` 仅用于交互态与进度条轨道。
 - 子代理色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名保持正文色 `--gem-text`。
 - 状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉支持思考档位与流式开关。
-- 页脚右侧显示版本号 `v1.0.11`，可被后端 `snap.version` 覆盖。
+- 页脚右侧显示版本号 `v1.0.12`，可被后端 `snap.version` 覆盖。
 - 离线 Demo：`scripts/build_demo.py` + `scripts/demo_engine.js` 生成 `demo.html` 与 `demo/index.html`。
 
 </details>
@@ -390,11 +390,11 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 
 | 文件                                          | 适用场景                                |
 | ------------------------------------------- | ----------------------------------- |
-| `agenthub-1.0.11-both.zip`                   | 客户端与 Hub 在同一台机器（最推荐）                |
-| `agenthub-1.0.11-plugins.zip`                | 只写代码的客户端电脑                          |
-| `agenthub-1.0.11-hub.zip`                    | 只跑 Worker 的服务器                      |
-| `agenthub-workers-1.0.11-minimax-plugin.zip` | MiniMax Code 桌面端 / 云端（Plugin V1 规范） |
-| `multi-agent-hub-1.0.11.carts` / `.vsix`     | 华为 CodeArts IDE、VS Code 及兼容编辑器      |
+| `agenthub-1.0.12-both.zip`                   | 客户端与 Hub 在同一台机器（最推荐）                |
+| `agenthub-1.0.12-plugins.zip`                | 只写代码的客户端电脑                          |
+| `agenthub-1.0.12-hub.zip`                    | 只跑 Worker 的服务器                      |
+| `agenthub-workers-1.0.12-minimax-plugin.zip` | MiniMax Code 桌面端 / 云端（Plugin V1 规范） |
+| `multi-agent-hub-1.0.12.carts` / `.vsix`     | 华为 CodeArts IDE、VS Code 及兼容编辑器      |
 
 自行构建：`python packaging/build.py --output <仓库外目录> --component all`。完整参数见 [packaging/README.md](packaging/README.md)。
 
@@ -434,7 +434,7 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 | 版本                | 重点                                                                                              |
 | ----------------- | ----------------------------------------------------------------------------------------------- |
-| **1.0.11**        | 工作台直连会话里提到的本地文件（产物/图片/附件预览与单条删除）、子代理卡片拖动排序与 opencode/cline 主题色、顶栏与浮层按钮右缘对齐；Linux 模板补齐 GitHub Copilot worker |
+| **1.0.12**        | 工作台直连会话里提到的本地文件（产物/图片/附件预览与单条删除）、子代理卡片拖动排序与 opencode/cline 主题色、顶栏与浮层按钮右缘对齐；Linux 模板补齐 GitHub Copilot worker |
 | 1.0.1             | 新增 opencode 与 Cline 两种 Worker（共 11 种）：配置模板、能力声明、NDJSON 事件流解析、原生子代理与各处数量对齐；架构图与进度图重绘，小字号与对比度全面提亮 |
 | 1.0.0             | 首个公开正式版：审计清理、致谢 TraeClaw、交接文档脱敏、补齐贡献者公约、发布线审校修复                                                 |
 | 0.9.9.9           | 重画架构图与进度图，补交接文档                                                                                 |

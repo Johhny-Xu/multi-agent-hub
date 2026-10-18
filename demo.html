@@ -8497,15 +8497,38 @@ html:not([data-theme="light"]) body.has-custom-bg .bubble.md .md-quote {
 }
 .platform-sidebar-header .platform-header-top .platform-header-left,
 .platform-sidebar-header .platform-header-top .platform-header-actions {
-  gap: 4px;
+  gap: 6px;
   flex: 0 0 auto;
   margin-left: auto;
 }
-.platform-sidebar-header .platform-header-top .icon-toggle-btn {
+/* 四个工具按钮统一 24×24 正方形：等宽 + 等间距，图标才能真正上下对齐 */
+.platform-sidebar-header .platform-header-top .icon-toggle-btn,
+.platform-sidebar-header .platform-header-top .btn-toggle-all-tree {
   width: 24px;
   height: 24px;
+  min-width: 24px;
   min-height: 24px;
+  flex: 0 0 24px;
+  padding: 0;
   border-radius: 7px;
+}
+.platform-sidebar-header .platform-header-top .icon-toggle-btn svg,
+.platform-sidebar-header .platform-header-top .btn-toggle-all-tree svg {
+  display: block;
+}
+/* #btn-toggle-all-tree 原规则是 ID 选择器（28×26），必须用更高优先级压回 24×24 */
+.platform-sidebar-header #btn-toggle-all-tree {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  flex: 0 0 24px;
+}
+/* 滤镜按钮外面多包了一层 div，默认 inline 布局会带来基线偏移（实测高 0.6px），改成 flex 对齐 */
+.platform-sidebar-header .sess-filter-wrap {
+  display: flex;
+  align-items: center;
+  height: 24px;
 }
 /* 侧栏收起时，对话区头部同样让位，避免「← 平台」被胶囊盖住 */
 .cb-platforms-sidebar.collapsed ~ .chat-main .chat-head-left {
@@ -8862,12 +8885,6 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
             <div class="platform-sidebar-header">
               <div class="platform-header-top">
                 <div class="platform-header-actions">
-                  <button id="btn-toggle-sidebar-collapse" class="icon-toggle-btn" type="button" title="点击展开/收起左侧边栏">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="4" width="18" height="16" rx="2"/>
-                      <line x1="9" y1="4" x2="9" y2="20"/>
-                    </svg>
-                  </button>
                   <button id="btn-toggle-all-tree" class="icon-toggle-btn btn-toggle-all-tree" type="button" title="一键展开/收起所有平台会话">
                     <svg class="ico-expand" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>
@@ -9226,7 +9243,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                 <div class="checkin-card" id="card-checkin-workbuddy">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon wb-icon">WB</div>
+                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="codebuddy-cn" data-agent="codebuddy-cn"></div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">腾讯 WorkBuddy / CodeBuddy</div>
                         <div class="checkin-brand-tag">Buddy 加油站 · 每日积分与盲盒</div>
@@ -9249,7 +9266,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                 <div class="checkin-card highlight-card" id="card-checkin-traecode">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon trae-icon">TR</div>
+                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="traecode" data-agent="traecode"></div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">ByteDance Trae Work</div>
                         <div class="checkin-brand-tag">免客户端直签 / CDP直连 · 每日 200 Credits</div>
@@ -9273,7 +9290,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                 <div class="checkin-card" id="card-checkin-codearts">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon ca-icon">CA</div>
+                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="codearts" data-agent="codearts"></div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">华为云 CodeArts (码道)</div>
                         <div class="checkin-brand-tag">码道福利 / 开发者空间每日算力包</div>
@@ -9329,7 +9346,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v1.0.11</span>
+            <span class="footer-version">v1.0.12</span>
           </div>
         </footer>
       </section>
@@ -10009,14 +10026,28 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     }
   }
 
+  // 签到卡头像复用平台卡头像：品牌 logo / 用户自定义上传图 / 首字母兜底，三者同一套渲染
+  function syncCheckinAvatars() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.checkin-brand-icon[data-checkin-agent]'),
+      function (el) {
+        applyAvatar(el, el.getAttribute('data-checkin-agent'));
+        el.style.width = '34px';
+        el.style.height = '34px';
+      }
+    );
+  }
+
   function loadAvatars() {
     return api('/api/avatars').then(function (res) {
       chat.avatars = res || {};
       renderPlatformList();
       renderThreadView();
       if (state.snap) renderAgents(state.snap);
+      syncCheckinAvatars();
       return res;
     }).catch(function () {
+      syncCheckinAvatars();
       return null;
     });
   }
@@ -12998,7 +13029,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         sa.mcp,
         '',
         '【服务说明与工具】',
-        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.11'),
+        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.12'),
         '',
         '把上面 URL 作为 HTTP MCP server 注册给本机 AI 会话后，即可像原生子代理一样直接指挥 traecode / workbuddy / zcode / qwen-work 等全部注册代理，长内容以本机文件形式交付，不进会话上下文。',
         '',
@@ -13122,7 +13153,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.11';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.12';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
