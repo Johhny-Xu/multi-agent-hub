@@ -3,10 +3,10 @@
 // 支持 WorkBuddy、Trae (免客户端直签)、CodeArts (华为云码道) 自动化打卡与多账号福利领取
 // 接口参考开源逆向成果与无客户端实现
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { fetchJsonSmart } from './vendor-quota.mjs';
 import { findCodeBuddySharedAuth } from './accounts.mjs';
 
@@ -229,437 +229,854 @@ export async function detectCredentials() {
   return creds;
 }
 
+// ---------------------------------------------------------------- 多账号档案扫描
+// 签到必须覆盖「所有已保存的账号」，不能只看当前生效的那一个：
+// 每个档案目录里就是该账号当时的凭据快照（auth.info / trae-jwt-token / codearts-auth.env）。
+
+/** 平台 → 参与签到的 worker 列表（WorkBuddy 的签到接口只在 www.codebuddy.cn，故仅取 codebuddy-cn） */
+const PLATFORM_WORKERS = {
+  workbuddy: ['codebuddy-cn'],
+  traecode: ['traecode'],
+  codearts: ['codearts'],
+};
+
+/** 各 worker 档案目录内的凭据文件名 */
+const PROFILE_CRED_FILE = {
+  'codebuddy-cn': 'auth.info',
+  codebuddy: 'auth.info',
+  traecode: 'trae-jwt-token',
+  codearts: 'codearts-auth.env',
+};
+
+/** 解出 JWT 的 payload（失败返回 null，绝不抛错） */
+function jwtPayload(tok) {
+  try {
+    const part = String(tok).split('.')[1];
+    if (!part) return null;
+    return JSON.parse(Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+const maskAk = (ak) => (ak && ak.length > 8 ? `${ak.slice(0, 4)}…${ak.slice(-4)}` : String(ak || ''));
+
 /**
- * 执行 WorkBuddy 签到
+ * 从一个「HOME 目录」读某平台的凭据。
+ * @param {'workbuddy'|'traecode'|'codearts'} platform
+ * @param {string} dir        HOME 根（线上是 os.homedir()，档案是其快照目录）
+ * @param {boolean} flat      档案目录里凭据文件是扁平存放的（auth.info），线上是嵌套路径
+ */
+async function readCredFrom(platform, dir, flat = false) {
+  const tryJson = async (rel) => {
+    try {
+      const d = JSON.parse((await readFile(join(dir, rel), 'utf-8')).replace(/^\uFEFF/, ''));
+      const tok = String(d?.auth?.accessToken || '').trim();
+      if (!tok || tok.startsWith('http')) return null;
+      const pl = jwtPayload(tok) || {};
+      return {
+        token: tok,
+        identity: pl.sub || '',
+        display: pl.nickname || pl.preferred_username || pl.email || '',
+        exp: Number(pl.exp) || 0,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  if (platform === 'workbuddy') {
+    const rels = flat ? ['auth.info'] : ['.codebuddy-cn/auth.info', '.codebuddy/auth.info'];
+    for (const rel of rels) {
+      const hit = await tryJson(rel);
+      if (hit) return { ...hit, source: flat ? '账号档案' : `~/${rel}` };
+    }
+    // 新版 CodeBuddy CLI 的共享会话存储
+    if (!flat) {
+      try {
+        const shared = await findCodeBuddySharedAuth(dir);
+        const tok = String(shared?.data?.auth?.accessToken || '').trim();
+        if (tok) {
+          const pl = jwtPayload(tok) || {};
+          return {
+            token: tok,
+            identity: pl.sub || '',
+            display: pl.nickname || pl.preferred_username || '',
+            exp: Number(pl.exp) || 0,
+            source: 'CodeBuddy 共享会话',
+          };
+        }
+      } catch { /* ignore */ }
+    }
+    return null;
+  }
+
+  if (platform === 'traecode') {
+    const rels = flat ? ['trae-jwt-token'] : ['.trae-cn/trae-jwt-token', '.trae/trae-jwt-token'];
+    for (const rel of rels) {
+      try {
+        const tok = (await readFile(join(dir, rel), 'utf-8')).trim();
+        if (!tok || tok.split('.').length !== 3) continue;
+        const pl = jwtPayload(tok) || {};
+        const d = pl.data || {};
+        return {
+          token: tok,
+          identity: String(d.id || d.user_id || ''),
+          display: d.id ? `UID:${d.id}` : '',
+          exp: Number(pl.exp) || 0,
+          source: flat ? '账号档案' : `~/${rel}`,
+        };
+      } catch { /* next */ }
+    }
+    return null;
+  }
+
+  if (platform === 'codearts') {
+    const rels = flat ? ['codearts-auth.env'] : ['.config/agenthub-codearts/codearts-auth.env'];
+    for (const rel of rels) {
+      try {
+        const txt = await readFile(join(dir, rel), 'utf-8');
+        const ak = (txt.match(/^CODEARTS_CLI_AK=(.+)$/m) || [])[1];
+        const sk = (txt.match(/^CODEARTS_CLI_SK=(.+)$/m) || [])[1];
+        if (ak && sk) {
+          const akv = ak.trim();
+          return { ak: akv, sk: sk.trim(), identity: akv, display: `AK:${maskAk(akv)}`, source: 'AK/SK' };
+        }
+      } catch { /* next */ }
+    }
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * 汇总某平台的所有可签账号（档案 + 当前线上凭据），按身份去重。
+ * @returns {Promise<Array<{name:string, display:string, worker:string, active:boolean, token?:string, ak?:string, sk?:string, exp?:number, source:string}>>}
+ */
+export async function listCheckinAccounts(platform) {
+  const accounts = [];
+  const seen = new Set();
+  const add = (a) => {
+    const key = String(a.identity || '');
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    accounts.push(a);
+  };
+
+  for (const worker of PLATFORM_WORKERS[platform] || []) {
+    let names = [];
+    try {
+      names = (await readdir(join(HOME, '.agenthub', 'accounts', worker))).filter((n) => !n.startsWith('.'));
+    } catch { names = []; }
+    for (const name of names.sort()) {
+      const dir = join(HOME, '.agenthub', 'accounts', worker, name);
+      let meta = {};
+      try { meta = JSON.parse((await readFile(join(dir, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, '')); } catch { /* 无 meta 也能用 */ }
+      const cred = await readCredFrom(platform, dir, true);
+      if (!cred) continue;
+      add({
+        name,
+        display: cred.display || meta.display || meta.identity || name,
+        worker,
+        active: false,
+        source: `账号档案 · ${name}`,
+        ...cred,
+      });
+    }
+  }
+
+  const live = await readCredFrom(platform, HOME, false);
+  if (live) {
+    const same = accounts.find((a) => a.identity === live.identity);
+    if (same) {
+      same.active = true;
+      same.token = same.token || live.token;
+      same.ak = same.ak || live.ak;
+      same.sk = same.sk || live.sk;
+    } else {
+      add({
+        name: '(当前登录)',
+        display: live.display || '当前登录账号',
+        worker: (PLATFORM_WORKERS[platform] || [''])[0],
+        active: false,
+        ...live,
+      });
+    }
+  }
+
+  const liveId = live?.identity;
+  for (const a of accounts) if (liveId && a.identity === liveId) a.active = true;
+  if (accounts.length && !accounts.some((a) => a.active)) accounts[0].active = true;
+  return accounts;
+}
+
+// ---------------------------------------------------------------- 华为云 SDK-HMAC-SHA256 签名
+// 与 huaweicloud-sdk / 开放网关一致。两个必须复刻的坑：
+//   1) CanonicalURI 必须以 / 结尾（path 已带尾斜杠时不能补第二个）
+//   2) CanonicalHeaders 每行自带 \n 后，整体再与 CanonicalRequest 用 \n 连接（即尾部已有一个 \n，不再额外补）
+const _sha256hex = (buf) => createHash('sha256').update(buf).digest('hex');
+const _rfc3986 = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+function codeArtsSignedHeaders(ak, sk, method, rawUrl, body, extra = {}) {
+  const u = new URL(rawUrl);
+  const headers = {};
+  for (const [k, v] of Object.entries(extra)) headers[k.toLowerCase()] = v;
+  headers.host = u.host;
+  const d = new Date();
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  headers['x-sdk-date'] = `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
+
+  const payload = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(method) ? body : null;
+  const names = Object.keys(headers).sort();
+  let canonicalHeaders = '';
+  for (const k of names) canonicalHeaders += `${k}:${String(headers[k]).trim()}\n`;
+  const signedHeaders = names.join(';');
+
+  const segs = (u.pathname || '/').split('/').map((s) => _rfc3986(decodeURIComponent(s)));
+  let canonicalUri = segs.join('/');
+  if (!canonicalUri.endsWith('/')) canonicalUri += '/';
+
+  const canonicalQuery = [...u.searchParams.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${_rfc3986(k)}=${_rfc3986(v)}`)
+    .join('&');
+
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    canonicalQuery,
+    canonicalHeaders,
+    signedHeaders,
+    _sha256hex(payload || Buffer.alloc(0)),
+  ].join('\n');
+  const stringToSign = ['SDK-HMAC-SHA256', headers['x-sdk-date'], _sha256hex(Buffer.from(canonicalRequest, 'utf-8'))].join('\n');
+  const signature = createHmac('sha256', sk).update(stringToSign).digest('hex');
+  headers.authorization = `SDK-HMAC-SHA256 Access=${ak}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  return headers;
+}
+
+const CODEARTS_GATEWAY = 'https://opengw.developer.huaweicloud.com';
+const CODEARTS_SNAP = 'https://snap-access.cn-north-4.myhuaweicloud.com';
+/** 码道客户端的固定身份头，缺一个就会被网关按「非 IDE 客户端」拒掉 */
+const CODEARTS_IDENTITY_HEADERS = {
+  'content-type': 'application/json',
+  'app-id': 'CodeAgent3.0',
+  'x-ot-function': 'agent-general',
+  'x-ot-client-type': 'IDE',
+  'x-ot-client-version': '26.9.902',
+  'plugin-name': 'codemate_vscode',
+  'plugin-version': '26.9.902',
+  'ide-name': 'VSCode',
+  'ide-version': '26.9.902',
+  'x-language': 'zh-cn',
+  'agent-type': 'PromptCenter',
+};
+
+/**
+ * 带签名调用码道网关。
+ * @returns {Promise<{ status:number, json:any, text:string }>}
+ */
+async function codeArtsFetch(ak, sk, method, url, bodyObj = null) {
+  const body = bodyObj ? JSON.stringify(bodyObj) : null;
+  const headers = codeArtsSignedHeaders(ak, sk, method, url, body, CODEARTS_IDENTITY_HEADERS);
+  const res = await fetch(url, { method, headers, body: body || undefined });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* 非 JSON（网关 404 HTML）*/ }
+  return { status: res.status, json, text };
+}
+
+/**
+ * 单个 WorkBuddy 账号打卡（www.codebuddy.cn 每日加油站）
+ * 真实响应字段是 credit / streak_days，已签到时是 code=10001 + "今天已签到，请明天再来"。
+ */
+async function checkinWorkBuddyOne(token) {
+  const res = await fetchJsonSmart('https://www.codebuddy.cn/v2/billing/meter/daily-checkin', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-Domain': 'codebuddy.cn',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) WorkBuddy/1.0.0'
+    },
+    body: JSON.stringify({})
+  }, 12_000);
+
+  const json = res.json || {};
+  const msg = String(json.msg || json.message || '');
+
+  if (res.status === 200 && json.code === 0) {
+    const credit = json.data?.credit ?? json.data?.points ?? json.data?.credits ?? 0;
+    const streak = json.data?.streak_days ?? json.data?.consecutiveDays ?? 0;
+    return {
+      ok: true,
+      status: 'success',
+      message: `签到成功 +${credit} 积分${streak ? `（连签 ${streak} 天）` : ''}`,
+      credits: credit,
+      consecutiveDays: Number(streak) || 0
+    };
+  }
+
+  // 10001 = 今天已签到
+  if (json.code === 10001 || msg.includes('已签到') || msg.includes('already')) {
+    return { ok: true, status: 'already', message: msg || '今日已签到', credits: 0, consecutiveDays: 0 };
+  }
+
+  if (res.status === 401 || json.code === 401) {
+    return { ok: false, status: 'expired', message: '登录态已失效，请在客户端重新登录', credits: 0, consecutiveDays: 0 };
+  }
+
+  return {
+    ok: false,
+    status: 'failed',
+    message: `签到接口返回 [${res.status}/${json.code ?? '-'}]：${msg || '未知错误'}`,
+    credits: 0,
+    consecutiveDays: 0
+  };
+}
+
+/**
+ * 读取「配置 Token」里手工粘贴的凭据，作为额外账号参与签到。
+ * CodeArts 支持 `AK,SK` 或 `AK:SK` 的写法（旧面板只给了单行输入框）。
+ */
+async function customCredentialAccount(platform) {
+  const state = await loadState();
+  const raw = String(state.customTokens?.[platform] || '').trim();
+  if (!raw) return null;
+  if (platform === 'codearts') {
+    const m = raw.match(/^([A-Z0-9]{8,})[,:;\s]+([A-Za-z0-9+/=]{8,})$/);
+    if (!m) return { name: '自定义凭据', display: '自定义凭据', identity: 'custom', active: false, source: '自定义凭据（格式应为 AK,SK）', invalid: true };
+    return { name: '自定义凭据', display: `AK:${maskAk(m[1])}`, identity: m[1], ak: m[1], sk: m[2], active: false, source: '自定义 AK/SK' };
+  }
+  return { name: '自定义 Token', display: '自定义 Token', identity: 'custom', token: raw, exp: 0, active: false, source: '自定义 Token' };
+}
+
+/**
+ * 执行 WorkBuddy 签到（覆盖所有已保存账号）
+ * 之前只签「当前生效」的那一个，导致另一个号永远签不到。
  */
 export async function checkinWorkBuddy(overrideToken = null) {
-  const creds = await detectCredentials();
-  const token = overrideToken || creds.workbuddy.token;
   const today = getTodayStr();
   const time = getNowTimeStr();
 
-  if (!token) {
+  let accounts;
+  if (overrideToken) {
+    accounts = [{ name: '自定义 Token', display: '自定义 Token', token: overrideToken, exp: 0, source: '自定义 Token', active: true }];
+  } else {
+    accounts = await listCheckinAccounts('workbuddy');
+    const custom = await customCredentialAccount('workbuddy');
+    if (custom) accounts = [custom, ...accounts];
+  }
+
+  if (!accounts.length) {
     return {
       platform: 'workbuddy',
       ok: false,
       status: 'unconfigured',
-      message: '未检测到 WorkBuddy / CodeBuddy 登录凭据，请在下方配置 Token 或在客户端登录。',
-      today, time
+      message: '未检测到 WorkBuddy / CodeBuddy 登录凭据，请先在客户端登录或保存账号档案。',
+      today,
+      time: getNowTimeStr(),
+      accounts: []
     };
   }
 
-  try {
-    // 1. 尝试直接执行每日签到接口 (https://www.codebuddy.cn/v2/billing/meter/daily-checkin)
-    const res = await fetchJsonSmart('https://www.codebuddy.cn/v2/billing/meter/daily-checkin', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-Domain': 'codebuddy.cn',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) WorkBuddy/1.0.0'
-      },
-      body: JSON.stringify({})
-    }, 12_000);
-
-    const json = res.json || {};
-    if (res.status === 200 && (json.code === 0 || json.success === true || json.status === 'success')) {
-      const pts = json.data?.points || json.data?.credits || json.data?.reward || '10积分';
-      const streak = json.data?.consecutiveDays || json.data?.continuousDays || 1;
-      return {
-        platform: 'workbuddy',
-        ok: true,
-        status: 'success',
-        message: `签到成功！获得 ${pts} (连续签到 ${streak} 天)`,
-        credits: String(pts),
-        consecutiveDays: Number(streak) || 1,
-        today, time
-      };
+  const results = [];
+  for (const acct of accounts) {
+    const label = acct.display || acct.name;
+    if (!acct.token) {
+      results.push({ ...acct, ...{ ok: false, status: 'failed', message: '档案内没有可用的 accessToken' } });
+      continue;
     }
-
-    // 检查是否今日已签过
-    const errMsg = json.message || json.msg || '';
-    if (errMsg.includes('已签到') || errMsg.includes('already') || json.code === 1000) {
-      return {
-        platform: 'workbuddy',
-        ok: true,
-        status: 'already',
-        message: '今日已完成签到，无需重复打卡。' + (errMsg ? ` (${errMsg})` : ''),
-        credits: '已领',
-        today, time
-      };
+    if (acct.exp && acct.exp * 1000 < Date.now()) {
+      results.push({ ...acct, ...{ ok: false, status: 'expired', message: '登录态已过期，请重新登录该账号' } });
+      continue;
     }
-
-    if (res.status === 401 || json.code === 401) {
-      return {
-        platform: 'workbuddy',
-        ok: false,
-        status: 'failed',
-        message: '凭据已失效 (401 Unauthorized)，请在客户端重新登录或更新 Token。',
-        today, time
-      };
+    try {
+      const r = await checkinWorkBuddyOne(acct.token);
+      results.push({ ...acct, ...r, label });
+    } catch (err) {
+      results.push({ ...acct, ok: false, status: 'failed', message: `网络请求失败：${err.message}`, label });
     }
-
-    return {
-      platform: 'workbuddy',
-      ok: false,
-      status: 'failed',
-      message: `签到响应异常 [${res.status}]: ${errMsg || '未知错误'}`,
-      today, time
-    };
-  } catch (err) {
-    return {
-      platform: 'workbuddy',
-      ok: false,
-      status: 'failed',
-      message: `网络请求失败: ${err.message}`,
-      today, time
-    };
   }
+
+  const okOnes = results.filter((r) => r.status === 'success');
+  const alreadyOnes = results.filter((r) => r.status === 'already');
+  const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
+
+  const status = badOnes.length && !okOnes.length && !alreadyOnes.length
+    ? 'failed'
+    : (badOnes.length ? 'failed' : (okOnes.length ? 'success' : 'already'));
+
+  const parts = results.map((r) => {
+    const name = r.label || r.name;
+    if (r.status === 'success') return `${name} +${r.credits}`;
+    if (r.status === 'already') return `${name} 已签`;
+    return `${name} ${r.status === 'expired' ? '登录态失效' : '失败'}`;
+  });
+
+  return {
+    platform: 'workbuddy',
+    ok: badOnes.length === 0,
+    status,
+    message: `${results.length} 个账号：${parts.join('；')}`,
+    credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
+    consecutiveDays: Math.max(0, ...results.map((r) => Number(r.consecutiveDays) || 0)),
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.label || r.name,
+      active: !!r.active,
+      status: r.status,
+      message: r.message,
+      credits: r.credits,
+      consecutiveDays: r.consecutiveDays
+    })),
+    today,
+    time
+  };
 }
 
+
 /**
- * 尝试通过 CDP (Chrome DevTools Protocol) 自动化触发 Trae 客户端打卡
- * @returns {Promise<object|null>}
+ * 在 Trae 客户端里执行一段脚本（CDP 直连 9222）。
+ * 客户端不在线 / 端口不通时返回 null。
+ * @param {string} expression 需要返回可 JSON 化的值的表达式
  */
-async function checkinTraeViaCdp() {
+async function evaluateInTrae(expression, timeoutMs = 6000) {
   const cdpPort = process.env.TRAE_CDP_PORT || '9222';
   const cdpHost = process.env.TRAE_CDP_HOST || '127.0.0.1';
-  const cdpUrl = `http://${cdpHost}:${cdpPort}/json`;
-  const today = getTodayStr();
-  const time = getNowTimeStr();
 
+  if (typeof globalThis.WebSocket !== 'function') return null;
+
+  let targets;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 1800);
-    const resp = await fetch(cdpUrl, { signal: ctrl.signal });
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const resp = await fetch(`http://${cdpHost}:${cdpPort}/json`, { signal: ctrl.signal });
     clearTimeout(timer);
     if (!resp.ok) return null;
-    const targets = await resp.json();
-    if (!Array.isArray(targets) || targets.length === 0) return null;
+    targets = await resp.json();
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(targets) || !targets.length) return null;
 
-    const workbench = targets.find(t => t.type === 'page' && t.url && t.url.includes('workbench'));
-    const target = workbench || targets.find(t => t.type === 'page') || targets[0];
-    if (!target || !target.webSocketDebuggerUrl) return null;
+  const target = targets.find((t) => t.type === 'page' && t.url && t.url.includes('workbench'))
+    || targets.find((t) => t.type === 'page');
+  if (!target || !target.webSocketDebuggerUrl) return null;
 
-    // Node 20+ 原生具备 globalThis.WebSocket
-    if (typeof globalThis.WebSocket !== 'function') return null;
+  const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl);
+  let msgId = 1;
+  /** @type {Map<number, Function>} */
+  const pending = new Map();
 
-    const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl);
+  const sendCmd = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = msgId++;
+    const t = setTimeout(() => { pending.delete(id); reject(new Error(`CDP ${method} timeout`)); }, timeoutMs);
+    pending.set(id, (val) => { clearTimeout(t); resolve(val); });
+    try { ws.send(JSON.stringify({ id, method, params })); } catch (e) { clearTimeout(t); pending.delete(id); reject(e); }
+  });
 
-    let msgId = 1;
-    /** @type {Map<number, {resolve: Function, reject: Function}>} */
-    const pending = new Map();
-
-    const sendCmd = (method, params = {}) => new Promise((resolve, reject) => {
-      const id = msgId++;
-      const t = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`CDP ${method} timeout`));
-      }, 5000);
-      pending.set(id, {
-        resolve: (val) => { clearTimeout(t); resolve(val); },
-        reject: (err) => { clearTimeout(t); reject(err); }
-      });
-      try {
-        ws.send(JSON.stringify({ id, method, params }));
-      } catch (e) {
-        clearTimeout(t);
-        pending.delete(id);
-        reject(e);
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.id && pending.has(data.id)) {
+        const entry = pending.get(data.id);
+        pending.delete(data.id);
+        entry(data.result);
       }
-    });
+    } catch { /* 非 JSON 帧忽略 */ }
+  };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.id && pending.has(data.id)) {
-          const entry = pending.get(data.id);
-          pending.delete(data.id);
-          entry.resolve(data.result);
-        }
-      } catch {}
-    };
-
+  try {
     await new Promise((resolve, reject) => {
       const connTimer = setTimeout(() => reject(new Error('WebSocket connect timeout')), 2500);
       ws.onopen = () => { clearTimeout(connTimer); resolve(null); };
       ws.onerror = (e) => { clearTimeout(connTimer); reject(e); };
     });
-
-    // 在 Trae 页面中执行查询和打卡
-    const cdpScript = `
-    (async () => {
-      const res = { clicked: false, status: 'unknown', text: '', credits: '100分' };
-      // 1. 查找弹窗或主界面的打卡按钮
-      const btns = Array.from(document.querySelectorAll('button, div[role="button"], span.trigger-RljaZJ, *[class*="commercialBannerPopupPrimaryAction"]'));
-      const checkinBtn = btns.find(b => {
-        const txt = (b.textContent || '').trim();
-        return txt === '签到' || txt === '立即签到' || txt === '已签到' || txt.includes('签到得');
-      });
-
-      if (checkinBtn) {
-        const initialText = (checkinBtn.textContent || '').trim();
-        res.text = initialText;
-        if (initialText.includes('已签')) {
-          res.status = 'already';
-          return res;
-        }
-        // 执行点击打卡
-        checkinBtn.click();
-        res.clicked = true;
-        // 等待状态响应
-        await new Promise(r => setTimeout(r, 600));
-        const afterText = (checkinBtn.textContent || '').trim();
-        res.text = afterText;
-        res.status = 'success';
-        return res;
-      }
-
-      // 2. 检查 localStorage 中的 credits 状态
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.includes('trae-cn-credits-billing-status')) {
-          res.status = 'already';
-          res.text = '每日 100 积分已生效';
-          return res;
-        }
-      }
-
-      return res;
-    })()
-    `;
-
-    const evalResult = await sendCmd('Runtime.evaluate', {
-      expression: cdpScript,
-      awaitPromise: true,
-      returnByValue: true
-    });
-
-    ws.close();
-
-    const val = evalResult?.result?.value;
-    if (val && (val.status === 'success' || val.clicked)) {
-      return {
-        platform: 'traecode',
-        ok: true,
-        status: 'success',
-        message: 'Trae 客户端自动打卡成功！已领取每日 100 积分福利',
-        credits: '100分',
-        consecutiveDays: 1,
-        today, time
-      };
-    } else if (val && val.status === 'already') {
-      return {
-        platform: 'traecode',
-        ok: true,
-        status: 'already',
-        message: '今日已在 Trae 客户端完成签到，积分已入账。',
-        credits: '已领',
-        today, time
-      };
-    }
+    const evalResult = await sendCmd('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+    return evalResult?.result?.value ?? null;
   } catch {
-    // 回退到普通 API 模式
+    return null;
+  } finally {
+    try { ws.close(); } catch { /* ignore */ }
   }
-  return null;
 }
 
 /**
- * 执行 Trae 签到 (支持 CDP 直控与免客户端 API 双模式)
+ * 通过 CDP 尝试在 Trae 客户端里点真实签到按钮。
+ *
+ * 注意：旧实现只要 localStorage 里存在 trae-cn-credits-billing-status 就判定「今日已签到」，
+ * 那个 key 一旦写入就永久存在，等于每天都谎报成功。这里必须以按钮文案 / 接口结果为准。
+ *
+ * @returns {Promise<null|{status:'success'|'already'|'unavailable', message:string, credits?:number}>}
+ */
+async function checkinTraeViaCdp() {
+  const script = `
+  (async () => {
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+
+    // 只认「签到」按钮；纯「领取」必须落在积分/权益面板内，
+    // 否则会误点活动横幅上的「立即领取」，把用户的羊毛顺手点掉。
+    const clickables = Array.from(document.querySelectorAll('button,[role="button"],[class*=btn],[class*=Button]'));
+    const hits = clickables.filter((el) => {
+      if (!visible(el)) return false;
+      const t = norm(el.textContent);
+      if (/签到/.test(t) && t.length <= 12) return true;
+      if (/^(领取|立即领取|每日领取)$/.test(t)) {
+        return !!el.closest('[class*=user-entitlement],[class*=checkin],[class*=credits]');
+      }
+      return false;
+    });
+
+    if (!hits.length) {
+      return { status: 'unavailable', message: '客户端界面里没有找到可点击的签到入口' };
+    }
+
+    const btn = hits[0];
+    const before = norm(btn.textContent);
+    if (/已签|已领/.test(before)) {
+      return { status: 'already', message: '客户端显示今日已签到（' + before + '）' };
+    }
+
+    btn.click();
+    await new Promise((r) => setTimeout(r, 1800));
+
+    const after = norm(btn.textContent);
+    if (/已签|已领/.test(after)) {
+      return { status: 'success', message: '已点击签到，按钮变为「' + after + '」' };
+    }
+    return { status: 'unavailable', message: '已点击「' + before + '」，但按钮状态未变化（' + after + '）' };
+  })()
+  `;
+
+  const val = await evaluateInTrae(script, 8000);
+  if (!val || !val.status) return null;
+  if (val.status === 'success' || val.status === 'already') return val;
+  return { status: 'unavailable', message: val.message || '客户端未提供可用的签到入口' };
+}
+
+/** 调 Trae 签到接口（真实头是 Cloud-IDE-JWT，不是 Bearer） */
+async function traeApi(token, path) {
+  const res = await fetchJsonSmart(`https://api.trae.cn${path}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Cloud-IDE-JWT ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'Trae/1.107.1 (X11; Linux x86_64) TraeCN',
+      'x-device-id': randomUUID(),
+      'x-machine-id': randomUUID()
+    },
+    body: JSON.stringify({ req_source: 1 })
+  }, 12_000);
+  const json = res.json || {};
+  return { status: res.status, json };
+}
+
+/** 单个 Trae 账号打卡：先查状态，未签才领 */
+async function checkinTraeOne(token) {
+  const st = await traeApi(token, '/trae/api/v2/ug/checkin_credits/status');
+  const stJson = st.json || {};
+
+  if (stJson.code === 1001) {
+    return { ok: false, status: 'expired', message: 'JWT 被服务端拒绝（1001），需要在客户端重新登录后刷新 token' };
+  }
+  if (stJson.checked_in === true) {
+    return { ok: true, status: 'already', message: '今日已签到', credits: 0, consecutiveDays: Number(stJson.streak || stJson.consecutive_days) || 0 };
+  }
+
+  const r = await traeApi(token, '/trae/api/v2/ug/checkin_credits/claim');
+  const json = r.json || {};
+  const msg = String(json.message || json.msg || '');
+
+  if (r.status === 200 && (json.code === 0 || json.code === undefined) && (json.checked_in !== false)) {
+    const credits = json.data?.credits ?? json.credits ?? json.data?.credit ?? 0;
+    const streak = json.data?.streak ?? json.data?.streak_days ?? 0;
+    return { ok: true, status: 'success', message: `领取 ${credits} 积分${streak ? `（连签 ${streak} 天）` : ''}`, credits: Number(credits) || 0, consecutiveDays: Number(streak) || 0 };
+  }
+  if (json.checked_in === true || /已签到|已领取|already|claimed/.test(msg)) {
+    return { ok: true, status: 'already', message: msg || '今日已签到', credits: 0, consecutiveDays: 0 };
+  }
+  if (json.code === 1001 || /not able to authenticate/.test(msg)) {
+    return { ok: false, status: 'expired', message: 'JWT 被服务端拒绝（1001），需要在客户端重新登录后刷新 token' };
+  }
+  return { ok: false, status: 'failed', message: `签到接口返回 [${r.status}/${json.code ?? '-'}]：${msg || '未知错误'}` };
+}
+
+/**
+ * 执行 Trae 签到：所有账号走 API，全部失败时再退回 CDP 点客户端按钮
  */
 export async function checkinTrae(overrideToken = null) {
   const today = getTodayStr();
-  const time = getNowTimeStr();
 
-  // 1. 若无手动覆盖 Token，优先尝试本地 CDP 直连打卡 (成功率 100% 且抗 Token 过期)
-  if (!overrideToken) {
-    const cdpRes = await checkinTraeViaCdp();
-    if (cdpRes) {
-      return cdpRes;
+  let accounts;
+  if (overrideToken) {
+    accounts = [{ name: '自定义 Token', display: '自定义 Token', token: overrideToken, exp: 0, source: '自定义 Token', active: true }];
+  } else {
+    accounts = await listCheckinAccounts('traecode');
+    const custom = await customCredentialAccount('traecode');
+    if (custom) accounts = [custom, ...accounts];
+  }
+
+  const results = [];
+  for (const acct of accounts) {
+    const label = acct.display || acct.name;
+    if (!acct.token) {
+      results.push({ ...acct, ok: false, status: 'failed', message: '档案内没有 JWT', label });
+      continue;
     }
-  }
-
-  const creds = await detectCredentials();
-  const token = overrideToken || (creds.traecode.token !== 'cdp-session' ? creds.traecode.token : '');
-
-  if (!token) {
-    return {
-      platform: 'traecode',
-      ok: false,
-      status: 'unconfigured',
-      message: '未检测到可用凭据：请运行 Trae 客户端或在下方一键填入 Token。',
-      today, time
-    };
-  }
-
-  const deviceId = randomUUID();
-  const machineId = randomUUID();
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    'User-Agent': 'Trae/1.0.0 (Windows NT 10.0; Win64; x64)',
-    'x-device-id': deviceId,
-    'x-machine-id': machineId
-  };
-
-  const origins = ['https://api.trae.cn', 'https://api.trae.com.cn'];
-
-  for (const origin of origins) {
+    if (acct.exp && acct.exp * 1000 < Date.now()) {
+      results.push({ ...acct, ok: false, status: 'expired', message: 'JWT 已过期，请在客户端重新登录', label });
+      continue;
+    }
     try {
-      // 免客户端：直接调用官方 checkin_credits/claim 接口
-      const claimUrl = `${origin}/trae/api/v2/ug/checkin_credits/claim`;
-      const res = await fetchJsonSmart(claimUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ req_source: 1 })
-      }, 12_000);
-
-      const json = res.json || {};
-
-      // 成功领取
-      if (res.status === 200 && (json.code === 0 || json.checked_in === true)) {
-        const gained = json.data?.credits || json.credits || '200 Credits';
-        const streak = json.data?.streak || json.streak || 1;
-        return {
-          platform: 'traecode',
-          ok: true,
-          status: 'success',
-          message: `免客户端签到成功！领取 ${gained} (连签 ${streak} 天)`,
-          credits: String(gained),
-          consecutiveDays: Number(streak) || 1,
-          today, time
-        };
-      }
-
-      // 今日已签到过
-      const msg = json.message || '';
-      if (json.checked_in || msg.includes('已签到') || msg.includes('already') || msg.includes('claimed') || json.code === 9074) {
-        return {
-          platform: 'traecode',
-          ok: true,
-          status: 'already',
-          message: '今日已完成签到，积分已入账。' + (msg ? ` (${msg})` : ''),
-          credits: '已领',
-          today, time
-        };
-      }
-
-      // 凭据过期提示
-      if (json.code === 1001 || msg.includes('not able to authenticate') || res.status === 401) {
-        return {
-          platform: 'traecode',
-          ok: false,
-          status: 'failed',
-          message: 'Trae JWT Token 已失效或过期，请点击下方重新获取或粘贴新 Token。',
-          today, time
-        };
-      }
-
-      // 其他业务错误
-      if (json.code !== undefined && json.code !== 0) {
-        return {
-          platform: 'traecode',
-          ok: false,
-          status: 'failed',
-          message: `官方返回错误 [${json.code}]: ${msg || '未成功'}`,
-          today, time
-        };
-      }
-    } catch {
-      // 尝试下一个域名 fallback
+      const r = await checkinTraeOne(acct.token);
+      results.push({ ...acct, ...r, label });
+    } catch (err) {
+      results.push({ ...acct, ok: false, status: 'failed', message: `网络请求失败：${err.message}`, label });
     }
   }
+
+  const okOnes = results.filter((r) => r.status === 'success');
+  const alreadyOnes = results.filter((r) => r.status === 'already');
+  const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
+
+  // API 全军覆没 → 试一次客户端 UI（客户端在本机运行时这条路不依赖 token）
+  if (badOnes.length === results.length && results.length) {
+    const cdp = await checkinTraeViaCdp();
+    if (cdp && cdp.status !== 'unavailable') {
+      return {
+        platform: 'traecode',
+        ok: true,
+        status: cdp.status,
+        message: `${cdp.message}（API 凭据失效，已改用客户端直签）`,
+        credits: cdp.credits || 0,
+        consecutiveDays: 0,
+        accounts: [{ name: 'Trae 客户端', display: 'Trae 客户端 (CDP)', active: true, status: cdp.status, message: cdp.message }],
+        today,
+        time: getNowTimeStr()
+      };
+    }
+  }
+
+  const status = badOnes.length
+    ? 'failed'
+    : (okOnes.length ? 'success' : 'already');
+
+  const parts = results.map((r) => {
+    const name = r.label || r.name;
+    if (r.status === 'success') return `${name} +${r.credits}`;
+    if (r.status === 'already') return `${name} 已签`;
+    return `${name} ${r.message}`;
+  });
 
   return {
     platform: 'traecode',
-    ok: false,
-    status: 'failed',
-    message: '连接 api.trae.cn 失败，请检查网络或代理设置。',
-    today, time
+    ok: badOnes.length === 0,
+    status,
+    message: results.length ? parts.join('；') : '未检测到 Trae 账号',
+    credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
+    consecutiveDays: Math.max(0, ...results.map((r) => Number(r.consecutiveDays) || 0)),
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.label || r.name,
+      active: !!r.active,
+      status: r.status,
+      message: r.message,
+      credits: r.credits,
+      consecutiveDays: r.consecutiveDays
+    })),
+    today,
+    time: getNowTimeStr()
   };
+}
+/**
+ * 单个 CodeArts AK/SK 账号的真实签到流程（参考 2951461586/CodeArts2API）
+ *   1. GET  /api/v1/benefit/claim          福利通道登记（幂等，确认身份）
+ *   2. GET  /v1/ops/delivery?channel=IDE   拉任务列表，找 USER_LOGIN 那个 campaign
+ *   3. POST /v1/ops/claim                  领取（需要 channel + idempotentKey）
+ *
+ * 旧实现只要文件里有 AK/SK 就直接返回「已激活」，从来没发过一个请求。
+ */
+async function checkinCodeArtsOne(ak, sk) {
+  // 1. 福利通道（同时验证 AK/SK 真的能过签名）
+  let userName = '';
+  try {
+    const r = await codeArtsFetch(ak, sk, 'GET', `${CODEARTS_GATEWAY}/api/v1/benefit/claim`);
+    const code = String(r.json?.error_code ?? '');
+    if (code && code !== '0000') {
+      const mapped = mapCodeArtsError(code, r.json?.error_msg, r.text);
+      return { ok: false, status: mapped.status, message: mapped.message };
+    }
+    userName = String(r.json?.result?.user_name || '');
+  } catch (err) {
+    return { ok: false, status: 'failed', message: `福利网关不可达：${err.message}` };
+  }
+
+  // 2. 任务列表
+  let campaign = null;
+  let campaigns = [];
+  try {
+    const r = await codeArtsFetch(ak, sk, 'GET', `${CODEARTS_SNAP}/v1/ops/delivery?channel=IDE`);
+    const items = Array.isArray(r.json?.data?.items) ? r.json.data.items : [];
+    campaigns = items;
+    campaign = items.find((it) => it.type === 'USER_LOGIN')
+      || items.find((it) => /签到/.test(String(it.title || '')))
+      || null;
+  } catch (err) {
+    return { ok: false, status: 'failed', message: `任务列表不可达：${err.message}` };
+  }
+
+  if (!campaign) {
+    return { ok: false, status: 'failed', message: `没有找到签到任务（共 ${campaigns.length} 个活动）` };
+  }
+
+  const amount = Number(campaign.benefitAmount) || 0;
+  const unit = campaign.benefitUnit === 'CREDIT' ? '积分' : (campaign.benefitUnit || '');
+  const who = userName ? `${userName} ` : '';
+
+  // 3a. 已经领过
+  if (campaign.claimable === false && ['CLAIMED', 'CONFIRMED', 'CONSUMED'].includes(String(campaign.status))) {
+    return {
+      ok: true,
+      status: 'already',
+      message: `${who}今日已领取「${campaign.title}」（${amount}${unit}）`,
+      credits: 0,
+      consecutiveDays: 0
+    };
+  }
+
+  if (campaign.claimable === false) {
+    return {
+      ok: false,
+      status: 'failed',
+      message: `「${campaign.title}」当前不可领取（状态 ${campaign.status || '未知'}）`
+    };
+  }
+
+  // 3b. 真正领取
+  const claimRes = await codeArtsFetch(ak, sk, 'POST', `${CODEARTS_SNAP}/v1/ops/claim`, {
+    campaignId: campaign.campaignId,
+    channel: 'IDE',
+    idempotentKey: randomUUID()
+  });
+  const cj = claimRes.json || {};
+  const bizCode = Number(cj.code ?? NaN);
+  const bizMsg = String(cj.message || cj.error_msg || '');
+
+  if (bizCode === 0) {
+    return {
+      ok: true,
+      status: 'success',
+      message: `${who}签到成功 +${amount}${unit}`,
+      credits: amount,
+      consecutiveDays: 1
+    };
+  }
+  // 40001 = 权益还没刷新（今日已领）
+  if (bizCode === 40001) {
+    return { ok: true, status: 'already', message: `${who}${bizMsg || '今日已领取，等明天刷新'}`, credits: 0, consecutiveDays: 0 };
+  }
+  if (bizCode === 4006) {
+    return { ok: false, status: 'failed', message: `${bizMsg || '名额已领完'}（4006）` };
+  }
+  const mapped = mapCodeArtsError(String(cj.error_code || bizCode), bizMsg, claimRes.text);
+  return { ok: false, status: mapped.status, message: mapped.message };
+}
+
+/** 把华为云网关/业务错误码翻译成人话 */
+function mapCodeArtsError(code, msg, rawText = '') {
+  const c = String(code || '');
+  const m = String(msg || '');
+  if (c === 'APIG.0602' || /token.*(expired|invalid)|sts/i.test(m)) {
+    return { status: 'expired', message: 'AK/SK 对应的临时安全凭证（STS）已过期，请重新获取或改用长期 AK/SK' };
+  }
+  if (c === 'APIG.0301' || c === 'APIG.0303' || /signature/i.test(m)) {
+    return { status: 'failed', message: `签名校验失败（${c || 'signature'}），请检查 AK/SK 是否匹配` };
+  }
+  if (c === 'APIG.0101') {
+    return { status: 'failed', message: '接口未在该环境发布（APIG.0101），请检查区域/网关地址' };
+  }
+  if (c === '4006') {
+    return { status: 'failed', message: `${m || '名额已领完'}（4006）` };
+  }
+  return { status: 'failed', message: `CodeArts 返回 [${c || '-'}]：${m || (rawText || '').slice(0, 120) || '未知错误'}` };
 }
 
 /**
- * 执行 CodeArts 签到
+ * 执行 CodeArts 签到（覆盖所有 AK/SK 档案）
  */
 export async function checkinCodeArts(overrideToken = null) {
-  const creds = await detectCredentials();
   const today = getTodayStr();
-  const time = getNowTimeStr();
-  const token = overrideToken || creds.codearts.token;
-  const ak = creds.codearts.ak;
-  const sk = creds.codearts.sk;
 
-  if (!token && (!ak || !sk)) {
+  let accounts;
+  if (overrideToken) {
+    accounts = [{ name: '自定义凭据', display: '自定义凭据', token: overrideToken, source: '自定义凭据', active: true }];
+  } else {
+    accounts = await listCheckinAccounts('codearts');
+    const custom = await customCredentialAccount('codearts');
+    if (custom) accounts = [custom, ...accounts];
+  }
+
+  if (!accounts.length) {
     return {
       platform: 'codearts',
       ok: false,
       status: 'unconfigured',
-      message: '未检测到 CodeArts AK/SK 或登录凭据，请在下方配置或检查 codearts-auth.env。',
-      today, time
+      message: '未检测到 CodeArts AK/SK，请检查 ~/.config/agenthub-codearts/codearts-auth.env 或保存账号档案。',
+      today,
+      time: getNowTimeStr(),
+      accounts: []
     };
   }
 
-  // 1. 如果有 Token / Cookie，调用成长中心/福利领取接口
-  if (token) {
+  const results = [];
+  for (const acct of accounts) {
+    const label = acct.display || acct.name;
+    if (acct.invalid) {
+      results.push({ ...acct, ok: false, status: 'failed', message: '自定义凭据格式应为 AK,SK（逗号分隔）', label });
+      continue;
+    }
+    if (!acct.ak || !acct.sk) {
+      results.push({ ...acct, ok: false, status: 'failed', message: '缺少 AK/SK', label });
+      continue;
+    }
     try {
-      const res = await fetchJsonSmart('https://developer.huaweicloud.com/api/v1/growth/checkin', {
-        method: 'POST',
-        headers: {
-          'Cookie': token.startsWith('Cookie:') ? token.replace(/^Cookie:\s*/, '') : token,
-          'Authorization': token.startsWith('Bearer ') ? token : `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CodeArts-Client/1.0'
-        },
-        body: JSON.stringify({})
-      }, 12_000);
-
-      const json = res.json || {};
-      if (res.status === 200 && (json.code === '200' || json.success || json.code === 0)) {
-        return {
-          platform: 'codearts',
-          ok: true,
-          status: 'success',
-          message: '华为云码道/开发者空间签到成功！福利积分已入账。',
-          credits: json.data?.points || '每日积分',
-          today, time
-        };
-      }
-      if (json.message?.includes('已签到') || json.msg?.includes('已签到')) {
-        return {
-          platform: 'codearts',
-          ok: true,
-          status: 'already',
-          message: '今日已完成签到。' + (json.message || ''),
-          credits: '已领',
-          today, time
-        };
-      }
-    } catch { /* fallback to AK/SK status check */ }
+      const r = await checkinCodeArtsOne(acct.ak, acct.sk);
+      results.push({ ...acct, ...r, label });
+    } catch (err) {
+      results.push({ ...acct, ok: false, status: 'failed', message: `请求异常：${err.message}`, label });
+    }
   }
 
-  // 2. 如果配置了 AK/SK，执行华为云码道凭据合规校验与算力额度确认
-  if (ak && sk) {
-    const akMask = ak.length > 8 ? `${ak.slice(0, 4)}…${ak.slice(-4)}` : ak;
-    return {
-      platform: 'codearts',
-      ok: true,
-      status: 'success',
-      message: `CodeArts AK/SK 凭据在网在线 (${akMask})，GLM-5.3 码道福利算力可用包已激活。`,
-      credits: '活跃',
-      consecutiveDays: 1,
-      today, time
-    };
-  }
+  const okOnes = results.filter((r) => r.status === 'success');
+  const alreadyOnes = results.filter((r) => r.status === 'already');
+  const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
+
+  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : 'already');
 
   return {
     platform: 'codearts',
-    ok: false,
-    status: 'failed',
-    message: '未能完成 CodeArts 签到，请确认凭据有效性。',
-    today, time
+    ok: badOnes.length === 0,
+    status,
+    message: results.map((r) => r.message).join('；'),
+    credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
+    consecutiveDays: Math.max(0, ...results.map((r) => Number(r.consecutiveDays) || 0)),
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.label || r.name,
+      active: !!r.active,
+      status: r.status,
+      message: r.message,
+      credits: r.credits,
+      consecutiveDays: r.consecutiveDays
+    })),
+    today,
+    time: getNowTimeStr()
   };
 }
+
 
 /**
  * 获取完整签到概览（供 WebUI 展示）
@@ -684,7 +1101,16 @@ export async function getCheckinOverview() {
       status: isToday ? pState.status : (cInfo.available ? 'pending' : 'unconfigured'),
       message: isToday ? pState.message : (cInfo.available ? '今日待打卡' : '未检测到有效凭据'),
       credits: pState.credits || '',
-      consecutiveDays: pState.consecutiveDays || 0
+      consecutiveDays: pState.consecutiveDays || 0,
+      accounts: isToday && Array.isArray(pState.accounts) && pState.accounts.length
+        ? pState.accounts
+        : (await listCheckinAccounts(plat)).map((a) => ({
+          name: a.name,
+          display: a.display,
+          active: !!a.active,
+          status: 'pending',
+          message: '今日待打卡',
+        })),
     };
   }
 
@@ -725,7 +1151,8 @@ export async function runCheckin(target = 'all') {
       status: res.status,
       message: res.message,
       credits: res.credits || '',
-      consecutiveDays: res.consecutiveDays || (state.platforms[plat]?.consecutiveDays || 0)
+      consecutiveDays: res.consecutiveDays || (state.platforms[plat]?.consecutiveDays || 0),
+      accounts: res.accounts || []
     };
     state.history.unshift({
       time: `${res.today} ${res.time}`,

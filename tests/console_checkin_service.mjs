@@ -5,6 +5,7 @@ import {
   OPEN_SOURCE_PROJECTS,
   detectCredentials,
   getCheckinOverview,
+  listCheckinAccounts,
   runCheckin,
   updateCheckinConfig
 } from '../console/checkin.mjs';
@@ -56,4 +57,30 @@ test('runCheckin handles platform calls without throwing fatal crashes', async (
   assert.equal(res.ok, true);
   assert.ok(res.results.traecode);
   assert.equal(typeof res.results.traecode.ok, 'boolean');
+});
+
+test('every platform can enumerate its check-in accounts', async () => {
+  for (const platform of ['workbuddy', 'traecode', 'codearts']) {
+    const list = await listCheckinAccounts(platform);
+    assert.ok(Array.isArray(list), `${platform} returns an array`);
+    for (const acct of list) {
+      assert.equal(typeof acct.name, 'string', `${platform} account name`);
+      assert.ok(acct.display, `${platform} account display`);
+      assert.equal(typeof acct.active, 'boolean', `${platform} active flag`);
+    }
+    // 同一身份不能因为有多份历史快照就被算成两个账号
+    const ids = list.filter((a) => a.identity).map((a) => a.identity);
+    assert.equal(new Set(ids).size, ids.length, `${platform} accounts are de-duplicated by identity`);
+  }
+});
+
+test('overview surfaces per-account rows so the UI can list multiple accounts', async () => {
+  const overview = await getCheckinOverview();
+  for (const platform of ['workbuddy', 'traecode', 'codearts']) {
+    assert.ok(Array.isArray(overview.platforms[platform].accounts), `${platform} has an accounts array`);
+    for (const row of overview.platforms[platform].accounts) {
+      assert.equal(typeof row.display, 'string');
+      assert.ok(['success', 'already', 'failed', 'expired', 'pending'].includes(row.status), `${platform} row status: ${row.status}`);
+    }
+  }
 });

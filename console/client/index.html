@@ -1078,6 +1078,53 @@
     color: #10b981;
     font-size: 11px;
   }
+  /* 多账号签到结果：一个平台可能挂着多个号，逐个列出来 */
+  .checkin-acct-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .checkin-acct-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    background: var(--gem-bg-card, rgba(0, 0, 0, 0.15));
+    border: 1px solid var(--gem-border, rgba(255, 255, 255, 0.06));
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+  .checkin-acct-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #94a3b8;
+  }
+  .checkin-acct-row.is-success .checkin-acct-dot { background: #34d399; }
+  .checkin-acct-row.is-already .checkin-acct-dot { background: #60a5fa; }
+  .checkin-acct-row.is-failed .checkin-acct-dot { background: #f87171; }
+  .checkin-acct-row.is-pending .checkin-acct-dot { background: #fbbf24; }
+  .checkin-acct-name {
+    font-weight: 600;
+    color: var(--gem-text, #0f172a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 45%;
+  }
+  .checkin-acct-state {
+    margin-left: auto;
+    text-align: right;
+    color: var(--gem-text-muted, #64748b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+  .checkin-acct-row.is-failed .checkin-acct-state { color: #f87171; }
   .checkin-card-foot {
     display: flex;
     gap: 8px;
@@ -8392,6 +8439,7 @@ html[data-ui="mobile"] .chat-input-row {
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-wb">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">累计奖励:</span><span class="c-val highlight" id="reward-wb">-</span></div>
                   </div>
+                  <div class="checkin-acct-list" id="accts-wb"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="workbuddy" id="btn-run-wb">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="workbuddy" id="btn-cfg-wb">配置 Token</button>
@@ -8416,6 +8464,7 @@ html[data-ui="mobile"] .chat-input-row {
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-trae">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">累计奖励:</span><span class="c-val highlight" id="reward-trae">-</span></div>
                   </div>
+                  <div class="checkin-acct-list" id="accts-trae"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="traecode" id="btn-run-trae">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="traecode" id="btn-cfg-trae">配置 Token</button>
@@ -8439,6 +8488,7 @@ html[data-ui="mobile"] .chat-input-row {
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-ca">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">福利算力:</span><span class="c-val highlight" id="reward-ca">-</span></div>
                   </div>
+                  <div class="checkin-acct-list" id="accts-ca"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="codearts" id="btn-run-ca">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="codearts" id="btn-cfg-ca">配置凭据</button>
@@ -8482,7 +8532,7 @@ html[data-ui="mobile"] .chat-input-row {
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v1.0.12</span>
+            <span class="footer-version">v1.0.13</span>
           </div>
         </footer>
       </section>
@@ -12207,7 +12257,7 @@ html[data-ui="mobile"] .chat-input-row {
         sa.mcp,
         '',
         '【服务说明与工具】',
-        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.12'),
+        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.13'),
         '',
         '把上面 URL 作为 HTTP MCP server 注册给本机 AI 会话后，即可像原生子代理一样直接指挥 traecode / workbuddy / zcode / qwen-work 等全部注册代理，长内容以本机文件形式交付，不进会话上下文。',
         '',
@@ -12331,7 +12381,7 @@ html[data-ui="mobile"] .chat-input-row {
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.12';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.13';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
@@ -15863,6 +15913,29 @@ html[data-ui="mobile"] .chat-input-row {
     };
 
     // 渲染打卡状态数据
+    const renderAccountRows = (containerId, accounts) => {
+      const box = document.getElementById(containerId);
+      if (!box) return;
+      const list = Array.isArray(accounts) ? accounts : [];
+      if (!list.length) {
+        box.innerHTML = '';
+        return;
+      }
+      box.innerHTML = list.map((a) => {
+        const st = String(a.status || 'pending');
+        const stateText = st === 'success'
+          ? (a.credits ? `+${a.credits}` : '已签到')
+          : (st === 'already' ? '今日已签' : (st === 'failed' ? (a.message || '失败') : (st === 'expired' ? '凭据失效' : '待打卡')));
+        const name = escapeHtml(a.display || a.name || '未知账号');
+        const cls = st === 'expired' ? 'failed' : st;
+        return `<div class="checkin-acct-row is-${escapeHtml(cls)}" title="${escapeHtml(a.message || '')}">
+          <span class="checkin-acct-dot"></span>
+          <span class="checkin-acct-name">${name}${a.active ? ' ·当前' : ''}</span>
+          <span class="checkin-acct-state">${escapeHtml(stateText)}</span>
+        </div>`;
+      }).join('');
+    };
+
     const renderOverview = (data) => {
       currentCheckinData = data;
       if (!data || !data.platforms) return;
@@ -15883,6 +15956,7 @@ html[data-ui="mobile"] .chat-input-row {
         if (msgEl) msgEl.textContent = p.workbuddy.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-wb');
         if (rewEl) rewEl.textContent = p.workbuddy.credits ? `${p.workbuddy.credits}${p.workbuddy.consecutiveDays ? ` (连签${p.workbuddy.consecutiveDays}天)` : ''}` : '-';
+        renderAccountRows('accts-wb', p.workbuddy.accounts);
         const btnWb = document.getElementById('btn-run-wb');
         if (btnWb) {
           btnWb.disabled = isSigned;
@@ -15900,6 +15974,7 @@ html[data-ui="mobile"] .chat-input-row {
         if (msgEl) msgEl.textContent = p.traecode.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-trae');
         if (rewEl) rewEl.textContent = p.traecode.credits ? `${p.traecode.credits}${p.traecode.consecutiveDays ? ` (连签${p.traecode.consecutiveDays}天)` : ''}` : '-';
+        renderAccountRows('accts-trae', p.traecode.accounts);
         const btnTrae = document.getElementById('btn-run-trae');
         if (btnTrae) {
           btnTrae.disabled = isSigned;
@@ -15917,6 +15992,7 @@ html[data-ui="mobile"] .chat-input-row {
         if (msgEl) msgEl.textContent = p.codearts.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-ca');
         if (rewEl) rewEl.textContent = p.codearts.credits ? `${p.codearts.credits}` : '-';
+        renderAccountRows('accts-ca', p.codearts.accounts);
         const btnCa = document.getElementById('btn-run-ca');
         if (btnCa) {
           btnCa.disabled = isSigned;

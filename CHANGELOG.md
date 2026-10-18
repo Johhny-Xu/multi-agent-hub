@@ -9,6 +9,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [1.0.13] - 2026-10-19
+
+**签到从「看起来成功」变成「真的成功」**，同时修掉账号档案与多 Key 场景下的一批数据问题。
+
+### 签到（三个平台全部重写）
+- **WorkBuddy**：原来只签「当前生效」的那一个账号，另一个号永远签不到。现在遍历 `~/.agenthub/accounts/codebuddy-cn/*` 的**所有**档案逐个打卡并按身份去重；响应字段改用真实字段 `data.credit` / `data.streak_days`（此前读 `points`/`credits` 取不到值，界面上的「10积分」其实是硬编码兜底文案）；`code=10001`（今天已签到）识别为「已签」而不是失败。
+- **CodeArts**：原实现只要 `codearts-auth.env` 里有 AK/SK 就直接返回「GLM-5.3 算力包已激活」，**一个请求都没发过**。现在按华为云 SDK-HMAC-SHA256 真实签名（复刻两处坑：CanonicalURI 强制补尾斜杠、CanonicalHeaders 自带尾 `\n` 后不再补），依次调 `GET /api/v1/benefit/claim`（福利通道 + 验签）→ `GET /v1/ops/delivery?channel=IDE`（找 `USER_LOGIN` 活动）→ `POST /v1/ops/claim`（`campaignId` + `channel=IDE` + `idempotentKey`）；把 `APIG.0602`（STS 过期）、`APIG.0301/0303`（签名失败）、`40001`（今日已领）、`4006`（名额领完）翻成人话。
+- **Trae**：删掉了「localStorage 里存在 `trae-cn-credits-billing-status` 就判今日已签到」——那个 key 一旦写入就永久存在，等于每天都谎报成功。改为先查 `POST /trae/api/v2/ug/checkin_credits/status` 判断真实状态、未签才 `claim`；认证头改成真实格式 `Authorization: Cloud-IDE-JWT <jwt>`（此前用的是 `Bearer`）。API 全失败时再退回 CDP 点客户端按钮，并且只认文案含「签到」或落在权益面板内的按钮，避免误点活动横幅的「立即领取」。
+- 三张签到卡片新增**按账号逐行展示**：`无名氏 ·当前 今日已签` / `Johhny_Xu +100`，失败账号直接显示原因（hover 看全文）。
+
+### 账号档案
+- opencode 第二把 Key 覆盖第一把：写入前以线上 `auth.json` 为底合并，沙箱与线上一并写回，同 provider 覆盖时日志明确提示改成 `provider:api_key`。
+- 可变异身份（`providers:` 集合 / `mmx:<region>` 单槽位 / 12 位文件指纹）的显示名改为**读取时按 identity 现算**，不再信任 `meta.json` 里固化的旧字符串；与线上身份不一致的历史快照标记 `stale` 并收进「历史 N」胶囊，不再伪装成第二个账号。
+- minimaxcode 一个号裂成两个：identity 从整文件指纹改为 `mmx:<region>` 单槽位，并加迁移规则按 `savedAt` 原地复用。
+
+### 子代理
+- 「思考程度」旁新增**按子代理适配的文件编辑权限**开关，数据源在 `hub/capabilities.json` 的 `permission.modes`，经 `task_contract.prepare_task` 落成各家 CLI 的真实开关（`--permission-mode` / `--allow-all-tools` / `--mode` / `--agent plan` / `--plan|--yolo`）；`POST /api/dispatch` 与 `/api/chat/send` 都会透传 `permission`。
+- 华为（codearts）模型列表重复：同一 id 挂多个别名时按 id 归并并择优选显示名，GLM-5.3 不再出现 5 次。
+
 ## [1.0.12] - 2026-10-18
 
 **控制台从网页变成可安装的桌面应用**，同时补齐「每日签到与福利中枢」，并收口一轮 WebUI 视觉与交互。侧栏、工作台、签到三块的手感在本版对齐。
