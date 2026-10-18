@@ -22,7 +22,7 @@ import * as checkinMod from './checkin.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.13';
+const VERSION = '1.0.14';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -105,7 +105,6 @@ const MODEL_CATALOG = {
     { id: 'fast-model', name: 'Fast' },
     { id: 'balanced-model', name: 'Balanced' },
     { id: 'primary-model', name: 'Primary' },
-    { id: 'deep-model', name: 'Deep' },
     { id: 'hy4-preview', name: 'Hy4 preview' },
     { id: 'deepseek-v4.1-flash', name: 'Deepseek-V4.1-Flash', tag: '免费', default: true },
     { id: 'gpt-6-astra', name: 'GPT-6-Astra' },
@@ -138,15 +137,15 @@ const MODEL_CATALOG = {
   antigravity: [
     { id: 'gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash Medium', default: true },
     { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High' },
-    { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro High' },
+    { id: 'gemini-3.8-flash-low', name: 'Gemini 3.8 Flash Low' },
     { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)' },
     { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
     { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' },
   ],
   mimocode: [
     { id: 'xiaomi/mimo-v2.6-flash', name: 'MiMo-V2.6-Flash (26f)', default: true },
-    { id: 'mimo-v2.6-pro', name: 'MiMo-V2.6-Pro' },
-    { id: 'mimo-v2.6-pro-ultraspeed', name: 'MiMo-V2.6-Pro-UltraSpeed' },
+    { id: 'xiaomi/mimo-v2.6-pro', name: 'MiMo-V2.6-Pro' },
+    { id: 'xiaomi/mimo-v2.6-pro-ultraspeed', name: 'MiMo-V2.6-Pro-UltraSpeed' },
     { id: '9router/trae', name: 'Trae (9router 通道)' },
   ],
   minimaxcode: [

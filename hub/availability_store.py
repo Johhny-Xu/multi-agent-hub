@@ -16,12 +16,13 @@ REASONS = {
     "region_restricted": "最近一次调用被服务区域限制拒绝；插件不能绕过区域限制。",
     "quota_exhausted": "最近一次调用额度不足；请处理账户额度后手动刷新。",
     "model_unavailable": "最近一次调用找不到所选模型；请更新本机模型配置后手动刷新。",
+    "plan_blocked": "最近一次调用被套餐拒绝：当前账号无权使用所选模型；请升级套餐或改用其它模型后手动刷新。",
     "empty_answer": "最近一次调用退出但未返回回答；未将偶发空答判为永久不支持。",
     "timeout": "最近一次调用超时；未将超时判为永久不支持。",
     "tool_protocol_unverified": "最近一次调用返回未执行的工具协议，不能视为任务成果。",
     "rate_limited": "最近一次调用处于排队或限流状态；未将排队判为永久不支持。",
 }
-BLOCKING = {"authentication_required", "region_restricted", "quota_exhausted", "model_unavailable"}
+BLOCKING = {"authentication_required", "region_restricted", "quota_exhausted", "model_unavailable", "plan_blocked"}
 
 
 def signature(profile):
@@ -51,13 +52,17 @@ def classify_failure(status, text):
     diagnostic = str(text).lower()
     if ("401" in diagnostic and any(t in diagnostic for t in ("auth", "unauthorized", "login"))) or any(t in diagnostic for t in ("invalid api key", "invalid_api_key", "authentication required", "authentication_required", "codearts_auth_required")):
         return "authentication_required"
-    if "failed_precondition" in diagnostic and "region" in diagnostic or any(t in diagnostic for t in ("region restricted", "not supported in your country", "unsupported region", "user location is not supported")):
+    if "failed_precondition" in diagnostic and "region" in diagnostic or any(t in diagnostic for t in ("region restricted", "not supported in your country", "not available in your country", "unsupported region", "user location is not supported")):
         return "region_restricted"
     if any(t in diagnostic for t in ("quota exceeded", "quota_exceeded", "insufficient credits", "credit balance is too low", "quota exhausted", "额度已用完", "可用额度已用完", "体验套餐可用额度已用完", "套餐查询失败", "积分不足", "无可用额度")):
         return "quota_exhausted"
+    # 套餐分级拒绝：CLI 认得这个 model id，但当前账号无权调用。
+    # 必须抢占 model_unavailable 之前判断：这类报错里也带 "model [x]"，但换账号就能用。
+    if "not allowed for user type" in diagnostic or "not available for user type" in diagnostic or re.search(r"model\s*\[[^\]]+\][^\n]{0,40}is not allowed", diagnostic):
+        return "plan_blocked"
     if any(t in diagnostic for t in ("排队提醒", "当前模型请求量较高", "升级权益等待中", "rate limit", "rate_limited", "too many requests", "429")):
         return "rate_limited"
-    if any(t in diagnostic for t in ("model_selection_not_applied", "model_catalog_unavailable", "model_ambiguous", "codearts_provider_unavailable", "no providers found")) or re.search(r"(?:model.{0,100}(?:not found|unavailable|not available|does not exist)|unknown model|model_not_found)", diagnostic):
+    if any(t in diagnostic for t in ("model_selection_not_applied", "model_catalog_unavailable", "model_ambiguous", "codearts_provider_unavailable", "no providers found", "not recognized as a known model", "invalid model selection", "reasoning effort value is not supported")) or re.search(r"(?:model.{0,100}(?:not found|unavailable|not available|does not exist)|unknown model|model_not_found)", diagnostic):
         return "model_unavailable"
     if "tool_protocol_unverified" in diagnostic:
         return "tool_protocol_unverified"

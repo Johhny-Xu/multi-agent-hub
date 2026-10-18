@@ -31,7 +31,7 @@ from availability_store import local_availability, record_outcome, refresh as re
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "1.0.13"
+SERVER_VERSION = "1.0.14"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -567,7 +567,14 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
     code = proc.returncode or (1 if parsed["error"] else 0)
     if code == 0 and not parsed["text"].strip():
         code = 1
-        out = parsed["error"] or "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。"
+        # 退出码为 0 但 stdout 为空时，真实诊断常常只写在 stderr（例如
+        # `400 model [primary-model] is not allowed for user type [...]`）。
+        # 之前这里直接丢弃 stderr，上层只能看到「没有可验证的回答」，
+        # 于是「套餐不支持/模型不存在」被误判成偶发空答，模型永远显示可用并反复失败。
+        detail = (stderr or "").strip()
+        if len(detail) > 800:
+            detail = detail[-800:]
+        out = parsed["error"] or detail or "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。"
     _record_cli_outcome(agent, prof, model, "completed" if code == 0 else "error", out)
     tag = f"{agent}/{model}" if model else agent
     return _truncate(f"[{tag}] exit={code}\n{out or '(无输出)'}")

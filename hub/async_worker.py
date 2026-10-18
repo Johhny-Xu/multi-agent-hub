@@ -368,6 +368,13 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None, inp
             if diagnostic:
                 text = (text + "\n" if text else "") + diagnostic
         if not text.strip() and proc.returncode == 0:
+            # 退出码 0 却没有 stdout 时，真正原因往往只写在 stderr
+            # （例如 `400 model [primary-model] is not allowed for user type [...]`）。
+            # 过去这里直接返回固定文案，上层只能判成「偶发空答」，
+            # 于是「套餐拒绝 / 模型不存在」被当成可用模型反复失败。取最后一行诊断即可。
+            last_line = next((line.strip() for line in reversed((diagnostic or "").splitlines()) if line.strip()), "")
+            if last_line:
+                return last_line[:800], 1
             return "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。", 1
         if len(text) > 20000:
             text = text[:20000] + "\n[输出超过 20000 字符，已截断]"

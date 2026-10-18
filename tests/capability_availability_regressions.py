@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "hub"))
 import agent_hub as hub
 import async_worker as worker
-from availability_store import classify_failure, local_availability, record_outcome, refresh, signature
+from availability_store import BLOCKING, REASONS, classify_failure, local_availability, record_outcome, refresh, signature
 from output_parser import parse_output
 from task_contract import capabilities, cleanup_attachments, prepare_task, public_model_capabilities
 
@@ -126,6 +126,33 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(classify_failure("error", "MODEL_UNAVAILABLE"), "model_unavailable")
         self.assertEqual(classify_failure("error", "MODEL_SELECTION_NOT_APPLIED"), "model_unavailable")
         self.assertIsNone(classify_failure("completed", "A document discusses invalid API key and MODEL_UNAVAILABLE"))
+
+    def test_plan_rejection_is_separated_from_a_missing_model(self):
+        # 两种 400 长得很像，但处置完全不同：换账号就能用 vs 换账号也没用。
+        blocked = "400 model [primary-model] is not allowed for user type [personal_free_user] (01a1/01a1)"
+        self.assertEqual(classify_failure("error", blocked), "plan_blocked")
+        self.assertEqual(classify_failure("error", "model [grok-4.7] is not allowed for user type [personal_free_user]"), "plan_blocked")
+        for text in ("error: invalid model selection (--model \"gemini-3.1-pro-high\" --effort \"\"): model gemini-3.1-pro-high is not recognized as a known model",
+                     "400 model [deep-model] service info not found",
+                     "Model not found: mimo-v2.6-pro/.",
+                     "400 the reasoning effort value is not supported by the current model"):
+            self.assertEqual(classify_failure("error", text), "model_unavailable", text)
+        self.assertEqual(classify_failure("error", "This model is not available in your country"), "region_restricted")
+        self.assertIn("plan_blocked", BLOCKING)
+        self.assertIn("套餐", REASONS["plan_blocked"])
+
+    def test_empty_stdout_keeps_the_stderr_diagnostic_instead_of_a_canned_message(self):
+        """退码 0 + 空 stdout 时真实原因只在 stderr；丢掉它会让「套餐拒绝」变成「偶发空答」。"""
+        diagnostic = "400 model [primary-model] is not allowed for user type [personal_free_user]"
+        script = self.base / "ok_empty.py"
+        script.write_text("import sys\nsys.stderr.write(%r + '\\n')\n" % diagnostic, encoding="utf-8")
+        profile = {"cli": [sys.executable, str(script), "{task}"], "models": {"default": "primary-model"},
+                   "model_arg": "--model", "async_default": False}
+        plan = prepare_task("codebuddy", profile, {"task": "fixture", "model": "primary-model"}, self.base / "attachments")
+        out = hub._dispatch_prepared_cli({"timeout_s": 20}, "codebuddy", profile, plan)
+        self.assertIn("is not allowed for user type", out)
+        self.assertNotIn("没有可验证的回答", out)
+        self.assertEqual(classify_failure("error", out), "plan_blocked")
 
     def test_stream_off_removes_conflicting_configured_boolean_flags(self):
         for agent, flag, model in (("codebuddy", "--include-partial-messages", "deepseek-v4.1-flash"), ("minimaxcode", "--stream", "MiniMax-M3.1-Flash-Preview")):
