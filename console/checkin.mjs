@@ -245,7 +245,7 @@ async function fileMtime(file) {
 async function readCredCandidates(platform, dir, flat = false) {
   const out = [];
 
-  const addJson = async (rel, source, { writable = true } = {}) => {
+  const addJson = async (rel, source, { writable = true, kind = 'cli' } = {}) => {
     const file = join(dir, rel);
     try {
       const d = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
@@ -263,14 +263,14 @@ async function readCredCandidates(platform, dir, flat = false) {
         file: writable ? file : '',
         mtime: await fileMtime(file),
         source,
-        kind: writable ? 'cli' : 'shared',
+        kind: writable ? kind : 'shared',
       });
     } catch { /* 没有这份文件 */ }
   };
 
   if (platform === 'workbuddy') {
     if (flat) {
-      await addJson('auth.info', '账号档案');
+      await addJson('auth.info', '账号档案', { kind: 'profile' });
       return out;
     }
     // 只取国内站凭据：签到打的是 www.codebuddy.cn，国际版（~/.codebuddy）的 token 不适用。
@@ -315,7 +315,7 @@ async function readCredCandidates(platform, dir, flat = false) {
           file,
           mtime: await fileMtime(file),
           source: flat ? '账号档案' : `~/${rel}`,
-          kind: 'cli',
+          kind: flat ? 'profile' : 'cli',
         });
       } catch { /* next */ }
     }
@@ -335,7 +335,7 @@ async function readCredCandidates(platform, dir, flat = false) {
           out.push({
             ak: akv, sk: sk.trim(), identity: akv, display: `AK:${maskAk(akv)}`,
             exp: 0, file, mtime: await fileMtime(file),
-            source: flat ? '账号档案 · AK/SK' : `~/${rel}`, kind: 'cli',
+            source: flat ? '账号档案 · AK/SK' : `~/${rel}`, kind: flat ? 'profile' : 'cli',
           });
         }
       } catch { /* next */ }
@@ -396,6 +396,14 @@ export async function listCheckinAccounts(platform) {
 
   /** @type {Map<string, any>} 身份 → 最优凭据（同一账号只留一份，绝不重复签） */
   const byIdentity = new Map();
+  /** @type {Map<string, any[]>} 身份 → 全部候选：首选 token 被服务端注销时还要有备胎 */
+  const candidates = new Map();
+  const remember = (acct) => {
+    if (!acct.token) return;
+    const list = candidates.get(acct.identity) || [];
+    if (!list.some((c) => c.token === acct.token)) list.push(acct);
+    candidates.set(acct.identity, list);
+  };
 
   for (const worker of PLATFORM_WORKERS[platform] || []) {
     let names = [];
@@ -418,18 +426,23 @@ export async function listCheckinAccounts(platform) {
         kind: 'profile',
         credentialSource: '账号档案快照',
       };
+      remember(acct);
       byIdentity.set(acct.identity, betterOf(byIdentity.get(acct.identity), acct));
     }
   }
 
   const live = await readCredFrom(platform, HOME, false);
   if (live?.identity) {
+    remember({ ...live, kind: 'cli' });
     const prev = byIdentity.get(live.identity);
     if (prev) {
-      const winner = betterOf(prev, { ...live, kind: 'cli' });
+      // CLI 当前在用的那份优先——不能只看 exp：重新登录后旧 JWT 仍留在档案里，
+      // 且有效期往往比新 token 更长（这次 Trae 重登就是 10-30 的旧 token 压过 10-26 的新 token）。
+      const liveExpired = live.exp > 0 && live.exp * 1000 <= Date.now();
+      const winner = liveExpired ? betterOf(prev, { ...live, kind: 'cli' }) : { ...live, kind: 'cli' };
       byIdentity.set(live.identity, {
         ...winner,
-        // 凭据用最新的那份，账号名沿用档案里更可读的那个
+        // 账号名沿用档案里更可读的那个
         name: prev.name || winner.name,
         display: prev.display || winner.display,
         worker: prev.worker || winner.worker,
@@ -451,7 +464,13 @@ export async function listCheckinAccounts(platform) {
     }
   }
 
-  const accounts = [...byIdentity.values()];
+  const accounts = [...byIdentity.values()].map((a) => {
+    // 同身份的其它候选（不同 token）：首选被服务端注销时按顺序回退
+    const alts = (candidates.get(a.identity) || [])
+      .filter((c) => c.token && c.token !== a.token)
+      .map((c) => ({ token: c.token, exp: c.exp, source: c.source, file: c.file }));
+    return alts.length ? { ...a, alternates: alts } : a;
+  });
   if (accounts.length && !accounts.some((a) => a.active)) accounts[0].active = true;
   return accounts;
 }
@@ -736,6 +755,14 @@ export async function checkinWorkBuddy(overrideToken = null) {
       if (r.status === 'expired') {
         const again = await refreshCodeBuddyAuth(acct.file, fresh.refreshToken || acct.refreshToken, acct.domain);
         if (again) r = await checkinWorkBuddyOne(again.token);
+      }
+      // 续期也救不回来时，试同身份的其它候选（例如 CLI 当前 token 被注销、档案里那份还能用）
+      if (r.status === 'expired') {
+        for (const alt of acct.alternates || []) {
+          if (alt.exp && alt.exp * 1000 < Date.now()) continue;
+          const altRes = await checkinWorkBuddyOne(alt.token);
+          if (altRes.status !== 'expired') { r = altRes; break; }
+        }
       }
       results.push({ ...acct, ...r, refreshed: fresh.refreshed, label });
     } catch (err) {
@@ -1061,20 +1088,33 @@ export async function checkinTrae(overrideToken = null) {
   const results = [];
   for (const acct of accounts) {
     const label = acct.display || acct.name;
-    if (!acct.token) {
-      results.push({ ...acct, ok: false, status: 'failed', message: '档案内没有 JWT', label });
+    // 同身份的多个候选 token：首选被服务端注销（1001）时按顺序回退。
+    // Trae 重新登录后，新写入的 token 反而可能被判 1001，而旧 token 仍然有效。
+    const tries = [
+      { token: acct.token, exp: acct.exp, source: acct.credentialSource || acct.source, via: 'primary' },
+      ...(acct.alternates || []).map((a) => ({ ...a, via: 'fallback' })),
+    ].filter((t) => t.token && !(t.exp && t.exp * 1000 < Date.now()));
+
+    if (!tries.length) {
+      const why = acct.token ? 'JWT 已过期' : '档案内没有 JWT';
+      results.push({ ...acct, ok: false, status: 'expired', message: `${why}，点「重新登录」重新授权`, label });
       continue;
     }
-    if (acct.exp && acct.exp * 1000 < Date.now()) {
-      results.push({ ...acct, ok: false, status: 'expired', message: 'JWT 已过期，点「重新登录」重新授权', label });
-      continue;
-    }
+
+    let r = null;
+    let used = null;
     try {
-      const r = await checkinTraeOne(acct.token);
-      results.push({ ...acct, ...r, label });
+      for (const t of tries) {
+        r = await checkinTraeOne(t.token);
+        if (r.status !== 'expired') { used = t; break; }
+      }
     } catch (err) {
       results.push({ ...acct, ok: false, status: 'failed', message: `网络请求失败：${err.message}`, label });
+      continue;
     }
+
+    const viaNote = used?.via === 'fallback' ? `（已回退到 ${used.source || '备用凭据'}）` : '';
+    results.push({ ...acct, ...r, message: `${r.message}${viaNote}`, label });
   }
 
   const okOnes = results.filter((r) => r.status === 'success');

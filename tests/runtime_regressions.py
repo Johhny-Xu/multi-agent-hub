@@ -334,6 +334,15 @@ class RuntimeRegressions(unittest.TestCase):
                 self.assertEqual(text, "generated answer")
                 self.assertEqual(sid, "sid-123")
 
+    def test_placeholder_reply_is_detected_for_dom_fallback(self):
+        # Trae 1.107 的 bridge 会在 ~5s 内把首屏「TRAE 思考中」当最终结果返回
+        self.assertTrue(worker._is_placeholder_reply("TRAE\n思考中"))
+        self.assertTrue(worker._is_placeholder_reply("  "))
+        self.assertTrue(worker._is_placeholder_reply("thinking"))
+        self.assertTrue(worker._is_placeholder_reply("生成中"))
+        self.assertFalse(worker._is_placeholder_reply("91"))
+        self.assertFalse(worker._is_placeholder_reply("思考中……这是足够长的一段真正回答，不应该被当成占位文本。"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

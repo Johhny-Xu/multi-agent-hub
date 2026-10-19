@@ -58,6 +58,29 @@ test('不同账号各自保留，不会被去重合并', async () => {
   assert.deepEqual(ids, ['u1', 'u2']);
 });
 
+test('CLI 当前凭据优先于档案里的长效旧凭据（重新登录后最常见）', async () => {
+  const LONG_OLD = fakeJwt({ data: { id: '9001' }, exp: nowSec + 86400 * 30 });
+  const SHORT_NEW = fakeJwt({ data: { id: '9001' }, exp: nowSec + 86400 * 3 });
+  const profile = join(root, '.agenthub', 'accounts', 'traecode', 'primary');
+  await mkdir(profile, { recursive: true });
+  await writeFile(join(profile, 'trae-jwt-token'), LONG_OLD, 'utf-8');
+  await mkdir(join(root, '.trae-cn'), { recursive: true });
+  await writeFile(join(root, '.trae-cn', 'trae-jwt-token'), SHORT_NEW, 'utf-8');
+
+  const accounts = await mod.listCheckinAccounts('traecode');
+  assert.equal(accounts.length, 1);
+  assert.equal(accounts[0].token, SHORT_NEW, 'CLI 里正在用的 token 优先，即使旧档案的 exp 更晚');
+  assert.match(accounts[0].credentialSource, /trae-cn/);
+});
+
+test('同身份的其它候选保留在 alternates 里，供 1001 时回退', async () => {
+  const accounts = await mod.listCheckinAccounts('traecode');
+  assert.equal(accounts.length, 1);
+  assert.ok(Array.isArray(accounts[0].alternates), '带 alternates 列表');
+  assert.ok(accounts[0].alternates.length >= 1, '档案里的旧 token 作为备用');
+  assert.notEqual(accounts[0].alternates[0].token, accounts[0].token);
+});
+
 test('清空日志只清 history，不动今日打卡状态与凭据', async () => {
   const today = localToday();
   await writeFile(process.env.AGENTHUB_CHECKIN_STATE, JSON.stringify({

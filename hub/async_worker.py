@@ -22,6 +22,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -201,6 +202,21 @@ with opener.open(request, timeout=float(sys.argv[2])) as response:
 """
 
 
+def _is_placeholder_reply(text):
+    """bridge 把首屏占位文本当成最终结果的情况。
+
+    Trae 1.107 更新后, /v1/chat 会在 ~5s 内返回 "TRAE\\n思考中" 并标记 completed,
+    而真实回答此时还没渲染出来。DOM 读取(drivers/dom_read.js)仍然准确,
+    所以识别出占位文本后改走 DOM 兜底读取。
+    """
+    condensed = re.sub(r"\s+", "", str(text or ""))
+    if not condensed:
+        return True
+    if len(condensed) > 24:
+        return False
+    return ("思考中" in condensed) or ("thinking" in condensed.lower()) or ("生成中" in condensed)
+
+
 def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT, *, gateway=None, dom_read=None, node=None):
     timeout = positive_timeout(timeout, TRAE_TIMEOUT)
     deadline = time.monotonic() + timeout
@@ -245,11 +261,14 @@ def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT, *, gat
         if (statuses and any(status not in {"completed", "done", "finished", "ok", "success"} for status in statuses)) or (not statuses and not text.strip()):
             raise RuntimeError("Trae 网关状态不确定，继续查询原任务；请勿重新派发: " + ",".join(statuses or ["missing"]))
         sid = sess.get("sessionId") or session_id or ""
-        if not text.strip() and os.path.exists(dom_read):
+        # 空文本 / 占位文本(「TRAE 思考中」) 都回退到 DOM 读取，拿真正的回答
+        if _is_placeholder_reply(text) and os.path.exists(dom_read):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise CommandTimeout(f"trae 任务超时 (>{timeout}s)")
-            text = subprocess_run([node, dom_read], timeout=min(120, remaining)).strip()
+            fallback = subprocess_run([node, dom_read], timeout=min(120, remaining)).strip()
+            if fallback:
+                text = fallback
         if any(p in text for p in ("排队提醒", "当前模型请求量较高", "升级权益等待中")):
             raise RuntimeError(f"Trae 处于排队限流状态: {text.strip()}")
         return text, sid
