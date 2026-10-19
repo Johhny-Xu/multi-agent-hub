@@ -6,7 +6,7 @@
 
 ![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，11 种 Worker 统一调度](docs/architecture.svg)
 
-**当前版本：v1.0.12** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
+**当前版本：v1.0.14** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
 | 接入形态 | 适用场景 | 你需要做的操作 |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ cd multi-agent-hub
 **安装成功后你能看到什么**
 
 - 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 11 张 Worker 状态卡片）。
-- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.12-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
+- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.14-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
 - 只想先看界面：直接用浏览器打开仓库里的 `demo.html`。
 
@@ -201,8 +201,8 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 原生宿主 | 安装方式 | 详细文档 |
 | --- | --- | --- |
-| **华为 CodeArts / VS Code** | 在 IDE 扩展面板选择「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.12.carts` / `.vsix` / `.cloudide`；或执行 `.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | 桌面端或云端导入 `agenthub-workers-1.0.12-minimax-plugin.zip`；CLI 启动：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **华为 CodeArts / VS Code** | 在 IDE 扩展面板选择「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.14.carts` / `.vsix` / `.cloudide`；或执行 `.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | 桌面端或云端导入 `agenthub-workers-1.0.14-minimax-plugin.zip`；CLI 启动：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | 执行 `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 中配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | 执行 `.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`，自动注册本地插件市场并将 11 个子代理写入 `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | 执行 `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或运行 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -316,7 +316,7 @@ Hub 统一管理以下 11 种 Worker；表中所列为**全新安装**时的默�
 - 顶栏 `z-index: 100`、会话头 `z-index: 50` 独立层叠上下文，下拉菜单不会被代码块或右侧工作台截断。
 - 毛玻璃模式：`body.has-custom-bg` 下启用 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一收敛为 `--gem-bg-card`，`--gem-surface-high` 仅用于悬浮交互态与进度条轨道。
 - 子代理色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名称保持正文色 `--gem-text`。
-- 底部状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉内置思考档位与流式输出开关；页脚右侧显示版本号 `v1.0.12`（可被后端 `snap.version` 动态覆盖）。
+- 底部状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉内置思考档位与流式输出开关；页脚右侧显示版本号 `v1.0.14`（可被后端 `snap.version` 动态覆盖）。
 - 离线 Demo 构建：运行 `scripts/build_demo.py`（配合 `scripts/demo_engine.js`）可同步生成 `demo.html` 与 `demo/index.html`。
 
 </details>
@@ -373,11 +373,11 @@ Hub 仅在本地或你的私有服务器内做协议转换与进程调度，所�
 
 | 文件名 | 适用场景 |
 | --- | --- |
-| `agenthub-1.0.12-both.zip` | 客户端与 Hub 装在同一台电脑（最常用） |
-| `agenthub-1.0.12-plugins.zip` | 仅在个人电脑上安装各宿主客户端插件 |
-| `agenthub-1.0.12-hub.zip` | 仅在服务器上部署 Hub 与 Worker 调度端 |
-| `agenthub-workers-1.0.12-minimax-plugin.zip` | 导入 MiniMax Code 桌面端或云端（符合 Plugin V1 规范） |
-| `multi-agent-hub-1.0.12.vsix` / `.carts` / `.cloudide` | 导入华为 CodeArts IDE、VS Code 及兼容云端 / 桌面编辑器 |
+| `agenthub-1.0.14-both.zip` | 客户端与 Hub 装在同一台电脑（最常用） |
+| `agenthub-1.0.14-plugins.zip` | 仅在个人电脑上安装各宿主客户端插件 |
+| `agenthub-1.0.14-hub.zip` | 仅在服务器上部署 Hub 与 Worker 调度端 |
+| `agenthub-workers-1.0.14-minimax-plugin.zip` | 导入 MiniMax Code 桌面端或云端（符合 Plugin V1 规范） |
+| `multi-agent-hub-1.0.14.vsix` / `.carts` / `.cloudide` | 导入华为 CodeArts IDE、VS Code 及兼容云端 / 桌面编辑器 |
 
 ### 常用开发与测试命令
 
@@ -417,6 +417,8 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 | 版本 | 核心变更 |
 | --- | --- |
+| **1.0.14** | 84 个模型逐个实跑一遍：CLI 退码 0 却空答时保留 stderr 真实诊断、新增 `plan_blocked` 区分「套餐无权」与「模型不存在」、别名表外的模型也能置灰；纠正三处模型目录错项；收口移动端四处布局缺陷（设置卡片标题竖排、数字被劈行、320px 下发送按钮换行、签到开关挤成窄柱） |
+| **1.0.13** | 签到从「看起来成功」变成「真的成功」：WorkBuddy 逐账号补签、CodeArts 改为 SDK-HMAC-SHA256 真实签名调用、Trae 先查状态再领取；账号档案修掉多 Key 覆盖、身份裂档与显示名固化；新增按子代理适配的文件编辑权限开关；华为模型列表按 id 归并去重 |
 | **1.0.12** | 右侧工作台直连会话提及的本地文件（支持产物 / 图片 / 附件预览与单条删除）；子代理卡片支持拖拽排序并补齐 opencode / Cline 品牌色；对齐顶栏与浮层按钮右缘；Linux 配置模板补齐可用 GitHub Copilot Worker |
 | **1.0.1** | 新增 opencode 与 Cline 两种 Worker（总计 11 种），补齐配置模板、能力声明、NDJSON 事件流解析与原生子代理；重绘中英架构图与路线图，放大字号并提升对比度 |
 | **1.0.0** | 首个公开正式版：完成全仓凭据审计清理、致谢 TraeClaw、交接文档脱敏、补充贡献者公约与发布线审校修复 |

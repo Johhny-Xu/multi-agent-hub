@@ -6,7 +6,7 @@ import { createInterface } from "node:readline";
 import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef, hubSetAgentStatus } from "./hub.mjs";
 import { hubDiscover } from "./discovery.mjs";
 
-const SERVER = { name: "agenthub-hub-bridge", version: "1.0.12" };
+const SERVER = { name: "agenthub-hub-bridge", version: "1.0.14" };
 const TASK_OPTIONS = {
   model: { type: "string", description: "模型别名或具体 ID；省略则使用 Hub 配置的默认模型" },
   thinking: { type: "string", enum: ["default", "on", "off"], default: "default", description: "思考模式；不支持的模式在派发前拒绝，可先查 hub_capabilities" },

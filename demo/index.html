@@ -1099,6 +1099,30 @@
 
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<script>
+/* 移动端自动切换：先按 UA / 触屏判定，再用 ?ui=mobile|desktop 覆盖并记住选择，?ui=auto 清除记忆 */
+(function () {
+  var d = document.documentElement;
+  try {
+    var q = new URLSearchParams(location.search).get('ui');
+    if (q === 'auto') { try { localStorage.removeItem('agenthub.ui'); } catch (e0b) {} q = null; }
+    var ok = (q === 'mobile' || q === 'desktop');
+    if (ok) { try { localStorage.setItem('agenthub.ui', q); } catch (e0) {} }
+    var pref = ok ? q : (function () { try { return localStorage.getItem('agenthub.ui') || ''; } catch (e1) { return ''; } })();
+    var ua = navigator.userAgent || '';
+    var mobileUA = /Android|iPhone|iPod|iPad|HarmonyOS|Mobile|MicroMessenger|MiuiBrowser|HuaweiBrowser|HeyTapBrowser|VivoBrowser|OPPO|SamsungBrowser/i.test(ua);
+    // 触屏兜底必须同时满足「粗指针 + 无 hover」：触屏笔记本（1366×768 触屏）主指针仍是鼠标，
+    // 只按 maxTouchPoints 判断会把它误判成手机端，导致桌面 UI 被切走。
+    var coarse = false;
+    try { coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches); } catch (e2) {}
+    var smallScreen = Math.min(screen.width || 9999, screen.height || 9999) <= 820;
+    var touchSmall = coarse && navigator.maxTouchPoints > 1 && smallScreen;
+    var ui = pref || ((mobileUA || touchSmall) ? 'mobile' : 'desktop');
+    d.setAttribute('data-ui', ui);
+    if (ui === 'mobile') d.classList.add('ui-mobile');
+  } catch (e) { d.setAttribute('data-ui', 'desktop'); }
+})();
+</script>
 <title>multi-agent-hub</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,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" />
 <style>
@@ -2150,6 +2174,53 @@
     color: #10b981;
     font-size: 11px;
   }
+  /* 多账号签到结果：一个平台可能挂着多个号，逐个列出来 */
+  .checkin-acct-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .checkin-acct-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    background: var(--gem-bg-card, rgba(0, 0, 0, 0.15));
+    border: 1px solid var(--gem-border, rgba(255, 255, 255, 0.06));
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+  .checkin-acct-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #94a3b8;
+  }
+  .checkin-acct-row.is-success .checkin-acct-dot { background: #34d399; }
+  .checkin-acct-row.is-already .checkin-acct-dot { background: #60a5fa; }
+  .checkin-acct-row.is-failed .checkin-acct-dot { background: #f87171; }
+  .checkin-acct-row.is-pending .checkin-acct-dot { background: #fbbf24; }
+  .checkin-acct-name {
+    font-weight: 600;
+    color: var(--gem-text, #0f172a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 45%;
+  }
+  .checkin-acct-state {
+    margin-left: auto;
+    text-align: right;
+    color: var(--gem-text-muted, #64748b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+  .checkin-acct-row.is-failed .checkin-acct-state { color: #f87171; }
   .checkin-card-foot {
     display: flex;
     gap: 8px;
@@ -4182,13 +4253,16 @@
     padding-top: 10px;
     border-top: 1px dashed var(--mcode-border);
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px 18px;
   }
   .mp-param-row {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex: 1 1 240px;
+    min-width: 0;
   }
   .mp-param-label {
     display: flex;
@@ -4211,6 +4285,7 @@
     flex-wrap: wrap;
     gap: 5px;
   }
+  #mp-capability-note { flex: 1 1 100%; }
   .mp-opt-btn {
     padding: 4px 9px;
     border-radius: 6px;
@@ -4226,6 +4301,7 @@
     color: var(--mcode-text);
     background: var(--mcode-surface-hover);
   }
+  .mp-param-options.is-disabled .mp-opt-btn { opacity: .55; cursor: not-allowed; }
   .mp-opt-btn.active {
     background: var(--mcode-accent);
     color: #fff;
@@ -4383,6 +4459,17 @@
       min-height: 26px !important;
       padding: 2px 4px !important;
       font-size: 10.5px !important;
+    }
+
+    /* 1b. 连接失败横幅：窄屏下按钮不换行、整体留白收窄 */
+    #banner {
+      margin: 8px 10px !important;
+      gap: 8px !important;
+      font-size: 12px !important;
+    }
+    #banner button {
+      white-space: nowrap !important;
+      flex-shrink: 0 !important;
     }
 
 
@@ -4599,10 +4686,22 @@
       width: 100% !important;
       z-index: 45 !important;
       border-left: none !important;
-      transform: translateX(24px) !important;
+      /* 关闭态完全移出视口（原来的 24px 只是右移，导致右缘被裁 24px） */
+      transform: translateX(100%) !important;
+      /* 抽屉在对话头之下展开：让出实测的头部高度，避免「工作台」标题栏与页签被对话头盖住 */
+      padding-top: var(--chat-head-h, 77px) !important;
+      box-sizing: border-box !important;
     }
     .workbench.open {
       transform: translateX(0) !important;
+    }
+    /* 手机端抽屉展开后，「工作台」按钮是唯一的收起入口：不允许像桌面端那样让位消失 */
+    #panel-chat.wb-open .btn-head-workbench {
+      width: auto !important;
+      min-width: 34px !important;
+      opacity: 1 !important;
+      padding: 3px 4px !important;
+      pointer-events: auto !important;
     }
 
     /* 7. 代理页面：单列卡片整屏自适应 */
@@ -8799,6 +8898,280 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
   align-items: center;
   justify-content: center;
 }
+
+/* ============================================================================
+   移动端独立 UI —— 由 UA 自动切换（html[data-ui="mobile"]），可用 ?ui= 覆盖
+   只覆盖"手机上是错的"部分：底部导航遮挡、卡片密度、触控高度、桌面专属控件
+   ============================================================================ */
+html[data-ui="mobile"] {
+  --m-nav-h: 56px;
+  --m-safe-b: env(safe-area-inset-bottom, 0px);
+  -webkit-text-size-adjust: 100%;
+}
+html[data-ui="mobile"] body { overscroll-behavior-y: none; }
+
+/* 1. 顶部压缩成 App Bar */
+html[data-ui="mobile"] header.top {
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 6px 12px !important;
+  border-bottom: 1px solid var(--mcode-border) !important;
+}
+html[data-ui="mobile"] header.top .sub { display: none !important; }
+html[data-ui="mobile"] header.top h1 { font-size: 15px !important; font-weight: 600 !important; }
+
+/* 2. 底部导航：吃掉安全区，高度可预测 */
+html[data-ui="mobile"] nav.tabs.cb-activity-bar {
+  height: calc(var(--m-nav-h) + var(--m-safe-b)) !important;
+  min-height: calc(var(--m-nav-h) + var(--m-safe-b)) !important;
+  padding: 4px 10px calc(4px + var(--m-safe-b)) !important;
+}
+html[data-ui="mobile"] .cb-activity-tab {
+  border-radius: 12px !important;
+  min-height: 44px !important;
+}
+
+/* 3. 核心修复：所有滚动区给底部导航让位，最后一张卡片不再被压在导航下面 */
+html[data-ui="mobile"] .platform-list,
+html[data-ui="mobile"] #panel-chat .chat-scroll,
+html[data-ui="mobile"] #panel-agents,
+html[data-ui="mobile"] #panel-queue,
+html[data-ui="mobile"] #panel-notes,
+html[data-ui="mobile"] .wb-body {
+  padding-bottom: calc(var(--m-nav-h) + var(--m-safe-b) + 24px) !important;
+  scroll-padding-bottom: calc(var(--m-nav-h) + var(--m-safe-b)) !important;
+  overscroll-behavior: contain;
+}
+
+/* 4. 平台 / 会话卡片：按手机列表行重排，而不是把桌面卡片缩小 */
+html[data-ui="mobile"] .platform-list {
+  /* 只设三边，底部留给上一条“给导航让位”的 padding-bottom，别用简写覆盖掉 */
+  padding-top: 10px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  gap: 10px !important;
+}
+html[data-ui="mobile"] .platform-group { margin: 0 !important; }
+html[data-ui="mobile"] .platform-item {
+  min-height: 66px !important;
+  padding: 12px 12px !important;
+  border-radius: 16px !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+html[data-ui="mobile"] .platform-avatar-stack { width: 46px !important; flex: 0 0 46px !important; }
+html[data-ui="mobile"] .platform-avatar {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+}
+/* 平台名保留：手机靠头像+名字双重识别，两行截断而不是直接砍掉 */
+html[data-ui="mobile"] .platform-app-label {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: 46px !important;
+  margin-top: 3px !important;
+  font-size: 9.5px !important;
+  line-height: 1.15 !important;
+  text-align: center !important;
+  white-space: normal !important;
+  overflow: hidden !important;
+  word-break: break-all;
+}
+html[data-ui="mobile"] .platform-capsule-body { min-width: 0 !important; gap: 4px !important; }
+html[data-ui="mobile"] .platform-capsule-top { gap: 6px !important; }
+html[data-ui="mobile"] .platform-capsule-time { font-size: 11px !important; opacity: .75; }
+html[data-ui="mobile"] .pill-sess-count { font-size: 10.5px !important; padding: 1px 6px !important; }
+html[data-ui="mobile"] .platform-chevron {
+  width: 24px !important;
+  height: 24px !important;
+  font-size: 11px !important;
+  margin: 0 !important;
+  flex: 0 0 24px !important;
+}
+
+/* 5. 会话行：44px 触控高度、单行省略、右侧计数不被挤掉 */
+html[data-ui="mobile"] .platform-session-tree { margin: 2px 0 4px 0 !important; }
+html[data-ui="mobile"] .session-tree-item {
+  min-height: 44px !important;
+  padding: 0 12px !important;
+  border-radius: 12px !important;
+  gap: 8px !important;
+}
+html[data-ui="mobile"] .session-tree-title {
+  font-size: 13.5px !important;
+  max-width: calc(100vw - 150px) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+html[data-ui="mobile"] .session-tree-meta { font-size: 11px !important; opacity: .7; }
+html[data-ui="mobile"] .session-pin-icon,
+html[data-ui="mobile"] .session-archive-icon { width: 26px !important; height: 26px !important; }
+
+/* 6. 对话头部：压成单行 52px —— [← 返回] [会话胶囊] …… [⋯] [工作台图标]
+      原来小屏断点会把头部折成两行（实测 83px），一半宽度是空的；
+      单行后给对话区多让出 ~30px，胶囊由 JS 定位到返回按钮右侧 */
+html[data-ui="mobile"] .chat-head {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 10px !important;
+  min-height: 52px !important;
+  height: auto !important;
+  overflow: hidden !important;
+}
+html[data-ui="mobile"] .chat-head-left {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  padding-left: 0 !important;
+  overflow: visible !important;
+}
+html[data-ui="mobile"] #btn-chat-back {
+  min-height: 32px !important;
+  padding: 4px 10px !important;
+  font-size: 12.5px !important;
+  border-radius: 10px !important;
+  flex-shrink: 0 !important;
+}
+html[data-ui="mobile"] .chat-head-right {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+  padding-top: 0 !important;
+}
+html[data-ui="mobile"] #btn-head-more,
+html[data-ui="mobile"] #btn-workbench-toggle {
+  flex: 0 0 auto !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  border-radius: 10px !important;
+}
+html[data-ui="mobile"] #btn-workbench-toggle { padding: 4px 11px !important; }
+/* 单行放不下「工作台」三个字：移动端只留图标 + 角标，title 里仍带说明 */
+html[data-ui="mobile"] #btn-workbench-toggle > span:not(.wb-badge-pill) { display: none !important; }
+/* 列表视图不需要「← 平台」（它本来就是列表），隐藏后胶囊可以贴左 */
+html[data-ui="mobile"] .chat-threads:not(.collapsed) ~ .chat-main #btn-chat-back { display: none !important; }
+/* 胶囊：接在返回按钮右侧，宽度随屏宽自适应 */
+html[data-ui="mobile"] .pill-dock .current-agent-pill.unified-pill {
+  max-width: min(46vw, 210px) !important;
+  height: 30px !important;
+}
+html[data-ui="mobile"] .pill-dock .current-agent-pill .current-session-name { max-width: 28vw !important; }
+
+/* 7. 隐藏桌面专属常驻信息（手机上属于噪音） */
+html[data-ui="mobile"] .cb-status-bar,
+html[data-ui="mobile"] #usage-bar { display: none !important; }
+
+/* 8. 输入区贴底时不吃导航的点击 */
+html[data-ui="mobile"] .composer,
+html[data-ui="mobile"] .chat-input-row {
+  padding-bottom: calc(8px + var(--m-safe-b)) !important;
+}
+
+/* 9. 设置卡片头：桌面是「标题 ←→ 按钮」的 justify-content:space-between 单行，
+   手机上标题会被两个按钮压到 50px 宽，逐字换行成竖排。改成上下两块。 */
+html[data-ui="mobile"] .settings-card { padding: 14px 14px 16px !important; }
+html[data-ui="mobile"] .settings-card-head {
+  display: block !important;
+  margin-bottom: 12px !important;
+}
+html[data-ui="mobile"] .settings-card-title {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 6px;
+  line-height: 1.4;
+}
+html[data-ui="mobile"] .settings-card-title > span:not([class]) { min-width: 0; }
+html[data-ui="mobile"] .settings-card-subtitle {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+html[data-ui="mobile"] .checkin-head-pill {
+  margin-left: 0 !important;
+  max-width: 100% !important;
+  white-space: normal !important;
+  line-height: 1.45;
+}
+html[data-ui="mobile"] .checkin-head-actions {
+  display: flex !important;
+  gap: 8px !important;
+  margin-top: 10px !important;
+}
+html[data-ui="mobile"] .checkin-head-actions .qa-btn { flex: 1 1 0; min-width: 0; }
+
+/* 10. 打卡卡片：标签一行、值一行。
+   原来 c-val 是 text-align:right + word-break:break-all，长句会被右对齐拆成锯齿，
+   还会把「1000」这种数字从中间劈开（领100 / 0积分）。 */
+html[data-ui="mobile"] .checkin-meta-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+html[data-ui="mobile"] .checkin-meta-row .c-val {
+  text-align: left;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+html[data-ui="mobile"] .checkin-acct-name { max-width: 52%; }
+
+/* 11. 模型选择器：手机上先保证模型名看得全，冗长的 model id 让位 */
+html[data-ui="mobile"] .uh-mp-cur-id { display: none !important; }
+html[data-ui="mobile"] .uh-mp-trigger { padding: 7px 9px !important; }
+html[data-ui="mobile"] .uh-mp-pills { gap: 6px !important; }
+html[data-ui="mobile"] .uh-mp-pill { max-width: 100%; }
+
+/* 12. 输入区底栏：模型选择器原来固定 max-width:320px，把「发送」挤到换行
+   （320 宽屏上按钮只剩 53px，两个字竖着排还溢出容器）。 */
+html[data-ui="mobile"] .composer-bar-right {
+  flex: 1 1 100% !important;
+  min-width: 0 !important;
+}
+html[data-ui="mobile"] .composer-bar-right .model-picker-container { flex: 1 1 auto; min-width: 0; }
+html[data-ui="mobile"] .model-picker-wrap {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+html[data-ui="mobile"] .model-picker-wrap .model-summary-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-ui="mobile"] .send-btn {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  padding: 0 14px !important;
+}
+/* 小屏上输入框别占掉半屏 */
+html[data-ui="mobile"] .composer textarea,
+html[data-ui="mobile"] .composer .chat-input {
+  max-height: 28vh !important;
+}
+
+/* 13. 自动签到开关与说明：手机上分两行，别挤成窄柱 */
+html[data-ui="mobile"] .checkin-control-bar {
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+}
+html[data-ui="mobile"] .checkin-auto-toggle-wrap {
+  flex: 1 1 100% !important;
+  min-width: 0 !important;
+}
+html[data-ui="mobile"] .checkin-auto-hint {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.45;
+}
+html[data-ui="mobile"] .checkin-nav-tabs { width: 100%; }
+html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
 </style>
 </head>
 <body>
@@ -9047,6 +9420,11 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                               <div class="mp-param-label"><span>思考程度</span></div>
                               <div class="mp-param-options" id="mp-options-effort"></div>
                             </div>
+                            <!-- 运行控制：文件编辑权限（每家 CLI 的开关不同，选项由 worker 能力表下发） -->
+                            <div class="mp-param-row" id="mp-row-permission">
+                              <div class="mp-param-label"><span>文件编辑权限</span><span class="mp-param-flag" id="mp-permission-flag"></span></div>
+                              <div class="mp-param-options" id="mp-options-permission"></div>
+                            </div>
                             <div id="mp-capability-note" role="status" style="font-size:12px;color:var(--mcode-text-muted)"></div>
                           </div>
                         </div>
@@ -9256,6 +9634,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-wb">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">累计奖励:</span><span class="c-val highlight" id="reward-wb">-</span></div>
                   </div>
+                  <div class="checkin-acct-list" id="accts-wb"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="workbuddy" id="btn-run-wb">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="workbuddy" id="btn-cfg-wb">配置 Token</button>
@@ -9280,6 +9659,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-trae">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">累计奖励:</span><span class="c-val highlight" id="reward-trae">-</span></div>
                   </div>
+                  <div class="checkin-acct-list" id="accts-trae"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="traecode" id="btn-run-trae">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="traecode" id="btn-cfg-trae">配置 Token</button>
@@ -9303,6 +9683,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
                     <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-ca">今日尚未执行</span></div>
                     <div class="checkin-meta-row"><span class="c-label">福利算力:</span><span class="c-val highlight" id="reward-ca">-</span></div>
                   </div>
+                  <div class="checkin-acct-list" id="accts-ca"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="codearts" id="btn-run-ca">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="codearts" id="btn-cfg-ca">配置凭据</button>
@@ -9346,7 +9727,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
             </a>
           </div>
           <div class="footer-right">
-            <span class="footer-version">v1.0.12</span>
+            <span class="footer-version">v1.0.14</span>
           </div>
         </footer>
       </section>
@@ -9540,6 +9921,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       bb.hidden = !!snap.ok;
       if (!snap.ok) $('#banner-text').textContent = '无法连接 ' + snap.endpoint.label + '（' + snap.endpoint.host + '）：' + snap.error;
       render();
+      positionPillDock();
       if (prevSelf !== SELF) {
         populateChatTargets();
         renderPlatformList();
@@ -9551,6 +9933,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       bb.hidden = false;
       $('#banner-text').textContent = '快照加载失败：' + err.message;
       render();
+      positionPillDock();
     });
   }
 
@@ -11741,6 +12124,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       p.model = defObj ? defObj.id : '';
     }
     p.effort = p.effort || '';
+    p.permission = p.permission || '';
     delete p.contextTier; delete p.autoTier;
     return p;
   }
@@ -11783,6 +12167,10 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     if (withAgent) parts.push(agent + '/' + (name || '默认模型'));
     else if (name) parts.push(name);
     if (p.effort) parts.push(p.effort);
+    if (p.permission) {
+      var permNames = { readonly: '只读', edit: '受控编辑', full: '完全控制' };
+      parts.push(permNames[p.permission] || p.permission);
+    }
     return parts.join(' · ') || (name || '默认模型');
   }
 
@@ -11832,6 +12220,40 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         });
         options.appendChild(button);
       });
+    }
+
+    // 文件编辑权限：选项来自该 worker 自己的能力表（每家 CLI 的开关不一样，不能照搬）
+    var permBox = $('#mp-options-permission');
+    if (permBox) {
+      permBox.textContent = '';
+      var catalogForPerm = getModelCatalog(agent) || [];
+      var modelForPerm = catalogForPerm.find(function (m) { return m.id === prefs.model; }) || catalogForPerm[0] || {};
+      var permCap = (modelForPerm.capability && modelForPerm.capability.permission) || null;
+      var permAllowed = (permCap && Array.isArray(permCap.allowed) && permCap.allowed.length) ? permCap.allowed : ['default'];
+      var permLabels = (permCap && permCap.labels) || {};
+      var permDescs = (permCap && permCap.descriptions) || {};
+      var PERM_FALLBACK = { default: '跟随 CLI', readonly: '只读', edit: '受控', full: '完全控制' };
+      var activePerm = prefs.permission || 'default';
+      if (permAllowed.indexOf(activePerm) < 0) activePerm = 'default';
+      permAllowed.forEach(function (val) {
+        var button = el('button', 'mp-opt-btn' + (activePerm === val ? ' active' : ''), permLabels[val] || PERM_FALLBACK[val] || val);
+        button.type = 'button';
+        button.dataset.perm = val;
+        button.title = (permCap && permCap.scope ? permCap.scope + '\n' : '') + (permDescs[val] || (val === 'default' ? '不加任何权限开关，完全跟随该 CLI 自身配置' : val));
+        button.addEventListener('click', function () {
+          saveAgentPrefs(agent, { permission: val === 'default' ? '' : val });
+          renderModelPanel();
+        });
+        permBox.appendChild(button);
+      });
+      var permFlag = $('#mp-permission-flag');
+      if (permFlag) {
+        var onlyDefault = permAllowed.length <= 1;
+        permFlag.textContent = onlyDefault ? '该子代理未提供开关' : (permCap && permCap.scope ? permCap.scope : '');
+        permFlag.title = onlyDefault ? '这个子代理的 CLI 没有暴露文件编辑权限开关，只能跟随它自己的配置' : (permCap && permCap.scope) || '';
+      }
+      if (permAllowed.length <= 1) permBox.classList.add('is-disabled');
+      else permBox.classList.remove('is-disabled');
     }
 
     var panelNote = $('#mp-capability-note');
@@ -12087,6 +12509,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     };
     if (model) payload.model = model;
     if (prefs.effort) payload.effort = prefs.effort;
+    if (prefs.permission) payload.permission = prefs.permission;
     if (prefs.thinking) payload.thinking = prefs.thinking;
     if (prefs.stream) payload.stream = prefs.stream;
     if (ready.length) payload.attachments = ready.map(function (a) {
@@ -13029,7 +13452,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         sa.mcp,
         '',
         '【服务说明与工具】',
-        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.12'),
+        'MCP 工具：subagent_run（派发→服务端等结果→产物落盘→只回摘要） / subagent_result / subagent_artifact / subagent_agents · 健康检查 GET ' + sa.url + '/health · 同步直通 POST ' + sa.url + '/run · v' + (sa.version || '1.0.14'),
         '',
         '把上面 URL 作为 HTTP MCP server 注册给本机 AI 会话后，即可像原生子代理一样直接指挥 traecode / workbuddy / zcode / qwen-work 等全部注册代理，长内容以本机文件形式交付，不进会话上下文。',
         '',
@@ -13153,7 +13576,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     populateChatTargets();
     renderPlatformList();
     renderSubagentBox(snap);
-    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.12';
+    var ver = (snap && (snap.version || (snap.subagent && snap.subagent.version))) || '1.0.14';
     var verText = ver.startsWith('v') ? ver : ('v' + ver);
     document.querySelectorAll('.footer-version').forEach(function (fv) { fv.textContent = verText; });
   }
@@ -13874,6 +14297,11 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     }
     // 对话列表展开时，活动栏（对话 / 设置标签页）必须同时常驻
     chromeSyncActbarWithSidebar();
+    // 列表视图隐藏「← 平台」，单行头部里的胶囊要跟着回到最左边
+    if (typeof positionPillDock === 'function') {
+      if (window.requestAnimationFrame) requestAnimationFrame(positionPillDock);
+      else setTimeout(positionPillDock, 0);
+    }
   }
 
   // 跨区域光标进出检测 (涵盖最左侧任务栏与展开后的侧栏)
@@ -14186,15 +14614,43 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     var dock = document.getElementById('pill-dock');
     if (!head || !dock) return;
     var r = head.getBoundingClientRect();
-    dock.style.top = Math.round(r.bottom + 12) + 'px';
+    var dockTop = Math.round(r.bottom + 12);
+    // 连接失败横幅出现时会把工作区整体下移，胶囊要跟着让位，否则压住横幅文字
+    var banner = document.getElementById('banner');
+    if (banner && !banner.hidden) {
+      var br = banner.getBoundingClientRect();
+      if (br.height > 0) dockTop = Math.max(dockTop, Math.round(br.bottom + 8));
+    }
+    dock.style.top = dockTop + 'px';
+    // 移动端是单行头部：胶囊接在「← 平台」右侧；列表视图返回按钮隐藏时贴左 10px
+    if (document.documentElement.getAttribute('data-ui') === 'mobile') {
+      var backBtn = document.getElementById('btn-chat-back');
+      var backRect = backBtn ? backBtn.getBoundingClientRect() : null;
+      var backShown = !!(backRect && backRect.width > 0);
+      dock.style.left = Math.round(backShown ? backRect.right + 8 : 10) + 'px';
+    } else {
+      dock.style.left = '';
+    }
     var pill = document.getElementById('current-agent-pill');
     if (pill) {
       var w = Math.round(pill.getBoundingClientRect().width);
       if (w > 0) document.documentElement.style.setProperty('--pill-dock-w', (w + 12) + 'px');
     }
+    // 手机端工作台抽屉要让开对话头（头部两行按钮高度随字号/换行浮动），实测后写回变量
+    var chatHead = document.querySelector('.chat-head');
+    if (chatHead) {
+      var h = Math.round(chatHead.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty('--chat-head-h', h + 'px');
+    }
   }
   positionPillDock();
   window.addEventListener('resize', positionPillDock);
+  if (window.ResizeObserver) {
+    try {
+      var chatHeadForResize = document.querySelector('.chat-head');
+      if (chatHeadForResize) new ResizeObserver(positionPillDock).observe(chatHeadForResize);
+    } catch (e) { /* noop */ }
+  }
 
   // 非对话页（设置 / 队列 / 笔记）隐藏会话胶囊；:has() 不支持时的兜底
   function syncPillDockVisibility() {
@@ -15046,9 +15502,22 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
   const notify = (msg, isErr = false) => (typeof window.__ahToast === 'function' ? window.__ahToast(msg, isErr) : window.alert(msg));
 
   // 账号隐私脱敏与加密防护：只显示头 2 位与后 2 位（中间 ***）
+  // 只有「像标识符」的串才打码：邮箱本地部分、UID/AK 前缀、长 ID 串。
+  // 用户自己起的别名、含中文或空格的展示名一律原样显示 —— 之前把「siliconflow」打成「si***ow」、
+  // 把「(2 个提供方)」打成「(2 ***供方)」就是这条规则的锅。
+  function looksLikeIdentifier(s) {
+    if (!s) return false;
+    if (String(s).includes('@')) return true;
+    if (!/^[\x20-\x7e]+$/.test(String(s))) return false;   // 含中文/全角 → 给人看的名字
+    if (/\s/.test(String(s))) return false;                 // 有空格 → 短语而非 ID
+    if (/^(UID|AK|SK)[:：\s]/i.test(String(s))) return true;
+    return /^[A-Za-z0-9._-]{12,}$/.test(String(s));         // 长标识符（指纹、token 片段）
+  }
+
   function maskPart(s) {
     if (!s) return '';
     s = String(s).trim();
+    if (!looksLikeIdentifier(s)) return s;
     if (s.length <= 2) return s[0] + '***' + (s[1] || '');
     if (s.length <= 4) return s.slice(0, 1) + '***' + s.slice(-1);
     return s.slice(0, 2) + '***' + s.slice(-2);
@@ -15060,7 +15529,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     var paren = str.match(/^([^(（]+)[(（]([^()（）]+)[)）]$/);
     if (paren) return maskAccount(paren[1].trim()) + ' (' + maskAccount(paren[2].trim()) + ')';
     var pfx = str.match(/^(UID[:：\s]*|AK[:：\s]*|小米\s*UID[:：\s]*|mimo-|trae-|cb-|cb-cn-|ak-|zcode-)(.+)$/i);
-    if (pfx) return pfx[1] + maskAccount(pfx[2]);
+    if (pfx && looksLikeIdentifier(str)) return pfx[1] + maskPart(pfx[2]);
     if (str.includes('@')) {
       var parts = str.split('@');
       return maskPart(parts[0]) + '@' + parts.slice(1).join('@');
@@ -15516,6 +15985,16 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       .uh-acc-chip-del:hover {
         background: rgba(239, 68, 68, 0.22); color: #ef4444;
       }
+      /* 同一份凭据的旧快照：可切换但视觉上弱化，避免被误认成第二个账号 */
+      .uh-acc-chip.stale {
+        opacity: 0.62; border-style: dashed;
+      }
+      .uh-acc-chip.stale:hover { opacity: 0.9; }
+      .uh-acc-chip.stale .uh-acc-chip-dot { background: var(--gem-text-muted); box-shadow: none; }
+      .uh-acc-chip-stale-tag {
+        font-size: 10px; padding: 1px 5px; border-radius: 4px;
+        background: rgba(148, 163, 184, 0.2); color: var(--gem-text-secondary); font-weight: 500;
+      }
       .uh-acc-chip-save {
         border-style: dashed; color: var(--gem-text-secondary); font-weight: 500;
       }
@@ -15799,12 +16278,22 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     const cbLabel = document.createElement('div'); cbLabel.className = 'uh-auth-step-label';
     cbLabel.textContent = worker === 'codearts'
       ? '输入华为云 CodeArts AK / SK 凭据（提交后自动添加至账号列表）'
-      : '回调链接 / 授权码 Code / API Key 认证（OAuth 授权成功后自动加入账号列表）';
+      : worker === 'opencode'
+        ? 'API Key 认证（直接粘贴 Key 即可，不校验格式；自动识别厂商）'
+        : worker === 'cline'
+          ? 'API Key 认证（直接粘贴 Key 即可，不校验格式；可选 provider|model|api_key|base_url）'
+          : '回调链接 / 授权码 Code / API Key 认证（OAuth 授权成功后自动加入账号列表）';
     const cbRow = document.createElement('div'); cbRow.className = 'uh-auth-input-row';
 
     const cbInput = document.createElement('input');
     cbInput.className = 'uh-auth-input';
-    cbInput.placeholder = worker === 'codearts' ? 'CODEARTS_CLI_AK' : '粘贴跳转后的回调链接 (http://localhost...)、授权 Code 或 API Key';
+    cbInput.placeholder = worker === 'codearts'
+      ? 'CODEARTS_CLI_AK'
+      : worker === 'opencode'
+        ? '直接粘贴 API Key（oc_sk-… / sk-ant-… 自动识别），也可写 provider:api_key'
+        : worker === 'cline'
+          ? '直接粘贴 API Key，需要指定时写 provider|model|api_key'
+          : '粘贴跳转后的回调链接 (http://localhost...)、授权 Code 或 API Key';
     const skInput = document.createElement('input');
     skInput.className = 'uh-auth-input';
     skInput.type = 'password';
@@ -16115,9 +16604,10 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
       const chipsWrap = document.createElement('div');
       chipsWrap.className = 'uh-acc-chips-wrap';
       chipsWrapRef = chipsWrap;
-      for (const p of profiles) {
+
+      const makeChip = (p, isStale) => {
         const chip = document.createElement('div');
-        chip.className = 'uh-acc-chip' + (p.active ? ' active' : '');
+        chip.className = 'uh-acc-chip' + (p.active ? ' active' : '') + (isStale ? ' stale' : '');
         chip.title = p.active ? `当前激活: ${maskAccount(p.display || p.name)}` : `点击立即切换至: ${maskAccount(p.display || p.name)}`;
         chip.setAttribute('data-acc-name', p.name);
 
@@ -16130,6 +16620,10 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
           chip.append(badge);
         } else {
           chip.onclick = () => doSwitchAccount(p.name);
+        }
+        if (isStale) {
+          const tag = document.createElement('span'); tag.className = 'uh-acc-chip-stale-tag'; tag.textContent = '历史';
+          chip.insertBefore(tag, chip.querySelector('.uh-acc-chip-del'));
         }
 
         const delBtn = document.createElement('span');
@@ -16144,7 +16638,24 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
           await load();
         };
         chip.append(delBtn);
-        chipsWrap.appendChild(chip);
+        return chip;
+      };
+
+      // 只登录了一个号时，别把同一份凭据的历史快照也摆出来当「另一个账号」；
+      // 历史快照默认收进「历史 N」胶囊，点开才显示，且仍可切换/删除
+      const staleProfiles = profiles.filter((p) => p.stale && !p.active);
+      const freshProfiles = profiles.filter((p) => !p.stale || p.active);
+      for (const p of freshProfiles) chipsWrap.appendChild(makeChip(p, false));
+      if (staleProfiles.length) {
+        const toggle = document.createElement('div');
+        toggle.className = 'uh-acc-chip uh-acc-chip-save';
+        toggle.textContent = `历史 ${staleProfiles.length}`;
+        toggle.title = '同一份凭据的旧快照（例如 token 刷新前保存的档案），点开可查看 / 切换 / 删除';
+        toggle.onclick = () => {
+          toggle.remove();
+          for (const p of staleProfiles) chipsWrap.appendChild(makeChip(p, true));
+        };
+        chipsWrap.appendChild(toggle);
       }
       // 行尾附「存别名」小胶囊，不再独占一行下拉框
       if (isLoggedIn) {
@@ -16597,6 +17108,29 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
     };
 
     // 渲染打卡状态数据
+    const renderAccountRows = (containerId, accounts) => {
+      const box = document.getElementById(containerId);
+      if (!box) return;
+      const list = Array.isArray(accounts) ? accounts : [];
+      if (!list.length) {
+        box.innerHTML = '';
+        return;
+      }
+      box.innerHTML = list.map((a) => {
+        const st = String(a.status || 'pending');
+        const stateText = st === 'success'
+          ? (a.credits ? `+${a.credits}` : '已签到')
+          : (st === 'already' ? '今日已签' : (st === 'failed' ? (a.message || '失败') : (st === 'expired' ? '凭据失效' : '待打卡')));
+        const name = escapeHtml(a.display || a.name || '未知账号');
+        const cls = st === 'expired' ? 'failed' : st;
+        return `<div class="checkin-acct-row is-${escapeHtml(cls)}" title="${escapeHtml(a.message || '')}">
+          <span class="checkin-acct-dot"></span>
+          <span class="checkin-acct-name">${name}${a.active ? ' ·当前' : ''}</span>
+          <span class="checkin-acct-state">${escapeHtml(stateText)}</span>
+        </div>`;
+      }).join('');
+    };
+
     const renderOverview = (data) => {
       currentCheckinData = data;
       if (!data || !data.platforms) return;
@@ -16617,6 +17151,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         if (msgEl) msgEl.textContent = p.workbuddy.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-wb');
         if (rewEl) rewEl.textContent = p.workbuddy.credits ? `${p.workbuddy.credits}${p.workbuddy.consecutiveDays ? ` (连签${p.workbuddy.consecutiveDays}天)` : ''}` : '-';
+        renderAccountRows('accts-wb', p.workbuddy.accounts);
         const btnWb = document.getElementById('btn-run-wb');
         if (btnWb) {
           btnWb.disabled = isSigned;
@@ -16634,6 +17169,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         if (msgEl) msgEl.textContent = p.traecode.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-trae');
         if (rewEl) rewEl.textContent = p.traecode.credits ? `${p.traecode.credits}${p.traecode.consecutiveDays ? ` (连签${p.traecode.consecutiveDays}天)` : ''}` : '-';
+        renderAccountRows('accts-trae', p.traecode.accounts);
         const btnTrae = document.getElementById('btn-run-trae');
         if (btnTrae) {
           btnTrae.disabled = isSigned;
@@ -16651,6 +17187,7 @@ body:not(:has(#panel-chat.active)) #pill-dock { display: none !important; }
         if (msgEl) msgEl.textContent = p.codearts.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-ca');
         if (rewEl) rewEl.textContent = p.codearts.credits ? `${p.codearts.credits}` : '-';
+        renderAccountRows('accts-ca', p.codearts.accounts);
         const btnCa = document.getElementById('btn-run-ca');
         if (btnCa) {
           btnCa.disabled = isSigned;

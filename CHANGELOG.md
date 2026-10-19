@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [1.0.14] - 2026-10-19
 
-**86 个模型逐个实跑一遍**，把「界面上有、派下去必失败」的模型和「失败却说不清原因」的链路一起修掉；同时收口移动端布局。
+**84 个模型逐个实跑一遍**，把「界面上有、派下去必失败」的模型和「失败却说不清原因」的链路一起修掉；同时收口移动端布局。
 
 ### 移动端
 - **设置卡片标题被压成竖排**：桌面是「标题 ←→ 两个按钮」的 `justify-content: space-between` 单行，390px 下标题只剩 51px 宽，「平台每日签到与福利中枢」逐字竖排。改为移动端 `display: block`，标题独占一行、按钮另起一行等宽铺满。
@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **320px 宽下「发送」被挤到换行**：`.model-picker-wrap` 固定 `max-width: 320px`，按钮只剩 53px，两个字竖排并溢出容器。改为 `composer-bar-right` 整行独占、`max-width: none`，模型名超长走省略号。
 - **自动签到开关挤成窄柱**：`.checkin-control-bar` 加 `flex-wrap`，开关与说明分两行。
 
-### 模型链路（实测 86 个模型后修复）
+### 模型链路（实测 84 个模型后修复）
 - **CLI 真实报错被吞掉**：CLI 退出码为 0 但 stdout 为空时，诊断常常只写在 stderr（实测 `400 model [primary-model] is not allowed for user type [personal_free_user]`）。同步路径（`hub/agent_hub.py`）与异步路径（`hub/async_worker.py`）都把 stderr 丢掉，只回一句「CLI 已退出但没有可验证的回答」，上层无法判断原因，模型永远显示可用并反复失败。现在两条路径都保留 stderr 末行诊断。
 - **新增失败归类 `plan_blocked`**：区分「这个 model id 不存在」（`model_unavailable`）与「id 存在但当前账号套餐无权使用」（`plan_blocked`），后者进 `BLOCKING`，控制台会把该模型置灰并给出「请升级套餐或改用其它模型」，而不是继续当可用模型派发。
 - 补充 `model_unavailable` 识别：`not recognized as a known model`、`invalid model selection`、`reasoning effort value is not supported`；`region_restricted` 补 `not available in your country`。
@@ -31,12 +31,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | 结果 | 数量 | 说明 |
 | --- | --- | --- |
-| 通过 | 53 | 真实返回 `91` |
+| 通过 | 55 | 真实返回 `91` |
 | 不适用 | 19 | traecode 走 GUI 通道，`_check_gui_options` 明确拒绝非默认模型，属设计约束 |
-| 失败 | 14 | 全部有明确根因，已在上文修复或归类 |
+| 失败 | 10 | 全部有明确根因，已在上文修复或归类（7 套餐限制 / 1 模型不存在 / 1 区域限制 / 1 超时） |
 
 ### 版本
-- 版本号 1.0.13 → **1.0.14**（`console/server.mjs`、`hub/agent_hub.py`、`.zcode-plugin/marketplace.json`、5 个 integration 的 `mcp/server.mjs`、控制台 footer、`desktop/package.json`）。
+- 版本号 1.0.13 → **1.0.14**，这次是全仓对齐（上一轮只改了运行时代码，构建与清单侧漏了）：运行时代码 `console/server.mjs`、`hub/agent_hub.py`、`console/client/index.html` 页脚；构建 `packaging/build.py`（决定产物文件名）、`integrations/codearts/install.py`；桥接 7 份 `mcp/server.mjs` 的 `serverInfo.version`；清单 `marketplace.json`、`.zcode-plugin/marketplace.json`、`plugins/agenthub-workers/{plugin,.claude-plugin,.minimax-plugin,.zcode-plugin}/plugin.json`、`integrations/{antigravity,codex,.codex-plugin}/plugin.json`；`integrations/vscode/package.json`、`desktop/package.json` 与 `package-lock.json`；文档 README 中英双份、`RUN_ON_LINUX.md`、`plugins/agenthub-workers/README.md`，以及重新生成的 `demo.html` / `demo/index.html`。
+- 两处回归测试此前硬编码 `1.0.12`，每次发版都会变红，改为从源码派生：`tests/extension_packaging_regressions.py` 从 `integrations/vscode/package.json` 读版本，`tests/discovery_regressions.py` 直接比对 `hub.SERVER_VERSION`。
 
 ## [1.0.13] - 2026-10-19
 
