@@ -758,7 +758,11 @@ async function exchangeTraeCallback(entry, rawInput, preferredName = '') {
       const verifier = entry.traeCodeVerifier || '';
       if (!verifier) throw new Error('回调包含 AuthCode 但当前会话缺少 PKCE CodeVerifier，请重新发起登录后再试');
       entry.buf += `\n[OAuth] 正在通过 Trae IDE 原生 ExchangeToken (AuthCode+PKCE) 接口换取 JWT…\n`;
-      let lastErr = '无响应';
+      // 逐域名试：三个 origin 只有一个是对的，另外两个会 404 / 400。
+      // 旧实现每轮都覆盖 lastErr，最后必然停在 api.trae.ai 的 404 上，
+      // 把国内端点的真实原因（无效参数 / AuthCode 已消费）盖掉了——截图上
+      // 「Trae AuthCode 兑换失败: HTTP 404」就是这么来的。
+      const errs = [];
       for (const origin of TRAE_OAUTH.ideApiOrigins) {
         try {
           const r = await fetchJsonSmart(`${origin}${TRAE_OAUTH.ideExchangeTokenPath}`, {
@@ -777,12 +781,20 @@ async function exchangeTraeCallback(entry, rawInput, preferredName = '') {
             accessToken = String(tok).trim();
             break;
           }
-          lastErr = r.json?.Result?.Message || r.json?.message || `HTTP ${r.status}`;
+          const host = (() => { try { return new URL(origin).host; } catch { return origin; } })();
+          const code = r.json?.ResponseMetadata?.Error?.Code || r.json?.Result?.Code || '';
+          const msg = r.json?.Result?.Message || r.json?.message
+            || r.json?.ResponseMetadata?.Error?.Message || `HTTP ${r.status}`;
+          errs.push(`${host}${code ? `[${code}]` : ''} ${msg}${r.status ? ` (HTTP ${r.status})` : ''}`);
         } catch (e) {
-          lastErr = e.message;
+          errs.push(`${origin} ${e.message}`);
         }
       }
-      if (!accessToken) throw new Error(`Trae AuthCode 兑换失败: ${lastErr}`);
+      if (!accessToken) {
+        // 优先展示真实业务错误；全是 404 时才回落到第一条，避免「最后一个域名 404」误导排查
+        const real = errs.find((s) => !/HTTP 404/.test(s));
+        throw new Error(`Trae AuthCode 兑换失败: ${real || errs[0] || '无响应'}`);
+      }
     }
     if (!accessToken) throw new Error('回调链接缺少可用参数（refreshToken / authCodeInfo / userJwt）');
   } else {
@@ -997,15 +1009,17 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
   };
   sessions.set(id, entry);
 
-  // 10 分钟兜底超时回收
+  // 20 分钟兜底超时回收
+  // Trae / 华为云这类要走「浏览器登录 + 复制回调」的流程，10 分钟经常不够：
+  // 用户去翻账号密码、过二次验证、再切回控制台粘贴，很容易超时重来。
   entry.timeoutTimer = setTimeout(() => {
     if (!entry.exited) {
-      entry.buf += '\n[timeout] 登录会话已超时（10 分钟）\n';
+      entry.buf += '\n[timeout] 登录会话已超时（20 分钟）\n';
       entry.exited = true;
       entry.code = -1;
       cleanupSessionResources(entry);
     }
-  }, 600_000);
+  }, 1_200_000);
   entry.timeoutTimer.unref?.();
 
   // ---------------- 分支 1：Python PTY 设备码流 (minimaxcode / github-copilot)
