@@ -4,7 +4,7 @@
 // 接口参考开源逆向成果与无客户端实现
 
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { join, dirname } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { fetchJsonSmart } from './vendor-quota.mjs';
@@ -757,16 +757,35 @@ async function checkinTraeViaCdp() {
   return { status: 'unavailable', message: val.message || '客户端未提供可用的签到入口' };
 }
 
+/**
+ * 稳定设备号：同一账号 + 同一台机器永远是同一个 UUID。
+ *
+ * 旧实现每次请求都 randomUUID()，等于每次签到都伪装成一台新设备。
+ * Trae 侧按账号统计活跃设备数，设备号天天变很容易被判「当前参与用户太多」(9074)。
+ * 这里用 UID + 主机名做 sha256，取前 16 字节拼成 UUID 形状，重启后也不变。
+ */
+function traeDeviceId(token) {
+  let uid = 'anon';
+  try {
+    uid = String(jwtPayload(token)?.data?.id || jwtPayload(token)?.sub || 'anon');
+  } catch { /* 用 anon 兜底 */ }
+  let host = 'host';
+  try { host = hostname(); } catch { /* ignore */ }
+  const h = createHash('sha256').update(`trae:${uid}:${host}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
 /** 调 Trae 签到接口（真实头是 Cloud-IDE-JWT，不是 Bearer） */
 async function traeApi(token, path) {
+  const deviceId = traeDeviceId(token);
   const res = await fetchJsonSmart(`https://api.trae.cn${path}`, {
     method: 'POST',
     headers: {
       'Authorization': `Cloud-IDE-JWT ${token}`,
       'Content-Type': 'application/json',
       'User-Agent': 'Trae/1.107.1 (X11; Linux x86_64) TraeCN',
-      'x-device-id': randomUUID(),
-      'x-machine-id': randomUUID()
+      'x-device-id': deviceId,
+      'x-machine-id': deviceId
     },
     body: JSON.stringify({ req_source: 1 })
   }, 12_000);
@@ -789,8 +808,17 @@ async function checkinTraeOne(token) {
     return { ok: true, status: 'already', message: '今日已签到', credits: 0, consecutiveDays: Number(stJson.streak || stJson.consecutive_days) || 0 };
   }
 
-  const r = await traeApi(token, '/trae/api/v2/ug/checkin_credits/claim');
-  const json = r.json || {};
+  // 领取接口只有 `{req_source:1}` 这一种正确请求体（多带任何字段都会变成 9004
+  // 「order parameters are incorrect」）；9074 是服务端自己的排队/限流，
+  // 与参数无关，隔一会儿再打通常就过了，所以这里退避重试几次再报错。
+  let r = null;
+  let json = {};
+  for (let attempt = 0; attempt < 3; attempt++) {
+    r = await traeApi(token, '/trae/api/v2/ug/checkin_credits/claim');
+    json = r.json || {};
+    if (json.code !== 9074) break;
+    if (attempt < 2) await new Promise((res) => setTimeout(res, 3000 * (attempt + 1)));
+  }
   const msg = String(json.message || json.msg || '');
 
   if (r.status === 200 && (json.code === 0 || json.code === undefined) && (json.checked_in !== false)) {
@@ -803,6 +831,9 @@ async function checkinTraeOne(token) {
   }
   if (json.code === 1001 || /not able to authenticate/.test(msg)) {
     return { ok: false, status: 'expired', message: 'JWT 已被服务端注销（1001），点「重新登录」用 Trae 账号重新授权' };
+  }
+  if (json.code === 9074) {
+    return { ok: false, status: 'failed', message: '签到接口排队中（9074 当前参与用户太多），已重试 3 次，稍后会自动再试' };
   }
   return { ok: false, status: 'failed', message: `签到接口返回 [${r.status}/${json.code ?? '-'}]：${msg || '未知错误'}` };
 }
@@ -1148,14 +1179,20 @@ export async function runCheckin(target = 'all') {
 
   // 记录状态与审计历史
   for (const [plat, res] of Object.entries(results)) {
+    const prev = state.platforms[plat] || {};
+    const failed = !['success', 'already'].includes(res.status);
     state.platforms[plat] = {
       lastDate: res.today,
       lastTime: res.time,
       status: res.status,
       message: res.message,
       credits: res.credits || '',
-      consecutiveDays: res.consecutiveDays || (state.platforms[plat]?.consecutiveDays || 0),
-      accounts: res.accounts || []
+      consecutiveDays: res.consecutiveDays || (prev.consecutiveDays || 0),
+      accounts: res.accounts || [],
+      // 同一天内的失败重试计数：定时器据此决定要不要隔半小时再试一次。
+      // 旧逻辑只看 lastDate，失败一次就把今天标成「已处理」，9074 这类
+      // 服务端排队错误再也没机会重试。成功后清零。
+      retryCount: failed ? (prev.lastDate === res.today ? (prev.retryCount || 0) + 1 : 1) : 0
     };
     state.history.unshift({
       time: `${res.today} ${res.time}`,
@@ -1210,10 +1247,17 @@ export function startAutoCheckinScheduler() {
       if (!state.autoCheckin) return;
 
       const today = getTodayStr();
-      const needsCheckin = Object.values(state.platforms).some((p) => p.lastDate !== today);
-      if (needsCheckin) {
-        console.log(`[Checkin] 触发定时每日自动签到 (${today})...`);
-        await runCheckin('all');
+      // 只补「还没签」和「今天签失败的」平台：
+      // 前者是首次触发；后者给限流/网络抖动留重试机会（每天最多 6 次，约 3 小时）。
+      // 旧实现只要有一个平台没签就 runCheckin('all')，会把已签成的平台又打一遍。
+      const pending = ['workbuddy', 'traecode', 'codearts'].filter((plat) => {
+        const p = state.platforms[plat] || {};
+        if (p.lastDate !== today) return true;
+        return p.status === 'failed' && (p.retryCount || 0) < 6;
+      });
+      if (pending.length) {
+        console.log(`[Checkin] 触发定时签到（待处理: ${pending.join(', ')}）...`);
+        for (const plat of pending) await runCheckin(plat);
       }
     } catch (e) {
       console.error('[Checkin] 自动打卡定时器异常:', e.message);
