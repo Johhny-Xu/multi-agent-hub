@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [Unreleased]
+
+### 修复
+- **Trae 1.107 更新后派发只返回「思考中」**：bridge 的 `/v1/chat` 会在约 5 秒内返回 `TRAE\n思考中` 并标记 `completed`，而真实回答此时还没渲染。hub 原来只在文本为空时才读 DOM，于是上层拿到的是占位文本。现在识别占位回复（空 / ≤24 字且含「思考中」「thinking」「生成中」）后统一走 `drivers/dom_read.js` 兜底读取（实测该脚本的选择器仍有效，能取到真实答案）。
+- **签到凭据回退**：Trae 重新登录后新写入的 token 可能被服务端判 `1001 / enable:false`，而账号档案里的旧 token 仍然有效。现在同一身份保留 `alternates` 候选，首选返回 1001 时按序回退（WorkBuddy 返回 401 时同样处理）；CLI 当前凭据未过期时优先于档案快照，不再只按 `exp` 挑选（重登后新 token 的 exp 往往比旧 token 短）。
+
 ## [1.0.15] - 2026-10-19
 
 **签到改成「复用已安装 CLI 的凭据」**，并补上一键清空日志。
