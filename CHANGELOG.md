@@ -21,6 +21,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **只取国内站凭据**：WorkBuddy 签到打的是 `www.codebuddy.cn`，国际版 `~/.codebuddy/auth.info` 的 token 不参与——之前「按 exp 统一挑选」会把有效期更长的国际版挑进来，签到时必然 401。
 - 凭据行显示「CLI 实时凭据 · 自动续期」，账号行悬停可看到每个账号各自的凭据来源。
 
+### Trae 签到链路（1.0.14 之后陆续修复，随本版发布）
+- **1001 不是「过期」**：JWT 的 `exp` 往往还没到，是服务端注销了这个会话（单端登录顶号 / 在别处重登）。提示改为可点的「重新登录」，用控制台自带 OAuth 重新授权，不再让人去装客户端。
+- **AuthCode 兑换不再被最后一个域名的 404 盖住原因**：三个 origin 逐个尝试时收集全部错误，优先展示非 404 的真实业务错误；登录会话兜底超时 10 分钟 → 20 分钟。
+- **9074 不是限流**：文案「当前参与用户太多」实际是 `x-device-id` 没在客户端注册过。改为从 Trae 客户端日志 `[ICDRS] (constructor) did: <id>` 里取出注册设备号并缓存到 `~/.config/agenthub-codearts/trae-device-id`（可用 `TRAE_DEVICE_ID` 覆盖），请求头与客户端 `_applyUgDeviceHeaders` 对齐；9074 退避重试 3 次，定时器对当天失败的平台继续重试（每天最多 6 次）。
+- **20405 设备证明**：Trae 给 AuthCode 兑换加了设备证明（客户端私钥/证书），浏览器 OAuth 这条路已不可用，单独提示「在 Trae 客户端登录或用配置 Token 粘贴 JWT」，不再让人对着 401 反复重试。
+
 ### 测试
 - 新增 `tests/console_checkin_credentials.mjs`（4 项）：同身份多处凭据择优、不同账号不被合并、清空日志不动今日状态、清空幂等。
 - 新增 `AGENTHUB_HOME` / `AGENTHUB_CHECKIN_STATE` 两个环境变量，可把凭据目录与签到状态指到临时目录——单测不再触碰真实凭据与线上历史。
