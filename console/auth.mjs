@@ -793,6 +793,11 @@ async function exchangeTraeCallback(entry, rawInput, preferredName = '') {
       if (!accessToken) {
         // 优先展示真实业务错误；全是 404 时才回落到第一条，避免「最后一个域名 404」误导排查
         const real = errs.find((s) => !/HTTP 404/.test(s));
+        // 20405 Device proof required：Trae 给授权码兑换加了设备证明（客户端私钥/证书），
+        // 浏览器 OAuth 这条路已经走不通，别让用户对着 401 反复重试。
+        if (/20405|Device proof required/i.test(real || '')) {
+          throw new Error('Trae 已启用设备证明（20405），浏览器授权这条路已不可用。请在 Trae 客户端登录后重试，或用「配置 Token」粘贴 JWT。');
+        }
         throw new Error(`Trae AuthCode 兑换失败: ${real || errs[0] || '无响应'}`);
       }
     }
