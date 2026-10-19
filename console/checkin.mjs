@@ -758,13 +758,68 @@ async function checkinTraeViaCdp() {
 }
 
 /**
- * 稳定设备号：同一账号 + 同一台机器永远是同一个 UUID。
+ * Trae 客户端向云端注册过的设备号。
  *
- * 旧实现每次请求都 randomUUID()，等于每次签到都伪装成一台新设备。
- * Trae 侧按账号统计活跃设备数，设备号天天变很容易被判「当前参与用户太多」(9074)。
- * 这里用 UID + 主机名做 sha256，取前 16 字节拼成 UUID 形状，重启后也不变。
+ * 这是签到能不能成的**决定性字段**：服务端按 x-device-id 认设备，
+ * 没注册过的 id 一律返回 `9074 当前参与用户太多`（文案有误导，实际是「设备不认识」）。
+ * 客户端在启动时把注册结果打进日志：
+ *   [ICDRS] (constructor) did: 3014218253872104, ldid: aha-xxx, rdid: ...
+ * 这里从日志里捞出来并缓存到 ~/.config/agenthub-codearts/trae-device-id，
+ * 之后不再依赖日志是否被轮转。
  */
-function traeDeviceId(token) {
+let _traeDeviceIdCache = '';
+async function resolveTraeDeviceId() {
+  const fromEnv = String(process.env.TRAE_DEVICE_ID || '').trim();
+  if (fromEnv) return fromEnv;
+  if (_traeDeviceIdCache) return _traeDeviceIdCache;
+
+  const cacheFile = join(homedir(), '.config', 'agenthub-codearts', 'trae-device-id');
+  try {
+    const cached = (await readFile(cacheFile, 'utf-8')).trim();
+    if (cached) { _traeDeviceIdCache = cached; return cached; }
+  } catch { /* 还没缓存过 */ }
+
+  const logRoots = [
+    join(homedir(), '.config', 'Trae CN', 'logs'),
+    join(homedir(), '.trae-cn', 'logs'),
+  ];
+  const dirs = [];
+  for (const root of logRoots) {
+    try {
+      for (const entry of await readdir(root, { withFileTypes: true })) {
+        if (entry.isDirectory()) dirs.push(join(root, entry.name));
+      }
+    } catch { /* 目录不存在就算了 */ }
+  }
+  dirs.sort().reverse(); // 时间戳目录名，倒序即最新优先
+
+  for (const dir of dirs.slice(0, 20)) {
+    let files = [];
+    try { files = await readdir(dir); } catch { continue; }
+    for (const f of files) {
+      if (!/^main.*\.log$/.test(f)) continue;
+      try {
+        const text = await readFile(join(dir, f), 'utf-8');
+        const m = text.match(/\[ICDRS\][^\n]*?\bdid:\s*([0-9A-Za-z_-]{6,})/);
+        if (m && m[1] && m[1] !== '0') {
+          _traeDeviceIdCache = m[1];
+          try {
+            await mkdir(dirname(cacheFile), { recursive: true });
+            await writeFile(cacheFile, m[1] + '\n');
+          } catch { /* 缓存写不进去不影响本次使用 */ }
+          return m[1];
+        }
+      } catch { /* 读不到就换下一个 */ }
+    }
+  }
+  return '';
+}
+
+/**
+ * 兜底设备号：拿不到客户端注册 id 时用（UID + 主机名派生，重启不变）。
+ * 注意这种 id 大概率会被判 9074，只作为「客户端没装/没跑过」时的占位。
+ */
+function fallbackTraeDeviceId(token) {
   let uid = 'anon';
   try {
     uid = String(jwtPayload(token)?.data?.id || jwtPayload(token)?.sub || 'anon');
@@ -777,15 +832,19 @@ function traeDeviceId(token) {
 
 /** 调 Trae 签到接口（真实头是 Cloud-IDE-JWT，不是 Bearer） */
 async function traeApi(token, path) {
-  const deviceId = traeDeviceId(token);
+  const deviceId = (await resolveTraeDeviceId()) || fallbackTraeDeviceId(token);
   const res = await fetchJsonSmart(`https://api.trae.cn${path}`, {
     method: 'POST',
     headers: {
       'Authorization': `Cloud-IDE-JWT ${token}`,
       'Content-Type': 'application/json',
       'User-Agent': 'Trae/1.107.1 (X11; Linux x86_64) TraeCN',
+      // 与客户端 _applyUgDeviceHeaders 对齐：只认 x-device-id，另外几个是设备画像
       'x-device-id': deviceId,
-      'x-machine-id': deviceId
+      'x-device-brand': process.env.TRAE_DEVICE_BRAND || 'unknown',
+      'x-device-type': process.env.TRAE_DEVICE_TYPE || 'Linux',
+      'x-os-version': process.env.TRAE_OS_VERSION || 'Linux',
+      'x-app-version': process.env.TRAE_APP_VERSION || '3.5.54'
     },
     body: JSON.stringify({ req_source: 1 })
   }, 12_000);
@@ -833,7 +892,9 @@ async function checkinTraeOne(token) {
     return { ok: false, status: 'expired', message: 'JWT 已被服务端注销（1001），点「重新登录」用 Trae 账号重新授权' };
   }
   if (json.code === 9074) {
-    return { ok: false, status: 'failed', message: '签到接口排队中（9074 当前参与用户太多），已重试 3 次，稍后会自动再试' };
+    // 9074 的文案是「当前参与用户太多」，实际最常见的成因是 x-device-id 不是
+    // 客户端注册过的那个 id。提示里要把这条线索给出来，别再让人以为是限流。
+    return { ok: false, status: 'failed', message: '9074：Trae 不认这个设备号（或正在排队），已重试 3 次；可在客户端跑一次让日志写入 did，或设置 TRAE_DEVICE_ID' };
   }
   return { ok: false, status: 'failed', message: `签到接口返回 [${r.status}/${json.code ?? '-'}]：${msg || '未知错误'}` };
 }
