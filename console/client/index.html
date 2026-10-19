@@ -8566,6 +8566,7 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
                   <div class="checkin-acct-list" id="accts-trae"></div>
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="traecode" id="btn-run-trae">立即签到</button>
+                    <button type="button" class="qa-btn btn-relogin" id="btn-relogin-trae" title="用 Trae 账号重新授权（控制台内置 OAuth，无需安装 Trae 客户端）">重新登录</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="traecode" id="btn-cfg-trae">配置 Token</button>
                   </div>
                 </div>
@@ -16234,6 +16235,16 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
         }
       });
     });
+
+    // 重新登录：JWT 被服务端注销（1001）或自然过期时，一步打开官方 OAuth 授权窗口。
+    // 1001 的 exp 往往还没到（是被顶号/注销），所以不能只提示「去客户端重新登录」——
+    // 控制台自己就有 GetLoginGuidance + PKCE 的授权流，不需要装 Trae 客户端。
+    const reloginTraeBtn = card.querySelector('#btn-relogin-trae');
+    if (reloginTraeBtn) {
+      reloginTraeBtn.addEventListener('click', () => {
+        openOAuthModal('traecode', {});
+      });
+    }
 
     // 自动签到开关
     if (autoCheckbox) {

@@ -780,7 +780,10 @@ async function checkinTraeOne(token) {
   const stJson = st.json || {};
 
   if (stJson.code === 1001) {
-    return { ok: false, status: 'expired', message: 'JWT 被服务端拒绝（1001），需要在客户端重新登录后刷新 token' };
+    // 1001 不等于「过期」：JWT 的 exp 往往还没到，是服务端把这个会话注销了
+    //（在别处重新登录、单端登录顶号、账号被踢下线都会这样）。所以提示要给可点的入口，
+    // 不能只说「去客户端重新登录」——控制台自带 OAuth，根本不需要装客户端。
+    return { ok: false, status: 'expired', message: 'JWT 已被服务端注销（1001），点「重新登录」用 Trae 账号重新授权' };
   }
   if (stJson.checked_in === true) {
     return { ok: true, status: 'already', message: '今日已签到', credits: 0, consecutiveDays: Number(stJson.streak || stJson.consecutive_days) || 0 };
@@ -799,7 +802,7 @@ async function checkinTraeOne(token) {
     return { ok: true, status: 'already', message: msg || '今日已签到', credits: 0, consecutiveDays: 0 };
   }
   if (json.code === 1001 || /not able to authenticate/.test(msg)) {
-    return { ok: false, status: 'expired', message: 'JWT 被服务端拒绝（1001），需要在客户端重新登录后刷新 token' };
+    return { ok: false, status: 'expired', message: 'JWT 已被服务端注销（1001），点「重新登录」用 Trae 账号重新授权' };
   }
   return { ok: false, status: 'failed', message: `签到接口返回 [${r.status}/${json.code ?? '-'}]：${msg || '未知错误'}` };
 }
@@ -827,7 +830,7 @@ export async function checkinTrae(overrideToken = null) {
       continue;
     }
     if (acct.exp && acct.exp * 1000 < Date.now()) {
-      results.push({ ...acct, ok: false, status: 'expired', message: 'JWT 已过期，请在客户端重新登录', label });
+      results.push({ ...acct, ok: false, status: 'expired', message: 'JWT 已过期，点「重新登录」重新授权', label });
       continue;
     }
     try {
