@@ -3,15 +3,19 @@
 // 支持 WorkBuddy、Trae (免客户端直签)、CodeArts (华为云码道) 自动化打卡与多账号福利领取
 // 接口参考开源逆向成果与无客户端实现
 
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { fetchJsonSmart } from './vendor-quota.mjs';
 import { findCodeBuddySharedAuth } from './accounts.mjs';
 
-const HOME = homedir();
-const STATE_FILE = join(HOME, '.agenthub', 'checkin-state.json');
+// AGENTHUB_HOME 仅用于测试：把「已安装 CLI 的凭据目录」指到临时目录
+const HOME = process.env.AGENTHUB_HOME ? resolve(process.env.AGENTHUB_HOME) : homedir();
+// 允许用环境变量指向临时文件：单测不能碰线上真实的签到历史。
+const STATE_FILE = process.env.AGENTHUB_CHECKIN_STATE
+  ? resolve(process.env.AGENTHUB_CHECKIN_STATE)
+  : join(HOME, '.agenthub', 'checkin-state.json');
 
 /** 开源项目参考索引 */
 export const OPEN_SOURCE_PROJECTS = {
@@ -125,7 +129,11 @@ function getNowTimeStr() {
 }
 
 /**
- * 探测各平台可用凭据
+ * 探测各平台可用凭据。
+ *
+ * 原则：**已安装 CLI 的凭据优先**——签到直接用 CLI 正在用的那一份，
+ * 不另存副本，所以 CLI 刷新后签到自动跟着新，不会拿着一份过期快照反复失败。
+ * 手工「配置 Token」只在 CLI 完全找不到凭据时兜底。
  */
 export async function detectCredentials() {
   const creds = {
@@ -134,38 +142,29 @@ export async function detectCredentials() {
     codearts: { available: false, source: '', ak: '', sk: '', token: '' }
   };
 
-  const state = await loadState();
+  const live = {
+    workbuddy: await readCredFrom('workbuddy', HOME, false),
+    traecode: await readCredFrom('traecode', HOME, false),
+    codearts: await readCredFrom('codearts', HOME, false),
+  };
 
-  // 1. WorkBuddy
-  if (state.customTokens?.workbuddy) {
-    creds.workbuddy = { available: true, source: '自定义 Token', token: state.customTokens.workbuddy };
-  } else {
-    for (const rel of ['.codebuddy-cn/auth.info', '.codebuddy/auth.info']) {
-      try {
-        const raw = await readFile(join(HOME, rel), 'utf-8');
-        const d = JSON.parse(raw.replace(/^\uFEFF/, ''));
-        const tok = String(d?.auth?.accessToken || '').trim();
-        if (tok && !tok.startsWith('http')) {
-          creds.workbuddy = { available: true, source: `本地凭据 (~/${rel})`, token: tok };
-          break;
-        }
-      } catch { /* continue */ }
-    }
-    if (!creds.workbuddy.available) {
-      try {
-        const shared = await findCodeBuddySharedAuth(HOME);
-        if (shared?.data?.auth?.accessToken) {
-          creds.workbuddy = { available: true, source: 'WorkBuddy 共享会话', token: shared.data.auth.accessToken };
-        }
-      } catch { /* continue */ }
-    }
+  for (const plat of ['workbuddy', 'traecode', 'codearts']) {
+    const hit = live[plat];
+    if (!hit) continue;
+    creds[plat] = {
+      available: true,
+      source: `${hit.source}（CLI 实时凭据）`,
+      token: hit.token || '',
+      ak: hit.ak || '',
+      sk: hit.sk || '',
+      exp: hit.exp || 0,
+      identity: hit.identity || '',
+      refreshable: !!hit.refreshToken,
+    };
   }
 
-  // 2. Trae (无需客户端直连 / CDP 本地直控)
-  if (state.customTokens?.traecode) {
-    creds.traecode = { available: true, source: '自定义 JWT Token', token: state.customTokens.traecode };
-  } else {
-    // 优先检测本地是否运行着开启调试端口的 Trae 客户端 (端口 9222)
+  // Trae 客户端正在运行（CDP 9222）时，即使没有落盘 JWT 也算可用
+  if (!creds.traecode.available) {
     let cdpOnline = false;
     try {
       const cdpPort = process.env.TRAE_CDP_PORT || '9222';
@@ -176,53 +175,23 @@ export async function detectCredentials() {
       clearTimeout(t);
       if (r.ok) cdpOnline = true;
     } catch {}
-
     if (cdpOnline) {
       creds.traecode = { available: true, source: 'Trae 客户端 (CDP 本地直连)', token: 'cdp-session' };
-    } else {
-      for (const rel of ['.trae-cn/trae-jwt-token', '.trae/trae-jwt-token']) {
-        try {
-          const tok = (await readFile(join(HOME, rel), 'utf-8')).trim();
-          if (tok) {
-            creds.traecode = { available: true, source: `本地凭据 (~/${rel})`, token: tok };
-            break;
-          }
-        } catch { /* continue */ }
-      }
     }
   }
 
-  // 3. CodeArts
-  if (state.customTokens?.codearts) {
-    creds.codearts = { available: true, source: '自定义 Token / AK-SK', token: state.customTokens.codearts };
-  } else {
-    try {
-      const txt = await readFile(join(HOME, '.config', 'agenthub-codearts', 'codearts-auth.env'), 'utf-8');
-      const akMatch = txt.match(/^CODEARTS_CLI_AK=(.+)$/m);
-      const skMatch = txt.match(/^CODEARTS_CLI_SK=(.+)$/m);
-      if (akMatch && skMatch) {
-        creds.codearts = {
-          available: true,
-          source: '本地 AK/SK 凭据 (~/.config/agenthub-codearts/codearts-auth.env)',
-          ak: akMatch[1].trim(),
-          sk: skMatch[1].trim()
-        };
-      }
-    } catch { /* continue */ }
-    if (!creds.codearts.available) {
-      try {
-        const caJson = await readFile(join(HOME, '.codeartsdoer', 'codearts_cli.json'), 'utf-8');
-        const d = JSON.parse(caJson);
-        const ak = d.ak || d.accessKey || d.access_key;
-        const sk = d.sk || d.secretKey || d.secret_key;
-        if (ak && sk) {
-          creds.codearts = {
-            available: true,
-            source: '本地 CodeArts 客户端配置 (~/.codeartsdoer/codearts_cli.json)',
-            ak, sk
-          };
-        }
-      } catch { /* continue */ }
+  // 兜底：CLI 找不到任何凭据时，才用手工配置的 Token
+  const state = await loadState();
+  for (const plat of ['workbuddy', 'traecode', 'codearts']) {
+    const raw = String(state.customTokens?.[plat] || '').trim();
+    if (!raw || creds[plat].available) continue;
+    if (plat === 'codearts') {
+      const m = raw.match(/^([A-Z0-9]{8,})[,:;\s]+([A-Za-z0-9+/=]{8,})$/);
+      creds.codearts = m
+        ? { available: true, source: '自定义 AK/SK（CLI 未检测到）', ak: m[1], sk: m[2] }
+        : { available: true, source: '自定义凭据（CLI 未检测到）', token: raw };
+    } else {
+      creds[plat] = { available: true, source: '自定义 Token（CLI 未检测到）', token: raw };
     }
   }
 
@@ -261,93 +230,153 @@ function jwtPayload(tok) {
 
 const maskAk = (ak) => (ak && ak.length > 8 ? `${ak.slice(0, 4)}…${ak.slice(-4)}` : String(ak || ''));
 
+/** 文件 mtime（毫秒），读不到算 0 */
+async function fileMtime(file) {
+  try { return (await stat(file)).mtimeMs; } catch { return 0; }
+}
+
 /**
- * 从一个「HOME 目录」读某平台的凭据。
- * @param {'workbuddy'|'traecode'|'codearts'} platform
- * @param {string} dir        HOME 根（线上是 os.homedir()，档案是其快照目录）
- * @param {boolean} flat      档案目录里凭据文件是扁平存放的（auth.info），线上是嵌套路径
+ * 一个目录下某平台的全部凭据候选。
+ *
+ * 「已安装 CLI 的凭据」可能同时存在于多处：CLI 自己的 auth.info、桌面版共享会话、
+ * 账号档案里的历史快照。它们的新旧并不一致，所以这里**全部读出来**交给调用方择优——
+ * 旧实现遇到第一个就 return，很容易拿到过期快照去签到。
  */
-async function readCredFrom(platform, dir, flat = false) {
-  const tryJson = async (rel) => {
+async function readCredCandidates(platform, dir, flat = false) {
+  const out = [];
+
+  const addJson = async (rel, source, { writable = true } = {}) => {
+    const file = join(dir, rel);
     try {
-      const d = JSON.parse((await readFile(join(dir, rel), 'utf-8')).replace(/^\uFEFF/, ''));
-      const tok = String(d?.auth?.accessToken || '').trim();
-      if (!tok || tok.startsWith('http')) return null;
+      const d = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
+      const auth = d?.auth || {};
+      const tok = String(auth.accessToken || '').trim();
+      if (!tok || tok.startsWith('http')) return;
       const pl = jwtPayload(tok) || {};
-      return {
+      out.push({
         token: tok,
+        refreshToken: String(auth.refreshToken || '').trim(),
         identity: pl.sub || '',
         display: pl.nickname || pl.preferred_username || pl.email || '',
         exp: Number(pl.exp) || 0,
-      };
-    } catch {
-      return null;
-    }
+        domain: String(auth.domain || '').trim(),
+        file: writable ? file : '',
+        mtime: await fileMtime(file),
+        source,
+        kind: writable ? 'cli' : 'shared',
+      });
+    } catch { /* 没有这份文件 */ }
   };
 
   if (platform === 'workbuddy') {
-    const rels = flat ? ['auth.info'] : ['.codebuddy-cn/auth.info', '.codebuddy/auth.info'];
-    for (const rel of rels) {
-      const hit = await tryJson(rel);
-      if (hit) return { ...hit, source: flat ? '账号档案' : `~/${rel}` };
+    if (flat) {
+      await addJson('auth.info', '账号档案');
+      return out;
     }
-    // 新版 CodeBuddy CLI 的共享会话存储
-    if (!flat) {
-      try {
-        const shared = await findCodeBuddySharedAuth(dir);
-        const tok = String(shared?.data?.auth?.accessToken || '').trim();
-        if (tok) {
-          const pl = jwtPayload(tok) || {};
-          return {
-            token: tok,
-            identity: pl.sub || '',
-            display: pl.nickname || pl.preferred_username || '',
-            exp: Number(pl.exp) || 0,
-            source: 'CodeBuddy 共享会话',
-          };
-        }
-      } catch { /* ignore */ }
-    }
-    return null;
+    // 只取国内站凭据：签到打的是 www.codebuddy.cn，国际版（~/.codebuddy）的 token 不适用。
+    // 之前按「exp 最大」统一挑选会把国际版那份挑进来，签到时必然 401。
+    await addJson('.codebuddy-cn/auth.info', '~/.codebuddy-cn/auth.info');
+    // 桌面版共享会话：只读。写它会把桌面版顶成别的账号（accounts.mjs 有同样约定）。
+    try {
+      const shared = await findCodeBuddySharedAuth(dir);
+      const tok = String(shared?.data?.auth?.accessToken || '').trim();
+      if (tok && !tok.startsWith('http')) {
+        const pl = jwtPayload(tok) || {};
+        out.push({
+          token: tok,
+          refreshToken: String(shared?.data?.auth?.refreshToken || '').trim(),
+          identity: pl.sub || '',
+          display: pl.nickname || pl.preferred_username || '',
+          exp: Number(pl.exp) || 0,
+          file: '',
+          mtime: await fileMtime(shared.file),
+          source: 'WorkBuddy 共享会话（只读）',
+          kind: 'shared',
+        });
+      }
+    } catch { /* ignore */ }
+    return out;
   }
 
   if (platform === 'traecode') {
     const rels = flat ? ['trae-jwt-token'] : ['.trae-cn/trae-jwt-token', '.trae/trae-jwt-token'];
     for (const rel of rels) {
+      const file = join(dir, rel);
       try {
-        const tok = (await readFile(join(dir, rel), 'utf-8')).trim();
+        const tok = (await readFile(file, 'utf-8')).trim();
         if (!tok || tok.split('.').length !== 3) continue;
         const pl = jwtPayload(tok) || {};
         const d = pl.data || {};
-        return {
+        out.push({
           token: tok,
           identity: String(d.id || d.user_id || ''),
           display: d.id ? `UID:${d.id}` : '',
           exp: Number(pl.exp) || 0,
+          file,
+          mtime: await fileMtime(file),
           source: flat ? '账号档案' : `~/${rel}`,
-        };
+          kind: 'cli',
+        });
       } catch { /* next */ }
     }
-    return null;
+    return out;
   }
 
   if (platform === 'codearts') {
     const rels = flat ? ['codearts-auth.env'] : ['.config/agenthub-codearts/codearts-auth.env'];
     for (const rel of rels) {
+      const file = join(dir, rel);
       try {
-        const txt = await readFile(join(dir, rel), 'utf-8');
+        const txt = await readFile(file, 'utf-8');
         const ak = (txt.match(/^CODEARTS_CLI_AK=(.+)$/m) || [])[1];
         const sk = (txt.match(/^CODEARTS_CLI_SK=(.+)$/m) || [])[1];
         if (ak && sk) {
           const akv = ak.trim();
-          return { ak: akv, sk: sk.trim(), identity: akv, display: `AK:${maskAk(akv)}`, source: 'AK/SK' };
+          out.push({
+            ak: akv, sk: sk.trim(), identity: akv, display: `AK:${maskAk(akv)}`,
+            exp: 0, file, mtime: await fileMtime(file),
+            source: flat ? '账号档案 · AK/SK' : `~/${rel}`, kind: 'cli',
+          });
         }
       } catch { /* next */ }
     }
-    return null;
+    if (!flat) {
+      // CodeArts 客户端自己的配置文件（长期 AK/SK 的另一个来源）
+      const file = join(dir, '.codeartsdoer', 'codearts_cli.json');
+      try {
+        const d = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
+        const ak = d.ak || d.accessKey || d.access_key;
+        const sk = d.sk || d.secretKey || d.secret_key;
+        if (ak && sk) {
+          out.push({
+            ak: String(ak).trim(), sk: String(sk).trim(), identity: String(ak).trim(),
+            display: `AK:${maskAk(String(ak).trim())}`,
+            exp: 0, file, mtime: await fileMtime(file),
+            source: '~/.codeartsdoer/codearts_cli.json', kind: 'cli',
+          });
+        }
+      } catch { /* 没有这份文件 */ }
+    }
+    return out;
   }
 
-  return null;
+  return out;
+}
+
+/**
+ * 从一处目录挑「最可信」的一份凭据。
+ * exp 大者优先（JWT 有效期最长）；exp 相同比文件 mtime；再相同按来源优先级（CLI > 共享会话 > 档案）。
+ * AK/SK 没有 exp，于是自然按 mtime 取最新的那份。
+ */
+async function readCredFrom(platform, dir, flat = false) {
+  const list = await readCredCandidates(platform, dir, flat);
+  if (!list.length) return null;
+  const rank = { cli: 2, shared: 1, profile: 0 };
+  return list.slice().sort((a, b) =>
+    (Number(b.exp) || 0) - (Number(a.exp) || 0)
+    || (Number(b.mtime) || 0) - (Number(a.mtime) || 0)
+    || (rank[b.kind] || 0) - (rank[a.kind] || 0)
+  )[0];
 }
 
 /**
@@ -355,14 +384,18 @@ async function readCredFrom(platform, dir, flat = false) {
  * @returns {Promise<Array<{name:string, display:string, worker:string, active:boolean, token?:string, ak?:string, sk?:string, exp?:number, source:string}>>}
  */
 export async function listCheckinAccounts(platform) {
-  const accounts = [];
-  const seen = new Set();
-  const add = (a) => {
-    const key = String(a.identity || '');
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    accounts.push(a);
+  const rank = { cli: 2, shared: 1, profile: 0 };
+  const scoreOf = (x) => [Number(x.exp) || 0, Number(x.mtime) || 0, rank[x.kind] || 0];
+  const betterOf = (a, b) => {
+    if (!a) return b;
+    const sa = scoreOf(a);
+    const sb = scoreOf(b);
+    for (let i = 0; i < sa.length; i++) if (sb[i] !== sa[i]) return sb[i] > sa[i] ? b : a;
+    return a;
   };
+
+  /** @type {Map<string, any>} 身份 → 最优凭据（同一账号只留一份，绝不重复签） */
+  const byIdentity = new Map();
 
   for (const worker of PLATFORM_WORKERS[platform] || []) {
     let names = [];
@@ -374,39 +407,51 @@ export async function listCheckinAccounts(platform) {
       let meta = {};
       try { meta = JSON.parse((await readFile(join(dir, 'meta.json'), 'utf-8')).replace(/^\uFEFF/, '')); } catch { /* 无 meta 也能用 */ }
       const cred = await readCredFrom(platform, dir, true);
-      if (!cred) continue;
-      add({
+      if (!cred?.identity) continue;
+      const acct = {
         name,
         display: cred.display || meta.display || meta.identity || name,
         worker,
         active: false,
         source: `账号档案 · ${name}`,
         ...cred,
-      });
+        kind: 'profile',
+        credentialSource: '账号档案快照',
+      };
+      byIdentity.set(acct.identity, betterOf(byIdentity.get(acct.identity), acct));
     }
   }
 
   const live = await readCredFrom(platform, HOME, false);
-  if (live) {
-    const same = accounts.find((a) => a.identity === live.identity);
-    if (same) {
-      same.active = true;
-      same.token = same.token || live.token;
-      same.ak = same.ak || live.ak;
-      same.sk = same.sk || live.sk;
+  if (live?.identity) {
+    const prev = byIdentity.get(live.identity);
+    if (prev) {
+      const winner = betterOf(prev, { ...live, kind: 'cli' });
+      byIdentity.set(live.identity, {
+        ...winner,
+        // 凭据用最新的那份，账号名沿用档案里更可读的那个
+        name: prev.name || winner.name,
+        display: prev.display || winner.display,
+        worker: prev.worker || winner.worker,
+        active: true,
+        credentialSource: winner.source,
+        liveFile: live.file || '',
+      });
     } else {
-      add({
+      byIdentity.set(live.identity, {
         name: '(当前登录)',
         display: live.display || '当前登录账号',
         worker: (PLATFORM_WORKERS[platform] || [''])[0],
-        active: false,
+        active: true,
         ...live,
+        kind: 'cli',
+        credentialSource: live.source,
+        liveFile: live.file || '',
       });
     }
   }
 
-  const liveId = live?.identity;
-  for (const a of accounts) if (liveId && a.identity === liveId) a.active = true;
+  const accounts = [...byIdentity.values()];
   if (accounts.length && !accounts.some((a) => a.active)) accounts[0].active = true;
   return accounts;
 }
@@ -487,6 +532,70 @@ async function codeArtsFetch(ak, sk, method, url, bodyObj = null) {
   return { status: res.status, json, text };
 }
 
+// ---------------------------------------------------------------- 凭据自动续期
+// CodeBuddy / WorkBuddy 的 accessToken 有效期 30 天、refreshToken 60 天。
+// CLI 启动时会自己刷新；签到如果拿着快过期/已过期的 token 直接打接口，
+// 到期那天起就会天天失败。这里复刻 CLI 自己的刷新请求（同端点、同文件），
+// 刷新后写回 **CLI 的 auth.info**——签到与 CLI 共用一份凭据，谁刷新都生效。
+
+const CODEBUDDY_REFRESH_PATH = '/v2/plugin/auth/token/refresh';
+const DEFAULT_CODEBUDDY_DOMAIN = 'www.workbuddy.cn';
+/** 距过期不足 2 小时就提前续期，避免签到跑到一半过期 */
+const TOKEN_REFRESH_MARGIN_MS = 2 * 3600 * 1000;
+
+/**
+ * 刷新一份 CodeBuddy auth.info 并写回原文件。
+ * 注意：刷新会轮换 refreshToken，**必须写回**，否则 CLI 手里那份就废了。
+ * @returns {Promise<{token:string, exp:number, refreshToken:string}|null>}
+ */
+async function refreshCodeBuddyAuth(file, refreshToken, domain = '') {
+  if (!file || !refreshToken) return null;
+  const host = domain || DEFAULT_CODEBUDDY_DOMAIN;
+  try {
+    const res = await fetchJsonSmart(`https://${host}${CODEBUDDY_REFRESH_PATH}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Refresh-Token': refreshToken,
+        'X-Auth-Refresh-Source': 'plugin',
+        'X-Domain': host,
+      },
+      body: '{}',
+    }, 15_000);
+    const data = res.json?.data;
+    const token = String(data?.accessToken || '').trim();
+    if (!token) return null;
+
+    const doc = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
+    const now = Date.now();
+    const nextAuth = { ...(doc.auth || {}), ...data, lastRefreshTime: now };
+    if (data.expiresIn && !data.expiresAt) nextAuth.expiresAt = now + Number(data.expiresIn) * 1000;
+    if (data.refreshExpiresIn && !data.refreshExpiresAt) nextAuth.refreshExpiresAt = now + Number(data.refreshExpiresIn) * 1000;
+    doc.auth = nextAuth;
+    await writeFile(file, JSON.stringify(doc, null, 2) + '\n', 'utf-8');
+
+    const pl = jwtPayload(token) || {};
+    return { token, exp: Number(pl.exp) || 0, refreshToken: String(data.refreshToken || refreshToken) };
+  } catch (err) {
+    console.warn('[Checkin] WorkBuddy 凭据自动续期失败:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 签到前确保凭据新鲜：快过期或已过期时用 refreshToken 续期。
+ * 无法续期（没有 refreshToken / 共享会话只读）时保持原样，由签到结果给出提示。
+ */
+async function ensureFreshWorkBuddy(acct) {
+  const expMs = (Number(acct.exp) || 0) * 1000;
+  if (expMs && expMs - Date.now() > TOKEN_REFRESH_MARGIN_MS) {
+    return { token: acct.token, exp: acct.exp, refreshed: false };
+  }
+  const renewed = await refreshCodeBuddyAuth(acct.file, acct.refreshToken, acct.domain);
+  if (!renewed) return { token: acct.token, exp: acct.exp, refreshed: false };
+  return { ...renewed, refreshed: true };
+}
+
 /**
  * 单个 WorkBuddy 账号打卡（www.codebuddy.cn 每日加油站）
  * 真实响应字段是 credit / streak_days，已签到时是 code=10001 + "今天已签到，请明天再来"。
@@ -549,7 +658,27 @@ async function customCredentialAccount(platform) {
     if (!m) return { name: '自定义凭据', display: '自定义凭据', identity: 'custom', active: false, source: '自定义凭据（格式应为 AK,SK）', invalid: true };
     return { name: '自定义凭据', display: `AK:${maskAk(m[1])}`, identity: m[1], ak: m[1], sk: m[2], active: false, source: '自定义 AK/SK' };
   }
-  return { name: '自定义 Token', display: '自定义 Token', identity: 'custom', token: raw, exp: 0, active: false, source: '自定义 Token' };
+  // 手工粘贴的 Token 也解出真实身份：与 CLI 凭据是同一个账号时不再重复签一次
+  const pl = jwtPayload(raw) || {};
+  const identity = platform === 'traecode'
+    ? String((pl.data || {}).id || (pl.data || {}).user_id || '')
+    : String(pl.sub || '');
+  return {
+    name: '自定义 Token',
+    display: pl.nickname || (identity && platform === 'traecode' ? `UID:${identity}` : '自定义 Token'),
+    identity: identity || 'custom',
+    token: raw,
+    exp: Number(pl.exp) || 0,
+    active: false,
+    source: '自定义 Token',
+  };
+}
+
+/** 自定义凭据只在「不与任何 CLI 账号撞身份」时才加入，避免同一账号被签两次 */
+function mergeCustomAccount(accounts, custom) {
+  if (!custom || custom.invalid) return accounts;
+  if (accounts.some((a) => a.identity && custom.identity && a.identity === custom.identity)) return accounts;
+  return [custom, ...accounts];
 }
 
 /**
@@ -566,7 +695,7 @@ export async function checkinWorkBuddy(overrideToken = null) {
   } else {
     accounts = await listCheckinAccounts('workbuddy');
     const custom = await customCredentialAccount('workbuddy');
-    if (custom) accounts = [custom, ...accounts];
+    accounts = mergeCustomAccount(accounts, custom);
   }
 
   if (!accounts.length) {
@@ -585,16 +714,30 @@ export async function checkinWorkBuddy(overrideToken = null) {
   for (const acct of accounts) {
     const label = acct.display || acct.name;
     if (!acct.token) {
-      results.push({ ...acct, ...{ ok: false, status: 'failed', message: '档案内没有可用的 accessToken' } });
+      results.push({ ...acct, ok: false, status: 'failed', message: '档案内没有可用的 accessToken', label });
       continue;
     }
-    if (acct.exp && acct.exp * 1000 < Date.now()) {
-      results.push({ ...acct, ...{ ok: false, status: 'expired', message: '登录态已过期，请重新登录该账号' } });
+
+    // 复用 CLI 的凭据：快过期先用 refreshToken 续期，续期结果写回 CLI 的 auth.info
+    let fresh = await ensureFreshWorkBuddy(acct);
+    if (fresh.exp && fresh.exp * 1000 < Date.now()) {
+      results.push({
+        ...acct,
+        ok: false,
+        status: 'expired',
+        message: fresh.refreshed ? '凭据续期后仍然过期，请重新登录该账号' : 'CLI 凭据已过期且无法自动续期，请重新登录一次 CLI',
+        label,
+      });
       continue;
     }
     try {
-      const r = await checkinWorkBuddyOne(acct.token);
-      results.push({ ...acct, ...r, label });
+      let r = await checkinWorkBuddyOne(fresh.token);
+      // 401 常见于「CLI 刚好也在刷新」：再续期一次换新 token 重试，而不是直接判失败
+      if (r.status === 'expired') {
+        const again = await refreshCodeBuddyAuth(acct.file, fresh.refreshToken || acct.refreshToken, acct.domain);
+        if (again) r = await checkinWorkBuddyOne(again.token);
+      }
+      results.push({ ...acct, ...r, refreshed: fresh.refreshed, label });
     } catch (err) {
       results.push({ ...acct, ok: false, status: 'failed', message: `网络请求失败：${err.message}`, label });
     }
@@ -629,7 +772,8 @@ export async function checkinWorkBuddy(overrideToken = null) {
       status: r.status,
       message: r.message,
       credits: r.credits,
-      consecutiveDays: r.consecutiveDays
+      consecutiveDays: r.consecutiveDays,
+      source: r.credentialSource || r.source || ''
     })),
     today,
     time
@@ -911,7 +1055,7 @@ export async function checkinTrae(overrideToken = null) {
   } else {
     accounts = await listCheckinAccounts('traecode');
     const custom = await customCredentialAccount('traecode');
-    if (custom) accounts = [custom, ...accounts];
+    accounts = mergeCustomAccount(accounts, custom);
   }
 
   const results = [];
@@ -980,7 +1124,8 @@ export async function checkinTrae(overrideToken = null) {
       status: r.status,
       message: r.message,
       credits: r.credits,
-      consecutiveDays: r.consecutiveDays
+      consecutiveDays: r.consecutiveDays,
+      source: r.credentialSource || r.source || ''
     })),
     today,
     time: getNowTimeStr()
@@ -1111,7 +1256,7 @@ export async function checkinCodeArts(overrideToken = null) {
   } else {
     accounts = await listCheckinAccounts('codearts');
     const custom = await customCredentialAccount('codearts');
-    if (custom) accounts = [custom, ...accounts];
+    accounts = mergeCustomAccount(accounts, custom);
   }
 
   if (!accounts.length) {
@@ -1165,7 +1310,8 @@ export async function checkinCodeArts(overrideToken = null) {
       status: r.status,
       message: r.message,
       credits: r.credits,
-      consecutiveDays: r.consecutiveDays
+      consecutiveDays: r.consecutiveDays,
+      source: r.credentialSource || r.source || ''
     })),
     today,
     time: getNowTimeStr()
@@ -1188,24 +1334,32 @@ export async function getCheckinOverview() {
     const cInfo = creds[plat] || {};
     const isToday = pState.lastDate === today;
 
+    // 本次签到的账号行（含各自的凭据来源），没签过就现读一份用于展示
+    const accountRows = isToday && Array.isArray(pState.accounts) && pState.accounts.length
+      ? pState.accounts
+      : (await listCheckinAccounts(plat)).map((a) => ({
+        name: a.name,
+        display: a.display,
+        active: !!a.active,
+        status: 'pending',
+        message: '今日待打卡',
+        source: a.credentialSource || a.source || '',
+      }));
+
     platforms[plat] = {
       available: cInfo.available,
       source: cInfo.source || '未关联凭据',
+      // cli = 直接复用已安装 CLI 的凭据（自动跟随 CLI 刷新）；custom = 手工配置；none = 没找到
+      credentialMode: !cInfo.available ? 'none' : (String(cInfo.source || '').includes('CLI 实时') ? 'cli' : 'custom'),
+      // WorkBuddy 有 refreshToken，签到前会自动续期，不需要人管
+      autoRefresh: plat === 'workbuddy' && cInfo.refreshable === true,
       lastDate: pState.lastDate || '无记录',
       lastTime: pState.lastTime || '',
       status: isToday ? pState.status : (cInfo.available ? 'pending' : 'unconfigured'),
       message: isToday ? pState.message : (cInfo.available ? '今日待打卡' : '未检测到有效凭据'),
       credits: pState.credits || '',
       consecutiveDays: pState.consecutiveDays || 0,
-      accounts: isToday && Array.isArray(pState.accounts) && pState.accounts.length
-        ? pState.accounts
-        : (await listCheckinAccounts(plat)).map((a) => ({
-          name: a.name,
-          display: a.display,
-          active: !!a.active,
-          status: 'pending',
-          message: '今日待打卡',
-        })),
+      accounts: accountRows,
     };
   }
 
@@ -1218,6 +1372,18 @@ export async function getCheckinOverview() {
     history: (state.history || []).slice(0, 20),
     openSourceProjects: OPEN_SOURCE_PROJECTS
   };
+}
+
+/**
+ * 一键清除签到日志。
+ * 只清历史记录，不动各平台今日状态与凭据——这样「清日志」不会让卡片误以为今天没签。
+ */
+export async function clearCheckinHistory() {
+  const state = await loadState();
+  const removed = Array.isArray(state.history) ? state.history.length : 0;
+  state.history = [];
+  await saveState(state);
+  return { ok: true, removed, overview: await getCheckinOverview() };
 }
 
 /**

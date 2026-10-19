@@ -22,7 +22,7 @@ import * as checkinMod from './checkin.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.14';
+const VERSION = '1.0.15';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -2377,6 +2377,10 @@ export async function start(context) {
       if (request.method === 'POST' && p === '/api/checkin/run') {
         const body = await readJson();
         send(200, await checkinMod.runCheckin(body?.platform || 'all'));
+        return;
+      }
+      if (request.method === 'POST' && p === '/api/checkin/history/clear') {
+        send(200, await checkinMod.clearCheckinHistory());
         return;
       }
       if (request.method === 'POST' && p === '/api/checkin/config') {

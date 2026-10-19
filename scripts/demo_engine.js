@@ -441,33 +441,49 @@
     platforms: {
       workbuddy: {
         available: true,
-        source: 'WorkBuddy 共享会话 / 本地凭据',
+        source: '~/.codebuddy-cn/auth.info（CLI 实时凭据）',
+        credentialMode: 'cli',
+        autoRefresh: true,
         lastDate: '2026-10-17',
         lastTime: '08:31:05',
         status: 'pending',
         message: '今日待打卡 (昨日获得 15 积分)',
         credits: '15 积分',
-        consecutiveDays: 3
+        consecutiveDays: 3,
+        accounts: [
+          { name: 'Johhny_Xu', display: 'Johhny_Xu', active: true, status: 'pending', message: '今日待打卡', source: '~/.codebuddy-cn/auth.info' },
+          { name: '1', display: '无名氏', active: false, status: 'pending', message: '今日待打卡', source: '账号档案快照' }
+        ]
       },
       traecode: {
         available: true,
-        source: '免客户端直连 (~/.trae-cn/trae-jwt-token)',
+        source: '~/.trae-cn/trae-jwt-token（CLI 实时凭据）',
+        credentialMode: 'cli',
+        autoRefresh: false,
         lastDate: '2026-10-17',
         lastTime: '08:31:07',
         status: 'pending',
         message: '今日待打卡 (昨日领取 200 Credits)',
         credits: '200 Credits',
-        consecutiveDays: 5
+        consecutiveDays: 5,
+        accounts: [
+          { name: 'primary', display: 'UID:2891045460773080', active: true, status: 'pending', message: '今日待打卡', source: '~/.trae-cn/trae-jwt-token' }
+        ]
       },
       codearts: {
         available: true,
-        source: '华为云码道 AK/SK 凭据',
+        source: '~/.config/agenthub-codearts/codearts-auth.env（CLI 实时凭据）',
+        credentialMode: 'cli',
+        autoRefresh: false,
         lastDate: '2026-10-17',
         lastTime: '08:31:10',
         status: 'pending',
         message: '今日待打卡 (GLM-5.3 码道福利算力包)',
         credits: '100,000 Token',
-        consecutiveDays: 4
+        consecutiveDays: 4,
+        accounts: [
+          { name: 'ak-HPUAPVZK', display: 'AK:HPUA…VZK', active: true, status: 'pending', message: '今日待打卡', source: '~/.config/agenthub-codearts/codearts-auth.env' }
+        ]
       }
     },
     history: [
@@ -1016,6 +1032,12 @@
           }
         });
         return new Response(JSON.stringify({ ok: true, results, overview: mockCheckinData }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/checkin/history/clear') {
+        const removed = (mockCheckinData.history || []).length;
+        mockCheckinData.history = [];
+        return new Response(JSON.stringify({ ok: true, removed, overview: mockCheckinData }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
       if (pathname === '/api/checkin/config') {

@@ -9,6 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [1.0.15] - 2026-10-19
+
+**签到改成「复用已安装 CLI 的凭据」**，并补上一键清空日志。
+
+### 签到
+- **日志一键清除**：签到日志页签新增「清空日志」，对应 `POST /api/checkin/history/clear`。只清历史记录，不动今日打卡状态与凭据——清完卡片照样显示今日已签。
+- **凭据直接复用 CLI 的**：签到不再依赖账号档案里的历史快照。每次打卡都实时读 CLI 自己的凭据位置（`~/.codebuddy-cn/auth.info`、`~/.trae-cn/trae-jwt-token`、`~/.config/agenthub-codearts/codearts-auth.env`、`~/.codeartsdoer/codearts_cli.json`、WorkBuddy 桌面版共享会话），零配置、不额外保存副本。
+- **同一账号多处凭据取最优**：按 JWT `exp` 优先、文件 mtime 次之挑一份，再按身份去重。既不会拿档案里的过期快照去签，也不会把同一账号签两次。
+- **WorkBuddy 自动续期**：accessToken 有效期 30 天、refreshToken 60 天。签到前若距过期不足 2 小时（或接口返回 401），用 refreshToken 调 CLI 同款端点 `POST /v2/plugin/auth/token/refresh` 续期，**并写回 CLI 的 `auth.info`**——签到与 CLI 共用同一份凭据，谁刷新都生效，不存在「控制台签到把 CLI 顶下线」。手工配置的 Token 只在 CLI 完全没有凭据时兜底，且与 CLI 账号同身份时不重复签。
+- **只取国内站凭据**：WorkBuddy 签到打的是 `www.codebuddy.cn`，国际版 `~/.codebuddy/auth.info` 的 token 不参与——之前「按 exp 统一挑选」会把有效期更长的国际版挑进来，签到时必然 401。
+- 凭据行显示「CLI 实时凭据 · 自动续期」，账号行悬停可看到每个账号各自的凭据来源。
+
+### 测试
+- 新增 `tests/console_checkin_credentials.mjs`（4 项）：同身份多处凭据择优、不同账号不被合并、清空日志不动今日状态、清空幂等。
+- 新增 `AGENTHUB_HOME` / `AGENTHUB_CHECKIN_STATE` 两个环境变量，可把凭据目录与签到状态指到临时目录——单测不再触碰真实凭据与线上历史。
+
 ## [1.0.14] - 2026-10-19
 
 **84 个模型逐个实跑一遍**，把「界面上有、派下去必失败」的模型和「失败却说不清原因」的链路一起修掉；同时收口移动端布局。

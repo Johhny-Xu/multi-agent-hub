@@ -445,33 +445,49 @@
     platforms: {
       workbuddy: {
         available: true,
-        source: 'WorkBuddy 共享会话 / 本地凭据',
+        source: '~/.codebuddy-cn/auth.info（CLI 实时凭据）',
+        credentialMode: 'cli',
+        autoRefresh: true,
         lastDate: '2026-10-17',
         lastTime: '08:31:05',
         status: 'pending',
         message: '今日待打卡 (昨日获得 15 积分)',
         credits: '15 积分',
-        consecutiveDays: 3
+        consecutiveDays: 3,
+        accounts: [
+          { name: 'Johhny_Xu', display: 'Johhny_Xu', active: true, status: 'pending', message: '今日待打卡', source: '~/.codebuddy-cn/auth.info' },
+          { name: '1', display: '无名氏', active: false, status: 'pending', message: '今日待打卡', source: '账号档案快照' }
+        ]
       },
       traecode: {
         available: true,
-        source: '免客户端直连 (~/.trae-cn/trae-jwt-token)',
+        source: '~/.trae-cn/trae-jwt-token（CLI 实时凭据）',
+        credentialMode: 'cli',
+        autoRefresh: false,
         lastDate: '2026-10-17',
         lastTime: '08:31:07',
         status: 'pending',
         message: '今日待打卡 (昨日领取 200 Credits)',
         credits: '200 Credits',
-        consecutiveDays: 5
+        consecutiveDays: 5,
+        accounts: [
+          { name: 'primary', display: 'UID:2891045460773080', active: true, status: 'pending', message: '今日待打卡', source: '~/.trae-cn/trae-jwt-token' }
+        ]
       },
       codearts: {
         available: true,
-        source: '华为云码道 AK/SK 凭据',
+        source: '~/.config/agenthub-codearts/codearts-auth.env（CLI 实时凭据）',
+        credentialMode: 'cli',
+        autoRefresh: false,
         lastDate: '2026-10-17',
         lastTime: '08:31:10',
         status: 'pending',
         message: '今日待打卡 (GLM-5.3 码道福利算力包)',
         credits: '100,000 Token',
-        consecutiveDays: 4
+        consecutiveDays: 4,
+        accounts: [
+          { name: 'ak-HPUAPVZK', display: 'AK:HPUA…VZK', active: true, status: 'pending', message: '今日待打卡', source: '~/.config/agenthub-codearts/codearts-auth.env' }
+        ]
       }
     },
     history: [
@@ -1020,6 +1036,12 @@
           }
         });
         return new Response(JSON.stringify({ ok: true, results, overview: mockCheckinData }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/checkin/history/clear') {
+        const removed = (mockCheckinData.history || []).length;
+        mockCheckinData.history = [];
+        return new Response(JSON.stringify({ ok: true, removed, overview: mockCheckinData }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
       if (pathname === '/api/checkin/config') {
@@ -2248,6 +2270,25 @@
     color: var(--gem-text-muted, #94a3b8);
     box-shadow: none;
     cursor: default;
+  }
+  .checkin-log-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--gem-surface-low, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--gem-border, rgba(255, 255, 255, 0.06));
+  }
+  .checkin-log-hint {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--gem-text-muted, #94a3b8);
+  }
+  .checkin-log-toolbar .qa-btn {
+    flex-shrink: 0;
   }
   .checkin-log-list {
     display: flex;
@@ -9172,6 +9213,11 @@ html[data-ui="mobile"] .checkin-auto-hint {
 }
 html[data-ui="mobile"] .checkin-nav-tabs { width: 100%; }
 html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
+html[data-ui="mobile"] .checkin-log-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+html[data-ui="mobile"] .checkin-log-toolbar .qa-btn { width: 100%; }
 </style>
 </head>
 <body>
@@ -9695,6 +9741,10 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
 
             <!-- Tab 2: 签到历史日志 -->
             <div class="checkin-tab-content" id="checkin-tab-history" hidden>
+              <div class="checkin-log-toolbar">
+                <span class="checkin-log-hint">日志只记录每次打卡结果；清空不会影响今日签到状态与凭据</span>
+                <button type="button" class="qa-btn" id="btn-checkin-log-clear">清空日志</button>
+              </div>
               <div class="checkin-log-list" id="checkin-log-container">
                 <div class="checkin-log-empty">暂无签到历史记录</div>
               </div>
@@ -17108,6 +17158,15 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
       }
     };
 
+    // 凭据来源文案：直接说明「这份凭据来自已安装的 CLI」，WorkBuddy 还会自动续期
+    const credentialText = (p) => {
+      if (!p || !p.available) return (p && p.source) || '未关联凭据';
+      const bits = [p.source || '已检测到凭据'];
+      if (p.credentialMode === 'cli' && !bits[0].includes('CLI')) bits.push('CLI 实时');
+      if (p.autoRefresh) bits.push('自动续期');
+      return bits.join(' · ');
+    };
+
     // 渲染打卡状态数据
     const renderAccountRows = (containerId, accounts) => {
       const box = document.getElementById(containerId);
@@ -17124,7 +17183,8 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
           : (st === 'already' ? '今日已签' : (st === 'failed' ? (a.message || '失败') : (st === 'expired' ? '凭据失效' : '待打卡')));
         const name = escapeHtml(a.display || a.name || '未知账号');
         const cls = st === 'expired' ? 'failed' : st;
-        return `<div class="checkin-acct-row is-${escapeHtml(cls)}" title="${escapeHtml(a.message || '')}">
+        const tip = [a.message, a.source ? `凭据：${a.source}` : ''].filter(Boolean).join(' · ');
+        return `<div class="checkin-acct-row is-${escapeHtml(cls)}" title="${escapeHtml(tip)}">
           <span class="checkin-acct-dot"></span>
           <span class="checkin-acct-name">${name}${a.active ? ' ·当前' : ''}</span>
           <span class="checkin-acct-state">${escapeHtml(stateText)}</span>
@@ -17147,7 +17207,7 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
         const isSigned = p.workbuddy.status === 'success' || p.workbuddy.status === 'already';
         updateBadge('badge-wb', p.workbuddy.status, p.workbuddy.status === 'success' ? '今日已签到' : (p.workbuddy.status === 'already' ? '今日已签' : (p.workbuddy.status === 'pending' ? '今日待打卡' : (p.workbuddy.status === 'failed' ? '签到失败' : '未关联凭据'))));
         const credEl = document.getElementById('cred-wb');
-        if (credEl) credEl.textContent = p.workbuddy.source || '未关联凭据';
+        if (credEl) credEl.textContent = credentialText(p.workbuddy);
         const msgEl = document.getElementById('msg-wb');
         if (msgEl) msgEl.textContent = p.workbuddy.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-wb');
@@ -17165,7 +17225,7 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
         const isSigned = p.traecode.status === 'success' || p.traecode.status === 'already';
         updateBadge('badge-trae', p.traecode.status, p.traecode.status === 'success' ? '今日已签到' : (p.traecode.status === 'already' ? '今日已签' : (p.traecode.status === 'pending' ? '今日待打卡' : (p.traecode.status === 'failed' ? '凭据过期/异常' : '未关联凭据'))));
         const credEl = document.getElementById('cred-trae');
-        if (credEl) credEl.textContent = p.traecode.source || '未关联凭据';
+        if (credEl) credEl.textContent = credentialText(p.traecode);
         const msgEl = document.getElementById('msg-trae');
         if (msgEl) msgEl.textContent = p.traecode.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-trae');
@@ -17183,7 +17243,7 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
         const isSigned = p.codearts.status === 'success' || p.codearts.status === 'already';
         updateBadge('badge-ca', p.codearts.status, p.codearts.status === 'success' ? '今日已签到' : (p.codearts.status === 'already' ? '今日已签' : (p.codearts.status === 'pending' ? '今日待打卡' : (p.codearts.status === 'failed' ? '签到失败' : '未关联凭据'))));
         const credEl = document.getElementById('cred-ca');
-        if (credEl) credEl.textContent = p.codearts.source || '未关联凭据';
+        if (credEl) credEl.textContent = credentialText(p.codearts);
         const msgEl = document.getElementById('msg-ca');
         if (msgEl) msgEl.textContent = p.codearts.message || '今日尚未执行';
         const rewEl = document.getElementById('reward-ca');
@@ -17284,6 +17344,41 @@ html[data-ui="mobile"] .checkin-nav-tabs .checkin-tab-btn { flex: 1 1 0; }
           refreshBtn.disabled = false;
           refreshBtn.textContent = '↻ 刷新状态';
         });
+      });
+    }
+
+    // 清空签到日志：只清历史记录，不动各平台今日状态与凭据
+    const clearLogBtn = document.getElementById('btn-checkin-log-clear');
+    if (clearLogBtn) {
+      clearLogBtn.addEventListener('click', async () => {
+        const count = (currentCheckinData?.history || []).length;
+        if (!count) {
+          alert('签到日志已经是空的');
+          return;
+        }
+        if (!confirm(`确定清空全部 ${count} 条签到日志？\n\n只清历史记录，不影响今日签到状态与凭据。`)) return;
+        clearLogBtn.disabled = true;
+        clearLogBtn.textContent = '清空中...';
+        try {
+          const res = await fetch('/api/checkin/history/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+          });
+          const json = await res.json();
+          if (json.ok && json.overview) {
+            renderOverview(json.overview);
+            clearLogBtn.textContent = `已清空 ${json.removed || 0} 条`;
+            setTimeout(() => { clearLogBtn.textContent = '清空日志'; }, 1800);
+            return;
+          }
+          alert('清空失败：' + (json.error || '未知错误'));
+        } catch (err) {
+          alert('清空请求异常: ' + err.message);
+        } finally {
+          clearLogBtn.disabled = false;
+          if (clearLogBtn.textContent === '清空中...') clearLogBtn.textContent = '清空日志';
+        }
       });
     }
 

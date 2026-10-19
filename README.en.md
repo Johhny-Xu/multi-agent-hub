@@ -6,7 +6,7 @@
 
 ![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 11 Workers under one scheduler](docs/architecture.en.svg)
 
-**Current version: v1.0.14** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
+**Current version: v1.0.15** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 | Connection Mode | Best For | What You Do |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ cd multi-agent-hub
 **What You See When It Succeeds**
 
 - Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 11 Worker status cards on the right).
-- You can also download `agenthub-1.0.14-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
+- You can also download `agenthub-1.0.15-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
 - Daily start and stop: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
 - Want to preview the UI first? Open `demo.html` directly in your browser.
 
@@ -201,8 +201,8 @@ To install a plugin for just one host, import the prebuilt package or run the ta
 
 | Native Host | Installation Method | Documentation |
 | --- | --- | --- |
-| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.14.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.14-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.15.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.15-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | Run `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | Run `.\install.cmd --component plugins --native-hosts codex --project <workspace path>` to register a local plugin marketplace and write 11 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | Run `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or run `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -316,7 +316,7 @@ Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispa
 - Top bar (`z-index: 100`) and chat header (`z-index: 50`) maintain independent stacking contexts so dropdowns are never clipped by code blocks or the workbench.
 - Glass mode (`body.has-custom-bg`) applies `backdrop-filter: blur(20px~24px) saturate(180%~190%)`, unifies neutral surfaces to `--gem-bg-card`, and reserves `--gem-surface-high` for hover states and the progress track.
 - `--agent-accent` styles the send button, context progress bar, and `#panel-chat` secondary menus while keeping model names in body color `--gem-text`.
-- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.14` (overridable by backend `snap.version`).
+- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.15` (overridable by backend `snap.version`).
 - Offline demo build: `scripts/build_demo.py` and `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
 
 </details>
@@ -373,11 +373,11 @@ Every release includes `SHA256SUMS` checksums and can be downloaded from Release
 
 | File | Target Use Case |
 | --- | --- |
-| `agenthub-1.0.14-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
-| `agenthub-1.0.14-plugins.zip` | Install host plugins on a coding workstation only |
-| `agenthub-1.0.14-hub.zip` | Run the Hub and Workers on a dedicated server only |
-| `agenthub-workers-1.0.14-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
-| `multi-agent-hub-1.0.14.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
+| `agenthub-1.0.15-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
+| `agenthub-1.0.15-plugins.zip` | Install host plugins on a coding workstation only |
+| `agenthub-1.0.15-hub.zip` | Run the Hub and Workers on a dedicated server only |
+| `agenthub-workers-1.0.15-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
+| `multi-agent-hub-1.0.15.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
 
 ### Development and Test Commands
 
@@ -417,6 +417,7 @@ Before submitting patches, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_C
 
 | Version | Highlights |
 | --- | --- |
+| **1.0.15** | Check-in now reuses the credentials of installed CLIs: every run reads the CLI's own credential files, picks the freshest by JWT expiry and file mtime, and deduplicates by identity; WorkBuddy auto-renews its access token through refreshToken and writes it back to the CLI's `auth.info` (one shared copy, nothing gets logged out); check-in logs can be cleared in one click; the international `~/.codebuddy` token is no longer used |
 | **1.0.14** | Ran all 84 models one by one: keep the real stderr diagnostic when a CLI exits 0 with an empty answer, add `plan_blocked` to separate "plan not entitled" from "model does not exist", and grey out models outside the alias table; corrected three model-catalog entries; fixed four mobile layout defects (settings card title stacked vertically, numbers split across lines, send button wrapping at 320px, check-in toggle squeezed into a narrow column) |
 | **1.0.13** | Check-in went from "looks successful" to "actually successful": per-account WorkBuddy claims, real SDK-HMAC-SHA256 signed CodeArts calls, and Trae now queries status before claiming; account profiles no longer lose a second API key, split one identity into two, or freeze display names; added a per-sub-agent file-editing permission switch; deduplicated the Huawei model list by id |
 | **1.0.12** | Workbench opens local files mentioned in chat (artifact, image, and attachment previews plus single-item deletion); draggable sub-agent cards with opencode and Cline brand colors; aligned top-bar and floating button right edges; added a working GitHub Copilot Worker entry to the Linux template |

@@ -8,7 +8,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = '1.0.14'
+VERSION = '1.0.15'
 COMMON = ['README.md', 'install.cmd', 'install.sh', 'start.cmd', 'start.sh', 'stop.cmd', 'stop.sh', 'status.cmd', 'status.sh', 'connect.cmd', 'connect.sh',
           'packaging/install.py', 'packaging/runtime.py', 'packaging/service.py', 'packaging/native.py',
           'packaging/bootstrap.ps1', 'packaging/launch.sh', 'packaging/README.md', 'packaging/connect.py', 'packaging/discovery.py']
@@ -26,7 +26,7 @@ def package_files(component):
         files['payload/drivers/zcode_rpc.mjs'] = ROOT / 'drivers/zcode_rpc.mjs'
         files['payload/drivers/zcode_dom.js'] = ROOT / 'drivers/zcode_dom.js'
         files['payload/drivers/codearts_cli.py'] = ROOT / 'drivers/codearts_cli.py'
-        for console_mod in ('server.mjs', 'vendor-quota.mjs', 'accounts.mjs', 'auth.mjs', 'secret-get.py'):
+        for console_mod in ('server.mjs', 'vendor-quota.mjs', 'accounts.mjs', 'auth.mjs', 'checkin.mjs', 'secret-get.py'):
             if (ROOT / 'console' / console_mod).is_file():
                 files['payload/console/' + console_mod] = ROOT / 'console' / console_mod
         for source in (ROOT / 'console/client').rglob('*'):
