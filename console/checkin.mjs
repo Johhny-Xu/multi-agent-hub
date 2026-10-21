@@ -7,6 +7,8 @@ import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { fetchJsonSmart } from './vendor-quota.mjs';
 import { findCodeBuddySharedAuth } from './accounts.mjs';
 import {
@@ -149,7 +151,8 @@ async function loadState() {
         codearts: '',
         qoder: '',
         'qoder-cn': '',
-        minimaxcode: ''
+        minimaxcode: '',
+        meoo: ''
       },
       platforms: {
         workbuddy: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
@@ -157,7 +160,8 @@ async function loadState() {
         codearts: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
         qoder: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
         'qoder-cn': { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
-        minimaxcode: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 }
+        minimaxcode: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
+        meoo: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 }
       },
       history: []
     };
@@ -204,7 +208,7 @@ export async function detectCredentials() {
     minimaxcode: { available: false, source: '', token: '' }
   };
 
-  const platforms = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode'];
+  const platforms = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'];
   const live = {
     workbuddy: await readCredFrom('workbuddy', HOME, false),
     traecode: await readCredFrom('traecode', HOME, false),
@@ -212,6 +216,7 @@ export async function detectCredentials() {
     qoder: await readCredFrom('qoder', HOME, false),
     'qoder-cn': await readCredFrom('qoder-cn', HOME, false),
     minimaxcode: await readCredFrom('minimaxcode', HOME, false),
+    meoo: await readMeooAk(),
   };
 
   for (const plat of platforms) {
@@ -1572,6 +1577,124 @@ export async function checkinQoder(target = 'qoder') {
  * 链路移植自 SkillHub 的 `@user_3a370331/totorosir-minimax-checkin`（作者 龙猫科技说 longmaoit）：
  * 复用 mcode CLI 自己的 OAuth 登录态，按桌面端同款签名直签，401 用 refresh_token 自愈。
  */
+// ---------------------------------------------------------------- Meoo（秒悟 / 阿里云）
+// Meoo 的每日积分是「每日登录赠送」（账号权益里 typeCode = daily_login，2000/天）。
+// 官方 CLI `@aliyun-meoo/cli` 的 `meoo login` 就是一次登录，所以签到 = 跑一次 login + 读一次 account。
+// AK 放在 ~/.config/agenthub-meoo/meoo-auth.env（MEOO_AK=...），不进仓库。
+
+const MEOO_AK_FILE = join(homedir(), '.config', 'agenthub-meoo', 'meoo-auth.env');
+
+/** 读 Meoo 的 AK：先看 env 文件，再看控制台里手工配的 customTokens.meoo */
+async function readMeooAk() {
+  let ak = String(process.env.MEOO_AK || '').trim();
+  if (!ak) {
+    try {
+      const raw = await readFile(MEOO_AK_FILE, 'utf-8');
+      const m = raw.match(/^\s*MEOO_AK\s*=\s*(\S+)/m);
+      if (m) ak = m[1].trim();
+    } catch { /* 没有文件就走 customTokens */ }
+  }
+  if (!ak) {
+    try {
+      const st = await loadState();
+      ak = String(st.customTokens?.meoo || '').trim();
+    } catch { /* ignore */ }
+  }
+  if (!ak) return { available: false, source: '', ak: '' };
+  const from = process.env.MEOO_AK ? '环境变量 MEOO_AK' : (ak === (await loadState().catch(() => ({})))?.customTokens?.meoo ? '控制台自定义 AK' : '~/.config/agenthub-meoo/meoo-auth.env');
+  return { available: true, source: from, ak, token: ak };
+}
+
+// 服务是 systemd 拉起的，PATH 里通常没有 ~/.npm-global/bin，这里按常见安装位置兜底
+function resolveMeooBin() {
+  const cands = [
+    process.env.MEOO_BIN,
+    join(homedir(), '.npm-global', 'bin', 'meoo'),
+    join(homedir(), '.local', 'bin', 'meoo'),
+    '/usr/local/bin/meoo',
+    '/opt/homebrew/bin/meoo',
+  ].filter(Boolean);
+  for (const c of cands) {
+    try { if (existsSync(c)) return c; } catch { /* ignore */ }
+  }
+  return process.platform === 'win32' ? 'meoo.cmd' : 'meoo';
+}
+
+/** 跑一次 meoo 子命令，返回 { ok, code, stdout, stderr } */
+function runMeoo(args, timeout = 45000) {
+  return new Promise((resolve) => {
+    // Windows 上 npm 全局装的是 meoo.cmd，execFile 直接调会 ENOENT，必须走 shell
+    const useShell = process.platform === 'win32';
+    execFile(resolveMeooBin(), args, { timeout, windowsHide: true, shell: useShell, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({
+        ok: !err,
+        code: err?.code ?? 0,
+        missing: err?.code === 'ENOENT',
+        stdout: String(stdout || ''),
+        stderr: String(stderr || ''),
+      });
+    });
+  });
+}
+
+/** Meoo 签到：login（= 每日登录）→ account（读积分） */
+export async function checkinMeoo() {
+  const today = getTodayStr();
+  const time = getNowTimeStr();
+  const cred = await readMeooAk();
+  if (!cred.available) {
+    return {
+      platform: 'meoo', ok: false, status: 'failed',
+      message: '未配置 Meoo AK：写到 ~/.config/agenthub-meoo/meoo-auth.env（MEOO_AK=...）或在控制台「配置 Token」里填',
+      credits: 0, consecutiveDays: 0, today, time, accounts: [],
+    };
+  }
+
+  const login = await runMeoo(['login', '--ak', cred.ak]);
+  if (login.missing) {
+    return {
+      platform: 'meoo', ok: false, status: 'failed',
+      message: '没找到 meoo 命令：先 npm i -g @aliyun-meoo/cli',
+      credits: 0, consecutiveDays: 0, today, time, accounts: [],
+    };
+  }
+  const loginText = (login.stdout + ' ' + login.stderr).replace(/\s+/g, ' ').trim();
+  if (!login.ok) {
+    const bad = /401|403|invalid|expired|无效|失败/i.test(loginText);
+    return {
+      platform: 'meoo', ok: false, status: bad ? 'expired' : 'failed',
+      message: bad ? `Meoo 登录失败：AK 无效或已过期（${loginText.slice(0, 120)}）` : `Meoo 登录失败：${loginText.slice(0, 160)}`,
+      credits: 0, consecutiveDays: 0, today, time, accounts: [],
+    };
+  }
+
+  // 登录成功 → 读账号积分（--json 给的是结构化数据）
+  const acc = await runMeoo(['account', '--json']);
+  let user = '';
+  let balance = 0;
+  let plan = '';
+  if (acc.ok) {
+    try {
+      const j = JSON.parse(acc.stdout.slice(acc.stdout.indexOf('{')));
+      const d = j.data || j;
+      user = d?.user?.username || '';
+      plan = d?.plan?.planName || '';
+      balance = Number(d?.points?.availableBalance ?? 0) || 0;
+    } catch { /* 解析失败就只报登录成功 */ }
+  }
+
+  const who = user ? `${user} ` : '';
+  const parts = [`${who}登录成功`];
+  if (plan) parts.push(plan);
+  if (balance) parts.push(`可用积分 ${balance.toLocaleString('en-US')}`);
+  return {
+    platform: 'meoo', ok: true, status: 'success',
+    message: parts.join('，'),
+    credits: 0, consecutiveDays: 0, today, time,
+    accounts: [{ name: user || 'meoo', display: user || 'Meoo 账号', active: true, status: 'success', message: parts.join('，'), credits: 0, source: cred.source }],
+  };
+}
+
 export async function checkinMiniMaxPlatform(region = 'cn') {
   const today = getTodayStr();
   const time = getNowTimeStr();
@@ -1625,7 +1748,7 @@ export async function getCheckinOverview() {
 
   // 整理每个平台的前端渲染数据
   const platforms = {};
-  for (const plat of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode']) {
+  for (const plat of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo']) {
     const pState = state.platforms[plat] || {};
     const cInfo = creds[plat] || {};
     const isToday = pState.lastDate === today;
@@ -1707,6 +1830,9 @@ export async function runCheckin(target = 'all') {
   }
   if (target === 'all' || target === 'minimaxcode') {
     results.minimaxcode = await checkinMiniMaxPlatform('cn');
+  }
+  if (target === 'all' || target === 'meoo') {
+    results.meoo = await checkinMeoo();
   }
 
   // 记录状态与审计历史

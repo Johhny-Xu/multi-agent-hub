@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 新增：Meoo（秒悟 / 阿里云）签到，第 7 个平台
+- **判定依据**：Meoo 的每日积分是「每日登录赠送」（账号权益里 `typeCode = daily_login`，2000/天），官方 CLI `@aliyun-meoo/cli` 的 `meoo login` 就是一次登录，所以签到 = `meoo login --ak <AK>` + `meoo account --json` 读积分。
+- **凭据**：AK 放 `~/.config/agenthub-meoo/meoo-auth.env`（`MEOO_AK=...`，不进仓库），也支持环境变量 `MEOO_AK` 或控制台「配置 AK」写进 `customTokens.meoo`。
+- **实现**：`checkinMeoo()` 走 `execFile` 调 CLI；Windows 上 npm 全局是 `meoo.cmd`，必须 `shell: true`；服务由 systemd 拉起、PATH 里没有 `~/.npm-global/bin`，所以 `resolveMeooBin()` 会按常见安装路径兜底解析。
+- **UI**：签到页新增「Meoo 秒悟」页签与卡片（账号 / 凭据来源 / 打卡状态 / 可用积分 / 立即签到 / 配置 AK），顶部统计胶囊从 6 平台变 7 平台。
+- **服务端**：n5095 已 `npm i -g @aliyun-meoo/cli`（0.5.6），AK 写到 `~/.config/agenthub-meoo/meoo-auth.env`（600 权限）。实测返回 `Johhny 登录成功，Free 免费版，可用积分 12,000`。
+
 ## [1.0.16] - 2026-10-21
 
 ### 修复：华为云码道（CodeArts）签到

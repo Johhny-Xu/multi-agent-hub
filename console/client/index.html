@@ -9172,6 +9172,7 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
                 <button type="button" class="checkin-plat-tab" data-plat="qoder" role="tab" aria-selected="false">Qoder</button>
                 <button type="button" class="checkin-plat-tab" data-plat="qoder-cn" role="tab" aria-selected="false">Qoder CN</button>
                 <button type="button" class="checkin-plat-tab" data-plat="minimaxcode" role="tab" aria-selected="false">MiniMax Code</button>
+                <button type="button" class="checkin-plat-tab" data-plat="meoo" role="tab" aria-selected="false">Meoo 秒悟</button>
               </div>
               <div class="checkin-cards-grid">
                 <!-- 1. WorkBuddy -->
@@ -9318,6 +9319,31 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="minimaxcode" id="btn-run-mm">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="minimaxcode" id="btn-cfg-mm">配置 Token</button>
+                  </div>
+                </div>
+
+                <!-- 7. Meoo（秒悟 / 阿里云） -->
+                <div class="checkin-card" id="card-checkin-meoo" data-plat-card="meoo">
+                  <div class="checkin-card-top">
+                    <div class="checkin-card-brand">
+                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="meoo" data-agent="meoo">M</div>
+                      <div class="checkin-brand-info">
+                        <div class="checkin-brand-title">Meoo 秒悟（阿里云）</div>
+                        <div class="checkin-brand-tag">每日登录送 2000 积分 · 复用 meoo CLI 登录态</div>
+                      </div>
+                    </div>
+                    <span class="checkin-status-badge status-pending" id="badge-meoo">检测中...</span>
+                  </div>
+                  <div class="checkin-card-meta">
+                    <div class="checkin-meta-row"><span class="c-label">凭据关联:</span><span class="c-val" id="cred-meoo">正在探测...</span></div>
+                    <div class="checkin-meta-row"><span class="c-label">签到方式:</span><span class="c-val tip">meoo login --ak → meoo account</span></div>
+                    <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-meoo">今日尚未执行</span></div>
+                    <div class="checkin-meta-row"><span class="c-label">可用积分:</span><span class="c-val highlight" id="reward-meoo">-</span></div>
+                  </div>
+                  <div class="checkin-acct-list" id="accts-meoo"></div>
+                  <div class="checkin-card-foot">
+                    <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="meoo" id="btn-run-meoo">立即签到</button>
+                    <button type="button" class="qa-btn btn-cfg-token" data-platform="meoo" id="btn-cfg-meoo">配置 AK</button>
                   </div>
                 </div>
               </div>
@@ -17203,9 +17229,28 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
         }
       }
 
+      // 7. Meoo（秒悟）
+      if (p.meoo) {
+        const mo = p.meoo;
+        const isSigned = mo.status === 'success' || mo.status === 'already';
+        updateBadge('badge-meoo', mo.status, mo.status === 'success' ? '今日已登录' : (mo.status === 'already' ? '今日已签' : (mo.status === 'failed' ? '签到失败' : '未关联凭据')));
+        const credEl = document.getElementById('cred-meoo');
+        if (credEl) credEl.textContent = credentialText(mo);
+        const msgEl = document.getElementById('msg-meoo');
+        if (msgEl) msgEl.textContent = mo.message || '今日尚未执行';
+        const rewEl = document.getElementById('reward-meoo');
+        if (rewEl) rewEl.textContent = mo.credits ? `${mo.credits} 积分` : '-';
+        renderAccountRows('accts-meoo', mo.accounts);
+        const btnMo = document.getElementById('btn-run-meoo');
+        if (btnMo) {
+          btnMo.disabled = isSigned;
+          btnMo.textContent = isSigned ? '今日已签' : '立即签到';
+        }
+      }
+
       // 顶部统计胶囊
       if (overallPill) {
-        const plats = [p.workbuddy, p.traecode, p.codearts, p.qoder, p['qoder-cn'], p.minimaxcode].filter(Boolean);
+        const plats = [p.workbuddy, p.traecode, p.codearts, p.qoder, p['qoder-cn'], p.minimaxcode, p.meoo].filter(Boolean);
         const signedCount = plats.filter(x => x.status === 'success' || x.status === 'already').length;
         overallPill.textContent = `${signedCount}/${plats.length} 平台已签到 · ${data.autoCheckin !== false ? '每日自动打卡激活' : '自动打卡已暂停'}`;
       }
