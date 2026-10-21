@@ -1318,6 +1318,16 @@ export function extractQoderCampaigns(payload) {
 
 const qoderClaimStatus = (row) => String(row?.claimStatus || row?.claim_status || '').toUpperCase();
 
+/** 活动是否在有效期内。开源项目 qoder-checkin 就是靠 startAt~endAt 判断「今日已领」，
+ *  不加这个判断会把上一期 CLAIMED 的老活动当成今天已领（Qoder CN 报「已签到」但客户端还有领取按钮就是这个原因）。
+ *  没有窗口字段时不做限制，避免把正常数据判死。 */
+function qoderInWindow(row, nowSec = Math.floor(Date.now() / 1000)) {
+  const s = Number(row?.startAt ?? row?.start_at ?? 0) || 0;
+  const e = Number(row?.endAt ?? row?.end_at ?? 0) || 0;
+  if (!e) return true;
+  return s <= nowSec && nowSec < e;
+}
+
 function qoderResponseMessage(res) {
   const json = res?.json || {};
   const data = json.data && typeof json.data === 'object' ? json.data : {};
@@ -1426,7 +1436,8 @@ async function checkinQoderOne(acct) {
   }
   let campaigns = extractQoderCampaigns(res.json);
   let claimable = campaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
-  let claimedBefore = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)));
+  let claimedBefore = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && qoderInWindow(item));
+  const staleClaimed = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderInWindow(item));
   let useBase = '';
 
   // 国际版活动列表为空时，换一套环境用同一个 token 再问一次。
@@ -1460,10 +1471,11 @@ async function checkinQoderOne(acct) {
       if (deviceNote) {
         return { ok: true, status: 'already', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
       }
-      return {
+      const diag = `[活动 ${campaigns.length} 个：` + (campaigns.map((c) => `${qoderClaimStatus(c) || '?'}`).join('/') || '空') + (staleClaimed.length ? `，其中 ${staleClaimed.length} 个是过期的 CLAIMED` : '') + ']';
+    return {
         ok: true,
         status: 'already',
-        message: '上游暂未下发每日积分活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
+        message: diag + ' 上游暂未下发每日积分活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
           + '常见原因：① 官方窗口每天 10:00 开启；② 客户端今天已领过；'
           + '③ 设备指纹（Cosy-MachineToken）过期——回 Windows 跑 qoder-checkin 的 01_extract.py 重新提取，或在 Qoder 客户端重新登录一次',
         credits: 0,

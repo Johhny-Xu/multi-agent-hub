@@ -2424,6 +2424,18 @@
   .checkin-log-toolbar .qa-btn {
     flex-shrink: 0;
   }
+  /* 签到日志 tab 是 .settings-card-body（flex column）的子项，
+     不显式给宽度时宽度会塌成 0，导致「日志点开是空白」 */
+  .settings-card-body > .checkin-tab-content {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+  .checkin-tab-content .checkin-log-list,
+  .checkin-tab-content .checkin-log-toolbar {
+    width: 100%;
+    box-sizing: border-box;
+  }
   .checkin-log-list {
     display: flex;
     flex-direction: column;
@@ -6066,6 +6078,16 @@ html[data-preset="grid"][data-theme="light"] {
   background: #111216 !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22) !important;
+}
+
+/* Meoo 秒悟：品牌薄荷绿，深底 + 绿色描边（与其它平台同款处理） */
+.platform-avatar[data-agent="meoo"],
+.agent-avatar-sm[data-agent="meoo"],
+.empty-avatar[data-agent="meoo"] {
+  background: linear-gradient(135deg, #065f46, #059669) !important;
+  border: 1px solid rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.30) !important;
+  color: #ecfdf5 !important;
 }
 
 /* Trae: Official cyber neon green #32F08C, requires dark badge base */
@@ -10465,6 +10487,7 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
                   </div>
                 </div>
               </div>
+            </div>
             <div class="checkin-tab-content" id="checkin-tab-history" hidden>
               <div class="checkin-log-toolbar">
                 <span class="checkin-log-hint">日志只记录每次打卡结果；清空不会影响今日签到状态与凭据</span>
@@ -11064,6 +11087,8 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     'console': { bg: 'linear-gradient(135deg, #0ea5e9, #6366f1)', code: 'CS' },
     'minimax-code': { bg: 'linear-gradient(135deg, #d97706, #ea580c)', code: 'MX' },
     'minimaxcode': { bg: 'linear-gradient(135deg, #9d174d, #e2167e)', code: 'MX' },
+    'meoo': { bg: 'linear-gradient(135deg, #34d399, #059669)', code: '秒' },
+    'meoo-cn': { bg: 'linear-gradient(135deg, #34d399, #0d9488)', code: '秒' },
     'opencode': { bg: 'linear-gradient(135deg, #0f172a, #334155)', code: 'OC' },
     'cline': { bg: 'linear-gradient(135deg, #0891b2, #06b6d4)', code: 'CL' },
     'qoder': { bg: 'linear-gradient(135deg, #16a34a, #2ADB5C)', code: 'QD' },

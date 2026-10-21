@@ -11,6 +11,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：Qoder CN「明明没签到却显示已签到」
+- 根因：判定「今日已领」只看 `claimStatus == CLAIMED`，没校验活动有效期，把上一期 CLAIMED 的老活动当成了今天已领，于是直接返回 already、根本不去领。
+- 修法（对齐开源项目 `wallechfox/qoder-checkin`）：新增 `qoderInWindow()`，CLAIMED 必须同时满足 `startAt <= now < endAt` 才算今日已领；过期 CLAIMED 单独计数，并在消息里输出 `[活动 N 个：状态/状态…]` 诊断串。
+- 实测：两个账号各领到 +100 Credits。
+
+### 修复：签到日志点开是空白
+- 根因是 **HTML 少了一个 `</div>`**：`#checkin-tab-history` 被嵌进了 `#checkin-tab-grid` 里面，切到日志 tab 时外层 `hidden` 把它一起隐藏了（DOM 里 history 的 parentElement 是 grid）。
+- 修法：补上闭合标签，让两个 tab content 成为兄弟节点；另加 `.settings-card-body > .checkin-tab-content { width:100% }` 兜底。
+- 实测：切到日志 tab 后高度 454px，20 条记录正常显示。
+
+### 新增：Meoo Agent OpenAPI 调用器 `scripts/meoo_agent_run.mjs`
+- Meoo 有 Agent OpenAPI（`https://meoo.com/open/v1`）：`POST /projects/{id}/agent/runs` 起 Run + `GET .../events` 收 SSE，用**账号 AK** 直接鉴权，不需要部署应用。
+- 脚本支持 `--project <url_id> --model --tier`，实测「只回复两个字：收到」→ 返回「收到」、status=completed。
+
+### 修复：Meoo 头像
+- 头像映射表加 `meoo`（薄荷绿渐变 + 「秒」），并补 `.platform-avatar[data-agent="meoo"]` 的深底+绿描边规则。
+
 ### 新增：Meoo（秒悟 / 阿里云）签到，第 7 个平台
 - **判定依据**：Meoo 的每日积分是「每日登录赠送」（账号权益里 `typeCode = daily_login`，2000/天），官方 CLI `@aliyun-meoo/cli` 的 `meoo login` 就是一次登录，所以签到 = `meoo login --ak <AK>` + `meoo account --json` 读积分。
 - **凭据**：AK 放 `~/.config/agenthub-meoo/meoo-auth.env`（`MEOO_AK=...`，不进仓库），也支持环境变量 `MEOO_AK` 或控制台「配置 AK」写进 `customTokens.meoo`。
