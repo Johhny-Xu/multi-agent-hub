@@ -17,6 +17,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -376,7 +377,23 @@ export async function installQoderUmidComponent(home = homedir()) {
 
 // ---------------------------------------------------------------- 对外入口
 
+// 真实设备指纹（Cosy-MachineToken/Code/Type）落在 ~/.config/agenthub-qoder/device.env。
+// 上游按设备下发活动：指纹不对，活动列表就是空的（Qoder 国际版长期签不上的根因）。
+// 环境变量优先，文件兜底；三件套必须齐全才生效。
+function loadQoderDeviceEnv() {
+  if (process.env.QODER_MACHINE_TOKEN && process.env.QODER_MACHINE_CODE && process.env.QODER_MACHINE_TYPE) return;
+  try {
+    const file = join(homedir(), '.config', 'agenthub-qoder', 'device.env');
+    const raw = readFileSync(file, 'utf-8');
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^\s*(QODER_MACHINE_(?:TOKEN|CODE|TYPE))\s*=\s*(\S+)/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+    }
+  } catch { /* 没这个文件就走原来的探测逻辑 */ }
+}
+
 async function resolveRisk(worker, home, uid) {
+  loadQoderDeviceEnv();
   const envToken = firstText(process.env.QODER_MACHINE_TOKEN);
   const envCode = firstText(process.env.QODER_MACHINE_CODE);
   const envType = firstText(process.env.QODER_MACHINE_TYPE);

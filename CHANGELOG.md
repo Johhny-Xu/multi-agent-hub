@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：Qoder 国际版终于签到成功（真实设备指纹）
+- **根因**：上游按**设备**下发活动，`Cosy-MachineToken/Code/Type` 是代码里合成的，不是真实客户端的 → 活动列表恒为空（token 有效、无 401，所以一直误判成"没活动"）。
+- **做法**：按开源项目 `wallechfox/qoder-checkin` 的 `01_extract.py`，在装了 Qoder 客户端的 Windows 上提取真实指纹（`runtime-info.exe` + DPAPI），
+  落到 `~/.config/agenthub-qoder/device.env`；`qoder-device.mjs` 新增 `loadQoderDeviceEnv()`：环境变量优先、文件兜底。
+- **部署**：n5095 的 unit 加 `EnvironmentFile=-%h/.config/agenthub-qoder/device.env`，重启后生效。
+- **结果**：`Henry Baker (henrybaker2689@gmail.com)` 领到 **+100 Credits**（随后幂等返回"今日已领取"）。另一个账号 `花凄` 仍为空列表（账号侧无活动）。
+
 ### 修复：Qoder CN「明明没签到却显示已签到」
 - 根因：判定「今日已领」只看 `claimStatus == CLAIMED`，没校验活动有效期，把上一期 CLAIMED 的老活动当成了今天已领，于是直接返回 already、根本不去领。
 - 修法（对齐开源项目 `wallechfox/qoder-checkin`）：新增 `qoderInWindow()`，CLAIMED 必须同时满足 `startAt <= now < endAt` 才算今日已领；过期 CLAIMED 单独计数，并在消息里输出 `[活动 N 个：状态/状态…]` 诊断串。
