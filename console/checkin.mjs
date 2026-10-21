@@ -1696,9 +1696,16 @@ export async function checkinMeoo() {
   }
 
   const who = user ? `${user} ` : '';
-  const parts = [`${who}登录成功`];
+  const parts = [`${who}登录态已同步`];
   if (plan) parts.push(plan);
   if (balance) parts.push(`可用积分 ${balance.toLocaleString('en-US')}`);
+  // 与上次记录比一下，涨了就是今天真发到了，没涨就是当天已领过
+  let prevBalance = 0;
+  try { prevBalance = Number((await loadState())?.platforms?.meoo?.credits) || 0; } catch { /* ignore */ }
+  if (prevBalance && balance && balance !== prevBalance) {
+    const d = balance - prevBalance;
+    parts.push(d > 0 ? `（较上次 +${d.toLocaleString('en-US')}）` : `（较上次 ${d.toLocaleString('en-US')}）`);
+  }
   return {
     platform: 'meoo', ok: true, status: 'success',
     message: parts.join('，'),

@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：签到日志里平台名显示成「其他平台」
+- 日志渲染的 `platMeta` 只映射了 5 个平台，`minimaxcode` 和 `meoo` 落到兜底值「其他平台」。补齐两个映射（MiniMax Code / Meoo 秒悟）。
+
+### 修正：Meoo 卡片文案（CLI 只是同步登录态）
+- 实测积分确实会涨：日志里 00:24 的 11,674 → 00:32 的 13,674（**+2,000**），说明每日登录赠送是生效的。
+- 但卡片原来写「今日已签到」容易误解，改为「已登录 / 登录态正常」，按钮改「刷新登录态」；统计胶囊不计入 meoo（它没有"打卡"概念）。
+- 消息里增加与上次积分的对比：`（较上次 +2,000）`。
+
 ### 修复：Qoder 国际版终于签到成功（真实设备指纹）
 - **根因**：上游按**设备**下发活动，`Cosy-MachineToken/Code/Type` 是代码里合成的，不是真实客户端的 → 活动列表恒为空（token 有效、无 401，所以一直误判成"没活动"）。
 - **做法**：按开源项目 `wallechfox/qoder-checkin` 的 `01_extract.py`，在装了 Qoder 客户端的 Windows 上提取真实指纹（`runtime-info.exe` + DPAPI），
