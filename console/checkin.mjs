@@ -1699,12 +1699,13 @@ export async function checkinMeoo() {
   const parts = [`${who}登录态已同步`];
   if (plan) parts.push(plan);
   if (balance) parts.push(`可用积分 ${balance.toLocaleString('en-US')}`);
-  // 与上次记录比一下，涨了就是今天真发到了，没涨就是当天已领过
+  // 注意：Meoo 的每日积分是「网页登录时服务端自动发放」，CLI 的 login 走 AK 认证、不会触发。
+  // 所以这里只报余额，不承诺涨幅（余额变动多半是用户自己在网页上领的）。
   let prevBalance = 0;
   try { prevBalance = Number((await loadState())?.platforms?.meoo?.credits) || 0; } catch { /* ignore */ }
   if (prevBalance && balance && balance !== prevBalance) {
     const d = balance - prevBalance;
-    parts.push(d > 0 ? `（较上次 +${d.toLocaleString('en-US')}）` : `（较上次 ${d.toLocaleString('en-US')}）`);
+    parts.push(d > 0 ? `（较上次 +${d.toLocaleString('en-US')}，多半是网页端领的）` : `（较上次 ${d.toLocaleString('en-US')}）`);
   }
   return {
     platform: 'meoo', ok: true, status: 'success',
