@@ -4,8 +4,30 @@
 build_demo.py - Package multi-agent-hub console into a standalone, zero-dependency interactive demo HTML.
 """
 
+import base64
+import mimetypes
 import os
 import re
+
+# 前端里引用的本地图片（如看板娘 mascot/*.webp）在 demo 里必须内联成 data URI，
+# 否则双击打开 demo.html 时相对路径失效、图片全空。
+LOCAL_ASSET_RE = re.compile(r'src="((?!https?:|data:|//)[^"]+\.(?:webp|png|jpe?g|gif|svg|webm|mp4))"')
+
+
+def inline_local_assets(html, client_dir):
+    def repl(match):
+        rel = match.group(1)
+        path = os.path.join(client_dir, *rel.split('/'))
+        if not os.path.isfile(path):
+            print(f"[WARN] demo asset missing: {rel}")
+            return match.group(0)
+        mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
+        with open(path, 'rb') as fh:
+            encoded = base64.b64encode(fh.read()).decode('ascii')
+        return f'src="data:{mime};base64,{encoded}"'
+
+    return LOCAL_ASSET_RE.sub(repl, html)
+
 
 def build_demo():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -14,6 +36,8 @@ def build_demo():
     
     with open(src_html_path, 'r', encoding='utf-8') as f:
         html = f.read()
+
+    html = inline_local_assets(html, os.path.dirname(src_html_path))
 
     with open(engine_js_path, 'r', encoding='utf-8') as f:
         engine_js = f.read()

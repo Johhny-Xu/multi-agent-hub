@@ -2,26 +2,28 @@
   "_comment": "极简配置示例：仅启用 MiniMax CLI (minimaxcode) 与 TraeCode 桌面端 (traecode)。本项目完全支持按需启用，无需配齐全部 11 个 Agent！",
   "agents": {
     "minimaxcode": {
-      "role": "文本/问答 worker (MiniMax CLI)",
-      "description": "基于 MiniMax 官方 mmx 命令行工具 (纯文本/代码生成)",
+      "role": "MiniMax Code worker（官方 mcode CLI 无头 exec）",
+      "description": "mcode exec --prompt-mode work --output-format text 无头执行（agent 模式）；与 MiniMax Code 桌面端同一账号体系（签到赠予积分在 Code 内可用）；未登录时会直接报 Sign in to MiniMax。模型引用是 provider/model，国内区与国际区都是 minimax/*（默认 minimax/MiniMax-M3.1-Flash，可选 minimax/MiniMax-M3）。",
       "cli": [
-        "mmx",
+        "mcode",
+        "exec",
+        "--prompt-mode",
+        "work",
+        "--permission",
+        "smart",
+        "--output-format",
         "text",
-        "chat",
-        "--message",
-        "{task}",
-        "--output",
-        "text"
+        "{task}"
       ],
       "model_arg": "--model",
+      "workdir_via": "--cwd",
+      "async_default": true,
+      "allow_unlisted_models": true,
       "models": {
-        "default": "MiniMax-M3.1-Flash-Preview",
-        "m3": "MiniMax-M3",
-        "m2.7": "MiniMax-M2.7",
-        "m2.5": "MiniMax-M2.5",
-        "m3.1fp": "MiniMax-M3.1-Flash-Preview"
-      },
-      "async_default": true
+        "default": "minimax/MiniMax-M3.1-Flash",
+        "3.1f": "minimax/MiniMax-M3.1-Flash",
+        "m3": "minimax/MiniMax-M3"
+      }
     },
     "traecode": {
       "role": "桌面版 worker (TraeCode 桌面端)",

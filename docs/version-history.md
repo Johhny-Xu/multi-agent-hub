@@ -74,4 +74,11 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
   - **移除所有搜索框的放大镜图标**：模型与运行参数弹窗的搜索框（`#mp-search-input`）和平台/会话侧栏的搜索框（`#platform-search`）都不再渲染放大镜图标，占位文字不再被图标压住。附带修掉根因：`.mp-search-input` 的 `padding: 0 24px 0 28px`、`border-radius: 6px`、`height/min-height: 30px`、`font-size: 12px` 一直**被基础表单规则 `input[type="text"]`(0,1,1) 压掉**（`.mp-search-input` 只有 0,1,0），内边距实际回落到全局的 `7px 12px`，于是文字从 12px 开始、而图标在 8px 起 —— 正好重叠。现把该规则连同 `:hover` / `:focus` 一并提到 `.mp-search-wrap .mp-search-input`（0,2,0）与 `.mp-search-wrap .mp-search-input:focus`（0,3,0），让自身样式真正生效；`.mp-search-clear`（右侧 ✕ 清空按钮）保留，右侧 24px 内边距继续为它预留。侧栏搜索框左侧内边距由 32px 收敛到 12px，右侧 46px 继续留给 `::after` 的 ⌘K 快捷键提示。全量盘点确认：应用中所有带「搜索」占位的输入框（`#platform-search`、`#mp-search-input`、`#agent-card-search`、`#custom-bg-input`）均已无图标残留。
   - **配套**：`console/server.mjs` 新增 `/api/chat/agent-summary` 读写端点；测试套件、单文件交互 Demo（`demo/index.html`、`demo.html`、桌面 `multi-agent-hub-demo.html`）同步更新。
 
+`v1.0.16`（2026-10-21）：签到两处修复 + 看板娘可拖拽。
 
+- **华为云码道（CodeArts）签到恢复**：线上长期报 `4000 invalid channel, group not found`。实测 `opengw` 的 `/api/v1/benefit/claim`（每日福利 Token）对这批 AK 稳定返回 4000，benefit 通道已按账号下线；而真正发「每日 1000 积分」的 `GET /v1/ops/delivery?channel=IDE` + `POST /v1/ops/claim`（`snap-access` 域名）一直正常。原实现把福利通道的失败当致命错误直接 return，导致整个签到被判失败。现降级为 best-effort：失败只在消息里注明「已跳过」，继续走积分签到；只有签名/凭证类错误才中止。实测当日领到「每日签到领1000积分」。
+- **Qoder 国际版换环境重试**：参考开源项目 `wallechfox/qoder-checkin` 的 `baseUrls` 设计，`qoderRequest` 支持 `baseUrl` 覆盖；国际版拿到空活动列表时用同一个 token 换 `openapi.qoder.com.cn` / `openapi.qoder.sh` 再问一次，有活动就在新环境领取并在消息里标注；仍为空则提示「设备指纹 Cosy-MachineToken 可能过期，回 Windows 跑 01_extract.py 或客户端重登」。
+- **看板娘可拖拽**：新增 `#mascot-air` 独立 fixed 图层与三段素材（`mascot-hang` 挣扎循环 / `mascot-fall` 头朝下俯冲 / `mascot-wipe` 落地擦汗）。`pointerdown` 拎起来跟手并循环挣扎，`pointerup` 用 `requestAnimationFrame` 加速坠落到**松手鼠标点的正下方**（1.1~2.4s，`e=p²`），落地播擦汗后回常态；尺寸与设置里的「小/中/大」联动（`--mascot-w` 提到 `:root`），擦汗层按 69% 缩放并把桌面线压到输入框上沿。
+- **灰底抠像模式 `--key flat`**：新素材不是绿幕（灰底 ~128 + 白色速度线 ~184 + 渐变），chroma key 要么留下速度线、要么吃掉白衬衫。`alpha_flat()` 改为挖「低饱和 + 亮度在区间内 + 与画面边缘连通」的连通域：白衬衫/白袜子被深色描边包住，flood fill 进不去；速度线连着边缘，一起被挖掉。参数 `--flat-lo/-hi/-sat`（白底段用 `--flat-hi 255`）。
+- **修复设置页误触发看板娘**：切到设置页时 `#panel-chat` 是 `hidden`、dock 的 rect 变成 0，但 `dock.hidden` 仍是 `false`，自动掉落定时器照跑。新增 `mascotOnScreen()`（rect 宽高都 > 0）统一判断。
+- **部署记录**：`console/client/index.html` 已 `scp` 到 n5095 的 `miniapp/client/` 并重启 `agent-hub-console.service`；线上实测拖拽/坠落/擦汗、CodeArts 签到均正常。

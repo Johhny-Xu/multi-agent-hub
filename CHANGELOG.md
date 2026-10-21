@@ -11,7 +11,137 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-10-21
+
+### 修复：华为云码道（CodeArts）签到
+- `opengw` 的 `/api/v1/benefit/claim`（每日福利 Token）对这批 AK 稳定返回 `4000 invalid channel, group not found`，**benefit 通道按账号下线**；而发「每日 1000 积分」的 `GET /v1/ops/delivery` + `POST /v1/ops/claim`（snap-access）正常。原代码把福利通道失败当致命错误直接 return，导致整个签到判失败。现在福利通道降级为 best-effort，只在消息里注明「已跳过」，继续走积分签到。
+
+### 改进：Qoder 国际版活动列表为空时自动换环境
+- 参考开源项目 `wallechfox/qoder-checkin`，`qoderRequest` 支持 `baseUrl` 覆盖；国际版拿到空活动列表时用同一个 token 换 `openapi.qoder.com.cn` / `openapi.qoder.sh` 再问一次，有活动就在新环境领并标注；仍为空则提示「设备指纹 Cosy-MachineToken 可能过期」。
+
+### 新增：看板娘可拖拽（拎起来 → 挣扎 → 松手坠落 → 落地擦汗）
+- 三段素材 `mascot-hang` / `mascot-fall` / `mascot-wipe`（800×873 / 800×678 / 800×910），`#mascot-air` 独立 fixed 图层，`pointerdown` 拎起来播挣扎循环跟手、`pointerup` 用 rAF 加速坠落到**松手鼠标点的正下方**（1.1~2.4s），落地播擦汗后回常态。
+- 尺寸跟设置联动（`--mascot-w` 提到 `:root`）；擦汗层按 69% 缩放 + 抬 0.1×宽，和待机同一个大小、桌面线压在输入框上沿。
+
+### 新增：灰底抠像模式 `--key flat`
+- 新视频不是绿幕（灰底 ~128 + 白色速度线 ~184），chroma key 会留线或吃白衬衫。`alpha_flat()` 挖「低饱和 + 亮度区间 + 与画面边缘连通」的连通域，白衬衫被描边包住所以安全。参数 `--flat-lo/-hi/-sat`。
+
+### 修复：设置页也会触发看板娘
+- 切到设置页时 `#panel-chat` 是 hidden、dock 的 rect 为 0，但 `dock.hidden` 仍是 false，掉落定时器照跑。加 `mascotOnScreen()`（rect 宽高 > 0）统一判断。
+
+### 新增：对话看板娘（趴在输入框上沿，30fps × 8 秒循环动画）
+- **位置**：`#chat-col` 里加一层 `.mascot-dock`，**素材里那条深红横线正好压在输入框卡片的上边框上**（`bottom: calc(var(--composer-h) - var(--mascot-w) * 0.105)`，红线在素材底边往上 84/800 处，必须按宽度比例换算）、右侧留 36px 躲开圆角；**红线以下她的袖子和桌沿灰带保留**，压在输入框上（`z-index: 60`）；`--composer-h` 由脚本用 `ResizeObserver` 实时量（输入框换行长高时她跟着上移），所以永远「趴」在框上，不会飘在背景里。
+- **素材**：`console/client/mascot/mascot-loop.webm`（VP9 + alpha，800×771，**30fps×8s**，1.3 MB）+ `mascot-poster.webp`（静态封面，视频解不出来时兜底）。整段是**完整循环动画**：待机托腮 → 挥手 → 说话 → 眨眼吐舌 → 鼓脸 → 生气冒烟 → 砸桌子，首尾接得上。
+- **抠图**：白底视频逐帧拆开抠成透明（`scripts/mascot_video_frames.py`，四边 flood fill + 边缘反预乘去白边），并单独清掉她手肘下面那层浅灰投影（被手臂围成口袋、边框 fill 进不去，按「与背景连通的 175~246 浅灰」再吃一遍，白色校服 ≥248 会挡住它）。**绿幕版**（当前用的）走 chroma key：四角取幕布色算 RGB 距离 `α = clamp((d-10)/(50-10))`（阈值要收紧，否则「白+绿」混色的桌沿会被判成背景淡出），再做 unspill（`G = min(G, (R+B)/2)`）压掉发梢上的绿边。**所有帧共用同一个固定裁切**，对齐靠裁切本身，不能逐帧算包围盒。
+- **编码坑**：libvpx 的 alpha 和 alt-ref 帧不兼容，`-auto-alt-ref 0` 必须加，否则会被静默降级成 `yuv420p`、透明直接没了；`ffprobe` 看输出仍是 `yuv420p`，不代表没有 alpha（alpha 在 BlockAdditional 里，Chrome/Edge/Firefox 正常）。
+- **交互**：点她随机跳到动画里的一个表情段落（`REACTIONS`：1.44 挥手 / 2.88 说话 / 4.0 眨眼 / 5.12 鼓脸 / 6.08 生气 / 7.04 惊讶，按 30fps 成片；**改帧率后必须按 24/新帧率 重算**）+ 随机播一段 CSS 动画（弹跳/摇头/放大/压扁/歪头）+ 说一句话；悬停轻微前倾、悬停 340ms 后说话；空闲 45s 自己嘀咕一句。派发成功时跳到挥手段落。
+- **性能**：`IntersectionObserver` + `visibilitychange` 控制播放，切到设置页或她不在视口里就暂停解码；`drop-shadow` 只挂在静态封面上，不挂视频（弱机上逐帧重绘滤镜会卡）。
+- **设置**：设置 → 外观与自定义背景新增「对话看板娘」开关 + 小/中/大尺寸 + 「让她说句话」，偏好写 `localStorage`（`agenthub.mascot.hidden` / `agenthub.mascot.size`）。**不在她身上放 ✕ 收起按钮**（曾经有，压在她脑袋上极易误点，一收起刷新也不回来）；手机上整块隐藏。
+- **降透明度**：消息压到她身上时降到 85%（鼠标移上去复原），长会话里不挡字。
+- **坑**：全局 `button:hover` / `button:active`（`index.html` 第 146-154 行）会给按钮加底色和整体缩放，`.mascot-figure` 必须用 `.mascot-dock .mascot-figure` 提特异性并 `background: transparent !important`，否则悬停时她背后会多一块灰色矩形。
+- **素材必须内联进 index.html**：`scripts/inline_mascot.py` 把 `src="mascot/*.webm|*.webp"` 换成 data URI（幂等，`--check` 只检查）。原因是 `server.mjs` 只把 index.html 的字节吐给 `/`、没有静态资源路由，线上也是 `scp index.html` 单文件部署——相对路径会 404，表现为「看板娘不显示」。index.html 因此从 750 KB 涨到约 2.6 MB（素材改了要重跑，脚本能刷新已内联的 data URI）。
+- 重叠态透明度从 `.38` 调到 `.85`：`.38` 太淡，长会话里会被误认为「她没显示」。
+- **修「她下半截被输入框盖住」**：`.mascot-dock` 的 `z-index` 提到 60（确保压在输入框之上）、`bottom` 按红线比例定位；右侧内缩 26→36px 避开 22px 圆角；`--composer-h` 增加 load/300ms/1200ms/fonts.ready 四次重测，防止输入框长高后她没跟上。
+- **修「动画播放后背后还有一个不动的她」**：视频是带 alpha 的，静态封面垫在底下时，视频透明的地方会把封面那一帧透出来。现在 `loadeddata` 后给封面加 `.is-hidden`（淡出到 0），解码失败再退回封面。
+- **裁切范围**：`--crop 400,0,1520,1080` —— 上下左右都不切。早先按 `480` 起裁把左边生气/砸桌子的**烟雾、星星**切掉了，按 `y=40` 裁顶又把**呆毛**切了（她抬头时呆毛顶到 y=16）。所有帧的并集包围盒是 x 438~1445。
+- **白底 GIF**：`ffmpeg -f lavfi -i color=white ... overlay,scale=400:-1,palettegen(160),paletteuse(bayer)` → 400×386 / 30fps / 8s / 7.5 MB。
+- 素材生产流水线与提示词见 `console/client/mascot/PROMPTS.md`。
+- **部署注意**：`server.mjs` 启动时把 `index.html` 读进内存（`clientEntry`），之后只吐这一份；部署机用的是 `miniapp/client/index.html` 拷贝。所以前端改完必须 `scp` 到 `miniapp/client/` 再 `systemctl --user restart agent-hub-console`，否则页面还是旧的（表现为「看板娘的 DOM 根本不存在」）。
+
+### 改动：看板娘待机只播「托腮」，点击改成三步循环
+- 待机：只循环 **0~1.2s** 的托腮小动作（就是那张待机图），其余段落不再自动播。
+- 点击按序推进：**摇手（1.44~2.88s）→ 扮鬼脸/眨眼吐舌（4.0~5.12s）→ 生气锤（6.08~7.04s）**，播完自动回待机；第 4 次点击回到摇手。
+- **10 秒内没有下一次点击就归零**，下次又是摇手（`lastPokeAt` 判断）。
+- 实现：`video.loop` 不再靠属性，用一个常驻 `requestAnimationFrame` 卡 `currentTime`（`stepUntil` 播完回 `IDLE_FROM`，空闲超过 `IDLE_TO` 就跳回 0）；派发成功的挥手改走 `playStep(0)`。
+
+### 新增：灰底抠像模式 `--key flat`
+- 新视频不是绿幕：背景是**灰底（~128）带白色速度线（~184）**，还有渐变。用 chroma key 要么把速度线留下，要么把白衬衫吃掉。
+- `alpha_flat()` 的思路：把「低饱和（max-min < 18）且亮度在 lo~hi」且**与画面边缘连通**的区域整块挖掉（`ndimage.label` + 边缘种子）。
+  白衬衫/白袜子被深色描边包住，flood fill 进不去，所以安全；速度线虽然亮，但它连着边缘，一起被挖掉。
+- 参数：`--flat-lo`（默认 100）、`--flat-hi`（默认 216，白底给 255）、`--flat-sat`（默认 18）。
+- 三段各自不同背景：挣扎/俯冲 `--flat-hi 216`，擦汗 `--flat-hi 255`（那段底部是白色桌面）。
+- 另外三段宽高比不同（1.09 / 0.85 / 1.31），`.mascot-air video` 改成 `width:100%; height:auto; bottom:0`（宽度铺满 + 底边对齐），不再用 `object-fit: contain`。
+
+### 修复：设置页也会触发看板娘
+- 切到设置页时 `#panel-chat` 是 `hidden`，`.mascot-dock` 的 rect 变成 0，但 `dock.hidden` 还是 false，自动掉落定时器照跑，于是她在设置页上凭空出现。
+- 加 `mascotOnScreen()`（rect 宽高都 > 0）并在 `drop()` / `enterHold()` / 自动循环里用它判断。
+
+### 修复：华为云码道（CodeArts）签到一直失败
+- 线上报 `CodeArts 返回 [4000]：invalid channel, group not found`。实测：opengw 的 `GET /api/v1/benefit/claim`（每日福利 Token）对这批 AK 稳定返回 4000，**benefit 通道按账号下线了**；而真正发「每日 1000 积分」的 `GET /v1/ops/delivery` + `POST /v1/ops/claim`（snap-access 域名）是好的。
+- 原代码把福利通道的失败当成致命错误直接 return，导致整个签到判失败。现在福利通道**降级为 best-effort**：失败只在消息里注明「福利 Token 通道不可用（4000），已跳过」，继续走积分签到；只有签名/凭证类错误才中止。
+- 实测（线上）：`ok:true / 今日已领取「每日签到领1000积分」（1000积分）`。
+
+### 改进：Qoder 国际版活动列表为空时自动换环境
+- 参考开源项目 `wallechfox/qoder-checkin`：`baseUrls` 可在 `https://openapi.qoder.sh`（国际）与 `https://openapi.qoder.com.cn`（国内）之间切换。
+- `qoderRequest` 支持 `baseUrl` 覆盖；`listQoderCampaigns` / `claimQoderCampaign` 多传一个 `baseUrl`。`checkinQoderOne` 在国际版拿到空活动列表时，用**同一个 token** 换另一套环境再问一次，有活动就在新环境上领，消息里标注「已切到 xxx」。
+- 仍为空时给出可执行提示：窗口 10:00 开启 / 客户端已领过 / **设备指纹 Cosy-MachineToken 过期（回 Windows 跑 01_extract.py 重新提取，或在客户端重登）**。
+
+### 新增：看板娘可拖拽（拎起来 → 挣扎 → 松手坠落 → 落地擦汗）
+- **三段新素材（2026-10-21 换新视频重制）**：来源 `454639640969510_到擦汗为止.mp4`（2560×1440/24fps/11.58s）。挣扎 2.6~4.9s、俯冲 5.6~8.8s、擦汗 9.9~11.5s。**这版背景不是绿幕**（灰底 ~128 + 白色速度线 ~184），所以新加了 `--key flat` 模式。：`mascot-hang`（被拎着挣扎，1.83s loop，800×873）、`mascot-fall`（**头朝下俯冲**，2.53s loop，800×678，`--crop 440,0,2140,1440`）、`mascot-wipe`（落地擦汗，1.30s 播一次，800×1047，`--flat-hi 255` 因为这段背景是白的）。来源：`hanging` 视频 2.0~3.67s / 7.3~8.97s，`falling` 视频 3.3~4.67s。
+- **交互**：`pointerdown` → 拎起来（播 hang 循环、跟手、常态层 `visibility:hidden`）；`pointermove` 位移 >5px 才算拖动；`pointerup` → rAF 加速坠落（**时长 1.1~2.4s，故意放慢**，`e=p²`）+ 播 fall；**落点是松手那个鼠标点的正下方**（`landXFor(e.clientX, w)` → `left = x - w*0.5`，再夹在输入框上方；自动彩蛋用她自己的中心），落地后把 `.mascot-dock` 的 `left` 挪到落点并存 `agenthub.mascot.x`，刷新后保持；到点播 wipe 一次 + 常态层 `anim-squish`，播完回 idle。没拖动就是「点了一下」，走 `react()` 换表情。
+- **结构**：新增 `#mascot-air`（`position:fixed`，`<body>` 末尾、**必须放在看板娘脚本之前**），三个 `<video>` 叠着只显示一个；归位坐标 `restY = dock.bottom - airH`，resize 时重算。
+- **自动彩蛋**：`drop()` 复用同一链路（先挣扎 0.7s、抬 70px 再坠落），每 45~75 秒一次，也可 `HubMascot.drop()`。
+- **尺寸统一**：`--mascot-w` / `--mascot-h` 提到 `:root`，`html[data-mascot-size]` 直接改变量，常态层和空中层共用，设置里选「小」时掉下来也是小的。
+- 四条视频全内联，index.html 到 4.7 MB。
+
+### 变更：会话归档改为「直接执行 + 底部气泡撤销」
+- **去掉二次确认**：点会话的归档图标不再弹 `confirm()`，直接归档并立刻从列表移除。
+- **底部漂浮气泡**：一行提示「已归档「会话名」」+ 实心「撤销」按钮，8 秒倒计时条，浮在输入框上方（按 `#chat-composer` 实际位置算，避免盖住发送按钮）。超时自动消失，归档保留。
+- **新增 `POST /api/chat/unarchive-session`**：把 `archives/<agent>-<sessionId>.json` 读回、删掉归档文件、把会话插回 `entry.sessions` 首位，返回新的 `sessions` / `thread`。老会话可能没有 `agent` 字段（归档名是 `unknown-<id>.json`），两种文件名都会尝试。
+- 撤销后提示「已撤销归档」；失败走 `toast` 报错，不会静默。
+
+### 变更：MiniMax worker 补上模型目录与 agent 模式
+- **默认模型 `minimax/MiniMax-M3.1-Flash`，另留一档 `minimax/MiniMax-M3`**：控制台模型目录、三份 `agents*.example.json`、`packaging/install.py` 与线上 `agents.json` 同步。**实测发现 provider 前缀国内区也是 `minimax/*`**（`minimax-cn/MiniMax-M3.1-Flash` 会报 `not available for the "configured_provider" route (preset cn-prod)`），此前文档里写的「国内区用 minimax-cn」是错的，已一并纠正。
+- **agent 模式**：`cli` 加 `--prompt-mode work`（mcode 的 `--prompt-mode` 有 `tui/coding/work`，默认 `tui`，work 才是干活模式）；`hub/capabilities.json` 新增 `permission.modes` —— `edit`（`--permission smart`，默认）与 `full`（`--permission full`）。控制台「模型与运行参数 → 文件编辑权限」现在对 minimaxcode 可选，实测 `full` 档经 `/api/dispatch` 派发能真实落盘。
+- **`--permission off` 不是只读**：实测 off 与 smart 都能写文件（off 的语义是「关闭权限询问」= 全放开），所以**不声明 readonly 档**，避免给用户一个假的只读开关。
+- **`merge_cli_arguments` 把 `--permission` / `--prompt-mode` / `--mode` 纳入标量替换**：否则 `cli` 里已有的 `--permission smart` 会和任务选项叠加成重复 flag（最后生效的才是用户所选，容易踩坑）。
+- **子代理与配额中枢同步同一套滑轨**：卡片区改一行滑轨（`flex: 0 0 360px`，移动端 86%），支持鼠标拖动 + 松手惯性 + **无限循环**（首尾搬家 + `scrollLeft` 补偿）；头部新增 `#qa-agent-tabs` 快速跳转胶囊（带主题色圆点），点哪个就把那张卡**滑到视口正中**（越界时靠搬家补位，所以左右都能到）。选中卡片的**顶部配色条**取该子代理的 `AGENT_THEMES[color]`，与打卡卡片同一套视觉；滚动时高亮跟随「最靠近中心」的卡片，搜索过滤时胶囊同步隐藏。
+- **修极光 / 自定义背景下的选中描边**：`body.has-custom-bg .card.uh-card` 用 `border: 1px solid rgba(255,255,255,.1) !important` 接管了毛玻璃卡片的边框，把选中态的 `border-color` 顶掉了 —— 表现就是「只有顶部配色条、没有整圈细线」。补一条同权重 `!important` 覆盖（`color-mix(accent 55%, transparent)`），现在和打卡卡片一样有整圈描边。**改这类卡片样式时注意 `has-custom-bg` 那批 `!important` 规则**。
+- **打卡卡片顶部配色条**：跟随该子代理的对话主题色（`AGENT_THEMES[agent].color`），**只对被平台胶囊选中 / 滑到轨道中心的那张卡显示**；Trae 卡片不再常亮（原 `highlight-card` 固定靛蓝渐变已移除）。
+- **修「选中一个却亮两个气泡」**：① 胶囊 hover 改为弱提示且不再作用于 `.active`（点完鼠标还停在上面，原样式和选中态一样亮）；② 程序化滚动期间（点胶囊后 800ms）滚动高亮不抢主，避免刚选中的气泡被邻近卡片顶掉。
+
+### 新增：MiniMax Code 每日签到（链路由 `totorosir-minimax-checkin` 移植）
+- **接入第 6 个签到平台 `minimaxcode`**：复用 mcode CLI 自己的 OAuth 登录态（`~/.minimax/auth/prod/<cn|en>/mcode-public/auth.json`），按桌面端同款参数与签名直调 `GET signin/status` → `POST signin/claim`，无需打开客户端、无需手工复制 token。[minimax-checkin.mjs](console/minimax-checkin.mjs)
+- **签名照桌面端还原**：`x-signature = md5(秒级时间戳 + 盐 + body)`，`yy = md5(encodeURIComponent(签名路径) + "_" + body + md5(毫秒时间戳) + "ooui")`；参数键序固定、`unix` 对齐整秒、签名路径末尾拼 `&client=desktop`。这套签名已用真实账号跑通（面板返回 7 天数据、今日 `400 基础 + 0 奖励`、连签第 3 天）。
+- **401 自愈**：`refresh_token` + `client_id=mcode-public` + `scope=agent.default` + `audience=agent-backend` 走 `POST {account}/oauth2/token` 续期，成功后**把新 token 回写 `auth.json` / `auth-state.json`**，CLI 与签到两边不会各持一份失效凭证。
+- **状态语义**：日状态 `1`未开始 / `2`可领取 / `3`已领取 / `4`不可用；`claim_result` `1`成功 / `2`今日已领。已领取时**只查不领**，不会重复请求 claim。
+- **额度卡片改走签到面板**：`vendor-quota.mjs` 原来拿 mcode 的 token 去打开放平台 `/token_plan/remains`，必然 401（Code 产品线的 token audience 是 `agent-backend`）。现在改为读签到面板，卡片显示「连续签到第 N 天」与今日基础/奖励积分。
+- **控制台打卡面板**：新增 MiniMax Code 卡片（凭据来源、签到接口、打卡状态、累计奖励、账号行），顶部统计胶囊计入第 6 个平台，自动签到定时器与「一键全签」都包含它。
+- **选项卡改成一行横向滑轨**：顶部 `.checkin-nav-tabs` 与平台胶囊条统一 `flex-wrap: nowrap` + `overflow-x: auto` + 隐藏滚动条 + `scroll-snap`，移动端不再把按钮压成等分小格（原 `flex: 1 1 0` 已去掉）。**打卡卡片区也从网格改成同一条滑轨**（`flex: 0 0 300px`，移动端 82% 露一角提示可滑），并支持按住鼠标左右拖动。
+- **平台胶囊改成滑轨导航 + 无限循环**：点胶囊不再筛选卡片，而是把对应卡片**滑到「第二个位置」**（第一格留给上一张，形成滑轨感）——这是用户明确要的落点：点 Trae / CodeArts 时它必须真的动起来，而不是因为「居中需要负偏移」被 clamp 在原地不动。循环用「首尾卡片搬家 + `scrollLeft` 位置补偿」实现（不克隆节点，避免 id 重复导致 `renderOverview` 更新到假节点）；目标在更左边时从末尾搬卡补位、在更右边时把首卡搬到末尾腾位，所以左右两个方向都能滑过去。拖动时高亮跟随「落在第二格」的那张卡（不再用「最靠近轨道中心」，否则点了 A 会亮 B）。
+- **开源参考**：签到链路以 SkillHub 的 `@user_3a370331/totorosir-minimax-checkin`（作者 龙猫科技说 longmaoit）为参考实现并已移植，控制台「开源参考」卡片与 README 致谢已列明；实现为本仓库原生代码，未引入第三方依赖。
+
+### 新增：Qoder / Qoder CN 双区域接入
+- **新增两个 worker**：`qoder`（国际版，`qodercli` / `~/.qoder`）与 `qoder-cn`（国内版，`qoderclicn` / `~/.qoder-cn`），控制台简称分别为 **`qd`** / **`qdcn`**。`agents.example.json`、`hub/capabilities.json`、登录/退出表、账号档案表、签到平台表与 UI 主题/头像表已同步。
+- **默认模型 DeepSeek-Flash**：两区默认均为 `dfmodel`（0.1x，个人版限时免费），模型目录同时覆盖 DeepSeek-V4-Pro、Qwen3.8-Max/Flash、Qwen3.7-Max/Plus/Flash、GLM-5.3/5.3-Flash/5.2、Kimi-K3/K2.8-Preview、MiniMax-M2.7 与 Auto；模型切换走 `-m <key>`。
+- **对话 / 流式 / 文件**：无头对话用 `-p`，流式输出 `--output-format stream-json`（assistant 消息为整段快照，声明为 `answer_snapshots`）；文件与图片走 `--attachment`；工作目录走 `--cwd`。只读模式使用官方内置 `Plan` 代理，编辑/完全控制映射到 `--permission-mode accept_edits` / `bypass_permissions`。
+- **账号快速切换**：Qoder CLI 的登录态实际存放在 `~/.qoder/.auth/user`（AES-128-CBC，key=iv=`machine_id` 前 16 字节），keychain 文件（`qoder-cli-credentials.json` + `.keychain-salt`）只是无系统钥匙串时的回退。账号档案现归档 `.auth/user` + `.auth/machine_id`，切换时两份一起还原；同时保留 keychain 回退格式的读取与回写。桌面版 `auth.v1.dat`（Chromium v11）可用系统钥匙串解出 token，已支持导入 CLI 的 `.auth/user`。[qoder.mjs](console/qoder.mjs)
+- **一键签到（链路由 `L0NE-6/Qoder-Daily` 移植）**：`GET /sash/api/v1/me/campaigns?forceRefresh=true` 拉实时活动列表，**只取 `actionType=CLAIM_BENEFIT` 的行**逐个 `POST .../{campaignId}/claim`；`CLAIMED` / `replayed` / `409` / 同人已领均按「今日已领」处理，不重复计数。以前把 `VIEW_DETAILS` 这类常驻活动也算进「已领取」，会把真正可领的每日活动盖掉，现已修正。请求带设备风控头 `Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType`（由本机 Qoder 客户端或 qodercli 的 `runtime-info` 组件生成，缓存 50 分钟）与 `Cosy-MachineOS / Cosy-MachineId / Cosy-MachineHostname / Cosy-Version`——国际版每日积分活动只对带这些头的请求下发，自行编造或用桌面端派生头都会被过滤。缺组件时国际版会从官方 qodercli npm 包提取（sha512 校验，`QODER_UMID_NO_INSTALL=1` 关闭），并在卡片上写明原因。token 临近过期时先用 `drt-` / `jrt-` 对应的 refresh 端点续期并写回加密凭据。[qoder.mjs](console/qoder.mjs) · [qoder-device.mjs](console/qoder-device.mjs)
+- **品牌图标**：两区共用 LobeHub `qoder-color.svg`（品牌绿 `#2ADB5C`），已加入控制台品牌头像表与平台主题变量。
+- **开源参考**：Qoder 签到链路（实时活动、`CLAIM_BENEFIT` 筛选、UMID 设备风控头、token 续期）明确以 `L0NE-6/Qoder-Daily` 为参考实现并已移植，README 致谢已列明；凭据与账号切换流程参考 `shuishuipingan/qoder2api-hub`（活动平台、token 刷新、CLI 文件回退）与 `70548887/Qoder-Switch`（多账号配置备份/还原），并索引 `wallechfox/qoder-checkin`、`techysy/CreditDaddy`；实现为本仓库原生代码，未引入第三方依赖。
+
+### 重写：MiniMax worker 改用官方 `mcode` CLI（告别 `mmx`）
+- **换引擎**：`minimaxcode` 从 `mmx text chat` 换成 **MiniMax Code 官方 CLI `mcode`** 的 headless 入口：`mcode exec --permission off --output-format text`，`--cwd` 走 `workdir_via`。`mcode` 与 MiniMax Code 桌面端同一账号体系，签到赠予积分在 Code 内可用；`mmx` 走的是开放平台 Token Plan / 付费余额，两条账互不相通。
+- **不再预设模型 id**：`mcode` 的模型引用是 `provider/model`（如 `minimax/MiniMax-M3`），未验证的 id 不再写死；派发不传 `--model` 就用账号默认，控制台模型目录对该 worker 留空。
+- **登录链路**：`mcode login --region cn --no-browser`（PTY 抓授权链接 + 设备码）。**mcode 的凭据既不在 `~/.minimax-code` 也不叫 `codex-auth.json`**，实测落在 `~/.minimax/auth/prod/<region>/mcode-public/`：`auth.json` 里是 `records["com.minimax.mcode.oauth.prod.cn <hash>"] = { accessToken, refreshToken, expiresAtMs }`，`auth-state.json` 里是 `{ status, region, expiresAtMs }`；控制台按这套路径登记凭据、判登录态与取配额。粘贴 `sk-` API Key 的旧分支改为提示正确做法（`mcode provider set-minimax-key`），不再往废弃的 `~/.mmx` 写数据。
+- **Hub 侧登录也换过来了**：`hub/login_manager.py` 的命令表由 `mmx` 改 `mcode`，登录命令改 `login --region <region> --no-browser`；**mcode 没有 `auth status` 子命令**，登录态改判 `auth-state.json` 的 `status === "authenticated"`（登出后 `auth.json` 仍在，只有 status 会翻转，所以不能只看文件存在），`hub_login` 的 status/start 与成功判定全部走这条。新增 4 个单测覆盖「无目录 / signed-out / authenticated / 非 cn 区域」。
+- **配额与账号身份**：`console/vendor-quota.mjs` 原来硬读 `~/.mmx/config.json`，`~/.mmx` 移走后配额必然报「凭据不可用」。改为从 mcode 的 `auth.json`（按 `expiresAtMs` 取最晚的一条 `accessToken`）+ `auth-state.json`（拿 region）取数，`~/.mmx/config.json` 只作历史兜底；`accounts.mjs` 的账号身份由 `mmx:<region>` 升级为 **`mcode:<region>`**，`isLiveCredValid` 改用 `auth-state.json` 的 status 判定，并让旧 `mmx:` / 文件指纹档案按 savedAt 原地复用，不会多裂一份历史档案。
+- **安装器**：`packaging/install.py` 不再探测 `mmx-cli`，改为 `mcode`（`which` 或 `~/.minimax-code/bin/mcode`），注册的 cli 是 `exec --permission off --output-format text {task}`。
+- **能力声明**：`hub/capabilities.json` 去掉 `--stream` / thinking 相关条目（mcode 用 `--output-format` 换值，不是布尔开关），保留 file/image 的 `messages_file` 附件注入。
+- **Linux 侧清理**：`mmx-cli` 已从 n5095 卸载，旧 `~/.mmx` 移到 `~/.mmx.removed-20261020`（含 OAuth token，留档不删）；mcode 0.6.12 装在 `~/.minimax-code`（独立 prefix，未进 PATH，配置里用绝对路径）。
+- 待办：授权完成后再补三件事：① 用 `mcode provider list` 确认区域 provider id（国内区是 `minimax-cn/*`，不是 `minimax/*`）并写回 `agents.json` 别名；② 跑通一次 `mcode exec` 真调用，把「待验证」的模型目录补回来；③ 用控制台「登录」按钮再走一遍，确认沙箱 → 账号档案 → 切换生效这条链路（`auth.json` / `auth-state.json` 两个文件的归档路径已按实测结构修好）。
+
+### 重写：Trae 每日签到（链路由 `L0NE-6/Trae-AutoCheckin` 移植）
+- **换掉整套旧实现**：原实现是「CLI 落盘 JWT + CDP 点客户端按钮」双轨，JWT 一旦被服务端注销（1001）就只剩找按钮这条路，失败时只能报「找不到签到按钮」。新实现按 `L0NE-6/Trae-AutoCheckin` 的做法直签：[trae-checkin.mjs](console/trae-checkin.mjs)
+- **设备号必须用客户端真实号**：从 `storage.json` 的 `iCubeAuthInfo://icube-dc:<号>` 取真实注册号（兼容「号写在值里」的写法），一个真号一天只签一个账号，多账号时其余账号才退回派生号；自己生成的号会被拒成 `9074`。
+- **判定链改成状态 → 领取 → 同设备号回查**：先 `POST /trae/api/v2/ug/checkin_credits/status`（body 固定 `{"req_source":1}`），已签直接返回；`enable=false` 判「未开放」不再发 claim；claim 返回 `0` 也要用同一设备号回查 `checked_in` 是否翻转，没翻转就判「未确认」——上游对已签过的账号、对任何设备号都回 `0`，不回查会亮假绿灯。
+- **错误码语义**：`9095` 今日已签、`9074` 排队限流（并提示多半是设备号不对）、`1001/1002/401/403` 鉴权失效；积分余额改从 `user_current_entitlement_list` 取真实数值（先 `usage_summary`，再按权益包求和）。
+- **凭据失效自动续期**：用 `refreshToken` + 设备证明（ECDSA P-256 对 `POST\\n路径\\nClientID\\nrefreshToken\\n时间戳\\nnonce` 签名）走新版 `POST /trae/api/v3/oauth/ExchangeToken`，三组 ClientID×产品线依次尝试；缺设备证明退回旧端点（实测报 `10101`）。轮换后的 `refreshToken` 落盘到 `~/.agenthub/trae-token-cache.json`，避免轮换链断掉。设备密钥同样从 `storage.json` 的 `iCubeAuthInfo://icube-dc:<号>` 解出（tc 头 + AES-128-CBC + sha512 校验）。
+- **控制台移除 Trae「重新登录」按钮**：不再需要跳 OAuth 授权窗口——JWT 失效会先用桌面端 refreshToken 自动续期，续不动才提示去客户端重新登录。
+- **开源参考**：上述链路明确以 `L0NE-6/Trae-AutoCheckin` 为参考实现并已移植，README 致谢已列明；实现为本仓库原生代码，未引入第三方依赖。
+
 ### 修复
+- **Trae 每日签到跟随桌面客户端账号**：CLI JWT 被服务端注销（1001）后，原 CDP 兜底只会在主界面找「签到」按钮，找不到就直接判 `failed`；实际签到入口在「积分/权益」面板的「每日签到」分组里。现在 CDP 会先打开积分面板、展开每日签到分组：有「签到/去签到/签到领取」按钮就点击；没有按钮时根据最近一条「签到奖励」的到期时间判断今天是否已领，已领返回 `already` 而不是失败。已用 n5095 上正在运行的 Trae 1.107.1 实测，桌面账号今日已签时卡片显示「客户端账号今日已签到」。
 - **Trae 1.107 更新后派发只返回「思考中」**：bridge 的 `/v1/chat` 会在约 5 秒内返回 `TRAE\n思考中` 并标记 `completed`，而真实回答此时还没渲染。hub 原来只在文本为空时才读 DOM，于是上层拿到的是占位文本。现在识别占位回复（空 / ≤24 字且含「思考中」「thinking」「生成中」）后统一走 `drivers/dom_read.js` 兜底读取（实测该脚本的选择器仍有效，能取到真实答案）。
 - **签到凭据回退**：Trae 重新登录后新写入的 token 可能被服务端判 `1001 / enable:false`，而账号档案里的旧 token 仍然有效。现在同一身份保留 `alternates` 候选，首选返回 1001 时按序回退（WorkBuddy 返回 401 时同样处理）；CLI 当前凭据未过期时优先于档案快照，不再只按 `exp` 挑选（重登后新 token 的 exp 往往比旧 token 短）。
 

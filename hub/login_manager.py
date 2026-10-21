@@ -19,12 +19,13 @@ from command_runtime import prepare_command, spawn_owned, terminate_owned
 
 WORKERS = {"codebuddy", "codebuddy-cn", "minimaxcode", "github-copilot",
            "antigravity", "mimocode", "zcode", "traecode", "codearts",
-           "opencode", "cline"}
+           "opencode", "cline", "qoder", "qoder-cn"}
 COMMANDS = {"codebuddy": "codebuddy", "codebuddy-cn": "codebuddy",
-            "minimaxcode": "mmx", "github-copilot": "copilot",
+            "minimaxcode": "mcode", "github-copilot": "copilot",
             "antigravity": "agy", "mimocode": "mimo", "zcode": "zcode",
             "traecode": "traecli", "codearts": "codearts",
-            "opencode": "opencode", "cline": "cline"}
+            "opencode": "opencode", "cline": "cline",
+            "qoder": "qodercli", "qoder-cn": "qoderclicn"}
 HOSTS = {"codebuddy": ("codebuddy.ai", "copilot.tencent.com"),
          "codebuddy-cn": ("codebuddy.ai", "copilot.tencent.com"),
          "minimaxcode": ("minimax.io", "minimaxi.com", "minimax.cn"),
@@ -32,9 +33,46 @@ HOSTS = {"codebuddy": ("codebuddy.ai", "copilot.tencent.com"),
          "mimocode": ("xiaomimimo.com",),
          "opencode": ("opencode.ai",),
          "cline": ("cline.bot",),
+         "qoder": ("qoder.com", "qoder.sh"),
+         "qoder-cn": ("qoder.com.cn", "qoder.cn"),
          "traecode": ("trae.cn", "trae.ai", "trae.com.cn", "trae.com")}
 ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 ACTIVE = {"preparing", "awaiting_user"}
+
+
+def qoder_logged_in(check):
+    """Qoder exits 0 even when logged out; trust only status JSON's logged_in."""
+    text = ANSI.sub("", (check.stdout or b"").decode("utf-8", "replace"))
+    text += ANSI.sub("", (check.stderr or b"").decode("utf-8", "replace"))
+    try:
+        data = json.loads(text.strip())
+        return isinstance(data, dict) and data.get("logged_in") is True
+    except ValueError:
+        return re.search(r'"logged_in"\s*:\s*true', text) is not None
+
+
+def minimax_logged_in():
+    """MiniMax Code CLI（mcode）没有 `auth status` 子命令。
+
+    登录态落在 `~/.minimax/auth/<env>/<region>/mcode-public/auth-state.json`，其中
+    `status` 为 `authenticated` 才算登录（登出后 auth.json 还在，但 status 会翻转）。
+    目录带 region 一层，因此按 `auth/*/*/mcode-public/` 扫。只读 status 字段，
+    不解析、不返回任何 token。
+    """
+    root = Path(os.path.expanduser(os.path.expandvars(os.environ.get("MCODE_AUTH_DIR") or "~/.minimax/auth")))
+    try:
+        candidates = sorted(root.glob("*/*/mcode-public/auth-state.json"))
+    except OSError:
+        return False
+    for candidate in candidates:
+        try:
+            with candidate.open("r", encoding="utf-8") as handle:
+                state = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        if str(state.get("status") or "").strip().lower() == "authenticated":
+            return True
+    return False
 
 
 def safe_url(value, worker):
@@ -48,8 +86,15 @@ def safe_url(value, worker):
             return None
         if not any(host == item or host.endswith("." + item) for item in HOSTS.get(worker, ())):
             return None
-        if any(re.sub(r"[^a-z]", "", key.lower()) in {"accesstoken", "refreshtoken", "idtoken", "apikey", "token", "password", "secret", "authorization"}
-               for key, _ in parse_qsl(url.query)):
+        sensitive = {"accesstoken", "refreshtoken", "idtoken", "apikey", "token", "password", "secret", "authorization"}
+        def is_sensitive(key):
+            normalized = re.sub(r"[^a-z]", "", key.lower())
+            # Qoder's device link carries the machine binding token users must
+            # present; it is the authorization itself, not a stored credential.
+            if worker in {"qoder", "qoder-cn"} and normalized == "machinetoken":
+                return False
+            return normalized in sensitive
+        if any(is_sensitive(key) for key, _ in parse_qsl(url.query)):
             return None
         return url.geturl()
     except ValueError:
@@ -170,14 +215,11 @@ class LoginManager:
             return {"ok": False, "worker": worker, "action": action, "status": "unavailable",
                     "instructions": f"Install the official {COMMANDS[worker]} CLI on the Hub host, then configure agents.json cli with its executable (or [node, script])."}
         if worker == "minimaxcode":
-            try:
-                check = run_status(prefix + ["auth", "status", "--output", "json"], env, 8)
-                if check.returncode == 0:
-                    return {"ok": True, "worker": worker, "action": action, "status": "authenticated"}
-                if action == "status":
-                    return {"ok": False, "worker": worker, "action": action, "status": "unknown", "instructions": "Call hub_login with action=start to obtain an official MiniMax OAuth link."}
-            except (OSError, subprocess.TimeoutExpired):
-                return {"ok": False, "worker": worker, "action": action, "status": "unavailable", "error": "MiniMax authentication status command failed or timed out"}
+            # mcode 没有 auth status：以 dataDir 下的 codex-auth.json 作为登录态
+            if minimax_logged_in():
+                return {"ok": True, "worker": worker, "action": action, "status": "authenticated"}
+            if action == "status":
+                return {"ok": False, "worker": worker, "action": action, "status": "unknown", "instructions": "Call hub_login with action=start to obtain an official MiniMax device-code link."}
         elif worker == "github-copilot":
             if action == "status":
                 if old and old["status"] == "authenticated":
@@ -202,6 +244,17 @@ class LoginManager:
         elif worker == "mimocode":
             if os.name != "nt":
                 return {"ok": False, "worker": worker, "action": action, "status": "manual_required", "instructions": "Run mimo auth login --provider xiaomi --pure in a local terminal. Automatic loopback link capture is currently verified on Windows."}
+        elif worker in {"qoder", "qoder-cn"} and action == "status":
+            status_command = (profile.get("login") or {}).get("status_command")
+            if not status_command:
+                return {"ok": False, "worker": worker, "action": action, "status": "unknown", "instructions": "This worker has no configured login.status_command."}
+            try:
+                check = run_status(status_command, env, 8)
+                if qoder_logged_in(check):
+                    return {"ok": True, "worker": worker, "action": action, "status": "authenticated"}
+                return {"ok": False, "worker": worker, "action": action, "status": "unknown", "instructions": "Call hub_login with action=start for official Qoder browser authorization."}
+            except (OSError, subprocess.TimeoutExpired):
+                return {"ok": False, "worker": worker, "action": action, "status": "unavailable", "error": "Qoder authentication status command failed or timed out"}
         elif worker not in {"codebuddy", "codebuddy-cn"}:
             # Other official CLIs are handled only when explicitly configured;
             # do not infer login from a model probe or reuse the desktop account.
@@ -264,7 +317,8 @@ class LoginManager:
                 auth_cwd = Path.home() / ".cache" / "agenthub" / "login-workspace"
                 auth_cwd.mkdir(parents=True, exist_ok=True)
                 if worker == "minimaxcode":
-                    cmd = prefix + ["auth", "login", "--recommend", "--region=" + str((profile.get("login") or {}).get("region", "cn"))]
+                    # --no-browser：Hub 主机多半没有桌面浏览器，让它只打印链接 + 设备码
+                    cmd = prefix + ["login", "--region", str((profile.get("login") or {}).get("region", "cn")), "--no-browser"]
                     env.pop("CI", None)
                 else:
                     cmd = prefix + ["auth", "login", "--provider", "xiaomi", "--pure"]
@@ -365,7 +419,7 @@ class LoginManager:
                     code = re.search(r"(?:Code|user.code)\s*[:=]\s*([A-Za-z0-9-]{4,32})", text, re.I)
                     if code:
                         self._transition(session, user_code=code.group(1))
-                    if worker == "minimaxcode" and "Logged in successfully" in text:
+                    if worker == "minimaxcode" and minimax_logged_in():
                         self._transition(session, status="authenticated")
                         break
                     if worker == "mimocode" and "Login successful" in text:
@@ -382,8 +436,14 @@ class LoginManager:
                 if worker == "github-copilot" and code == 0:
                     self._transition(session, status="authenticated")
                 elif worker == "minimaxcode" and code == 0:
-                    check = run_status(prefix + ["auth", "status", "--output", "json"], env, 8)
-                    self._transition(session, status="authenticated" if check.returncode == 0 else "failed")
+                    authenticated = minimax_logged_in()
+                    self._transition(session, status="authenticated" if authenticated else "failed",
+                                     **({} if authenticated else {"error": "Official mcode login ended without writing codex-auth.json"}))
+                elif worker in {"qoder", "qoder-cn"} and code == 0:
+                    check = run_status((profile.get("login") or {}).get("status_command") or prefix + ["status", "-o", "json"], env, 8)
+                    authenticated = qoder_logged_in(check)
+                    self._transition(session, status="authenticated" if authenticated else "failed",
+                                     **({} if authenticated else {"error": "Official Qoder login ended without verified authentication"}))
                 elif code == 0 and (profile.get("login") or {}).get("status_command"):
                     check = run_status(profile["login"]["status_command"], env, 8)
                     self._transition(session, status="authenticated" if check.returncode == 0 else "failed")

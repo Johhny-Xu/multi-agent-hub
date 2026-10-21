@@ -11,6 +11,7 @@ import https from 'node:https';
 import tls from 'node:tls';
 import { homedir, platform as osPlatform, userInfo as osUserInfo } from 'node:os';
 import { join, dirname } from 'node:path';
+import { fetchMiniMaxSignin } from './minimax-checkin.mjs';
 import { fileURLToPath } from 'node:url';
 
 const HOME = homedir();
@@ -248,8 +249,8 @@ const TOKEN_READERS = {
     return { token: tok, account };
   },
   'minimaxcode': async () => {
-    const d = await readJsonSafe(join(HOME, '.mmx', 'config.json'));
-    return d?.oauth?.access_token || d?.api_key || d?.apiKey || null;
+    const auth = await readMinimaxAuth();
+    return auth ? findMinimaxToken(auth.raw) : null;
   },
   'antigravity': async () => {
     const credPath = join(HOME, '.gemini', 'antigravity-cli', 'antigravity-oauth-token');
@@ -420,28 +421,112 @@ async function fetchCodeBuddyQuota(tokenObj, base, label) {
 
 // ---------------------------------------------------------------- minimax
 // 国内 OAuth（region=cn）用 minimaxi.com 域；国际用 minimax.io。
-// ~/.mmx/config.json 的 oauth.resource_url 优先。
+// mcode（MiniMax Code 官方 CLI）的 OAuth 凭据在 ~/.minimax/auth/<env>/<region>/mcode-public/：
+//   auth.json       { records: { "com.minimax.mcode.oauth.prod.cn <hash>": { accessToken, expiresAtMs } } }
+//   auth-state.json { status: "authenticated", region: "cn" }
+// 老的 mmx CLI 是 ~/.mmx/config.json —— 放最后兜底。
 const MINIMAX_PATHS = ['/v1/api/openplatform/coding_plan/remains', '/v1/token_plan/remains'];
 const MINIMAX_REGION_BASES = {
   cn: ['https://www.minimaxi.com', 'https://api.minimaxi.com'],
   intl: ['https://www.minimax.io', 'https://api.minimax.io'],
 };
 
-function minimaxUrls() {
-  return readJsonSafe(join(HOME, '.mmx', 'config.json')).then((cfg) => {
-    const oauth = cfg?.oauth || {};
-    const bases = [];
-    if (typeof oauth.resource_url === 'string' && oauth.resource_url.startsWith('http')) {
-      bases.push(oauth.resource_url.replace(/\/+$/, ''));
+/** mcode 凭据候选路径；MCODE_AUTH_DIR 可整体覆盖 ~/.minimax/auth */
+function minimaxAuthCandidates() {
+  const out = [];
+  const envDir = String(process.env.MCODE_AUTH_DIR || '').trim();
+  if (envDir) {
+    for (const rel of ['auth.json', 'auth-state.json']) {
+      out.push({ label: join(envDir, rel), path: join(envDir, rel) });
     }
-    for (const b of MINIMAX_REGION_BASES[oauth.region === 'cn' ? 'cn' : 'intl'] || []) bases.push(b);
-    const urls = [];
-    for (const base of bases) for (const p of MINIMAX_PATHS) {
-      const u = base + p;
-      if (!urls.includes(u)) urls.push(u);
+  }
+  for (const region of ['cn', 'global', 'intl']) {
+    for (const rel of ['auth.json', 'auth-state.json']) {
+      const p = join(HOME, '.minimax', 'auth', 'prod', region, 'mcode-public', rel);
+      out.push({ label: join('.minimax/auth/prod', region, 'mcode-public', rel), path: p });
     }
-    return urls;
-  });
+  }
+  out.push({ label: join('.mmx', 'config.json'), path: join(HOME, '.mmx', 'config.json') });
+  return out;
+}
+
+async function readMinimaxAuth() {
+  for (const item of minimaxAuthCandidates()) {
+    const raw = await readJsonSafe(item.path);
+    if (raw) return { raw, source: item.label, legacy: item.label.startsWith('.mmx'), dir: dirname(item.path) };
+  }
+  return null;
+}
+
+/** 在 auth.json 的 records 里挑一份 token（记录键形如 "com.minimax.mcode.oauth.prod.cn <hash>"） */
+function pickMinimaxRecordToken(raw) {
+  const records = raw?.records;
+  if (!records || typeof records !== 'object') return null;
+  let best = null;
+  for (const value of Object.values(records)) {
+    if (!value || typeof value !== 'object') continue;
+    const tok = typeof value.accessToken === 'string' ? value.accessToken.trim() : '';
+    if (!tok) continue;
+    const exp = Number(value.expiresAtMs) || 0;
+    if (!best || exp > best.exp) best = { tok, exp };
+  }
+  return best ? best.tok : null;
+}
+
+/**
+ * 兼容两种形态：mcode 的 auth.json（records[].accessToken）与老 mmx 的 config.json（oauth.access_token）。
+ * 兜底再按「已知 token 字段名」限深递归，覆盖字段名跨版本变化的情况。
+ */
+function findMinimaxToken(node, depth = 0) {
+  const fromRecords = pickMinimaxRecordToken(node);
+  if (fromRecords) return fromRecords;
+  if (!node || typeof node !== 'object' || depth > 4) return null;
+  const keys = ['access_token', 'accessToken', 'access', 'token', 'api_key', 'apiKey', 'apiKeyValue'];
+  for (const key of keys) {
+    const value = node[key];
+    if (typeof value === 'string') {
+      const tok = value.trim();
+      if (tok.length > 8 && !/^https?:/i.test(tok)) return tok;
+    }
+  }
+  for (const value of Object.values(node)) {
+    const hit = findMinimaxToken(value, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function minimaxRegionOf(raw) {
+  const region = String(raw?.region || raw?.oauth?.region || '').trim().toLowerCase();
+  return region === 'global' || region === 'intl' ? 'intl' : 'cn';
+}
+
+function minimaxAccountOf(raw) {
+  const acctRaw = raw?.account ?? raw?.oauth?.account ?? raw?.user ?? null;
+  if (typeof acctRaw === 'string' && acctRaw.trim()) return acctRaw.trim();
+  const fromObj = acctRaw && (acctRaw.email || acctRaw.name || acctRaw.username || acctRaw.user_name || acctRaw.nick);
+  if (fromObj) return String(fromObj).trim();
+  const direct = raw?.email || raw?.user?.email || raw?.user?.name || null;
+  return direct ? String(direct).trim() : null;
+}
+
+async function minimaxUrls() {
+  // auth.json 里没有 region，region 在 auth-state.json：把两者合并后再判断
+  const auth = await readMinimaxAuth();
+  const state = auth?.dir ? await readJsonSafe(join(auth.dir, 'auth-state.json')) : null;
+  const raw = { ...(auth?.raw || {}), ...(state || {}) };
+  const oauth = raw?.oauth || {};
+  const bases = [];
+  const resource = [oauth.resource_url, raw?.resource_url, raw?.base_url].find(
+    (value) => typeof value === 'string' && value.startsWith('http'));
+  if (resource) bases.push(resource.replace(/\/+$/, ''));
+  for (const base of MINIMAX_REGION_BASES[minimaxRegionOf(raw)] || []) bases.push(base);
+  const urls = [];
+  for (const base of bases) for (const p of MINIMAX_PATHS) {
+    const u = base + p;
+    if (!urls.includes(u)) urls.push(u);
+  }
+  return urls;
 }
 
 function getMiniMaxField(model, snakeKey, camelKey) {
@@ -528,14 +613,42 @@ function addMiniMaxQuota(quotas, key, model, getTotal, countSnake, countCamel, p
   quotas[key] = buildMiniMaxQuota(effectiveTotal, effectiveCount, getMiniMaxResetAt(model, ...resetArgs), countMeansRemaining, providedPercent);
 }
 
+/**
+ * MiniMax Code（mcode）的展示数据。
+ * Code 产品线没有「额度条」的概念，真正的每日产出是签到积分，所以直接读签到面板：
+ * 面板里的 days[is_today] 给出连续天数 / 今日状态 / 基础分与奖励分。
+ */
+async function fetchMiniMaxCodeQuota() {
+  try {
+    const info = await fetchMiniMaxSignin('cn');
+    if (!info) return null;
+    if (info.status === 401) {
+      return { message: 'MiniMax 登录态已失效，请在控制台点「登录」重新走 mcode 设备码授权。' };
+    }
+    if (info.status !== 200 || !info.today) return null;
+    const { dayNo, dayText, points, bonusPoints } = info.today;
+    const total = (Number(points) || 0) + (Number(bonusPoints) || 0);
+    const plan = dayNo ? `连续签到第 ${dayNo} 天` : 'MiniMax Code';
+    const detail = `今日${dayText}${total ? ` · ${points} 基础 + ${bonusPoints} 奖励 = ${total} 积分` : ''}`;
+    return {
+      account: 'MiniMax Code · 国内版',
+      plan,
+      message: `${detail}（签到积分 30 天内有效，仅限 MiniMax Code 使用）`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchMiniMaxQuota(token) {
-  if (!token) return { message: 'MiniMax 凭据不可用（~/.mmx/config.json 缺失或未登录）。' };
-  // 账号名：mmx OAuth 登录时官方 CLI 会把 token 响应里的 account 写回 config.json（本地无 userinfo 接口可查）
-  const mmxCfg = (await readJsonSafe(join(HOME, '.mmx', 'config.json'))) || {};
-  const mmxAcctRaw = mmxCfg?.account ?? mmxCfg?.oauth?.account ?? null;
-  const mmxAccount = (typeof mmxAcctRaw === 'string' && mmxAcctRaw.trim())
-    || (mmxAcctRaw && (mmxAcctRaw.email || mmxAcctRaw.name || mmxAcctRaw.username || mmxAcctRaw.user_name || mmxAcctRaw.nick))
-    || null;
+  if (!token) return { message: 'MiniMax 凭据不可用（~/.minimax/auth/prod/cn/mcode-public/auth.json 缺失或未登录，请点「登录」走 mcode 设备码授权）。' };
+  // mcode 的 token 是 MiniMax Code 产品线的（audience=agent-backend），
+  // 打开放平台的 /token_plan/remains 必然 401。所以先走 Code 自己的签到面板取真实数据。
+  const code = await fetchMiniMaxCodeQuota();
+  if (code) return code;
+  // 账号名：mcode 不保证在凭据文件里写账号标识（本地也没有 userinfo 接口），取不到就只显示区域
+  const mmxAuth = await readMinimaxAuth();
+  const mmxAccount = minimaxAccountOf(mmxAuth?.raw || null);
   const withAcct = (obj) => (mmxAccount ? { account: mmxAccount, ...obj } : obj);
   const usageUrls = await minimaxUrls();
   let lastErrorMessage = '';
@@ -564,7 +677,7 @@ async function fetchMiniMaxQuota(token) {
       const combined = `${apiStatusMessage} ${rawText}`.trim();
 
       if (res.status === 401 || res.status === 403 || apiStatusCode === 1004 || authLike.test(combined)) {
-        return { message: 'MiniMax 凭据无效或已失效，请重新登录 mmx。' };
+        return { message: 'MiniMax 凭据无效或已失效，请重新登录（控制台「登录」走 mcode 设备码授权）。' };
       }
       if (!res.ok) {
         lastErrorMessage = `MiniMax 配额接口错误 (${res.status})`;

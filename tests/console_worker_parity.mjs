@@ -3,15 +3,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { LOGIN_COMMANDS, parseClineAuthInput, parseOpencodeAuthInput } = await import('../console/auth.mjs');
+const { LOGIN_COMMANDS, parseClineAuthInput, parseOpencodeAuthInput, listModels } = await import('../console/auth.mjs');
 const { WORKER_CRED_FILES } = await import('../console/accounts.mjs');
 
 const WORKERS = [
   'antigravity', 'codebuddy', 'codebuddy-cn', 'github-copilot', 'mimocode',
   'minimaxcode', 'traecode', 'zcode', 'codearts', 'opencode', 'cline',
+  'qoder', 'qoder-cn',
 ];
 
-test('login table and credential archive cover exactly the same eleven workers', () => {
+test('login table and credential archive cover exactly the same thirteen workers', () => {
   assert.deepEqual(Object.keys(LOGIN_COMMANDS).sort(), [...WORKERS].sort());
   assert.deepEqual(Object.keys(WORKER_CRED_FILES).sort(), [...WORKERS].sort());
 });
@@ -36,6 +37,31 @@ test('opencode and cline use their key-based flows', () => {
   // 凭据文件必须指向官方 CLI 自己的落盘位置
   assert.deepEqual(WORKER_CRED_FILES.opencode, ['.local/share/opencode/auth.json']);
   assert.deepEqual(WORKER_CRED_FILES.cline, ['.cline/data/secrets.json', '.cline/data/settings/providers.json']);
+});
+
+// Qoder CLI 的登录态是 .auth/user（AES-CBC + machine_id），切号必须两份一起归档
+test('qoder workers archive both the login state and machine id', () => {
+  for (const worker of ['qoder', 'qoder-cn']) {
+    assert.equal(LOGIN_COMMANDS[worker].mode, 'pty_device');
+    assert.ok(LOGIN_COMMANDS[worker].cmd[1] === 'login');
+    assert.deepEqual(WORKER_CRED_FILES[worker], [
+      `${worker === 'qoder-cn' ? '.qoder-cn' : '.qoder'}/.auth/user`,
+      `${worker === 'qoder-cn' ? '.qoder-cn' : '.qoder'}/.auth/machine_id`,
+    ]);
+  }
+});
+
+test('qoder defaults to DeepSeek-Flash (dfmodel) in both regions', async () => {
+  const { workers } = await listModels();
+  for (const worker of ['qoder', 'qoder-cn']) {
+    const entry = workers[worker];
+    assert.ok(entry, `${worker} has a model catalog`);
+    assert.equal(entry.default, 'dfmodel', `${worker} defaults to DeepSeek-Flash`);
+    const flash = entry.models.find((m) => m.id === 'dfmodel');
+    assert.ok(flash, 'dfmodel is selectable');
+    assert.equal(flash.name, 'DeepSeek-Flash');
+    assert.equal(flash.isDefault, true);
+  }
 });
 
 // 用户在 WebUI 里最常见的行为就是直接粘一把 Key；这条路径不允许报「格式错误」
@@ -153,6 +179,7 @@ test('provider-set display names never bake in a bogus count', async () => {
   // 可变异身份 = 描述的是「这份凭据文件」而不是独立账号，只用来判定历史快照
   assert.equal(isMutableIdentity('providers:opencode'), true);
   assert.equal(isMutableIdentity('mmx:cn'), true);
+  assert.equal(isMutableIdentity('qoder-token:0123456789ab'), true);
   assert.equal(isMutableIdentity('5cc0eb9e0749'), true);
   // 稳定身份不一致代表真的是另一个账号，绝不能被当成快照收起
   assert.equal(isMutableIdentity('someone@example.com'), false);

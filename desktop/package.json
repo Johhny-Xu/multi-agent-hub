@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-hub-desktop",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Multi-Agent Hub Desktop Client for Windows",
   "main": "main.js",
   "author": "Multi-Agent Hub Team",

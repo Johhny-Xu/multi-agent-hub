@@ -24,6 +24,10 @@ test('checkin open source projects catalog covers all three platforms', () => {
 
   const caNames = OPEN_SOURCE_PROJECTS.codearts.map(p => p.name);
   assert.ok(caNames.some(n => n.includes('CodeArts2API') || n.includes('codearts')), 'Contains CodeArts checkin project');
+
+  assert.ok(Array.isArray(OPEN_SOURCE_PROJECTS.qoder) && OPEN_SOURCE_PROJECTS.qoder.length >= 2, 'Qoder has open source projects');
+  const qdNames = OPEN_SOURCE_PROJECTS.qoder.map(p => p.name);
+  assert.ok(qdNames.some(n => n.includes('qoder')), 'Contains Qoder checkin project');
 });
 
 test('detectCredentials returns structured results for targets', async () => {
@@ -31,6 +35,8 @@ test('detectCredentials returns structured results for targets', async () => {
   assert.ok('workbuddy' in creds);
   assert.ok('traecode' in creds);
   assert.ok('codearts' in creds);
+  assert.ok('qoder' in creds);
+  assert.ok('qoder-cn' in creds);
   assert.equal(typeof creds.traecode.available, 'boolean');
 });
 
@@ -41,6 +47,8 @@ test('getCheckinOverview provides state, history and open source references', as
   assert.ok(overview.platforms.workbuddy);
   assert.ok(overview.platforms.traecode);
   assert.ok(overview.platforms.codearts);
+  assert.ok(overview.platforms.qoder);
+  assert.ok(overview.platforms['qoder-cn']);
   assert.ok(Array.isArray(overview.history));
   assert.ok(overview.openSourceProjects);
 });
@@ -60,7 +68,7 @@ test('runCheckin handles platform calls without throwing fatal crashes', async (
 });
 
 test('every platform can enumerate its check-in accounts', async () => {
-  for (const platform of ['workbuddy', 'traecode', 'codearts']) {
+  for (const platform of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn']) {
     const list = await listCheckinAccounts(platform);
     assert.ok(Array.isArray(list), `${platform} returns an array`);
     for (const acct of list) {
@@ -76,7 +84,7 @@ test('every platform can enumerate its check-in accounts', async () => {
 
 test('overview surfaces per-account rows so the UI can list multiple accounts', async () => {
   const overview = await getCheckinOverview();
-  for (const platform of ['workbuddy', 'traecode', 'codearts']) {
+  for (const platform of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn']) {
     assert.ok(Array.isArray(overview.platforms[platform].accounts), `${platform} has an accounts array`);
     for (const row of overview.platforms[platform].accounts) {
       assert.equal(typeof row.display, 'string');

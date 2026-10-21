@@ -4,11 +4,18 @@
 // 接口参考开源逆向成果与无客户端实现
 
 import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
-import { homedir, hostname } from 'node:os';
+import { homedir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { fetchJsonSmart } from './vendor-quota.mjs';
 import { findCodeBuddySharedAuth } from './accounts.mjs';
+import {
+  readQoderCredential, readQoderCredentialAt, refreshQoderToken, persistQoderToken,
+  listQoderCampaigns, claimQoderCampaign, isQoderTokenExpired, qoderRegion, altQoderBaseUrl,
+} from './qoder.mjs';
+import { resolveQoderDevice } from './qoder-device.mjs';
+import { checkinTraeAccount, readTraeDesktopAuth, readTraeTokenCache, jwtUid } from './trae-checkin.mjs';
+import { checkinMiniMax, fetchMiniMaxSignin, readMinimaxCredential, MINIMAX_REGIONS } from './minimax-checkin.mjs';
 
 // AGENTHUB_HOME 仅用于测试：把「已安装 CLI 的凭据目录」指到临时目录
 const HOME = process.env.AGENTHUB_HOME ? resolve(process.env.AGENTHUB_HOME) : homedir();
@@ -40,6 +47,12 @@ export const OPEN_SOURCE_PROJECTS = {
     }
   ],
   traecode: [
+    {
+      name: 'L0NE-6/Trae-AutoCheckin',
+      url: 'https://github.com/L0NE-6/Trae-AutoCheckin',
+      description: 'Trae 每日签到脚本（抗 9074 限流）。本项目的 Trae 签到链路移植自该项目：req_source 请求体、客户端真实注册设备号、状态→领取→同设备号回查确认，以及 refreshToken + ECDSA 设备证明续期。',
+      tags: ['活动签到', '真实设备号', '设备证明续期', '多账号']
+    },
     {
       name: 'star620/TraeTools',
       url: 'https://github.com/star620/TraeTools',
@@ -78,6 +91,46 @@ export const OPEN_SOURCE_PROJECTS = {
       description: '华为云开发者成长中心扩展与自动化方案，支持自动检测任务与完成签到。',
       tags: ['Node.js', '开发者空间', '任务打卡']
     }
+  ],
+  qoder: [
+    {
+      name: 'shuishuipingan/qoder2api-hub',
+      url: 'https://github.com/shuishuipingan/qoder2api-hub',
+      description: 'Qoder / Qoder CN 双区域账号池与 OpenAI 兼容网关，含设备授权、令牌刷新、每日活动签到与额度查询的完整逆向实现。',
+      tags: ['Python', '双区域', '活动签到', '令牌刷新']
+    },
+    {
+      name: 'L0NE-6/Qoder-Daily',
+      url: 'https://github.com/L0NE-6/Qoder-Daily',
+      description: 'Qoder 每日签到脚本（中国版 / 国际版），本项目的签到链路移植自该项目：forceRefresh 实时活动、CLAIM_BENEFIT 定向活动筛选、本机 UMID 组件生成的设备风控头与 token 续期。',
+      tags: ['活动签到', 'UMID 设备风控', '多账号', 'GitHub Actions']
+    },
+    {
+      name: 'wallechfox/qoder-checkin',
+      url: 'https://github.com/wallechfox/qoder-checkin',
+      description: '从 Qoder 本地凭据提取登录态并完成每日领取的轻量脚本。',
+      tags: ['本地凭据', '每日领取', '轻量']
+    },
+    {
+      name: 'techysy/CreditDaddy',
+      url: 'https://github.com/techysy/CreditDaddy',
+      description: 'Qoder 活动与 Credits 领取工具，覆盖多类 campaign 与幂等重放处理。',
+      tags: ['Campaign', 'Credits', '幂等']
+    },
+    {
+      name: '70548887/Qoder-Switch',
+      url: 'https://github.com/70548887/Qoder-Switch',
+      description: 'Qoder 多账号切换工具，按配置目录备份/还原登录态，可作为账号快切流程的参考实现。',
+      tags: ['多账号', '快速切换', '配置备份']
+    }
+  ],
+  minimaxcode: [
+    {
+      name: '@user_3a370331/totorosir-minimax-checkin',
+      url: 'https://skillhub.cn/skills/user_3a370331/totorosir-minimax-checkin',
+      description: 'MiniMax Code（海螺 AI）每日签到领积分，作者龙猫科技说（longmaoit）。本项目的签到链路移植自该技能：直接复用 mcode CLI 的 OAuth 登录态，按桌面端同款参数与签名调用 signin/status → signin/claim，401 时用 refresh_token 自动续期。',
+      tags: ['接口直签', 'OAuth 自动续期', '桌面端签名', '纯标准库']
+    }
   ]
 };
 
@@ -93,12 +146,18 @@ async function loadState() {
       customTokens: {
         workbuddy: '',
         traecode: '',
-        codearts: ''
+        codearts: '',
+        qoder: '',
+        'qoder-cn': '',
+        minimaxcode: ''
       },
       platforms: {
         workbuddy: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
         traecode: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
-        codearts: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 }
+        codearts: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
+        qoder: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
+        'qoder-cn': { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 },
+        minimaxcode: { lastDate: '', lastTime: '', status: 'idle', message: '尚未执行签到', credits: '', consecutiveDays: 0 }
       },
       history: []
     };
@@ -139,16 +198,23 @@ export async function detectCredentials() {
   const creds = {
     workbuddy: { available: false, source: '', token: '' },
     traecode: { available: false, source: '', token: '' },
-    codearts: { available: false, source: '', ak: '', sk: '', token: '' }
+    codearts: { available: false, source: '', ak: '', sk: '', token: '' },
+    qoder: { available: false, source: '', token: '' },
+    'qoder-cn': { available: false, source: '', token: '' },
+    minimaxcode: { available: false, source: '', token: '' }
   };
 
+  const platforms = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode'];
   const live = {
     workbuddy: await readCredFrom('workbuddy', HOME, false),
     traecode: await readCredFrom('traecode', HOME, false),
     codearts: await readCredFrom('codearts', HOME, false),
+    qoder: await readCredFrom('qoder', HOME, false),
+    'qoder-cn': await readCredFrom('qoder-cn', HOME, false),
+    minimaxcode: await readCredFrom('minimaxcode', HOME, false),
   };
 
-  for (const plat of ['workbuddy', 'traecode', 'codearts']) {
+  for (const plat of platforms) {
     const hit = live[plat];
     if (!hit) continue;
     creds[plat] = {
@@ -163,26 +229,28 @@ export async function detectCredentials() {
     };
   }
 
-  // Trae 客户端正在运行（CDP 9222）时，即使没有落盘 JWT 也算可用
+  // Trae 客户端装在本机时，storage.json 里的 refreshToken 也算可用凭据：
+  // 即使 CLI 的 JWT 被注销，也能用设备证明续期换新，不必再走客户端 UI。
   if (!creds.traecode.available) {
-    let cdpOnline = false;
+    let desktop = null;
     try {
-      const cdpPort = process.env.TRAE_CDP_PORT || '9222';
-      const cdpHost = process.env.TRAE_CDP_HOST || '127.0.0.1';
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 800);
-      const r = await fetch(`http://${cdpHost}:${cdpPort}/json/version`, { signal: ctrl.signal });
-      clearTimeout(t);
-      if (r.ok) cdpOnline = true;
-    } catch {}
-    if (cdpOnline) {
-      creds.traecode = { available: true, source: 'Trae 客户端 (CDP 本地直连)', token: 'cdp-session' };
+      desktop = await readTraeDesktopAuth(HOME);
+    } catch {
+      desktop = null;
+    }
+    if (desktop?.refreshToken || desktop?.accessToken) {
+      creds.traecode = {
+        available: true,
+        source: 'Trae 客户端 storage.json（可自动续期）',
+        token: desktop.accessToken || '',
+        refreshToken: desktop.refreshToken || '',
+      };
     }
   }
 
   // 兜底：CLI 找不到任何凭据时，才用手工配置的 Token
   const state = await loadState();
-  for (const plat of ['workbuddy', 'traecode', 'codearts']) {
+  for (const plat of platforms) {
     const raw = String(state.customTokens?.[plat] || '').trim();
     if (!raw || creds[plat].available) continue;
     if (plat === 'codearts') {
@@ -207,6 +275,9 @@ const PLATFORM_WORKERS = {
   workbuddy: ['codebuddy-cn'],
   traecode: ['traecode'],
   codearts: ['codearts'],
+  qoder: ['qoder'],
+  'qoder-cn': ['qoder-cn'],
+  minimaxcode: ['minimaxcode'],
 };
 
 /** 各 worker 档案目录内的凭据文件名 */
@@ -215,6 +286,8 @@ const PROFILE_CRED_FILE = {
   codebuddy: 'auth.info',
   traecode: 'trae-jwt-token',
   codearts: 'codearts-auth.env',
+  qoder: 'user',
+  'qoder-cn': 'user',
 };
 
 /** 解出 JWT 的 payload（失败返回 null，绝不抛错） */
@@ -360,6 +433,79 @@ async function readCredCandidates(platform, dir, flat = false) {
     return out;
   }
 
+  if (platform === 'qoder' || platform === 'qoder-cn') {
+    const worker = platform;
+    const cred = flat ? await readQoderCredentialAt(dir, worker) : await readQoderCredential(dir, worker);
+    if (cred.ok) {
+      const mtime = await fileMtime(cred.file);
+      for (const entry of cred.entries) {
+        out.push({
+          token: entry.token,
+          refreshToken: entry.refreshToken,
+          identity: entry.identity,
+          display: entry.display,
+          user: entry.user,
+          exp: entry.expiresAt || 0,
+          file: cred.file,
+          saltFile: cred.saltFile,
+          worker,
+          mtime,
+          source: entry.source || (flat ? '账号档案 · Qoder' : `~/${qoderRegion(worker).configDir}/.auth/user`),
+          kind: flat ? 'profile' : 'cli',
+        });
+      }
+    }
+    return out;
+  }
+
+  if (platform === 'minimaxcode') {
+    // mcode 的 OAuth 凭据：~/.minimax/auth/prod/<cn|en>/mcode-public/auth.json
+    // accessToken 是不透明串（不是 JWT），身份只能按区域给一个稳定值：mcode:<region>
+    const regions = flat ? ['cn'] : ['cn', 'global'];
+    for (const region of regions) {
+      const cfg = MINIMAX_REGIONS[region];
+      if (!cfg) continue;
+      // 账号档案目录里的文件被拍平成 auth.json / auth-state.json，路径和线上不同
+      const rel = flat ? 'auth.json' : join('.minimax', 'auth', 'prod', cfg.authDir, 'mcode-public', 'auth.json');
+      const file = join(dir, rel);
+      let cred = null;
+      if (flat) {
+        try {
+          const raw = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
+          let best = null;
+          for (const value of Object.values(raw?.records || {})) {
+            const token = String(value?.accessToken || '').trim();
+            if (!token) continue;
+            const exp = Number(value?.expiresAtMs) || 0;
+            if (!best || exp > best.expiresAtMs) {
+              best = { token, refreshToken: String(value?.refreshToken || '').trim(), expiresAtMs: exp };
+            }
+          }
+          if (best) cred = best;
+        } catch { /* 档案里没有这份文件 */ }
+      } else {
+        try {
+          cred = await readMinimaxCredential(dir, region);
+        } catch {
+          cred = null;
+        }
+      }
+      if (!cred?.token) continue;
+      out.push({
+        token: cred.token,
+        refreshToken: cred.refreshToken || '',
+        identity: `mcode:${region}`,
+        display: cfg.name,
+        exp: Math.floor((Number(cred.expiresAtMs) || 0) / 1000),
+        file,
+        mtime: await fileMtime(file),
+        source: flat ? '账号档案 · MiniMax Code' : (cred.source || `~/${rel}`),
+        kind: flat ? 'profile' : 'cli',
+      });
+    }
+    return out;
+  }
+
   return out;
 }
 
@@ -468,7 +614,7 @@ export async function listCheckinAccounts(platform) {
     // 同身份的其它候选（不同 token）：首选被服务端注销时按顺序回退
     const alts = (candidates.get(a.identity) || [])
       .filter((c) => c.token && c.token !== a.token)
-      .map((c) => ({ token: c.token, exp: c.exp, source: c.source, file: c.file }));
+      .map((c) => ({ token: c.token, refreshToken: c.refreshToken, identity: c.identity, exp: c.exp, source: c.source, file: c.file, saltFile: c.saltFile, worker: c.worker }));
     return alts.length ? { ...a, alternates: alts } : a;
   });
   if (accounts.length && !accounts.some((a) => a.active)) accounts[0].active = true;
@@ -696,7 +842,7 @@ async function customCredentialAccount(platform) {
 /** 自定义凭据只在「不与任何 CLI 账号撞身份」时才加入，避免同一账号被签两次 */
 function mergeCustomAccount(accounts, custom) {
   if (!custom || custom.invalid) return accounts;
-  if (accounts.some((a) => a.identity && custom.identity && a.identity === custom.identity)) return accounts;
+  if (accounts.some((a) => (a.identity && custom.identity && a.identity === custom.identity) || (custom.token && a.token === custom.token))) return accounts;
   return [custom, ...accounts];
 }
 
@@ -809,272 +955,17 @@ export async function checkinWorkBuddy(overrideToken = null) {
 
 
 /**
- * 在 Trae 客户端里执行一段脚本（CDP 直连 9222）。
- * 客户端不在线 / 端口不通时返回 null。
- * @param {string} expression 需要返回可 JSON 化的值的表达式
- */
-async function evaluateInTrae(expression, timeoutMs = 6000) {
-  const cdpPort = process.env.TRAE_CDP_PORT || '9222';
-  const cdpHost = process.env.TRAE_CDP_HOST || '127.0.0.1';
-
-  if (typeof globalThis.WebSocket !== 'function') return null;
-
-  let targets;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2000);
-    const resp = await fetch(`http://${cdpHost}:${cdpPort}/json`, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!resp.ok) return null;
-    targets = await resp.json();
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(targets) || !targets.length) return null;
-
-  const target = targets.find((t) => t.type === 'page' && t.url && t.url.includes('workbench'))
-    || targets.find((t) => t.type === 'page');
-  if (!target || !target.webSocketDebuggerUrl) return null;
-
-  const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl);
-  let msgId = 1;
-  /** @type {Map<number, Function>} */
-  const pending = new Map();
-
-  const sendCmd = (method, params = {}) => new Promise((resolve, reject) => {
-    const id = msgId++;
-    const t = setTimeout(() => { pending.delete(id); reject(new Error(`CDP ${method} timeout`)); }, timeoutMs);
-    pending.set(id, (val) => { clearTimeout(t); resolve(val); });
-    try { ws.send(JSON.stringify({ id, method, params })); } catch (e) { clearTimeout(t); pending.delete(id); reject(e); }
-  });
-
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.id && pending.has(data.id)) {
-        const entry = pending.get(data.id);
-        pending.delete(data.id);
-        entry(data.result);
-      }
-    } catch { /* 非 JSON 帧忽略 */ }
-  };
-
-  try {
-    await new Promise((resolve, reject) => {
-      const connTimer = setTimeout(() => reject(new Error('WebSocket connect timeout')), 2500);
-      ws.onopen = () => { clearTimeout(connTimer); resolve(null); };
-      ws.onerror = (e) => { clearTimeout(connTimer); reject(e); };
-    });
-    const evalResult = await sendCmd('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-    return evalResult?.result?.value ?? null;
-  } catch {
-    return null;
-  } finally {
-    try { ws.close(); } catch { /* ignore */ }
-  }
-}
-
-/**
- * 通过 CDP 尝试在 Trae 客户端里点真实签到按钮。
+ * 执行 Trae 签到（实现移植自 L0NE-6/Trae-AutoCheckin，见 README 致谢）。
  *
- * 注意：旧实现只要 localStorage 里存在 trae-cn-credits-billing-status 就判定「今日已签到」，
- * 那个 key 一旦写入就永久存在，等于每天都谎报成功。这里必须以按钮文案 / 接口结果为准。
+ * 链路：读桌面端 storage.json 取真实设备号 / refreshToken / 设备密钥
+ *      → 逐账号「查状态 → 必要时续期 → 领取 → 同设备号回查确认」。
  *
- * @returns {Promise<null|{status:'success'|'already'|'unavailable', message:string, credits?:number}>}
- */
-async function checkinTraeViaCdp() {
-  const script = `
-  (async () => {
-    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-
-    // 只认「签到」按钮；纯「领取」必须落在积分/权益面板内，
-    // 否则会误点活动横幅上的「立即领取」，把用户的羊毛顺手点掉。
-    const clickables = Array.from(document.querySelectorAll('button,[role="button"],[class*=btn],[class*=Button]'));
-    const hits = clickables.filter((el) => {
-      if (!visible(el)) return false;
-      const t = norm(el.textContent);
-      if (/签到/.test(t) && t.length <= 12) return true;
-      if (/^(领取|立即领取|每日领取)$/.test(t)) {
-        return !!el.closest('[class*=user-entitlement],[class*=checkin],[class*=credits]');
-      }
-      return false;
-    });
-
-    if (!hits.length) {
-      return { status: 'unavailable', message: '客户端界面里没有找到可点击的签到入口' };
-    }
-
-    const btn = hits[0];
-    const before = norm(btn.textContent);
-    if (/已签|已领/.test(before)) {
-      return { status: 'already', message: '客户端显示今日已签到（' + before + '）' };
-    }
-
-    btn.click();
-    await new Promise((r) => setTimeout(r, 1800));
-
-    const after = norm(btn.textContent);
-    if (/已签|已领/.test(after)) {
-      return { status: 'success', message: '已点击签到，按钮变为「' + after + '」' };
-    }
-    return { status: 'unavailable', message: '已点击「' + before + '」，但按钮状态未变化（' + after + '）' };
-  })()
-  `;
-
-  const val = await evaluateInTrae(script, 8000);
-  if (!val || !val.status) return null;
-  if (val.status === 'success' || val.status === 'already') return val;
-  return { status: 'unavailable', message: val.message || '客户端未提供可用的签到入口' };
-}
-
-/**
- * Trae 客户端向云端注册过的设备号。
- *
- * 这是签到能不能成的**决定性字段**：服务端按 x-device-id 认设备，
- * 没注册过的 id 一律返回 `9074 当前参与用户太多`（文案有误导，实际是「设备不认识」）。
- * 客户端在启动时把注册结果打进日志：
- *   [ICDRS] (constructor) did: 3014218253872104, ldid: aha-xxx, rdid: ...
- * 这里从日志里捞出来并缓存到 ~/.config/agenthub-codearts/trae-device-id，
- * 之后不再依赖日志是否被轮转。
- */
-let _traeDeviceIdCache = '';
-async function resolveTraeDeviceId() {
-  const fromEnv = String(process.env.TRAE_DEVICE_ID || '').trim();
-  if (fromEnv) return fromEnv;
-  if (_traeDeviceIdCache) return _traeDeviceIdCache;
-
-  const cacheFile = join(homedir(), '.config', 'agenthub-codearts', 'trae-device-id');
-  try {
-    const cached = (await readFile(cacheFile, 'utf-8')).trim();
-    if (cached) { _traeDeviceIdCache = cached; return cached; }
-  } catch { /* 还没缓存过 */ }
-
-  const logRoots = [
-    join(homedir(), '.config', 'Trae CN', 'logs'),
-    join(homedir(), '.trae-cn', 'logs'),
-  ];
-  const dirs = [];
-  for (const root of logRoots) {
-    try {
-      for (const entry of await readdir(root, { withFileTypes: true })) {
-        if (entry.isDirectory()) dirs.push(join(root, entry.name));
-      }
-    } catch { /* 目录不存在就算了 */ }
-  }
-  dirs.sort().reverse(); // 时间戳目录名，倒序即最新优先
-
-  for (const dir of dirs.slice(0, 20)) {
-    let files = [];
-    try { files = await readdir(dir); } catch { continue; }
-    for (const f of files) {
-      if (!/^main.*\.log$/.test(f)) continue;
-      try {
-        const text = await readFile(join(dir, f), 'utf-8');
-        const m = text.match(/\[ICDRS\][^\n]*?\bdid:\s*([0-9A-Za-z_-]{6,})/);
-        if (m && m[1] && m[1] !== '0') {
-          _traeDeviceIdCache = m[1];
-          try {
-            await mkdir(dirname(cacheFile), { recursive: true });
-            await writeFile(cacheFile, m[1] + '\n');
-          } catch { /* 缓存写不进去不影响本次使用 */ }
-          return m[1];
-        }
-      } catch { /* 读不到就换下一个 */ }
-    }
-  }
-  return '';
-}
-
-/**
- * 兜底设备号：拿不到客户端注册 id 时用（UID + 主机名派生，重启不变）。
- * 注意这种 id 大概率会被判 9074，只作为「客户端没装/没跑过」时的占位。
- */
-function fallbackTraeDeviceId(token) {
-  let uid = 'anon';
-  try {
-    uid = String(jwtPayload(token)?.data?.id || jwtPayload(token)?.sub || 'anon');
-  } catch { /* 用 anon 兜底 */ }
-  let host = 'host';
-  try { host = hostname(); } catch { /* ignore */ }
-  const h = createHash('sha256').update(`trae:${uid}:${host}`).digest('hex');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-}
-
-/** 调 Trae 签到接口（真实头是 Cloud-IDE-JWT，不是 Bearer） */
-async function traeApi(token, path) {
-  const deviceId = (await resolveTraeDeviceId()) || fallbackTraeDeviceId(token);
-  const res = await fetchJsonSmart(`https://api.trae.cn${path}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Cloud-IDE-JWT ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'Trae/1.107.1 (X11; Linux x86_64) TraeCN',
-      // 与客户端 _applyUgDeviceHeaders 对齐：只认 x-device-id，另外几个是设备画像
-      'x-device-id': deviceId,
-      'x-device-brand': process.env.TRAE_DEVICE_BRAND || 'unknown',
-      'x-device-type': process.env.TRAE_DEVICE_TYPE || 'Linux',
-      'x-os-version': process.env.TRAE_OS_VERSION || 'Linux',
-      'x-app-version': process.env.TRAE_APP_VERSION || '3.5.54'
-    },
-    body: JSON.stringify({ req_source: 1 })
-  }, 12_000);
-  const json = res.json || {};
-  return { status: res.status, json };
-}
-
-/** 单个 Trae 账号打卡：先查状态，未签才领 */
-async function checkinTraeOne(token) {
-  const st = await traeApi(token, '/trae/api/v2/ug/checkin_credits/status');
-  const stJson = st.json || {};
-
-  if (stJson.code === 1001) {
-    // 1001 不等于「过期」：JWT 的 exp 往往还没到，是服务端把这个会话注销了
-    //（在别处重新登录、单端登录顶号、账号被踢下线都会这样）。所以提示要给可点的入口，
-    // 不能只说「去客户端重新登录」——控制台自带 OAuth，根本不需要装客户端。
-    return { ok: false, status: 'expired', message: 'JWT 已被服务端注销（1001），点「重新登录」用 Trae 账号重新授权' };
-  }
-  if (stJson.checked_in === true) {
-    return { ok: true, status: 'already', message: '今日已签到', credits: 0, consecutiveDays: Number(stJson.streak || stJson.consecutive_days) || 0 };
-  }
-
-  // 领取接口只有 `{req_source:1}` 这一种正确请求体（多带任何字段都会变成 9004
-  // 「order parameters are incorrect」）；9074 是服务端自己的排队/限流，
-  // 与参数无关，隔一会儿再打通常就过了，所以这里退避重试几次再报错。
-  let r = null;
-  let json = {};
-  for (let attempt = 0; attempt < 3; attempt++) {
-    r = await traeApi(token, '/trae/api/v2/ug/checkin_credits/claim');
-    json = r.json || {};
-    if (json.code !== 9074) break;
-    if (attempt < 2) await new Promise((res) => setTimeout(res, 3000 * (attempt + 1)));
-  }
-  const msg = String(json.message || json.msg || '');
-
-  if (r.status === 200 && (json.code === 0 || json.code === undefined) && (json.checked_in !== false)) {
-    const credits = json.data?.credits ?? json.credits ?? json.data?.credit ?? 0;
-    const streak = json.data?.streak ?? json.data?.streak_days ?? 0;
-    return { ok: true, status: 'success', message: `领取 ${credits} 积分${streak ? `（连签 ${streak} 天）` : ''}`, credits: Number(credits) || 0, consecutiveDays: Number(streak) || 0 };
-  }
-  if (json.checked_in === true || /已签到|已领取|already|claimed/.test(msg)) {
-    return { ok: true, status: 'already', message: msg || '今日已签到', credits: 0, consecutiveDays: 0 };
-  }
-  if (json.code === 1001 || /not able to authenticate/.test(msg)) {
-    return { ok: false, status: 'expired', message: 'JWT 已被服务端注销（1001），点「重新登录」用 Trae 账号重新授权' };
-  }
-  if (json.code === 9074) {
-    // 9074 的文案是「当前参与用户太多」，实际最常见的成因是 x-device-id 不是
-    // 客户端注册过的那个 id。提示里要把这条线索给出来，别再让人以为是限流。
-    return { ok: false, status: 'failed', message: '9074：Trae 不认这个设备号（或正在排队），已重试 3 次；可在客户端跑一次让日志写入 did，或设置 TRAE_DEVICE_ID' };
-  }
-  return { ok: false, status: 'failed', message: `签到接口返回 [${r.status}/${json.code ?? '-'}]：${msg || '未知错误'}` };
-}
-
-/**
- * 执行 Trae 签到：所有账号走 API，全部失败时再退回 CDP 点客户端按钮
+ * 不再保留 CDP 点客户端按钮的兜底：那条路只在客户端开着且停在对话页时有效，
+ * 失败时只能报「找不到签到按钮」；现在的失败原因能落到 9074 / 1001 / enable=false 上。
  */
 export async function checkinTrae(overrideToken = null) {
   const today = getTodayStr();
+  const home = HOME;
 
   let accounts;
   if (overrideToken) {
@@ -1085,64 +976,71 @@ export async function checkinTrae(overrideToken = null) {
     accounts = mergeCustomAccount(accounts, custom);
   }
 
+  // 桌面端凭据：提供 refreshToken（续期）与真实设备号 / 设备密钥（过设备检查）
+  let desktop = null;
+  try {
+    desktop = await readTraeDesktopAuth(home);
+  } catch {
+    desktop = null;
+  }
+  const tokenCache = await readTraeTokenCache(home);
+  const usedDeviceIds = new Set();
   const results = [];
+
   for (const acct of accounts) {
     const label = acct.display || acct.name;
-    // 同身份的多个候选 token：首选被服务端注销（1001）时按顺序回退。
-    // Trae 重新登录后，新写入的 token 反而可能被判 1001，而旧 token 仍然有效。
-    const tries = [
-      { token: acct.token, exp: acct.exp, source: acct.credentialSource || acct.source, via: 'primary' },
-      ...(acct.alternates || []).map((a) => ({ ...a, via: 'fallback' })),
-    ].filter((t) => t.token && !(t.exp && t.exp * 1000 < Date.now()));
+    const uid = String(acct.user?.id || acct.user?.uid || acct.uid || jwtUid(acct.token) || '').trim();
+    // 桌面端登的是同一个账号时才借用它的 refreshToken / 设备密钥，否则会把别人的 token 刷掉。
+    // 客户端凭据里没写 uid 时（只有 refreshToken 的情况）仅在单账号下视为同一账号。
+    const desktopUid = String(desktop?.uid || jwtUid(desktop?.accessToken) || '').trim();
+    const desktopMatches = !!desktop && (desktopUid ? desktopUid === uid : accounts.length === 1);
+    const tokens = [acct.token, ...(acct.alternates || []).map((a) => a.token)]
+      .map((t) => String(t || '').trim())
+      .filter((t, index, arr) => t && arr.indexOf(t) === index);
 
-    if (!tries.length) {
-      const why = acct.token ? 'JWT 已过期' : '档案内没有 JWT';
-      results.push({ ...acct, ok: false, status: 'expired', message: `${why}，点「重新登录」重新授权`, label });
-      continue;
-    }
+    const base = {
+      uid,
+      identity: acct.identity,
+      name: label,
+      refreshToken: acct.refreshToken || (desktopMatches ? desktop.refreshToken : '') || '',
+      deviceId: acct.deviceId || '',
+      privateKeyPem: desktopMatches ? desktop.privateKeyPem : '',
+      publicKeyPem: desktopMatches ? desktop.publicKeyPem : '',
+      machineId: desktopMatches ? desktop.machineId : '',
+    };
 
     let r = null;
-    let used = null;
     try {
-      for (const t of tries) {
-        r = await checkinTraeOne(t.token);
-        if (r.status !== 'expired') { used = t; break; }
+      for (const token of (tokens.length ? tokens : [''])) {
+        r = await checkinTraeAccount({ ...base, token }, { home, cache: tokenCache, usedDeviceIds });
+        if (r.status !== 'expired') break;
       }
     } catch (err) {
       results.push({ ...acct, ok: false, status: 'failed', message: `网络请求失败：${err.message}`, label });
       continue;
     }
 
-    const viaNote = used?.via === 'fallback' ? `（已回退到 ${used.source || '备用凭据'}）` : '';
-    results.push({ ...acct, ...r, message: `${r.message}${viaNote}`, label });
+    const status = r?.status === 'success' ? 'success'
+      : r?.status === 'already' ? 'already'
+        : r?.status === 'expired' ? 'expired'
+          : 'failed';
+    results.push({
+      ...acct,
+      ok: status === 'success' || status === 'already',
+      status,
+      message: r?.message || '未取得签到结果',
+      credits: Number(r?.credits) || 0,
+      consecutiveDays: Number(r?.consecutiveDays) || 0,
+      deviceId: r?.deviceId || '',
+      label,
+    });
   }
 
   const okOnes = results.filter((r) => r.status === 'success');
   const alreadyOnes = results.filter((r) => r.status === 'already');
   const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
 
-  // API 全军覆没 → 试一次客户端 UI（客户端在本机运行时这条路不依赖 token）
-  if (badOnes.length === results.length && results.length) {
-    const cdp = await checkinTraeViaCdp();
-    if (cdp && cdp.status !== 'unavailable') {
-      return {
-        platform: 'traecode',
-        ok: true,
-        status: cdp.status,
-        message: `${cdp.message}（API 凭据失效，已改用客户端直签）`,
-        credits: cdp.credits || 0,
-        consecutiveDays: 0,
-        accounts: [{ name: 'Trae 客户端', display: 'Trae 客户端 (CDP)', active: true, status: cdp.status, message: cdp.message }],
-        today,
-        time: getNowTimeStr()
-      };
-    }
-  }
-
-  const status = badOnes.length
-    ? 'failed'
-    : (okOnes.length ? 'success' : 'already');
-
+  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : 'already');
   const parts = results.map((r) => {
     const name = r.label || r.name;
     if (r.status === 'success') return `${name} +${r.credits}`;
@@ -1155,7 +1053,7 @@ export async function checkinTrae(overrideToken = null) {
     ok: badOnes.length === 0,
     status,
     message: results.length ? parts.join('；') : '未检测到 Trae 账号',
-    credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
+    credits: okOnes.reduce((sum, r) => sum + (Number(r.credits) || 0), 0),
     consecutiveDays: Math.max(0, ...results.map((r) => Number(r.consecutiveDays) || 0)),
     accounts: results.map((r) => ({
       name: r.name,
@@ -1165,12 +1063,13 @@ export async function checkinTrae(overrideToken = null) {
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
-      source: r.credentialSource || r.source || ''
+      source: r.credentialSource || r.source || '',
     })),
     today,
-    time: getNowTimeStr()
+    time: getNowTimeStr(),
   };
 }
+
 /**
  * 单个 CodeArts AK/SK 账号的真实签到流程（参考 2951461586/CodeArts2API）
  *   1. GET  /api/v1/benefit/claim          福利通道登记（幂等，确认身份）
@@ -1180,18 +1079,28 @@ export async function checkinTrae(overrideToken = null) {
  * 旧实现只要文件里有 AK/SK 就直接返回「已激活」，从来没发过一个请求。
  */
 async function checkinCodeArtsOne(ak, sk) {
-  // 1. 福利通道（同时验证 AK/SK 真的能过签名）
+  // 1. 福利 Token 通道（opengw）——**只是顺手领，失败不能挡住签到**
+  //    2026-10 起 opengw 的 /api/v1/benefit/claim 对不少账号稳定返回
+  //    {"error_code":"4000","error_msg":"invalid channel, group not found"}（benefit 通道按账号下线/迁移），
+  //    而真正给「每日 1000 积分」的 /v1/ops/claim 在 snap-access 上是好的。
+  //    以前这里一失败就 return，导致整个 CodeArts 签到被判失败。
   let userName = '';
+  let benefitNote = '';
   try {
     const r = await codeArtsFetch(ak, sk, 'GET', `${CODEARTS_GATEWAY}/api/v1/benefit/claim`);
     const code = String(r.json?.error_code ?? '');
     if (code && code !== '0000') {
       const mapped = mapCodeArtsError(code, r.json?.error_msg, r.text);
-      return { ok: false, status: mapped.status, message: mapped.message };
+      // 签名/凭证类错误说明凭据本身有问题，这时候继续也没意义
+      if (mapped.status === 'expired' || /签名校验失败/.test(mapped.message)) {
+        return { ok: false, status: mapped.status, message: mapped.message };
+      }
+      benefitNote = `福利 Token 通道不可用（${code}），已跳过；`;
+    } else {
+      userName = String(r.json?.result?.user_name || '');
     }
-    userName = String(r.json?.result?.user_name || '');
   } catch (err) {
-    return { ok: false, status: 'failed', message: `福利网关不可达：${err.message}` };
+    benefitNote = `福利 Token 通道不可达（${err.message}），已跳过；`;
   }
 
   // 2. 任务列表
@@ -1221,7 +1130,7 @@ async function checkinCodeArtsOne(ak, sk) {
     return {
       ok: true,
       status: 'already',
-      message: `${who}今日已领取「${campaign.title}」（${amount}${unit}）`,
+      message: `${benefitNote}${who}今日已领取「${campaign.title}」（${amount}${unit}）`,
       credits: 0,
       consecutiveDays: 0
     };
@@ -1249,7 +1158,7 @@ async function checkinCodeArtsOne(ak, sk) {
     return {
       ok: true,
       status: 'success',
-      message: `${who}签到成功 +${amount}${unit}`,
+      message: `${benefitNote}${who}签到成功 +${amount}${unit}`,
       credits: amount,
       consecutiveDays: 1
     };
@@ -1359,6 +1268,353 @@ export async function checkinCodeArts(overrideToken = null) {
 }
 
 
+// ---------------------------------------------------------------- Qoder / Qoder CN 活动领取
+// 实现方式移植自 L0NE-6/Qoder-Daily（见 README 致谢）：
+//   1. 活动列表必须带 ?forceRefresh=true，否则吃到缓存、刚开的活动看不到；
+//   2. 只认 actionType=CLAIM_BENEFIT 的活动，VIEW_DETAILS 这类常驻活动不参与领取；
+//   3. 请求必须带本机 UMID 组件生成的设备风控头，否则国际版每日活动整行不下发。
+
+const QODER_BENEFIT_ACTION = 'CLAIM_BENEFIT';
+
+/** 从活动接口响应里取 CLAIM_BENEFIT 行（兼容 campaigns / data.campaigns 两种包装） */
+export function extractQoderCampaigns(payload) {
+  const isBenefit = (row) => String(row?.actionType || row?.action_type || '').toUpperCase() === QODER_BENEFIT_ACTION;
+  const data = payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object' ? payload.data : {};
+  let rows = Array.isArray(payload?.campaigns) && payload.campaigns.length
+    ? payload.campaigns
+    : Array.isArray(data.campaigns) ? data.campaigns : [];
+  if (!rows.length) {
+    // 兜底：有些版本把活动行下沉到更深层，按 actionType 递归捞回来
+    const found = [];
+    const seen = new Set();
+    const visit = (node, depth = 0) => {
+      if (!node || depth > 8) return;
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item, depth + 1);
+        return;
+      }
+      if (typeof node !== 'object') return;
+      const id = node.campaignId || node.campaign_id;
+      if (id && isBenefit(node)) {
+        const key = String(id);
+        if (!seen.has(key)) {
+          seen.add(key);
+          found.push(node);
+        }
+        return;
+      }
+      for (const value of Object.values(node)) visit(value, depth + 1);
+    };
+    visit(payload);
+    rows = found;
+  }
+  return rows.filter((row) => row && typeof row === 'object' && isBenefit(row));
+}
+
+const qoderClaimStatus = (row) => String(row?.claimStatus || row?.claim_status || '').toUpperCase();
+
+function qoderResponseMessage(res) {
+  const json = res?.json || {};
+  const data = json.data && typeof json.data === 'object' ? json.data : {};
+  return String(
+    json.message || json.msg || data.message || data.msg
+    || json.error?.message || data.error?.message || json.error || ''
+  ).trim();
+}
+
+function qoderBenefit(item) {
+  const benefit = item?.benefit || {};
+  return Number(benefit.amount ?? benefit.value ?? benefit.credits ?? 0) || 0;
+}
+
+/** 领取结果归一化：重放/同人已领都按「今日已领」处理，不重复计数 */
+function qoderClaimOutcome(res) {
+  const json = res?.json || {};
+  const data = json.data && typeof json.data === 'object' ? json.data : json;
+  const status = String(data.status || json.status || '').toUpperCase();
+  const code = String(data.code || json.code || data.errorCode || json.errorCode || '').toUpperCase();
+  const message = qoderResponseMessage(res);
+  const replayed = data.replayed === true || json.replayed === true
+    || ['REPLAYED', 'ALREADY_CLAIMED', 'SAME_PERSON_ALREADY_CLAIMED', 'BLOCKED'].includes(status)
+    || ['REPLAYED', 'ALREADY_CLAIMED', 'SAME_PERSON_ALREADY_CLAIMED', 'BLOCKED'].includes(code);
+  if (res?.status === 401 || res?.status === 403) {
+    return { status: 'expired', message: message || '登录态已失效，请重新登录 Qoder CLI' };
+  }
+  if (res?.status === 404 || res?.status === 405) {
+    return { status: 'unsupported', message: message || '该区域暂未开放活动领取接口' };
+  }
+  if (replayed || res?.status === 409) {
+    return { status: 'already', message: message || '今日已领取过' };
+  }
+  if (['CLAIMED', 'GRANTED', 'SUCCESS', 'OK'].includes(status) || data.success === true || data.claimed === true) {
+    return { status: 'success', message: message || '领取成功' };
+  }
+  return { status: 'failed', message: `活动领取返回 [${res?.status ?? '-'}/${status || '-'}]：${message || '未知错误'}` };
+}
+
+async function ensureQoderFresh(acct) {
+  if (!isQoderTokenExpired(acct)) return { token: acct.token, refreshed: false };
+  const renewed = await refreshQoderToken(acct.worker, acct.refreshToken);
+  if (!renewed) return { token: acct.token, refreshed: false };
+  const expiresAt = renewed.expiresIn ? Math.floor(Date.now() / 1000 + renewed.expiresIn) : 0;
+  if (acct.file && acct.saltFile) {
+    await persistQoderToken({
+      credFile: acct.file,
+      saltFile: acct.saltFile,
+      identity: acct.identity,
+      token: renewed.token,
+      refreshToken: renewed.refreshToken,
+      expiresAt,
+    }).catch(() => false);
+  }
+  return { token: renewed.token, refreshed: true };
+}
+
+async function fetchQoderCampaigns(acct, device = null) {
+  let fresh = await ensureQoderFresh(acct);
+  let res = await listQoderCampaigns(acct.worker, fresh.token, device);
+  if ((res.status === 401 || res.status === 403) && acct.refreshToken) {
+    const renewed = await refreshQoderToken(acct.worker, acct.refreshToken);
+    if (renewed?.token) {
+      fresh = { token: renewed.token, refreshed: true };
+      res = await listQoderCampaigns(acct.worker, fresh.token, device);
+    }
+  }
+  return { res, token: fresh.token };
+}
+
+/** 单个 Qoder 账号：解析设备身份 → 拉活动列表 → 逐个领取 → 汇总积分 */
+async function checkinQoderOne(acct) {
+  const candidates = [acct, ...(Array.isArray(acct.alternates) ? acct.alternates : [])];
+  const worker = acct.worker || 'qoder';
+  const uid = String(acct.user?.id || acct.user?.uid || acct.uid || '').trim();
+  // 设备身份按账号 uid 生成：桌面端组件会把指纹与账号绑在一起
+  let device = null;
+  try {
+    device = await resolveQoderDevice(worker, { home: HOME, uid });
+  } catch {
+    device = null;
+  }
+  const deviceNote = device?.note || '';
+  let fetched = null;
+  for (const candidate of candidates) {
+    const entry = { ...candidate, expiresAt: candidate.expiresAt || candidate.exp || 0 };
+    fetched = await fetchQoderCampaigns(entry, device);
+    if (fetched.res.status !== 401 && fetched.res.status !== 403) break;
+  }
+  const { res, token } = fetched;
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, status: 'expired', message: `签到活动查询失败（HTTP ${res.status}），请确认凭证有效且地区选择正确`, credits: 0, consecutiveDays: 0 };
+  }
+  if (res.status === 429) {
+    return { ok: false, status: 'failed', message: '签到活动查询失败（HTTP 429），请稍后重试', credits: 0, consecutiveDays: 0 };
+  }
+  if (!res.ok) {
+    return { ok: false, status: 'failed', message: `活动列表返回 [${res.status}]：${qoderResponseMessage(res) || '未知错误'}`, credits: 0, consecutiveDays: 0 };
+  }
+  const bodyCode = Number(res.json?.code ?? res.json?.errorCode);
+  if (bodyCode === 401 || bodyCode === 403) {
+    return { ok: false, status: 'expired', message: qoderResponseMessage(res) || '登录态已失效，请在 Qoder CLI 重新登录', credits: 0, consecutiveDays: 0 };
+  }
+  if (res.json?.success === false || (Number.isFinite(bodyCode) && ![0, 200].includes(bodyCode))) {
+    return { ok: false, status: 'failed', message: `活动列表返回 [${bodyCode}]：${qoderResponseMessage(res) || '未知错误'}`, credits: 0, consecutiveDays: 0 };
+  }
+  let campaigns = extractQoderCampaigns(res.json);
+  let claimable = campaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
+  let claimedBefore = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)));
+  let useBase = '';
+
+  // 国际版活动列表为空时，换一套环境用同一个 token 再问一次。
+  // 开源项目 qoder-checkin 的 baseUrls 就是让在 openapi.qoder.sh / openapi.qoder.com.cn 之间切，
+  // 国际账号被下发到另一套环境时，只有换环境才看得到活动。
+  if (!claimable.length && !claimedBefore.length) {
+    const alt = altQoderBaseUrl(worker);
+    if (alt) {
+      try {
+        const altRes = await listQoderCampaigns(worker, token, device, alt);
+        if (altRes.ok) {
+          const altCampaigns = extractQoderCampaigns(altRes.json);
+          const altClaimable = altCampaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
+          if (altClaimable.length) {
+            campaigns = altCampaigns;
+            claimable = altClaimable;
+            claimedBefore = altCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)));
+            useBase = alt;
+          }
+        }
+      } catch { /* 换环境失败就按原结果走 */ }
+    }
+  }
+
+  if (!claimable.length) {
+    if (claimedBefore.length) {
+      return { ok: true, status: 'already', message: claimedBefore.length > 1 ? `今日 ${claimedBefore.length} 个活动已领取` : '今日已领取', credits: 0, consecutiveDays: 0 };
+    }
+    // 国际版：定向活动没下发时把原因说清楚，别让人以为接口挂了
+    if (worker === 'qoder') {
+      if (deviceNote) {
+        return { ok: true, status: 'already', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
+      }
+      return {
+        ok: true,
+        status: 'already',
+        message: '上游暂未下发每日积分活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
+          + '常见原因：① 官方窗口每天 10:00 开启；② 客户端今天已领过；'
+          + '③ 设备指纹（Cosy-MachineToken）过期——回 Windows 跑 qoder-checkin 的 01_extract.py 重新提取，或在 Qoder 客户端重新登录一次',
+        credits: 0,
+        consecutiveDays: 0
+      };
+    }
+    return { ok: true, status: 'already', message: '当前没有可领取的签到活动', credits: 0, consecutiveDays: 0 };
+  }
+
+  let credits = 0;
+  let successCount = 0;
+  let alreadyCount = 0;
+  const failures = [];
+  for (const item of claimable) {
+    const campaignId = item.campaignId || item.campaign_id;
+    const amount = qoderBenefit(item);
+    try {
+      const claim = await claimQoderCampaign(worker, token, campaignId, device, useBase);
+      const outcome = qoderClaimOutcome(claim);
+      if (outcome.status === 'success') {
+        successCount += 1;
+        credits += amount;
+      } else if (outcome.status === 'already') {
+        alreadyCount += 1;
+      } else {
+        failures.push(outcome.message);
+      }
+    } catch (err) {
+      failures.push(`请求异常：${err.message}`);
+    }
+    if (claimable.length > 1) await new Promise((r) => setTimeout(r, 800));
+  }
+
+  const parts = [];
+  if (successCount) parts.push(`领取 ${successCount} 个活动${credits ? `，+${credits} Credits` : ''}${useBase ? `（已切到 ${useBase.replace('https://', '')}）` : ''}`);
+  const alreadyTotal = alreadyCount + claimedBefore.length;
+  if (alreadyTotal) parts.push(`${alreadyTotal} 个今日已领`);
+  if (failures.length) parts.push(`失败 ${failures.length} 个：${failures[0]}`);
+  if (!parts.length) parts.push('当前没有可领取的签到活动');
+  const status = failures.length ? 'failed' : (successCount ? 'success' : 'already');
+  return {
+    ok: !failures.length,
+    status,
+    message: parts.join('；'),
+    credits,
+    consecutiveDays: 0,
+  };
+}
+
+/**
+ * 执行 Qoder / Qoder CN 一键签到（覆盖所有账号档案与当前 CLI 凭据）
+ * @param {'qoder'|'qoder-cn'} target
+ */
+export async function checkinQoder(target = 'qoder') {
+  const platform = target === 'qoder-cn' ? 'qoder-cn' : 'qoder';
+  const today = getTodayStr();
+  let accounts = await listCheckinAccounts(platform);
+  const custom = await customCredentialAccount(platform);
+  accounts = mergeCustomAccount(accounts, custom);
+
+  if (!accounts.length) {
+    return {
+      platform,
+      ok: false,
+      status: 'unconfigured',
+      message: `未检测到 ${qoderRegion(platform).name} 凭据，请先在控制台完成 Qoder CLI 登录或保存账号档案。`,
+      today,
+      time: getNowTimeStr(),
+      accounts: [],
+    };
+  }
+
+  const results = [];
+  for (const acct of accounts) {
+    const label = acct.display || acct.name;
+    try {
+      const r = await checkinQoderOne(acct);
+      results.push({ ...acct, ...r, label });
+    } catch (err) {
+      results.push({ ...acct, ok: false, status: 'failed', message: `请求异常：${err.message}`, label });
+    }
+  }
+
+  const okOnes = results.filter((r) => r.status === 'success');
+  const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
+  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : 'already');
+  return {
+    platform,
+    ok: badOnes.length === 0,
+    status,
+    message: results.map((r) => r.message).join('；'),
+    credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
+    consecutiveDays: 0,
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.label || r.name,
+      active: !!r.active,
+      status: r.status,
+      message: r.message,
+      credits: r.credits,
+      consecutiveDays: r.consecutiveDays,
+      source: r.credentialSource || r.source || '',
+    })),
+    today,
+    time: getNowTimeStr(),
+  };
+}
+
+/**
+ * MiniMax Code 每日签到。
+ * 链路移植自 SkillHub 的 `@user_3a370331/totorosir-minimax-checkin`（作者 龙猫科技说 longmaoit）：
+ * 复用 mcode CLI 自己的 OAuth 登录态，按桌面端同款签名直签，401 用 refresh_token 自愈。
+ */
+export async function checkinMiniMaxPlatform(region = 'cn') {
+  const today = getTodayStr();
+  const time = getNowTimeStr();
+  const cfg = MINIMAX_REGIONS[region] || MINIMAX_REGIONS.cn;
+  const state = await loadState();
+  const custom = String(state.customTokens?.minimaxcode || '').trim();
+  const cred = await readMinimaxCredential(HOME, cfg.key);
+  if (!cred && !custom) {
+    return {
+      platform: 'minimaxcode',
+      ok: false,
+      status: 'unconfigured',
+      message: `未检测到 ${cfg.name} 登录态，请先在控制台点「登录」完成 mcode 设备码授权。`,
+      credits: 0,
+      consecutiveDays: 0,
+      today,
+      time,
+      accounts: [],
+    };
+  }
+  const r = await checkinMiniMax(cfg.key, custom);
+  return {
+    platform: 'minimaxcode',
+    ok: r.ok,
+    status: r.status,
+    message: r.message,
+    credits: r.credits,
+    consecutiveDays: r.consecutiveDays,
+    today,
+    time,
+    accounts: [{
+      name: `mcode-${cfg.key}`,
+      display: cfg.name,
+      active: true,
+      status: r.status,
+      message: r.message,
+      credits: r.credits,
+      consecutiveDays: r.consecutiveDays,
+      source: r.source || cred?.source || (custom ? '自定义 Token' : ''),
+    }],
+  };
+}
+
 /**
  * 获取完整签到概览（供 WebUI 展示）
  */
@@ -1369,7 +1625,7 @@ export async function getCheckinOverview() {
 
   // 整理每个平台的前端渲染数据
   const platforms = {};
-  for (const plat of ['workbuddy', 'traecode', 'codearts']) {
+  for (const plat of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode']) {
     const pState = state.platforms[plat] || {};
     const cInfo = creds[plat] || {};
     const isToday = pState.lastDate === today;
@@ -1391,8 +1647,8 @@ export async function getCheckinOverview() {
       source: cInfo.source || '未关联凭据',
       // cli = 直接复用已安装 CLI 的凭据（自动跟随 CLI 刷新）；custom = 手工配置；none = 没找到
       credentialMode: !cInfo.available ? 'none' : (String(cInfo.source || '').includes('CLI 实时') ? 'cli' : 'custom'),
-      // WorkBuddy 有 refreshToken，签到前会自动续期，不需要人管
-      autoRefresh: plat === 'workbuddy' && cInfo.refreshable === true,
+      // WorkBuddy / Qoder / MiniMax Code 有 refreshToken，签到前会自动续期，不需要人管
+      autoRefresh: ['workbuddy', 'qoder', 'qoder-cn', 'minimaxcode'].includes(plat) && cInfo.refreshable === true,
       lastDate: pState.lastDate || '无记录',
       lastTime: pState.lastTime || '',
       status: isToday ? pState.status : (cInfo.available ? 'pending' : 'unconfigured'),
@@ -1428,7 +1684,7 @@ export async function clearCheckinHistory() {
 
 /**
  * 执行指定平台签到或一键全签
- * @param {'all'|'workbuddy'|'traecode'|'codearts'} target
+ * @param {'all'|'workbuddy'|'traecode'|'codearts'|'qoder'|'qoder-cn'} target
  */
 export async function runCheckin(target = 'all') {
   const state = await loadState();
@@ -1442,6 +1698,15 @@ export async function runCheckin(target = 'all') {
   }
   if (target === 'all' || target === 'codearts') {
     results.codearts = await checkinCodeArts();
+  }
+  if (target === 'all' || target === 'qoder') {
+    results.qoder = await checkinQoder('qoder');
+  }
+  if (target === 'all' || target === 'qoder-cn') {
+    results['qoder-cn'] = await checkinQoder('qoder-cn');
+  }
+  if (target === 'all' || target === 'minimaxcode') {
+    results.minimaxcode = await checkinMiniMaxPlatform('cn');
   }
 
   // 记录状态与审计历史
@@ -1517,7 +1782,7 @@ export function startAutoCheckinScheduler() {
       // 只补「还没签」和「今天签失败的」平台：
       // 前者是首次触发；后者给限流/网络抖动留重试机会（每天最多 6 次，约 3 小时）。
       // 旧实现只要有一个平台没签就 runCheckin('all')，会把已签成的平台又打一遍。
-      const pending = ['workbuddy', 'traecode', 'codearts'].filter((plat) => {
+      const pending = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode'].filter((plat) => {
         const p = state.platforms[plat] || {};
         if (p.lastDate !== today) return true;
         return p.status === 'failed' && (p.retryCount || 0) < 6;

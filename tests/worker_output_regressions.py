@@ -53,7 +53,7 @@ class WorkerOutputTests(unittest.TestCase):
         zcode = {"sessionId":"test","traceId":"test","response":"answer","usage":{"reasoningTokens":99}}
         self.assertEqual(parse_output(json.dumps(zcode)), {"text":"answer","error":None})
         self.assertEqual(parse_output(json.dumps(dict(zcode,type="result"))), {"text":"answer","error":None})
-        minimax = {"type":"message","role":"assistant","model":"MiniMax-M3.1-Flash-Preview","usage":{},"content":[{"type":"thinking","thinking":"PRIVATE"},{"type":"text","text":"answer"}]}
+        minimax = {"type":"message","role":"assistant","model":"MiniMax-M3.1-Flash","usage":{},"content":[{"type":"thinking","thinking":"PRIVATE"},{"type":"text","text":"answer"}]}
         self.assertEqual(parse_output(json.dumps(minimax)), {"text":"answer","error":None})
 
     def test_subagent_output_does_not_replace_primary_worker_answer(self):

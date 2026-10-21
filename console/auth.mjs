@@ -1,7 +1,7 @@
 // @ts-check
 // Multi-Agent Hub WebUI 11-Worker 登录 / 退出 / 回调认证 / 模型管理模块（零第三方依赖）
 // 支持全部 11 个子代理通过 WebUI 完成登录、退出、沙箱添加新账号与回调/Token 认证：
-// 1. minimaxcode    : Python PTY 包装 mmx auth login --recommend --region=cn（提取设备码与链接）+ 支持粘贴 API Key
+// 1. minimaxcode    : Python PTY 包装 mcode login --region cn --no-browser（提取授权链接与设备码）
 // 2. codebuddy      : 官方 codebuddy --acp (external) JSON-RPC authenticate，秒级提取 _codebuddy.ai/authUrl 并自动落盘
 // 3. codebuddy-cn   : 官方 codebuddy --acp (internal) JSON-RPC authenticate，秒级提取 copilot.tencent.com 链接并自动落盘
 // 4. github-copilot : Python PTY 包装 copilot login --device-code（提取 GitHub 设备码与链接）+ 支持粘贴 GitHub Token
@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { clearQuotaCache, fetchJsonSmart, encryptZcodeCred } from './vendor-quota.mjs';
 import { autoSyncLiveAccount, addFromSandbox, findCodeBuddySharedAuth } from './accounts.mjs';
+import { QODER_MODELS } from './qoder.mjs';
 
 const execFile = promisify(execFileCb);
 const HOME = homedir();
@@ -148,11 +149,12 @@ function zcodeProviderOf(region) {
 // ---------------------------------------------------------------- 登录命令表（全部 11 个 Worker 均支持 WebUI 登录）
 export const LOGIN_COMMANDS = {
   'minimaxcode': {
-    cmd: [resolveCliBin('mmx', join(HOME, '.npm-global', 'bin', 'mmx')), 'auth', 'login', '--recommend', '--region=cn'],
+    // MiniMax Code 官方 CLI（mcode）：--no-browser 打印授权链接 + 设备码，轮询落盘到 mcode 自己的配置目录
+    cmd: [resolveCliBin('mcode', join(HOME, '.minimax-code', 'bin', 'mcode')), 'login', '--region', 'cn', '--no-browser'],
     headless: true,
     mode: 'pty_device',
-    note: '打开 MiniMax 授权链接并确认设备码，后端将自动轮询并写入 ~/.mmx/config.json；也可直接在下方粘贴 MiniMax API Key (sk-...)。MiniMax 官方不返回账户名，建议在上方填写「账号备注名称」以便识别',
-    callbackHint: '可选：直接粘贴 MiniMax API Key (sk-...) 立即完成认证',
+    note: '打开 MiniMax 授权链接并确认设备码即可（与 MiniMax Code 桌面端同一账号，签到赠予积分在 Code 内可用）；登录态写入 mcode 配置目录，不再使用 mmx',
+    callbackHint: '可选：完成授权后把浏览器最终地址粘到下方，便于立即确认',
   },
   'codebuddy': {
     cmd: [resolveCliBin('codebuddy', join(HOME, '.npm-global', 'bin', 'codebuddy')), '--acp'],
@@ -228,13 +230,27 @@ export const LOGIN_COMMANDS = {
     note: '点开下方 Cline 设备授权链接并输入面板显示的验证码，授权完成后 CLI 会自动写入 ~/.cline 并加入账号列表（cline-free 免费模型必须走这条路）。若想用 API Key，直接在下方输入框粘贴（裸 Key 或 provider|model|key|base_url），后端会改用非交互方式写入并做一次真实调用校验',
     callbackHint: '浏览器授权完成后会话会自己结束并自动入账；要加 API Key 账号时在此粘贴',
   },
+  'qoder': {
+    cmd: [resolveCliBin('qodercli', join(HOME, '.local', 'bin', 'qodercli')), 'login'],
+    headless: true,
+    mode: 'pty_device',
+    note: '点开下方 Qoder 官方授权链接并在浏览器登录；授权完成后 CLI 会写入 ~/.qoder（凭据 + 密钥盐），控制台自动归档账号。Qoder CLI 登录态与桌面版相互独立',
+    callbackHint: '浏览器授权完成后会话会自己结束并自动入账',
+  },
+  'qoder-cn': {
+    cmd: [resolveCliBin('qoderclicn', join(HOME, '.local', 'bin', 'qoderclicn')), 'login'],
+    headless: true,
+    mode: 'pty_device',
+    note: '点开下方 Qoder CN 官方授权链接并在浏览器登录；授权完成后 CLI 会写入 ~/.qoder-cn（凭据 + 密钥盐），控制台自动归档账号。Qoder CN CLI 登录态与桌面版相互独立',
+    callbackHint: '浏览器授权完成后会话会自己结束并自动入账',
+  },
 };
 
 /** 各 worker 退出时需要移走的凭据文件（相对 HOME） */
 const LOGOUT_FILES = {
   'codebuddy': ['.codebuddy/auth.info'],
   'codebuddy-cn': ['.codebuddy-cn/auth.info'],
-  'minimaxcode': ['.mmx/config.json'],
+  'minimaxcode': ['.minimax-code/codex-auth.json', '.minimax-code/auth.json', '.minimax-code/config/auth.json', '.mmx/config.json'],
   'antigravity': ['.gemini/antigravity-cli/antigravity-oauth-token'],
   'traecode': ['.trae-cn/trae-jwt-token'],
   'zcode': ['.zcode/v2/credentials.json'],
@@ -243,6 +259,8 @@ const LOGOUT_FILES = {
   'github-copilot': ['.config/github-copilot/copilot-token'],
   'opencode': ['.local/share/opencode/auth.json'],
   'cline': ['.cline/data/secrets.json', '.cline/data/settings/providers.json'],
+  'qoder': ['.qoder/.auth/user', '.qoder/qoder-cli-credentials.json', '.qoder/.keychain-salt'],
+  'qoder-cn': ['.qoder-cn/.auth/user', '.qoder-cn/qoder-cli-credentials.json', '.qoder-cn/.keychain-salt'],
 };
 
 function stripAnsi(str) {
@@ -469,8 +487,8 @@ function getMimoKeyName(targetHome) {
 }
 
 /**
- * MiniMax mmx 官方 CLI 登录不落盘账户名，但 config.json 的 oauth.account 字段会被官方 normalizer
- * 保留、并显示在 `mmx auth status` 的 Account 行。登录完成时把用户在 WebUI 填的备注名注入该字段。
+ * 历史遗留：mmx 时代会把备注名注入 ~/.mmx/config.json 的 oauth.account。
+ * 换成 mcode 后不再有该字段（登录态由 mcode 自己管理），此函数只在旧文件存在时才写，否则静默跳过。
  */
 async function injectMinimaxAccountName(targetHome, name) {
   const nn = String(name || '').trim();
@@ -1836,29 +1854,15 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
         };
       }
 
-      // 6. MiniMaxCode: 支持直接粘贴 sk-... API Key 或向 PTY 发送输入
+      // 6. MiniMaxCode(mcode)：官方 CLI 不接受把 API Key 写进登录态文件，
+      //    这里只提示正确做法，避免往已废弃的 ~/.mmx/config.json 里写脏数据
       if (e.worker === 'minimaxcode' && /^sk-[A-Za-z0-9_-]{10,}$/.test(input)) {
-        const mmxFile = join(e.targetHome, '.mmx', 'config.json');
-        await mkdir(dirname(mmxFile), { recursive: true });
-        let cfg = { region: 'cn' };
-        try { cfg = JSON.parse(await readFile(mmxFile, 'utf-8')); } catch { /* ignore */ }
-        cfg.api_key = input;
-        // MiniMax 官方不返回账户名：用用户备注名落盘，供账号识别与 auth status 展示
-        if (prefName && !cfg.account) cfg.account = prefName;
-        await writeFile(mmxFile, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
-        e.buf += `\n[MiniMax] ✓ API Key 已直接写入 ${mmxFile}\n`;
-        const acc = await finalizeLoginAccount(e, prefName);
-        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
-        const accName = acc?.name || e.savedAccountName || '';
-        clearQuotaCache('minimaxcode');
-        cleanupSessionResources(e);
-        e.code = 0;
-        e.exited = true;
+        e.buf += '\n[MiniMax] mcode 不接受直接粘贴 API Key：请走设备码授权，或在终端执行 '
+          + '`export MCODE_PROVIDER_API_KEY=... && mcode provider set-minimax-key && mcode provider use api-key`\n';
         return {
-          ok: true,
+          ok: false,
           worker: 'minimaxcode',
-          accountName: accName,
-          note: accName ? `MiniMax 认证成功，已自动添加并切换至账号「${accName}」` : 'MiniMax API Key 已保存并生效',
+          error: 'mcode 请用设备码授权（点「登录」）；API Key 需在终端用 mcode provider set-minimax-key 配置',
         };
       }
 
@@ -2089,6 +2093,8 @@ function pickDisplayAlias(id, aliases) {
 }
 
 const CATALOG_MODELS = {
+  qoder: QODER_MODELS,
+  'qoder-cn': QODER_MODELS,
   codearts: [
     { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.70x', default: true },
     { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x' },
@@ -2147,10 +2153,11 @@ const CATALOG_MODELS = {
     { id: 'xiaomi/mimo-v2.6-pro-ultraspeed', name: 'MiMo-V2.6-Pro-UltraSpeed' },
     { id: '9router/trae', name: 'Trae (9router 通道)' },
   ],
+  // mcode 的模型引用是 provider/model；国内区与国际区都是 minimax/*（实测 minimax-cn/* 会报
+  // not available for the configured_provider route）。默认 3.1 Flash，另留一档 M3。
   minimaxcode: [
-    // mmx CLI 的上下文窗口由模型决定（text chat 无上下文参数）：M3.1-Flash-Preview=512K，M3=1M
-    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K 上下文', ctx: '512K' },
-    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', ctx: '1M', default: true },
+    { id: 'minimax/MiniMax-M3.1-Flash', name: 'MiniMax-M3.1-Flash', tag: '默认 · 1M 上下文', ctx: '1M', default: true },
+    { id: 'minimax/MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', ctx: '1M' },
   ],
   zcode: [
     { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },

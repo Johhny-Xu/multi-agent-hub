@@ -33,7 +33,7 @@ function capabilityDocument() {
   return { schema_version: 2, platform: 'linux', attachment_limit_bytes: 1024 * 1024, workers: {
     probe: workerCapability('synthetic'),
     mimocode: workerCapability('xiaomi/mimo-v2.6-flash'),
-    minimaxcode: workerCapability('MiniMax-M3.1-Flash-Preview', { thinking: ['default', 'on'] }),
+    minimaxcode: workerCapability('minimax/MiniMax-M3.1-Flash', { thinking: ['default', 'on'] }),
     zcode: workerCapability('GLM-5.3-Flash', { enabled: false }),
   } };
 }
@@ -346,10 +346,11 @@ test('snapshot follows configured default models and does not auto-route a catal
     const snapshot = (await api('/api/snapshot')).body;
     assert.equal(snapshot.ok, true, JSON.stringify(snapshot));
     assert.equal(snapshot.agents.find((agent) => agent.name === 'mimocode').defaultModel, 'xiaomi/mimo-v2.6-flash');
-    assert.equal(snapshot.modelCatalog.minimaxcode.length, 2);
+    // minimaxcode 预置 3.1 Flash（默认）与 M3 两档；hub 实报的 id 若不同会作为额外条目追加
+    assert.ok(snapshot.modelCatalog.minimaxcode.length >= 2);
+    assert.ok(snapshot.modelCatalog.minimaxcode.some((model) => model.id === 'minimax/MiniMax-M3'), '应预置 M3');
+    assert.equal(snapshot.modelCatalog.minimaxcode.find((model) => model.default).id, 'minimax/MiniMax-M3.1-Flash');
     assert.equal(snapshot.modelCatalog.mimocode.length, 4);
-    assert.ok(snapshot.modelCatalog.minimaxcode.some((model) => model.id === 'MiniMax-M3'));
-    assert.equal(snapshot.modelCatalog.minimaxcode.find((model) => model.default).id, 'MiniMax-M3.1-Flash-Preview');
   } finally { agentsOverride = modelsOverride = null; await stop(); }
 });
 

@@ -1,8 +1,10 @@
 """Login contract checks using fake CLI processes; no network or real credentials."""
 import io
 import json
+import os
 import queue
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -97,6 +99,15 @@ class LoginContractTests(unittest.TestCase):
         ]:
             with self.subTest(url=url):
                 self.assertIsNone(login.safe_url(url, "codebuddy"))
+
+    def test_qoder_device_link_allows_machine_token_but_not_stored_credentials(self):
+        official = "https://qoder.com/device/selectAccounts?challenge=PUBLIC_EXAMPLE&machine_token=PUBLIC_MACHINE"
+        self.assertEqual(login.safe_url(official, "qoder"), official)
+        cn = "https://qoder.com.cn/device/selectAccounts?machine_token=PUBLIC_MACHINE"
+        self.assertEqual(login.safe_url(cn, "qoder-cn"), cn)
+        self.assertIsNone(login.safe_url("https://qoder.com/device?access_token=FAKE_SECRET", "qoder"))
+        self.assertIsNone(login.safe_url("https://qoder.com/device?refresh_token=FAKE_SECRET", "qoder"))
+        self.assertIsNone(login.safe_url("https://qoder.com.attacker.invalid/device?machine_token=FAKE", "qoder"))
 
     def test_codebuddy_environments_stay_separate(self):
         home = str(Path.home())
@@ -291,6 +302,34 @@ class LoginContractTests(unittest.TestCase):
         self.assertFalse(self.manager._transition(session, status="awaiting_user", login_url="https://www.codebuddy.ai/login"))
         self.assertEqual(session["status"], "cancelled")
         self.assertNotIn("login_url", session)
+
+
+class MiniMaxMcodeLoginStateTests(unittest.TestCase):
+    """mcode 没有 `auth status`：登录态看 auth-state.json 的 status 字段。"""
+
+    def _write_state(self, root, status, region="cn"):
+        target = Path(root) / "prod" / region / "mcode-public"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "auth-state.json").write_text(json.dumps({"status": status, "region": region}), encoding="utf-8")
+
+    def test_absent_auth_dir_is_not_logged_in(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
+            self.assertFalse(login.minimax_logged_in())
+
+    def test_signed_out_state_is_not_logged_in(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
+            self._write_state(tmp, "signed-out")
+            self.assertFalse(login.minimax_logged_in())
+
+    def test_authenticated_state_marks_logged_in(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
+            self._write_state(tmp, "authenticated")
+            self.assertTrue(login.minimax_logged_in())
+
+    def test_region_subdirectory_is_found(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
+            self._write_state(tmp, "authenticated", region="global")
+            self.assertTrue(login.minimax_logged_in())
 
 
 if __name__ == "__main__":

@@ -72,7 +72,9 @@ def worker_config(app, node):
         return first_file([directory / relative for directory in modules])
     cb = module_file('@tencent-ai/codebuddy-code/bin/codebuddy') or first_file([shutil.which('codebuddy')])
     mimo = module_file('@mimo-ai/cli/bin/mimo') or first_file([shutil.which('mimo')])
-    mmx = module_file('mmx-cli/dist/mmx.mjs') or first_file([shutil.which('mmx')])
+    # MiniMax Code 官方 CLI（mcode）：装到 ~/.minimax-code 独立 prefix，不在 npm 全局里
+    mcode = first_file([shutil.which('mcode'), home / '.minimax-code/bin/mcode',
+                        home / '.minimax-code/bin/mcode.exe'])
     workers = {}
     if cb and node_args:
         for name, profile, extra in [('codebuddy', '.codebuddy', {}), ('codebuddy-cn', '.codebuddy-cn', {'CODEBUDDY_INTERNET_ENVIRONMENT': 'internal'})]:
@@ -83,9 +85,14 @@ def worker_config(app, node):
     if mimo and node_args:
         workers['mimocode'] = {'role': 'MiMo official CLI', 'cli': node_args + [str(mimo), 'run', '--pure', '{task}'], 'model_arg': '--model',
             'models': {'default': 'xiaomi/mimo-v2.6-flash', '26f': 'xiaomi/mimo-v2.6-flash', 'v2.6f': 'xiaomi/mimo-v2.6-flash'}, 'async_default': True}
-    if mmx and node_args:
-        workers['minimaxcode'] = {'role': 'MiniMax official text CLI', 'cli': node_args + [str(mmx), 'text', 'chat', '--message', '{task}', '--output', 'text'],
-            'model_arg': '--model', 'models': {'default': 'MiniMax-M3.1-Flash-Preview'}, 'async_default': True}
+    if mcode:
+        # 模型引用是 provider/model，国内区与国际区都是 minimax/*（实测 minimax-cn/* 不可用）；
+        # --prompt-mode work 让它以 agent 方式工作，写权限由 capabilities.json 的 permission.modes 控制
+        workers['minimaxcode'] = {'role': 'MiniMax Code official CLI (mcode headless exec)',
+            'cli': [str(mcode), 'exec', '--prompt-mode', 'work', '--permission', 'smart', '--output-format', 'text', '{task}'],
+            'model_arg': '--model', 'workdir_via': '--cwd', 'allow_unlisted_models': True,
+            'models': {'default': 'minimax/MiniMax-M3.1-Flash', '3.1f': 'minimax/MiniMax-M3.1-Flash', 'm3': 'minimax/MiniMax-M3'},
+            'async_default': True}
     for name, commands, args, model in [('github-copilot', ('copilot.exe', 'copilot'), ['--silent', '-p', '{task}'], 'auto'),
                                        ('antigravity', ('agy.exe', 'agy'), ['--print-timeout', '60s', '-p', '{task}'], 'gemini-3.8-flash-medium')]:
         cli = first_file([shutil.which(command) for command in commands])

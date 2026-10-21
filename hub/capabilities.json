@@ -179,6 +179,148 @@
       }
     }
   },
+  "qoder": {
+    "stream": {
+      "on": {
+        "args": [
+          "--output-format",
+          "stream-json"
+        ]
+      },
+      "off": {
+        "args": [
+          "--output-format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "cli",
+        "flag": "--attachment"
+      },
+      "image": {
+        "mode": "cli",
+        "flag": "--attachment"
+      }
+    },
+    "thinking": {
+      "on": {
+        "args": [
+          "--thinking",
+          "enabled"
+        ]
+      },
+      "off": {
+        "args": [
+          "--thinking",
+          "disabled"
+        ]
+      }
+    },
+    "stream_semantics": "answer_snapshots",
+    "notes": "Qoder CLI -p prints one result; --output-format stream-json emits system/assistant/result records (assistant records are message snapshots, not deltas). -m takes the model selector key shown in the IDE (default DeepSeek-Flash = dfmodel, 0.1x, limited-time free). --attachment carries files and images. The built-in Plan agent is read-only.",
+    "permission": {
+      "description": "--permission-mode / --agent Plan",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--agent",
+            "Plan"
+          ],
+          "desc": "Plan 代理只读规划，不落盘改文件"
+        },
+        "edit": {
+          "label": "受控编辑",
+          "args": [
+            "--permission-mode",
+            "accept_edits"
+          ],
+          "desc": "文件编辑自动通过，其余仍需确认"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--permission-mode",
+            "bypass_permissions"
+          ],
+          "desc": "跳过所有确认（高危操作仍会询问）"
+        }
+      }
+    }
+  },
+  "qoder-cn": {
+    "stream": {
+      "on": {
+        "args": [
+          "--output-format",
+          "stream-json"
+        ]
+      },
+      "off": {
+        "args": [
+          "--output-format",
+          "json"
+        ]
+      }
+    },
+    "attachments": {
+      "file": {
+        "mode": "cli",
+        "flag": "--attachment"
+      },
+      "image": {
+        "mode": "cli",
+        "flag": "--attachment"
+      }
+    },
+    "thinking": {
+      "on": {
+        "args": [
+          "--thinking",
+          "enabled"
+        ]
+      },
+      "off": {
+        "args": [
+          "--thinking",
+          "disabled"
+        ]
+      }
+    },
+    "stream_semantics": "answer_snapshots",
+    "notes": "Qoder CN CLI shares qodercli's flags but uses ~/.qoder-cn. -p prints one result; stream-json assistant records are message snapshots. Default DeepSeek-Flash (dfmodel, 0.1x, limited-time free). --attachment carries files and images. The built-in Plan agent is read-only.",
+    "permission": {
+      "description": "--permission-mode / --agent Plan",
+      "modes": {
+        "readonly": {
+          "label": "只读",
+          "args": [
+            "--agent",
+            "Plan"
+          ],
+          "desc": "Plan 代理只读规划，不落盘改文件"
+        },
+        "edit": {
+          "label": "受控编辑",
+          "args": [
+            "--permission-mode",
+            "accept_edits"
+          ],
+          "desc": "文件编辑自动通过，其余仍需确认"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": [
+            "--permission-mode",
+            "bypass_permissions"
+          ],
+          "desc": "跳过所有确认（高危操作仍会询问）"
+        }
+      }
+    }
+  },
   "github-copilot": {
     "thinking": {
       "off": {
@@ -281,32 +423,6 @@
     "stream_semantics": "answer_snapshots"
   },
   "minimaxcode": {
-    "thinking": {
-      "on": {
-        "args": [],
-        "models": [
-          "MiniMax-M3.1-Flash-Preview"
-        ]
-      }
-    },
-    "stream": {
-      "on": {
-        "args": [
-          "--output",
-          "text",
-          "--stream"
-        ]
-      },
-      "off": {
-        "args": [
-          "--output",
-          "json"
-        ],
-        "remove_args": [
-          "--stream"
-        ]
-      }
-    },
     "attachments": {
       "file": {
         "mode": "messages_file"
@@ -315,8 +431,22 @@
         "mode": "messages_file"
       }
     },
-    "notes": "MiniMax-M3.1-Flash-Preview always uses thinking; off is unsupported.",
-    "stream_semantics": "answer_deltas"
+    "permission": {
+      "description": "--permission",
+      "modes": {
+        "edit": {
+          "label": "受控编辑",
+          "args": ["--permission", "smart", "--prompt-mode", "work"],
+          "desc": "smart 策略 + work agent 提示词（默认）：可读写文件，其余工具按策略处理"
+        },
+        "full": {
+          "label": "完全控制",
+          "args": ["--permission", "full", "--prompt-mode", "work"],
+          "desc": "full 策略：跳过所有确认，可自由读写文件（已实测落盘）"
+        }
+      }
+    },
+    "notes": "mcode exec 无头模式（--output-format text）：与 MiniMax Code 桌面端同一账号，登录态缺失时 exec 会直接报 Sign in to MiniMax。模型引用是 provider/model，国内区与国际区都是 minimax/*（实测 minimax/MiniMax-M3.1-Flash 与 minimax/MiniMax-M3 均可用；minimax-cn/* 会报 not available for the configured_provider route）。agent 模式由 --prompt-mode work 开启。注意：mcode 的 --permission off 是「关闭权限询问」= 全放开，**不是只读**（实测 off 与 smart 都能落盘），所以不声明 readonly 档，只给 edit(smart) / full(full)。"
   },
   "zcode": {
     "attachments": {

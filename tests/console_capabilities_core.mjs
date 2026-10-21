@@ -45,3 +45,29 @@ print(hub.tool_hub_capabilities({}))
     await rm(target, { recursive: true, force: true });
   }
 });
+
+test('qd / qdcn aliases resolve to the Qoder workers and dfmodel is the default', () => {
+  const worker = {
+    configured: true,
+    default_model: 'dfmodel',
+    availability: { enabled: true },
+    models: [{
+      id: 'dfmodel',
+      availability: { enabled: true },
+      thinking: { allowed: ['on', 'off'] },
+      permission: { allowed: ['readonly', 'edit', 'full'] },
+      stream: { supported: true, semantics: 'answer_snapshots' },
+      attachments: { file: { supported: true, mode: 'cli' }, image: { supported: true, mode: 'cli' } },
+    }],
+  };
+  const document = normalizeCapabilities({
+    schema_version: 2,
+    platform: 'linux',
+    workers: { qoder: worker, 'qoder-cn': worker },
+  });
+  for (const alias of ['qd', 'qdcn']) {
+    assert.equal(taskCapability(document, alias).allowed, true, `${alias} default model`);
+    assert.equal(taskCapability(document, alias).model, 'dfmodel');
+    assert.equal(taskCapability(document, alias, 'dfmodel', { thinking: 'on', stream: true, permission: 'readonly', attachments: [{ mime_type: 'image/png' }] }).allowed, true);
+  }
+});

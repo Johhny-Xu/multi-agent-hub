@@ -10,7 +10,9 @@
         "{task}"
       ],
       "model_arg": "--model",
-      "models": {"default": ""},
+      "models": {
+        "default": ""
+      },
       "timeout_arg": "--timeout",
       "workdir_via": "--cwd",
       "async_default": true
@@ -196,27 +198,103 @@
       },
       "async_default": true
     },
-    "minimaxcode": {
-      "role": "文本/问答 worker 示例（聊天型 CLI）",
-      "description": "文本/问答 worker 示例（聊天型 CLI）; cli 路径请替换为本机真实可执行文件。models 为模型别名表。",
+    "qoder": {
+      "role": "Qoder 官方 CLI（国际版，无头 print 模式）",
+      "description": "Qoder 官方 CLI 无头执行；-m 使用 Qoder 模型选择器 key，默认 DeepSeek-Flash (dfmodel，限时 0.1x)；--attachment 传文件/图片，--cwd 指定工作目录。首次使用先在 Hub 主机执行 qodercli login。",
       "cli": [
-        "/usr/local/bin/minimaxcode-placeholder",
+        "qodercli",
+        "-p",
+        "{task}"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": "dfmodel",
+        "flash": "dfmodel",
+        "deepseek-flash": "dfmodel",
+        "dsflash": "dfmodel",
+        "pro": "dmodel",
+        "deepseek-pro": "dmodel",
+        "qwen": "qmodel_38max",
+        "glm": "gmodel",
+        "kimi": "kmodel_latest",
+        "minimax": "mmodel",
+        "auto": "auto"
+      },
+      "workdir_via": "--cwd",
+      "async_default": true,
+      "login": {
+        "command": [
+          "qodercli",
+          "login"
+        ],
+        "status_command": [
+          "qodercli",
+          "status",
+          "-o",
+          "json"
+        ]
+      }
+    },
+    "qoder-cn": {
+      "role": "Qoder CN 官方 CLI（国内版，无头 print 模式）",
+      "description": "Qoder CN 官方 CLI 无头执行；与 qodercli 参数一致（-p / -m / --attachment / --cwd），配置目录为 ~/.qoder-cn。默认 DeepSeek-Flash (dfmodel，限时 0.1x)；首次使用先在 Hub 主机执行 qoderclicn login。",
+      "cli": [
+        "qoderclicn",
+        "-p",
+        "{task}"
+      ],
+      "model_arg": "-m",
+      "models": {
+        "default": "dfmodel",
+        "flash": "dfmodel",
+        "deepseek-flash": "dfmodel",
+        "dsflash": "dfmodel",
+        "pro": "dmodel",
+        "deepseek-pro": "dmodel",
+        "qwen": "qmodel_38max",
+        "glm": "gmodel",
+        "kimi": "kmodel_latest",
+        "minimax": "mmodel",
+        "auto": "auto"
+      },
+      "workdir_via": "--cwd",
+      "async_default": true,
+      "login": {
+        "command": [
+          "qoderclicn",
+          "login"
+        ],
+        "status_command": [
+          "qoderclicn",
+          "status",
+          "-o",
+          "json"
+        ]
+      }
+    },
+    "minimaxcode": {
+      "role": "MiniMax Code worker（官方 mcode CLI 无头 exec）",
+      "description": "mcode exec --prompt-mode work --output-format text 无头执行（agent 模式）；与 MiniMax Code 桌面端同一账号体系（签到赠予积分在 Code 内可用）；未登录时会直接报 Sign in to MiniMax。模型引用是 provider/model，国内区与国际区都是 minimax/*（默认 minimax/MiniMax-M3.1-Flash，可选 minimax/MiniMax-M3）。",
+      "cli": [
+        "/home/johhny/.minimax-code/bin/mcode",
+        "exec",
+        "--prompt-mode",
+        "work",
+        "--permission",
+        "smart",
+        "--output-format",
         "text",
-        "chat",
-        "--message",
-        "{task}",
-        "--output",
-        "text"
+        "{task}"
       ],
       "model_arg": "--model",
+      "workdir_via": "--cwd",
+      "async_default": true,
+      "allow_unlisted_models": true,
       "models": {
-        "default": "MiniMax-M3.1-Flash-Preview",
-        "m3": "MiniMax-M3",
-        "m2.7": "MiniMax-M2.7",
-        "m2.5": "MiniMax-M2.5",
-        "m3.1fp": "MiniMax-M3.1-Flash-Preview"
-      },
-      "async_default": true
+        "default": "minimax/MiniMax-M3.1-Flash",
+        "3.1f": "minimax/MiniMax-M3.1-Flash",
+        "m3": "minimax/MiniMax-M3"
+      }
     }
   }
 }

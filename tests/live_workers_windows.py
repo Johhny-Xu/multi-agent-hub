@@ -65,7 +65,7 @@ COPILOT = entry("HUB_PROBE_COPILOT", "copilot", [HOME / ".local/bin/copilot.exe"
 TRAE = entry("HUB_PROBE_TRAE", "traecli", [HOME / ".local/bin/traecli.exe"], ["hub-windows-root-*/traecli.exe"])
 ZCODE = entry("HUB_PROBE_ZCODE", None, [Path("C:/Program Files/ZCode/resources/glm/zcode.cjs")])
 AGY = entry("HUB_PROBE_ANTIGRAVITY", "agy", [HOME / ".local/bin/agy.exe", HOME / ".antigravity/bin/agy.exe"], ["agenthub-probe-antigravity-*/agy.exe"])
-MODELS = {"codebuddy": "deepseek-v4.1-flash", "codebuddy-cn": "deepseek-v4.1-flash", "github-copilot": "auto", "mimocode": "xiaomi/mimo-v2.6-flash", "minimaxcode": "MiniMax-M3.1-Flash-Preview", "traecode": "GLM-5.3-FlashX", "zcode": "GLM-5.3-Flash", "antigravity": "gemini-3.8-flash-medium"}
+MODELS = {"codebuddy": "deepseek-v4.1-flash", "codebuddy-cn": "deepseek-v4.1-flash", "github-copilot": "auto", "mimocode": "xiaomi/mimo-v2.6-flash", "minimaxcode": "MiniMax-M3.1-Flash", "traecode": "GLM-5.3-FlashX", "zcode": "GLM-5.3-Flash", "antigravity": "gemini-3.8-flash-medium"}
 
 def sanitize(text):
     text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", str(text))

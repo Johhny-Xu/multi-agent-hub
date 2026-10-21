@@ -16,7 +16,7 @@ const worker = (entry, reason = '') => ({ configured: true, default_model: entry
 const workers = {
   'codebuddy-cn': worker(model('deepseek-v4.1-flash', ['default','on','off'])),
   'github-copilot': worker(model('auto', ['default','off'])),
-  minimaxcode: worker(model('MiniMax-M3.1-Flash-Preview', ['default','on'])),
+  minimaxcode: worker(model('minimax/MiniMax-M3.1-Flash', ['default','on'])),
   mimocode: worker(model('xiaomi/mimo-v2.6-flash', ['default','on','off'])),
   zcode: worker(model('GLM-5.3-Flash', ['default'], { enabled: false, reason: '当前官方模型目录缺少 GLM-5.3-Flash' }), '当前官方模型目录缺少 GLM-5.3-Flash'),
   codebuddy: worker(model('deepseek-v4.1-flash', ['default','on','off']), '当前账户登录失效，需要重新登录'),

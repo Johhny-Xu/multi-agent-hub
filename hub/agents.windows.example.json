@@ -11,7 +11,9 @@
         "{task}"
       ],
       "model_arg": "--model",
-      "models": {"default": ""},
+      "models": {
+        "default": ""
+      },
       "timeout_arg": "--timeout",
       "workdir_via": "--cwd",
       "async_default": true
@@ -90,24 +92,28 @@
       "async_default": true
     },
     "minimaxcode": {
-      "role": "MiniMax 官方 mmx 文本 CLI",
-      "description": "纯文本/问答入口；填写稳定安装的 mmx-cli/dist/mmx.mjs。",
+      "role": "MiniMax Code worker（官方 mcode CLI 无头 exec）",
+      "description": "mcode exec --prompt-mode work --output-format text 无头执行（agent 模式）；与 MiniMax Code 桌面端同一账号体系（签到赠予积分在 Code 内可用）；未登录时会直接报 Sign in to MiniMax。模型引用是 provider/model，国内区与国际区都是 minimax/*（默认 minimax/MiniMax-M3.1-Flash，可选 minimax/MiniMax-M3）。",
       "cli": [
-        "node",
-        "C:/PATH/TO/npm/node_modules/mmx-cli/dist/mmx.mjs",
+        "mcode",
+        "exec",
+        "--prompt-mode",
+        "work",
+        "--permission",
+        "smart",
+        "--output-format",
         "text",
-        "chat",
-        "--message",
-        "{task}",
-        "--output",
-        "text"
+        "{task}"
       ],
       "model_arg": "--model",
+      "workdir_via": "--cwd",
+      "async_default": true,
+      "allow_unlisted_models": true,
       "models": {
-        "default": "MiniMax-M3.1-Flash-Preview",
-        "m31flash": "MiniMax-M3.1-Flash-Preview"
-      },
-      "async_default": true
+        "default": "minimax/MiniMax-M3.1-Flash",
+        "3.1f": "minimax/MiniMax-M3.1-Flash",
+        "m3": "minimax/MiniMax-M3"
+      }
     },
     "mimocode": {
       "role": "小米 MiMo 官方 CLI",

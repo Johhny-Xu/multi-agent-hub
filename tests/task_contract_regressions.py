@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "hub"))
 import agent_hub as hub
 import async_worker as worker
-from task_contract import UnsupportedCapability, apply_environment, cleanup_attachments, merge_cli_arguments, prepare_task
+from task_contract import UnsupportedCapability, apply_environment, cleanup_attachments, merge_cli_arguments, prepare_task, public_model_capabilities, resolve_model
 
 
 def attachment(name, value, mime="text/plain"):
@@ -56,6 +56,35 @@ class TaskContractTests(unittest.TestCase):
         merged = json.loads(apply_environment(current, update)["MIMOCODE_CONFIG_CONTENT"])
         self.assertEqual(merged["permission"]["bash"], "deny")
         self.assertEqual(merged["provider"]["xiaomi"]["name"], "existing")
+
+    def test_qoder_defaults_to_deepseek_flash_and_declares_controls(self):
+        profile = {
+            "cli": ["qodercli", "-p", "{task}"],
+            "model_arg": "-m",
+            "models": {"default": "dfmodel", "flash": "dfmodel", "pro": "dmodel"},
+        }
+        self.assertEqual(resolve_model(profile), "dfmodel")
+        for worker in ("qoder", "qoder-cn"):
+            caps = public_model_capabilities(worker, profile, "dfmodel")
+            self.assertTrue(caps["stream"]["supported"])
+            self.assertEqual(caps["stream"]["semantics"], "answer_snapshots")
+            self.assertTrue(caps["attachments"]["file"]["supported"])
+            self.assertTrue(caps["attachments"]["image"]["supported"])
+            self.assertEqual(caps["thinking"]["allowed"], ["default", "on", "off"])
+            self.assertEqual(caps["permission"]["allowed"], ["default", "readonly", "edit", "full"])
+
+        plan = self.prepare(
+            worker="qoder", profile=profile, stream=True, thinking="on", permission="readonly",
+            attachments=[attachment("shot.png", b"png-bytes", "image/png"), attachment("notes.txt", b"hello")],
+        )
+        self.assertIn("--output-format", plan["extra_args"])
+        self.assertIn("stream-json", plan["extra_args"])
+        self.assertEqual(plan["extra_args"].count("--thinking"), 1)
+        self.assertIn("enabled", plan["extra_args"])
+        self.assertEqual(plan["extra_args"][plan["extra_args"].index("--agent") + 1], "Plan")
+        self.assertEqual(plan["extra_args"].count("--attachment"), 2)
+        self.assertTrue(Path(plan["staging"]).is_dir())
+        self.assertEqual({item["kind"] for item in plan["metadata"]["attachments"]}, {"image", "file"})
 
     def test_scalar_format_flags_are_replaced_and_attachment_flags_repeat(self):
         command = ['mimo', 'run', '--format', 'json', '--model=old', '{task}']

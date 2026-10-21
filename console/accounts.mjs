@@ -15,6 +15,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clearQuotaCache, decryptZcodeCred } from './vendor-quota.mjs';
 import { getSandbox } from './auth.mjs';
+import { readQoderCredential } from './qoder.mjs';
 
 const execFile = promisify(execFileCb);
 const HOME = homedir();
@@ -46,7 +47,11 @@ const ACCOUNTS_WRITE_LOCK = 'accounts-write';
 export const WORKER_CRED_FILES = {
   'codebuddy': ['.codebuddy/auth.info'],
   'codebuddy-cn': ['.codebuddy-cn/auth.info'],
-  'minimaxcode': ['.mmx/config.json'],
+  // mcode（MiniMax Code 官方 CLI）把 OAuth 凭据放在 ~/.minimax/auth/<env>/<region>/mcode-public/：
+  //   auth.json        → { records: { "com.minimax.mcode.oauth.prod.cn <hash>": { accessToken, refreshToken, expiresAtMs } } }
+  //   auth-state.json  → { status: "authenticated", region: "cn", expiresAtMs }
+  // 登录命令固定 --region cn，所以只登记 cn 这一套（copyFile 要求列出的文件都存在）。
+  'minimaxcode': ['.minimax/auth/prod/cn/mcode-public/auth-state.json', '.minimax/auth/prod/cn/mcode-public/auth.json'],
   'antigravity': ['.gemini/antigravity-cli/antigravity-oauth-token'],
   'traecode': ['.trae-cn/trae-jwt-token'],
   'zcode': ['.zcode/v2/credentials.json'],
@@ -55,6 +60,8 @@ export const WORKER_CRED_FILES = {
   'github-copilot': ['.config/github-copilot/copilot-token'],
   'opencode': ['.local/share/opencode/auth.json'],
   'cline': ['.cline/data/secrets.json', '.cline/data/settings/providers.json'],
+  'qoder': ['.qoder/.auth/user', '.qoder/.auth/machine_id'],
+  'qoder-cn': ['.qoder-cn/.auth/user', '.qoder-cn/.auth/machine_id'],
 };
 
 /** 同步 github-copilot 的 gnome-keyring 与本地镜像文件 */
@@ -199,7 +206,7 @@ export function formatProvidersDisplay(providers) {
 export function isMutableIdentity(identity) {
   const s = String(identity || '');
   if (!s) return false;
-  if (s.startsWith('providers:') || s.startsWith('mmx:')) return true;
+  if (s.startsWith('providers:') || s.startsWith('mcode:') || s.startsWith('mmx:') || s.startsWith('qoder-token:')) return true;
   return /^[0-9a-f]{12}$/.test(s); // 纯文件指纹
 }
 
@@ -267,19 +274,26 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       return { label, identity: uid || fp, display };
     }
     if (worker === 'minimaxcode') {
-      const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
+      // auth-state.json 在前（带 region），auth.json 兜底；两者都没有时按未登录处理
+      let raw = null;
+      for (const rel of relFiles) {
+        try {
+          raw = JSON.parse((await readFile(join(baseHome, rel), 'utf-8')).replace(/^\uFEFF/, ''));
+          break;
+        } catch { /* 试下一个候选 */ }
+      }
+      if (!raw) throw new Error('MiniMax 凭据不可用');
       const reg = cleanProfileLabel(raw?.region || raw?.oauth?.region || 'cn') || 'cn';
-      // mmx OAuth 登录时官方 CLI 会把 token 响应里的 account 写回 config.json
-      const acctRaw = raw?.account ?? raw?.oauth?.account ?? null;
+      // mcode 的 codex-auth.json 按 provider 分槽；老 mmx 的 config.json 会把账号写回 account 字段
+      const acctRaw = raw?.account ?? raw?.oauth?.account ?? raw?.user ?? null;
       const acctStr = typeof acctRaw === 'string' ? acctRaw : (acctRaw?.email || acctRaw?.name || acctRaw?.username || acctRaw?.user_name || acctRaw?.nick || '');
       const uname = cleanProfileLabel(acctStr || raw?.email || raw?.user?.email || raw?.user?.name || '');
-      // mmx 的 config.json 只有 region + token，逐字节指纹每次刷新 token 都会变，
-      // 用它当身份会让一个号在列表里不断裂档；而 mmx 一个 region 只有一个槽位，
-      // 所以身份用 mmx:<region>（有账号名时带上），跨 token 刷新保持稳定。
-      const label = uname || `mmx-${reg}`;
+      // mcode 一个 region 同样只有一个槽位（dataDir 下的 codex-auth.json），身份用 mcode:<region>：
+      // 逐字节指纹会随 token 刷新变化，用它当身份会让一个号在列表里反复裂档。
+      const label = uname || `mcode-${reg}`;
       // 回退时给个人能读懂的名字；不要拿指纹当展示名，否则前端脱敏后变成 mm***eb，等于没名字
       const regionText = reg === 'cn' ? '中国区' : String(reg).toUpperCase();
-      return { label, identity: uname ? `mmx:${reg}:${uname}` : `mmx:${reg}`, display: acctStr || raw?.email || raw?.user?.email || `MiniMax · ${regionText}` };
+      return { label, identity: uname ? `mcode:${reg}:${uname}` : `mcode:${reg}`, display: acctStr || raw?.email || raw?.user?.email || `MiniMax · ${regionText}` };
     }
     if (worker === 'mimocode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));
@@ -335,14 +349,62 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       const identity = email ? `email:${email}` : `provider:${provider}`;
       return { label, identity, display: email || `${provider} (${shortFp})` };
     }
+    if (worker === 'qoder' || worker === 'qoder-cn') {
+      const cred = await readQoderCredential(baseHome, worker);
+      if (!cred.ok || !cred.primary) throw new Error(cred.error || cred.reason || 'Qoder 凭据不可用');
+      const primary = cred.primary;
+      const label = cleanProfileLabel(primary.display || primary.identity) || `${worker === 'qoder-cn' ? 'qdcn' : 'qd'}-${shortFp}`;
+      return { label, identity: primary.identity, display: primary.display || label };
+    }
   } catch { /* fallback below */ }
   const fallbackLabel = `${cleanProfileLabel(worker).slice(0, 8)}-${shortFp}`;
   return { label: fallbackLabel, identity: fp, display: fallbackLabel };
 }
 
+/**
+ * 读 mcode 的登录态文件 `~/.minimax/auth/<env>/<region>/mcode-public/auth-state.json`。
+ * 目录带 region 一层，所以按 `auth/*` 扫（目前登录命令固定 region=cn）。
+ * 返回 { status, region, expiresAtMs, rel } 或 null。
+ */
+export async function readMinimaxAuthState(baseHome = HOME) {
+  const root = join(baseHome, '.minimax', 'auth');
+  let envs = [];
+  try { envs = await readdir(root, { withFileTypes: true }); } catch { return null; }
+  for (const env of envs) {
+    if (!env.isDirectory()) continue;
+    let regions = [];
+    try { regions = await readdir(join(root, env.name), { withFileTypes: true }); } catch { continue; }
+    for (const region of regions) {
+      if (!region.isDirectory()) continue;
+      const rel = join('.minimax', 'auth', env.name, region.name, 'mcode-public', 'auth-state.json');
+      try {
+        const raw = JSON.parse((await readFile(join(baseHome, rel), 'utf-8')).replace(/^\uFEFF/, ''));
+        return {
+          status: String(raw?.status || '').trim(),
+          region: String(raw?.region || region.name || 'cn').trim(),
+          expiresAtMs: Number(raw?.expiresAtMs) || 0,
+          rel,
+        };
+      } catch { /* 换下一个 */ }
+    }
+  }
+  return null;
+}
+
 /** 检查指定 HOME 下某 worker 是否存在有效凭据 */
 async function isLiveCredValid(worker, relFiles, baseHome = HOME) {
   if (!relFiles || !relFiles.length) return false;
+  // Qoder 的可读文件是「盐 + AES-GCM 密文」，必须解密成功且有 token 才算已登录
+  if (worker === 'qoder' || worker === 'qoder-cn') {
+    const cred = await readQoderCredential(baseHome, worker);
+    return cred.ok === true && !!cred.primary;
+  }
+  // mcode 的登录态由 auth-state.json 的 status 明确表达（authenticated / signed-out），
+  // 比「文件存在且非空」更准：登出后 auth.json 仍在，但 status 会翻转。
+  if (worker === 'minimaxcode') {
+    const state = await readMinimaxAuthState(baseHome);
+    return !!state && state.status === 'authenticated';
+  }
   // cline 的 secrets.json / providers.json 由官方 CLI 按需写入，任一存在且非空即视为已登录
   const anyOf = worker === 'cline';
   let present = 0;
@@ -500,13 +562,19 @@ async function _autoSyncLiveAccount(worker, preferredName = '') {
     const autoOnes = metas.filter((m) => m.meta?.autoAdded === true);
     if (autoOnes.length === 1) targetName = autoOnes[0].name;
   }
-  // 2d. 单槽位 worker（minimaxcode：一个 region 只有一份 config.json）身份从「文件指纹」升级成
-  //     mmx:<region> 之后，旧档案的 identity 还是指纹，按身份匹配必然落空。
-  //     这里按「同 worker 下取 savedAt 最新的一份复用」兜底，让身份迁移不额外裂出新档案。
-  if (!targetName && String(identity).startsWith('mmx:')) {
+  // Qoder 在凭据不含用户信息时用 refreshToken 指纹当身份，刷新轮换后指纹会变；
+  // 同样只在「只有一个自动档案」时原地更新，绝不覆盖用户保存的第二个账号。
+  if (!targetName && String(identity).startsWith('qoder-token:')) {
+    const autoOnes = metas.filter((m) => m.meta?.autoAdded === true);
+    if (autoOnes.length === 1) targetName = autoOnes[0].name;
+  }
+  // 2d. 单槽位 worker（minimaxcode：一个 region 只有一份 codex-auth.json / config.json）身份从
+  //     「文件指纹」升级成 mcode:<region>（历史上是 mmx:<region>）之后，旧档案的 identity 还是旧方案，
+  //     按身份匹配必然落空。这里按「同 worker 下取 savedAt 最新的一份复用」兜底，让身份迁移不额外裂出新档案。
+  if (!targetName && String(identity).startsWith('mcode:')) {
     const sameScheme = metas.filter((m) => {
       const id = String(m.meta?.identity || '');
-      return id.startsWith('mmx:') || /^[0-9a-f]{12}$/.test(id);
+      return id.startsWith('mcode:') || id.startsWith('mmx:') || /^[0-9a-f]{12}$/.test(id);
     });
     if (sameScheme.length) {
       sameScheme.sort((a, b) => String(b.meta?.savedAt || '').localeCompare(String(a.meta?.savedAt || '')));

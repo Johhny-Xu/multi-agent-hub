@@ -18,11 +18,12 @@ import * as vendorQuota from './vendor-quota.mjs';
 import * as accountsMod from './accounts.mjs';
 import * as authMod from './auth.mjs';
 import * as checkinMod from './checkin.mjs';
+import { QODER_MODELS } from './qoder.mjs';
 
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.15';
+const VERSION = '1.0.16';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -43,6 +44,8 @@ const AGENT_ALIASES = {
   codearts: 'codearts',
   'huawei-codearts': 'codearts',
   oc: 'opencode',
+  qd: 'qoder',
+  qdcn: 'qoder-cn',
 };
 const canonicalAgent = (value) => AGENT_ALIASES[String(value || '').trim().toLowerCase()] || String(value || '').trim();
 // 子代理直通端点绑定地址: 默认仅回环; 设 0.0.0.0 才暴露给局域网(无鉴权, 慎用)
@@ -88,8 +91,11 @@ const DISPATCH_OVERRIDES = { traecode: { tool: 'trae_delegate', asyncFlag: { wai
 
 /**
  * 2026-10-05 实测模型目录 (逐一在各 CLI 交互界面查证, 替代 agents.json 旧表)
+ * Qoder 模型 id 取自官方模型选择器 key；DeepSeek-Flash (dfmodel) 为个人版限时免费默认模型。
  */
 const MODEL_CATALOG = {
+  qoder: QODER_MODELS,
+  'qoder-cn': QODER_MODELS,
   codearts: [
     { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.70x', default: true },
     { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x' },
@@ -148,9 +154,10 @@ const MODEL_CATALOG = {
     { id: 'xiaomi/mimo-v2.6-pro-ultraspeed', name: 'MiMo-V2.6-Pro-UltraSpeed' },
     { id: '9router/trae', name: 'Trae (9router 通道)' },
   ],
+  // mcode 的模型引用是 provider/model，国内区与国际区都是 minimax/*（实测）
   minimaxcode: [
-    { id: 'MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文', default: true },
-    { id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax-M3.1-Flash-Preview', tag: '512K 上下文' },
+    { id: 'minimax/MiniMax-M3.1-Flash', name: 'MiniMax-M3.1-Flash', tag: '默认 · 1M 上下文', default: true },
+    { id: 'minimax/MiniMax-M3', name: 'MiniMax-M3', tag: '1M 上下文' },
   ],
   zcode: [
     { id: 'GLM-5.3-Flash', name: 'GLM-5.3-Flash', default: true },
@@ -1218,8 +1225,29 @@ export async function start(context) {
     }
   }
 
-  function enforceSessionLimit(entry) {
-    if (!entry || !Array.isArray(entry.sessions)) return;
+  /**
+   * 把归档文件读回来并从 archives/ 删掉（供「撤销归档」用）。
+   * 归档文件名是 `<agent>-<sessionId>.json`；老会话可能没有 agent 字段，
+   * 那时 archiveSession 会写成 `unknown-<sessionId>.json`，所以两种都要试。
+   */
+  async function restoreSession(agent, sessionId) {
+    const names = [`${agent}-${sessionId}.json`, `unknown-${sessionId}.json`];
+    for (const name of names) {
+      const archPath = join(archivesDir, name);
+      try {
+        const raw = await readFile(archPath, 'utf-8');
+        const session = JSON.parse(raw);
+        if (!session || session.id !== sessionId) continue;
+        await rm(archPath, { force: true });
+        return session;
+      } catch {
+        /* 换下一个文件名 */
+      }
+    }
+    return null;
+  }
+
+  function enforceSessionLimit(entry) {    if (!entry || !Array.isArray(entry.sessions)) return;
     if (entry.sessions.length > SESSIONS_MAX) {
       // 保持活跃会话列表最多 SESSIONS_MAX 个，超出的最旧会话自动归档到 archives/
       const removed = entry.sessions.splice(SESSIONS_MAX);
@@ -2874,6 +2902,36 @@ export async function start(context) {
             thread: target,
             activeSessionId: sessionId,
             sessions,
+          });
+          return;
+        }
+        if (p === '/api/chat/unarchive-session') {
+          const agent = safeName(body.agent, 'agent');
+          const sessionId = safeName(body.sessionId, 'sessionId');
+          const entry = getAgentEntry(agent, true);
+          if (!entry) throw badReq('平台不存在');
+          const restored = await restoreSession(agent, sessionId);
+          if (!restored) throw badReq('归档记录不存在或已恢复');
+          if (!Array.isArray(entry.sessions)) entry.sessions = [];
+          if (!entry.sessions.some((s) => s.id === sessionId)) entry.sessions.unshift(restored);
+          if (!entry.activeSessionId) entry.activeSessionId = sessionId;
+          saveConv();
+          const activeThread = getThread(agent, false, entry.activeSessionId);
+          const sessions = (entry.sessions || []).map((s) => ({
+            id: s.id,
+            title: s.title || '会话',
+            created: s.created,
+            updated: s.updated,
+            unread: s.unread || 0,
+            msgCount: (s.messages || []).length,
+            cliSessionId: s.cliSessionId || null,
+          }));
+          send(200, {
+            ok: true,
+            thread: activeThread,
+            activeSessionId: entry.activeSessionId,
+            sessions,
+            restored: { id: restored.id, title: restored.title || '会话' },
           });
           return;
         }

@@ -169,7 +169,9 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(classify_failure("error", out), "plan_blocked")
 
     def test_stream_off_removes_conflicting_configured_boolean_flags(self):
-        for agent, flag, model in (("codebuddy", "--include-partial-messages", "deepseek-v4.1-flash"), ("minimaxcode", "--stream", "MiniMax-M3.1-Flash-Preview")):
+        # minimaxcode 已换成 mcode（--output-format 换值，不再有需要剔除的 boolean 开关），
+        # 冲突剔除的语义由 codebuddy 的 --include-partial-messages 覆盖。
+        for agent, flag, model in (("codebuddy", "--include-partial-messages", "deepseek-v4.1-flash"),):
             profile = {"cli": [sys.executable, "fixture.py", "-p" if agent == "codebuddy" else "--message", "{task}", flag],
                        "models": {"default": model}, "model_arg": "--model", "async_default": True}
             with patch.object(hub, "_start_async", return_value="fixture-a123456789") as launch:

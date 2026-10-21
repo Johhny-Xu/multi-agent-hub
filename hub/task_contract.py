@@ -32,7 +32,7 @@ def merge_cli_arguments(command, additions):
     Call before substituting {task}, so arbitrary prompt text cannot be parsed
     as an option. Repeated attachment flags intentionally remain repeated.
     """
-    scalars = {"--model", "-m", "--agent", "--input-format", "--format", "--output-format", "--output", "--settings", "--reasoning-effort", "--effort", "--timeout"}
+    scalars = {"--model", "-m", "--agent", "--input-format", "--format", "--output-format", "--output", "--settings", "--reasoning-effort", "--effort", "--timeout", "--permission", "--prompt-mode", "--mode"}
     result = list(command)
     index = 0
     while index < len(additions):
