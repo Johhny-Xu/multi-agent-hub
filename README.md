@@ -2,9 +2,9 @@
 
 [English](README.en.md) · **简体中文**
 
-**multi-agent-hub** 是一个本地多 AI Agent 调度枢纽，把电脑上散落的 11 种 AI 编码 CLI（被调度的执行端，下称 **Worker**）合成一个共享任务池。如果你同时装着 CodeBuddy、Copilot、Antigravity、TraeCode 等多家工具，它让你不用在某个账号额度见底时手动切工具、重讲一遍需求——当前客户端可以直接把活派给另一个 AI 接着干。
+**multi-agent-hub** 是一个本地多 AI Agent 调度枢纽，把电脑上散落的 13 种 AI 编码 CLI（被调度的执行端，下称 **Worker**）合成一个共享任务池。如果你同时装着 CodeBuddy、Copilot、Antigravity、TraeCode 等多家工具，它让你不用在某个账号额度见底时手动切工具、重讲一遍需求——当前客户端可以直接把活派给另一个 AI 接着干。
 
-![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，11 种 Worker 统一调度](docs/architecture.svg)
+![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，13 种 Worker 统一调度](docs/architecture.svg)
 
 **当前版本：v1.0.16** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
@@ -16,9 +16,9 @@
 
 **核心亮点**
 
-- 🤖 **一套契约调度 11 种 Worker**：覆盖 Antigravity、CodeBuddy（国际版 / 国内版）、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode 与 Cline，任务各自消耗对应账号额度，共享同一任务队列、邮箱与协作笔记。
+- 🤖 **一套契约调度 13 种 Worker**：覆盖 Antigravity、CodeBuddy（国际版 / 国内版）、**Qoder（国际版 / 国内版）**、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode 与 Cline，任务各自消耗对应账号额度，共享同一任务队列、邮箱与协作笔记。
 - 🔌 **6 款原生宿主免手配参数**：安装器自动写入原生子代理、斜杠命令与工作流，子代理上下文与主会话自动隔离。
-- 🔐 **WebUI 内完成全部 11 个 Worker 登录与切号**：同时支持 9 家 OAuth、Cline 设备码授权、opencode API Key 三条路径；免 SSH 登录、登出、多账号保存与秒切，仅凭落盘真实凭据判定登录态，杜绝假成功。
+- 🔐 **WebUI 内完成全部 13 个 Worker 登录与切号**：同时支持 9 家 OAuth、Cline 设备码授权、opencode API Key 三条路径；免 SSH 登录、登出、多账号保存与秒切，仅凭落盘真实凭据判定登录态，杜绝假成功。
 - ⚡ **一键启停 Worker，全端立即生效**：在控制台关闭某个 Worker 后，所有客户端的派发请求在执行前即被拦截（返回 `profile_disabled`），不白扣额度。
 - 🛡️ **严格终态判定，拒绝半截结果**：自动拦截空回答、已知异常退出和超时后的残缺回答；全程保留原任务 `ref`（任务追踪编号），且禁止 Worker 给自己递归派活。
 - 🔄 **支持单机与跨机混合部署**：支持纯 Windows、纯 Linux、Windows ↔ Linux（局域网直连或 SSH 反向通道）；配置与凭据存放在源码目录外，升级版本不丢历史。
@@ -72,7 +72,7 @@ cd multi-agent-hub
 
 **安装成功后你能看到什么**
 
-- 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 11 张 Worker 状态卡片）。
+- 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 13 张 Worker 状态卡片）。
 - 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.16-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
 - 只想先看界面：直接用浏览器打开仓库里的 `demo.html`。
@@ -252,7 +252,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 
 ## 支持的 Worker 与默认模型
 
-Hub 统一管理以下 11 种 Worker；表中所列为**全新安装**时的默认模型，升级已有服务器会保留你原有的模型配置。
+Hub 统一管理以下 13 种 Worker；表中所列为**全新安装**时的默认模型，升级已有服务器会保留你原有的模型配置。
 
 | Worker | 默认模型 | 规格与鉴权要点 |
 | --- | --- | --- |
@@ -279,7 +279,7 @@ Hub 统一管理以下 11 种 Worker；表中所列为**全新安装**时的默�
 | `hub_ask` | 派发任务并阻塞等待最终回答 |
 | `hub_dispatch` | 异步派发任务，立即返回持久化任务编号 `ref` |
 | `hub_fetch` | 凭 `ref` 轮询任务状态或取回最终结果 |
-| `hub_status` | 查看全部 11 种 Worker 的在线状态与启停开关 |
+| `hub_status` | 查看全部 13 种 Worker 的在线状态与启停开关 |
 | `hub_capabilities` | 查询各 Worker 支持的模型、思考档位、流式与附件能力 |
 | `hub_login` | 查询登录态或发起指定 Worker 的登录流程 |
 | `hub_discover` | 只读扫描局域网与本机可用的 Hub 实例 |
@@ -300,7 +300,7 @@ Hub 统一管理以下 11 种 Worker；表中所列为**全新安装**时的默�
 | 模块 | 你能直接做的操作 |
 | --- | --- |
 | **三栏工作台与文件预览** | 左侧切换平台会话树、中间沉浸式对话、右侧折叠工作台；工作台直连会话中提到的本地文件，支持产物、图片、附件在线预览与单条删除 |
-| **11 个 Worker 登录与秒切** | 直接在网页里完成 9 家 OAuth、Cline 设备码与 opencode API Key 登录、登出、保存多账号并一键切换，无需 SSH 进服务器敲命令 |
+| **13 个 Worker 登录与秒切** | 直接在网页里完成 9 家 OAuth、Cline 设备码与 opencode API Key 登录、登出、保存多账号并一键切换，无需 SSH 进服务器敲命令 |
 | **实时额度监控与启停开关** | 查看各账号剩余额度（60 秒缓存 + 并发请求合并）；拨动卡片开关即可启用或禁用 Worker（落盘 `agents.json` 全端生效），卡片支持拖拽排序 |
 | **智能收展与品牌锚点** | 顶栏、活动栏、会话侧栏随光标靠近自动展开、移开自动收起；点击左上角品牌图标可一键切换“自动收展 / 常驻固定”并记住偏好 |
 | **12 套主题与毛玻璃壁纸** | 内置 Mocha、Shell、Aurora、Dusk、Cyber、Grid 6 套配色（各含深色 / 浅色，全部通过 WCAG AA 对比度校准）；上传自定义壁纸后全局自动切换为半透明毛玻璃视图 |

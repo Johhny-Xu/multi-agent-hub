@@ -4,7 +4,7 @@
 
 **multi-agent-hub** is a local dispatch hub that turns 11 scattered AI coding CLIs (**Workers** — the tools that execute delegated tasks) into one shared worker pool. If you juggle CodeBuddy, Copilot, Antigravity, TraeCode, and other CLIs, you no longer have to switch tools and re-explain your prompt when one account hits its quota limit — your current AI client can hand the task straight to another AI.
 
-![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 11 Workers under one scheduler](docs/architecture.en.svg)
+![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 13 Workers under one scheduler](docs/architecture.en.svg)
 
 **Current version: v1.0.16** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
@@ -16,9 +16,9 @@
 
 **Key Capabilities**
 
-- 🤖 **Dispatch to 11 Workers under one contract**: Run tasks across Antigravity, CodeBuddy (International / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode, and Cline; each task uses the target Worker's own quota while sharing one task queue, mailbox, and note board.
+- 🤖 **Dispatch to 13 Workers under one contract**: Run tasks across Antigravity, CodeBuddy (International / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode, and Cline; each task uses the target Worker's own quota while sharing one task queue, mailbox, and note board.
 - 🔌 **Auto-configure 6 native hosts**: The installer writes native sub-agents, slash commands, and workflows automatically, keeping sub-agent context isolated from your main chat.
-- 🔐 **Log in and switch accounts for all 11 Workers in the WebUI**: Supports 9 OAuth vendors, Cline device-code auth, and opencode API keys; log in, log out, save multiple accounts, and switch in one click without SSH, verifying real on-disk credentials so fake logins never pass.
+- 🔐 **Log in and switch accounts for all 13 Workers in the WebUI**: Supports 9 OAuth vendors, Cline device-code auth, and opencode API keys; log in, log out, save multiple accounts, and switch in one click without SSH, verifying real on-disk credentials so fake logins never pass.
 - ⚡ **Toggle Workers on or off across every client at once**: Disabling a Worker in the console blocks dispatch requests immediately (`profile_disabled`) before any quota is spent.
 - 🛡️ **Reject empty or truncated answers**: Filters out blank replies, known crash exits, and partial output after timeouts; preserves the original task `ref` (persistent tracking ID) and blocks any Worker from dispatching tasks to itself.
 - 🔄 **Deploy on one machine or split across machines**: Runs on Windows, Linux, or Windows ↔ Linux over LAN or SSH reverse tunnels; keeps config and credentials outside the repo directory so upgrades never wipe task history.
@@ -72,7 +72,7 @@ cd multi-agent-hub
 
 **What You See When It Succeeds**
 
-- Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 11 Worker status cards on the right).
+- Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 13 Worker status cards on the right).
 - You can also download `agenthub-1.0.16-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
 - Daily start and stop: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
 - Want to preview the UI first? Open `demo.html` directly in your browser.
@@ -252,7 +252,7 @@ Then run "Developer: Reload Window" in the IDE and test with `/hub-status`. See 
 
 ## Supported Workers and Default Models
 
-The Hub schedules all 11 Workers below. The table shows default models for **fresh installations**; upgrading an existing server keeps your configured models intact.
+The Hub schedules all 13 Workers below. The table shows default models for **fresh installations**; upgrading an existing server keeps your configured models intact.
 
 | Worker | Default Model | Specs and Auth Notes |
 | --- | --- | --- |
@@ -279,7 +279,7 @@ Every native host plugin exposes the same **8 MCP tools** through the local brid
 | `hub_ask` | Dispatch a task and wait for the final answer |
 | `hub_dispatch` | Dispatch asynchronously and return a persistent `ref` immediately |
 | `hub_fetch` | Poll task status or retrieve the final result by `ref` |
-| `hub_status` | List online and enabled states for all 11 Workers |
+| `hub_status` | List online and enabled states for all 13 Workers |
 | `hub_capabilities` | Query supported models, thinking levels, streaming, and attachment limits |
 | `hub_login` | Check login status or start a login flow for a Worker |
 | `hub_discover` | Scan the local machine and LAN for available Hubs (read-only) |
@@ -331,11 +331,11 @@ Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispa
 | --- | --- | --- |
 | Windows Regressions & DOM Assertions | ✅ 32 suites + 7 DOM checks passed | See `docs/refactor-validation.json` and `tests/console_layout_theme_dom.mjs` |
 | Linux Regressions & Load Tests | ✅ 29 suites + 4,500+ requests passed | 360 concurrent requests with 0 errors; see `docs/stage3-stress-report.json` |
-| Linux Production Hub Upgrade | ✅ Passed | Loaded 24 Hub tools and 11 Workers while preserving external config, task history, and auth |
+| Linux Production Hub Upgrade | ✅ Passed | Loaded 24 Hub tools and 13 Workers while preserving external config, task history, and auth |
 | Linux Antigravity CLI 1.3.1 | ✅ Real call passed | Dispatched through native sub-agent `hub-mimocode` and returned a live answer |
 | Linux ZCode CLI 0.16.9 | ✅ Real call passed | Polled the original `ref` and returned the expected answer |
 | Windows Codex / ZCode Native Plugins | ✅ Real call passed | Both native sub-agents dispatched tasks and returned answers |
-| Windows Antigravity Native Plugin | ✅ Real call passed | `hub_status` and `hub_capabilities` returned all 11 Workers |
+| Windows Antigravity Native Plugin | ✅ Real call passed | `hub_status` and `hub_capabilities` returned all 13 Workers |
 | CodeArts Native Components & Channels | ✅ Passed | Verified Windows ↔ Linux LAN and SSH reverse tunnel connections |
 | Linux CodeArts Built-in Models | ✅ Real call passed | Completed GLM-5.2 calls in seconds and exited all child processes cleanly |
 | Windows DSH Host | ⚠️ Blocked by account balance | Plugin registration passed; model invocation returned `402 ACCOUNT_QUOTA` |
