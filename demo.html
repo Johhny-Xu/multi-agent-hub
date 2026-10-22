@@ -6080,14 +6080,19 @@ html[data-preset="grid"][data-theme="light"] {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* Meoo 秒悟：品牌薄荷绿，深底 + 绿色描边（与其它平台同款处理） */
+/* Meoo 秒悟：官方 favicon（gw.alicdn.com 184×184 → 64×64 webp 内联，约 2 KB）
+   页面没有静态资源路由，图标必须内联 */
 .platform-avatar[data-agent="meoo"],
 .agent-avatar-sm[data-agent="meoo"],
 .empty-avatar[data-agent="meoo"] {
-  background: linear-gradient(135deg, #065f46, #059669) !important;
-  border: 1px solid rgba(52, 211, 153, 0.45) !important;
-  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.30) !important;
-  color: #ecfdf5 !important;
+  background-image: url("data:image/webp;base64,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") !important;
+  background-size: 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35) !important;
+  color: transparent !important;
+  font-size: 0 !important;
 }
 
 /* Trae: Official cyber neon green #32F08C, requires dark badge base */
@@ -10466,7 +10471,7 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
                 <div class="checkin-card" id="card-checkin-meoo" data-plat-card="meoo">
                   <div class="checkin-card-top">
                     <div class="checkin-card-brand">
-                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="meoo" data-agent="meoo">M</div>
+                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="meoo" data-agent="meoo"></div>
                       <div class="checkin-brand-info">
                         <div class="checkin-brand-title">Meoo 秒悟（阿里云）</div>
                         <div class="checkin-brand-tag">仅同步 meoo CLI 登录态 · 积分由网页登录后服务端自动发放，CLI 不触发</div>

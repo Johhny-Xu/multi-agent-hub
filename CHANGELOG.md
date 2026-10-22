@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 改进：Meoo 头像换成官方图标
+- 从 meoo.com 的 `<link rel="icon">` 拿到 184×184 PNG（`gw.alicdn.com`），压成 **64×64 webp（2 KB）** 后 base64 内联。
+- 页面没有静态资源路由，图标只能内联（和看板娘素材同一个原因）。
+- 卡片里原来的占位文字 `M` 去掉，`color: transparent` + `font-size: 0` 防止叠字。
+
 ### 新增：Meoo 作为可派发的 Worker（走 Agent OpenAPI，不是 CLI）
 - Meoo 的 CLI 没有对话能力，但 **Agent OpenAPI 有**：`POST /open/v1/projects/{id}/agent/runs` + SSE，用账号 AK 直接鉴权。
 - 新增 `scripts/meoo_agent_cli.mjs`：把 hub 的 `{task}` 转成一次 Run，把文本结果打到 stdout，退出码按 `run.completed` 判定 ——
