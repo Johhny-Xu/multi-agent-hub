@@ -2,9 +2,9 @@
 
 [English](README.en.md) · **简体中文**
 
-**multi-agent-hub** 是一个本地多 AI Agent 调度枢纽，把电脑上散落的 13 种 AI 编码 CLI（被调度的执行端，下称 **Worker**）合成一个共享任务池。如果你同时装着 CodeBuddy、Copilot、Antigravity、TraeCode 等多家工具，它让你不用在某个账号额度见底时手动切工具、重讲一遍需求——当前客户端可以直接把活派给另一个 AI 接着干。
+**multi-agent-hub** 是一个本地多 AI Agent 调度 Hub，把电脑上散落的 14 种 AI 编码 CLI（被调度的执行端，统称 **Worker**）连通为一个共享任务池。当你同时使用 CodeBuddy、Copilot、Antigravity、TraeCode 等多家工具时，无需在单个账号额度见底后手动切工具或重述需求——当前客户端可直接把任务派给另一个 AI 接力完成。
 
-![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，13 种 Worker 统一调度](docs/architecture.svg)
+![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，14 种 Worker 统一调度](docs/architecture.svg)
 
 **当前版本：v1.0.17** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
@@ -16,9 +16,9 @@
 
 **核心亮点**
 
-- 🤖 **一套契约调度 13 种 Worker**：覆盖 Antigravity、CodeBuddy（国际版 / 国内版）、**Qoder（国际版 / 国内版）**、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode 与 Cline，任务各自消耗对应账号额度，共享同一任务队列、邮箱与协作笔记。
+- 🤖 **一套契约调度 14 种 Worker**：覆盖 Antigravity、CodeBuddy（国际版 / 国内版）、**Qoder（国际版 / 国内版）**、GitHub Copilot、MiMo、MiniMax、TraeCode、ZCode、CodeArts、opencode、Cline 与 **Meoo（秒悟）**，任务各自消耗对应账号额度，共享同一任务队列、邮箱与协作笔记。
 - 🔌 **6 款原生宿主免手配参数**：安装器自动写入原生子代理、斜杠命令与工作流，子代理上下文与主会话自动隔离。
-- 🔐 **WebUI 内完成全部 13 个 Worker 登录与切号**：同时支持 9 家 OAuth、Cline 设备码授权、opencode API Key 三条路径；免 SSH 登录、登出、多账号保存与秒切，仅凭落盘真实凭据判定登录态，杜绝假成功。
+- 🔐 **WebUI 内完成全部 14 个 Worker 登录与切号**：同时支持 9 家 OAuth、Cline 设备码授权、opencode API Key 三条路径；免 SSH 登录、登出、多账号保存与秒切，仅凭落盘真实凭据判定登录态，杜绝假成功。
 - ⚡ **一键启停 Worker，全端立即生效**：在控制台关闭某个 Worker 后，所有客户端的派发请求在执行前即被拦截（返回 `profile_disabled`），不白扣额度。
 - 🛡️ **严格终态判定，拒绝半截结果**：自动拦截空回答、已知异常退出和超时后的残缺回答；全程保留原任务 `ref`（任务追踪编号），且禁止 Worker 给自己递归派活。
 - 🔄 **支持单机与跨机混合部署**：支持纯 Windows、纯 Linux、Windows ↔ Linux（局域网直连或 SSH 反向通道）；配置与凭据存放在源码目录外，升级版本不丢历史。
@@ -72,7 +72,7 @@ cd multi-agent-hub
 
 **安装成功后你能看到什么**
 
-- 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 13 张 Worker 状态卡片）。
+- 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 14 张 Worker 状态卡片）。
 - 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.17-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
 - 只想先看界面：直接用浏览器打开仓库里的 `demo.html`。
@@ -252,7 +252,7 @@ python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/cli
 
 ## 支持的 Worker 与默认模型
 
-Hub 统一管理以下 13 种 Worker；表中所列为**全新安装**时的默认模型，升级已有服务器会保留你原有的模型配置。
+Hub 统一管理以下 14 种 Worker；表中所列为**全新安装**时的默认模型，升级已有服务器会保留你原有的模型配置。
 
 | Worker | 默认模型 | 规格与鉴权要点 |
 | --- | --- | --- |
@@ -267,6 +267,9 @@ Hub 统一管理以下 13 种 Worker；表中所列为**全新安装**时的默�
 | **CodeArts** | `GLM-5.2` (0.70x) | 覆盖 4 款企业模型（GLM-5.2、GLM-5.2-ArkTS-SPARK、OpenPangu-2.0-Pro/Flash）；Linux CLI 自动加载 AK/SK |
 | **opencode** | 官方 CLI 默认模型 | 支持在 WebUI 内直接配置 API Key 鉴权、解析 NDJSON 事件流与专属主题色 |
 | **Cline** | 官方 CLI 默认模型 | 支持在 WebUI 内通过设备码完成授权、解析 NDJSON 事件流与专属主题色 |
+| **Qoder**（国际版） | `dfmodel` (DeepSeek-Flash) | 23 款官方模型（DeepSeek / GLM / Kimi / MiniMax 等）；每天 10:00（UTC+8）可领 100 Credits；支持 CLI 账号档案与多账号快切 |
+| **Qoder**（国内版） | `dfmodel` (DeepSeek-Flash) | 同一套模型目录，走 `openapi.qoder.com.cn`；设备指纹取自本机 UMID 组件（`runtime-info`） |
+| **Meoo**（秒悟） | `auto` | 走 **Agent OpenAPI**（不是 CLI），可选 `qwen3.8-flash` / `deepseek-v4.1-flash-1017` / `kimi-k3` / `glm-5.3-flash`；每日登录赠送 2000 积分 |
 
 ---
 
@@ -279,7 +282,7 @@ Hub 统一管理以下 13 种 Worker；表中所列为**全新安装**时的默�
 | `hub_ask` | 派发任务并阻塞等待最终回答 |
 | `hub_dispatch` | 异步派发任务，立即返回持久化任务编号 `ref` |
 | `hub_fetch` | 凭 `ref` 轮询任务状态或取回最终结果 |
-| `hub_status` | 查看全部 13 种 Worker 的在线状态与启停开关 |
+| `hub_status` | 查看全部 14 种 Worker 的在线状态与启停开关 |
 | `hub_capabilities` | 查询各 Worker 支持的模型、思考档位、流式与附件能力 |
 | `hub_login` | 查询登录态或发起指定 Worker 的登录流程 |
 | `hub_discover` | 只读扫描局域网与本机可用的 Hub 实例 |
@@ -300,22 +303,22 @@ Hub 统一管理以下 13 种 Worker；表中所列为**全新安装**时的默�
 | 模块 | 你能直接做的操作 |
 | --- | --- |
 | **三栏工作台与文件预览** | 左侧切换平台会话树、中间沉浸式对话、右侧折叠工作台；工作台直连会话中提到的本地文件，支持产物、图片、附件在线预览与单条删除 |
-| **13 个 Worker 登录与秒切** | 直接在网页里完成 9 家 OAuth、Cline 设备码与 opencode API Key 登录、登出、保存多账号并一键切换，无需 SSH 进服务器敲命令 |
+| **14 个 Worker 登录与秒切** | 直接在网页里完成 9 家 OAuth、Cline 设备码与 opencode API Key 登录、登出、保存多账号并一键切换，无需 SSH 进服务器敲命令 |
 | **实时额度监控与启停开关** | 查看各账号剩余额度（60 秒缓存 + 并发请求合并）；拨动卡片开关即可启用或禁用 Worker（落盘 `agents.json` 全端生效），卡片支持拖拽排序 |
 | **智能收展与品牌锚点** | 顶栏、活动栏、会话侧栏随光标靠近自动展开、移开自动收起；点击左上角品牌图标可一键切换“自动收展 / 常驻固定”并记住偏好 |
 | **12 套主题与毛玻璃壁纸** | 内置 Mocha、Shell、Aurora、Dusk、Cyber、Grid 6 套配色（各含深色 / 浅色，全部通过 WCAG AA 对比度校准）；上传自定义壁纸后全局自动切换为半透明毛玻璃视图 |
-| **子代理品牌色联动** | 发送按钮、上下文进度条与二级菜单自动跟随当前选中 Worker 的品牌主题色（含 opencode 与 Cline 专属配色） |
+| **Worker 品牌色联动** | 发送按钮、上下文进度条与二级菜单自动跟随当前选中 Worker 的品牌主题色（含 opencode 与 Cline 专属配色） |
 | **跨平台会话归档** | 聚合搜索、按平台筛选历史会话，支持一键复原归档会话，删除前强制二次确认 |
 | **子代理 MCP 端点卡片** | 一键复制 `:8790/mcp` 接入地址或“发给 Agent 的自动配置提示词”；在非 HTTPS 的局域网 IP 访问时剪贴板自动降级，保证复制按钮始终可用 |
 
 <details>
 <summary><b>前端布局与交互实现细节</b></summary>
 
-- 品牌锚点 `#brand-logo-pin`（`z-index: 120`）永不隐藏；顶栏触发区为 `Y ≤ 38px`、活动栏为 `X ≤ 42px`，设 90ms 防误触展开与 650ms 防抖收起；弹窗打开、输入框聚焦或侧栏展开时保持常驻；顶栏与浮层按钮右缘严格对齐。
+- 品牌锚点 `#brand-logo-pin`（`z-index: 120`）始终保持可见。顶栏触发区为 `Y ≤ 38px`，活动栏触发区为 `X ≤ 42px`；设 90ms 防误触展开与 650ms 防抖收起。弹窗打开、输入框聚焦或侧栏展开时保持常驻，顶栏与浮层按钮右缘严格对齐。
 - 侧栏触发区覆盖完整占位宽度（`1440px` 视口下 `X ≤ 324px`）；会话卡片单行化展示，按需挂载 `/api/chat/agent-summary` 摘要。
 - 顶栏 `z-index: 100`、会话头 `z-index: 50` 独立层叠上下文，下拉菜单不会被代码块或右侧工作台截断。
 - 毛玻璃模式：`body.has-custom-bg` 下启用 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一收敛为 `--gem-bg-card`，`--gem-surface-high` 仅用于悬浮交互态与进度条轨道。
-- 子代理色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名称保持正文色 `--gem-text`。
+- Worker 主题色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名称保持正文色 `--gem-text`。
 - 底部状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉内置思考档位与流式输出开关；页脚右侧显示版本号 `v1.0.17`（可被后端 `snap.version` 动态覆盖）。
 - 离线 Demo 构建：运行 `scripts/build_demo.py`（配合 `scripts/demo_engine.js`）可同步生成 `demo.html` 与 `demo/index.html`。
 
@@ -417,10 +420,12 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 | 版本 | 核心变更 |
 | --- | --- |
-| **1.0.17** | 签到凭据改为直接复用已安装 CLI 的凭据：每次打卡实时读取 CLI 自己的凭据文件，按 JWT 有效期与文件时间择优、按身份去重；WorkBuddy 支持 refreshToken 自动续期并写回 CLI 的 `auth.info`（两边共用一份，不会互相顶下线）；签到日志支持一键清除；不再误用国际版 `~/.codebuddy` 的凭据 |
+| **1.0.17** | Qoder 的「今日已领」改为按 UTC+8 窗口日判定（上游每天 10:00 开新一期，0:00–10:00 不再把昨天那期谎报成已签，未开窗显示待打卡并到点自动补签）；WebUI 收起 GUI 通道的模型选择（traecode 改由客户端决定，不再报 UNSUPPORTED）；Meoo 回答不再重复；控制台重启从 90s 降到 9s |
+| **1.0.16** | CodeArts 签到恢复（福利 Token 通道下线时降级为积分签到）、Qoder 国际版换环境重试、签到日志空白修复、看板娘可拖拽；Meoo（秒悟）作为第 14 种 Worker 接入 |
+| **1.0.15** | 签到凭据直接复用已安装 CLI 的本地凭据：每次打卡实时读取 CLI 自身凭据文件，按 JWT 有效期与文件更新时间择优并按身份去重；WorkBuddy 支持 refreshToken 自动续期并写回 CLI 的 `auth.info`（两端共用一份，互不影响登录态）；签到日志支持一键清除；彻底避免误用国际版 `~/.codebuddy` 凭据 |
 | **1.0.14** | 84 个模型逐个实跑一遍：CLI 退码 0 却空答时保留 stderr 真实诊断、新增 `plan_blocked` 区分「套餐无权」与「模型不存在」、别名表外的模型也能置灰；纠正三处模型目录错项；收口移动端四处布局缺陷（设置卡片标题竖排、数字被劈行、320px 下发送按钮换行、签到开关挤成窄柱） |
-| **1.0.13** | 签到从「看起来成功」变成「真的成功」：WorkBuddy 逐账号补签、CodeArts 改为 SDK-HMAC-SHA256 真实签名调用、Trae 先查状态再领取；账号档案修掉多 Key 覆盖、身份裂档与显示名固化；新增按子代理适配的文件编辑权限开关；华为模型列表按 id 归并去重 |
-| **1.0.12** | 右侧工作台直连会话提及的本地文件（支持产物 / 图片 / 附件预览与单条删除）；子代理卡片支持拖拽排序并补齐 opencode / Cline 品牌色；对齐顶栏与浮层按钮右缘；Linux 配置模板补齐可用 GitHub Copilot Worker |
+| **1.0.13** | 签到从「看起来成功」变成「真的成功」：WorkBuddy 逐账号补签、CodeArts 改为 SDK-HMAC-SHA256 真实签名调用、Trae 先查状态再领取；账号档案修掉多 Key 覆盖、身份裂档与显示名固化；新增按 Worker 适配的文件编辑权限开关；华为模型列表按 id 归并去重 |
+| **1.0.12** | 右侧工作台直连会话提及的本地文件（支持产物 / 图片 / 附件预览与单条删除）；Worker 卡片支持拖拽排序并补齐 opencode / Cline 品牌色；对齐顶栏与浮层按钮右缘；Linux 配置模板补齐可用 GitHub Copilot Worker |
 | **1.0.1** | 新增 opencode 与 Cline 两种 Worker（总计 11 种），补齐配置模板、能力声明、NDJSON 事件流解析与原生子代理；重绘中英架构图与路线图，放大字号并提升对比度 |
 | **1.0.0** | 首个公开正式版：完成全仓凭据审计清理、致谢 TraeClaw、交接文档脱敏、补充贡献者公约与发布线审校修复 |
 | **0.9.9.7 ~ 0.9.9.9** | 修复 Linux 源码安装执行位丢失与回环代理劫持；兼容 Node 20 WebSocket；补齐英文 README、安全政策、贡献指南与新版 SVG 图表 |
@@ -439,7 +444,7 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 ### 致谢
 
-- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons)：提供控制台与子代理头像使用的品牌 SVG 图标。
+- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons)：提供控制台与 Worker 头像使用的品牌 SVG 图标。
 - [TraeClaw](https://github.com/firerlAGI/TraeClaw)：提供 `trae_delegate` 通道依赖的本地桥接与 CDP/DOM 自动化方案。
 - [L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily)：Qoder / Qoder CN 每日签到的实现参考。`forceRefresh` 实时活动列表、`CLAIM_BENEFIT` 定向活动筛选与领取语义、token 续期链路，以及用本机 UMID 组件（`runtime-info`）生成 `Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType` 设备风控头的方案，均移植自该项目——国际版的每日积分活动只对带这些头的请求下发。感谢作者的无私分享。
 - [L0NE-6/Trae-AutoCheckin](https://github.com/L0NE-6/Trae-AutoCheckin)：Trae 每日签到的实现参考。`req_source` 请求体、必须使用客户端真实注册设备号（`iCubeAuthInfo://icube-dc:`）、状态 → 领取 → 同设备号回查确认的判定链、9095/9074/1001 的语义、以及用 refreshToken + 设备证明（ECDSA P-256）走新版 `ExchangeToken` 续期的方案，均移植自该项目。感谢作者的无私分享。

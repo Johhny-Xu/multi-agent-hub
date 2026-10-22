@@ -2,9 +2,9 @@
 
 **English** · [简体中文](README.md)
 
-**multi-agent-hub** is a local dispatch hub that turns 11 scattered AI coding CLIs (**Workers** — the tools that execute delegated tasks) into one shared worker pool. If you juggle CodeBuddy, Copilot, Antigravity, TraeCode, and other CLIs, you no longer have to switch tools and re-explain your prompt when one account hits its quota limit — your current AI client can hand the task straight to another AI.
+**multi-agent-hub** is a local AI agent dispatch Hub that connects 14 scattered AI coding CLIs (**Workers** — execution backends for delegated tasks) into one shared worker pool. When juggling tools like CodeBuddy, Copilot, Antigravity, and TraeCode, you no longer need to switch tools or re-explain context when an account runs out of quota — your current client can delegate tasks directly to another AI to continue the work.
 
-![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 13 Workers under one scheduler](docs/architecture.en.svg)
+![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 14 Workers under one scheduler](docs/architecture.en.svg)
 
 **Current version: v1.0.17** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
@@ -16,9 +16,9 @@
 
 **Key Capabilities**
 
-- 🤖 **Dispatch to 13 Workers under one contract**: Run tasks across Antigravity, CodeBuddy (International / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode, and Cline; each task uses the target Worker's own quota while sharing one task queue, mailbox, and note board.
+- 🤖 **Dispatch to 14 Workers under one contract**: Run tasks across Antigravity, CodeBuddy (International / China), Qoder (International / China), GitHub Copilot, MiMo, MiniMax, TraeCode, ZCode, CodeArts, opencode, Cline, and **Meoo**; each task uses the target Worker's own quota while sharing one task queue, mailbox, and note board.
 - 🔌 **Auto-configure 6 native hosts**: The installer writes native sub-agents, slash commands, and workflows automatically, keeping sub-agent context isolated from your main chat.
-- 🔐 **Log in and switch accounts for all 13 Workers in the WebUI**: Supports 9 OAuth vendors, Cline device-code auth, and opencode API keys; log in, log out, save multiple accounts, and switch in one click without SSH, verifying real on-disk credentials so fake logins never pass.
+- 🔐 **Log in and switch accounts for all 14 Workers in the WebUI**: Supports 9 OAuth vendors, Cline device-code auth, and opencode API keys; log in, log out, save multiple accounts, and switch in one click without SSH, verifying real on-disk credentials so fake logins never pass.
 - ⚡ **Toggle Workers on or off across every client at once**: Disabling a Worker in the console blocks dispatch requests immediately (`profile_disabled`) before any quota is spent.
 - 🛡️ **Reject empty or truncated answers**: Filters out blank replies, known crash exits, and partial output after timeouts; preserves the original task `ref` (persistent tracking ID) and blocks any Worker from dispatching tasks to itself.
 - 🔄 **Deploy on one machine or split across machines**: Runs on Windows, Linux, or Windows ↔ Linux over LAN or SSH reverse tunnels; keeps config and credentials outside the repo directory so upgrades never wipe task history.
@@ -72,7 +72,7 @@ cd multi-agent-hub
 
 **What You See When It Succeeds**
 
-- Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 13 Worker status cards on the right).
+- Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 14 Worker status cards on the right).
 - You can also download `agenthub-1.0.17-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
 - Daily start and stop: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
 - Want to preview the UI first? Open `demo.html` directly in your browser.
@@ -244,7 +244,7 @@ sh install.sh --component plugins --native-hosts codearts --codearts-target cli 
 python integrations/codearts/install.py --config "$env:LOCALAPPDATA/AgentHub/client.json" --ide-settings "<new workspace path>/.codeartsdoer/mcp/mcp_settings.json" --target ide --apply
 ```
 
-Then run "Developer: Reload Window" in the IDE and test with `/hub-status`. See the [CodeArts package docs](integrations/codearts/README.md).
+Then run "Developer: Reload Window" in the IDE and test with `/hub-status`. See the [CodeArts package docs](integrations/codearts/README.md#换工作区后连接-hub).
 
 </details>
 
@@ -252,7 +252,7 @@ Then run "Developer: Reload Window" in the IDE and test with `/hub-status`. See 
 
 ## Supported Workers and Default Models
 
-The Hub schedules all 13 Workers below. The table shows default models for **fresh installations**; upgrading an existing server keeps your configured models intact.
+The Hub schedules all 14 Workers below. The table shows default models for **fresh installations**; upgrading an existing server keeps your configured models intact.
 
 | Worker | Default Model | Specs and Auth Notes |
 | --- | --- | --- |
@@ -267,6 +267,9 @@ The Hub schedules all 13 Workers below. The table shows default models for **fre
 | **CodeArts** | `GLM-5.2` (0.70x) | 4 enterprise models (GLM-5.2, GLM-5.2-ArkTS-SPARK, OpenPangu-2.0-Pro/Flash); Linux CLI auto-loads AK/SK |
 | **opencode** | Official CLI default | Configure API keys in the WebUI, parse NDJSON event streams, and display a dedicated brand accent color |
 | **Cline** | Official CLI default | Authorize via device code in the WebUI, parse NDJSON event streams, and display a dedicated brand accent color |
+| **Qoder** (International) | `dfmodel` (DeepSeek-Flash) | 23 official models (DeepSeek / GLM / Kimi / MiniMax); 100 daily Credits at 10:00 UTC+8; CLI account profiles with one-click switching |
+| **Qoder** (China) | `dfmodel` (DeepSeek-Flash) | Same model catalog via `openapi.qoder.com.cn`; device fingerprint comes from the local UMID component (`runtime-info`) |
+| **Meoo** | `auto` | Talks to the **Agent OpenAPI** instead of a CLI; `qwen3.8-flash` / `deepseek-v4.1-flash-1017` / `kimi-k3` / `glm-5.3-flash`; 2000 credits granted per daily login |
 
 ---
 
@@ -279,7 +282,7 @@ Every native host plugin exposes the same **8 MCP tools** through the local brid
 | `hub_ask` | Dispatch a task and wait for the final answer |
 | `hub_dispatch` | Dispatch asynchronously and return a persistent `ref` immediately |
 | `hub_fetch` | Poll task status or retrieve the final result by `ref` |
-| `hub_status` | List online and enabled states for all 13 Workers |
+| `hub_status` | List online and enabled states for all 14 Workers |
 | `hub_capabilities` | Query supported models, thinking levels, streaming, and attachment limits |
 | `hub_login` | Check login status or start a login flow for a Worker |
 | `hub_discover` | Scan the local machine and LAN for available Hubs (read-only) |
@@ -300,22 +303,22 @@ Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispa
 | Module | What You Can Do |
 | --- | --- |
 | **Three-Pane Workbench & File Preview** | Browse the platform session tree on the left, chat in the center, and open local files mentioned in the conversation inside the collapsible right-hand workbench (supports artifact, image, and attachment previews plus single-item deletion) |
-| **11-Worker Login & Account Switching** | Complete logins for 9 OAuth vendors, Cline device codes, and opencode API keys directly in the browser; log out, save multiple accounts, and switch in one click without SSH |
+| **14-Worker Login & Account Switching** | Complete logins for 9 OAuth vendors, Cline device codes, and opencode API keys directly in the browser; log out, save multiple accounts, and switch in one click without SSH |
 | **Live Quotas & Worker Switches** | Monitor remaining quota per account (60 s cache with request coalescing); toggle Workers on or off on each card (saved to `agents.json` and synced everywhere) and drag cards to reorder |
 | **Smart Reveal / Collapse** | Top bar, activity bar, and session sidebar expand when your cursor approaches and hide when it leaves; click the top-left brand icon to pin or unpin the layout |
 | **12 Themes & Glass Wallpaper** | Switch between Mocha, Shell, Aurora, Dusk, Cyber, and Grid in light or dark mode (all WCAG AA contrast-calibrated); upload a custom wallpaper to switch the UI to translucent glass |
-| **Sub-agent Accent Colors** | The send button, context progress bar, and secondary menus adopt the active Worker's brand color (including opencode and Cline accents) |
+| **Worker Accent Colors** | The send button, context progress bar, and secondary menus adopt the active Worker's brand color (including opencode and Cline accents) |
 | **Cross-Platform Session Archive** | Search and filter archived chats across platforms, restore sessions in one click, and confirm twice before permanent deletion |
 | **Sub-agent MCP Endpoint Card** | Copy the `:8790/mcp` URL or a ready-to-send setup prompt in one click; includes an automatic clipboard fallback when accessed over plain-HTTP LAN IPs |
 
 <details>
 <summary><b>Frontend layout and interaction details</b></summary>
 
-- Brand anchor `#brand-logo-pin` (`z-index: 120`) stays visible at all times. Trigger zones: top bar `Y ≤ 38px`, activity bar `X ≤ 42px`, with a 90 ms reveal delay and 650 ms collapse debounce; bars remain pinned while a modal is open, an input is focused, or the sidebar is expanded; top-bar and floating button right edges align.
+- Brand anchor `#brand-logo-pin` (`z-index: 120`) stays visible at all times. Trigger zones: top bar `Y ≤ 38px`, activity bar `X ≤ 42px`, with a 90 ms reveal delay and 650 ms collapse debounce. Bars remain pinned while a modal is open, an input is focused, or the sidebar is expanded. Top-bar and floating button right edges align strictly.
 - The sidebar trigger zone spans its full footprint (`X ≤ 324px` on a `1440px` viewport); session cards render on a single line and load `/api/chat/agent-summary` summaries on demand.
 - Top bar (`z-index: 100`) and chat header (`z-index: 50`) maintain independent stacking contexts so dropdowns are never clipped by code blocks or the workbench.
 - Glass mode (`body.has-custom-bg`) applies `backdrop-filter: blur(20px~24px) saturate(180%~190%)`, unifies neutral surfaces to `--gem-bg-card`, and reserves `--gem-surface-high` for hover states and the progress track.
-- `--agent-accent` styles the send button, context progress bar, and `#panel-chat` secondary menus while keeping model names in body color `--gem-text`.
+- Worker accent color `--agent-accent` styles the send button, context progress bar, and `#panel-chat` secondary menus while keeping model names in body color `--gem-text`.
 - Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.17` (overridable by backend `snap.version`).
 - Offline demo build: `scripts/build_demo.py` and `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
 
@@ -331,11 +334,11 @@ Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispa
 | --- | --- | --- |
 | Windows Regressions & DOM Assertions | ✅ 32 suites + 7 DOM checks passed | See `docs/refactor-validation.json` and `tests/console_layout_theme_dom.mjs` |
 | Linux Regressions & Load Tests | ✅ 29 suites + 4,500+ requests passed | 360 concurrent requests with 0 errors; see `docs/stage3-stress-report.json` |
-| Linux Production Hub Upgrade | ✅ Passed | Loaded 24 Hub tools and 13 Workers while preserving external config, task history, and auth |
+| Linux Production Hub Upgrade | ✅ Passed | Loaded 24 Hub tools and 11 Workers while preserving external config, task history, and auth |
 | Linux Antigravity CLI 1.3.1 | ✅ Real call passed | Dispatched through native sub-agent `hub-mimocode` and returned a live answer |
 | Linux ZCode CLI 0.16.9 | ✅ Real call passed | Polled the original `ref` and returned the expected answer |
 | Windows Codex / ZCode Native Plugins | ✅ Real call passed | Both native sub-agents dispatched tasks and returned answers |
-| Windows Antigravity Native Plugin | ✅ Real call passed | `hub_status` and `hub_capabilities` returned all 13 Workers |
+| Windows Antigravity Native Plugin | ✅ Real call passed | `hub_status` and `hub_capabilities` returned all 11 Workers |
 | CodeArts Native Components & Channels | ✅ Passed | Verified Windows ↔ Linux LAN and SSH reverse tunnel connections |
 | Linux CodeArts Built-in Models | ✅ Real call passed | Completed GLM-5.2 calls in seconds and exited all child processes cleanly |
 | Windows DSH Host | ⚠️ Blocked by account balance | Plugin registration passed; model invocation returned `402 ACCOUNT_QUOTA` |
@@ -417,10 +420,12 @@ Before submitting patches, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_C
 
 | Version | Highlights |
 | --- | --- |
-| **1.0.17** | Check-in now reuses the credentials of installed CLIs: every run reads the CLI's own credential files, picks the freshest by JWT expiry and file mtime, and deduplicates by identity; WorkBuddy auto-renews its access token through refreshToken and writes it back to the CLI's `auth.info` (one shared copy, nothing gets logged out); check-in logs can be cleared in one click; the international `~/.codebuddy` token is no longer used |
+| **1.0.17** | Qoder's "already claimed today" check now uses the UTC+8 window day (the upstream opens a new window at 10:00 daily, so 00:00–10:00 no longer reports yesterday's claim as today's; a closed window shows as pending and auto-retries); the WebUI hides model selection for GUI-only channels (traecode follows its client and no longer throws UNSUPPORTED); Meoo no longer duplicates answers; console restarts drop from 90 s to 9 s |
+| **1.0.16** | CodeArts check-in recovered (falls back to credit claiming when the benefit-token channel is gone), Qoder International retries against the alternate environment, blank check-in log fixed, draggable mascot; Meoo joins as the 14th Worker |
+| **1.0.15** | Check-in directly reuses local credentials of installed CLIs: every run reads the CLI's own credential files, picks the freshest by JWT expiry and file mtime, and deduplicates by identity; WorkBuddy auto-renews access tokens via refreshToken and writes them back to the CLI's `auth.info` (sharing a single copy without session conflicts); check-in logs can be cleared in one click; the international `~/.codebuddy` token is no longer erroneously used |
 | **1.0.14** | Ran all 84 models one by one: keep the real stderr diagnostic when a CLI exits 0 with an empty answer, add `plan_blocked` to separate "plan not entitled" from "model does not exist", and grey out models outside the alias table; corrected three model-catalog entries; fixed four mobile layout defects (settings card title stacked vertically, numbers split across lines, send button wrapping at 320px, check-in toggle squeezed into a narrow column) |
-| **1.0.13** | Check-in went from "looks successful" to "actually successful": per-account WorkBuddy claims, real SDK-HMAC-SHA256 signed CodeArts calls, and Trae now queries status before claiming; account profiles no longer lose a second API key, split one identity into two, or freeze display names; added a per-sub-agent file-editing permission switch; deduplicated the Huawei model list by id |
-| **1.0.12** | Workbench opens local files mentioned in chat (artifact, image, and attachment previews plus single-item deletion); draggable sub-agent cards with opencode and Cline brand colors; aligned top-bar and floating button right edges; added a working GitHub Copilot Worker entry to the Linux template |
+| **1.0.13** | Check-in went from "looks successful" to "actually successful": per-account WorkBuddy claims, real SDK-HMAC-SHA256 signed CodeArts calls, and Trae now queries status before claiming; account profiles no longer lose a second API key, split one identity into two, or freeze display names; added a per-Worker file-editing permission switch; deduplicated the Huawei model list by id |
+| **1.0.12** | Workbench opens local files mentioned in chat (artifact, image, and attachment previews plus single-item deletion); draggable Worker cards with opencode and Cline brand colors; aligned top-bar and floating button right edges; added a working GitHub Copilot Worker entry to the Linux template |
 | **1.0.1** | Added opencode and Cline Workers (11 total) with config templates, capability declarations, NDJSON stream parsing, and native sub-agents; redrew architecture and roadmap SVGs with larger text and higher contrast |
 | **1.0.0** | First public release: full secret audit cleanup, TraeClaw attribution, sanitized handover docs, Code of Conduct, and release review fixes |
 | **0.9.9.7 – 0.9.9.9** | Fixed Linux source install exec-bit loss and loopback proxy hijacking; added Node 20 WebSocket compatibility, English README, security policy, contributing guide, and updated diagrams |
@@ -439,7 +444,7 @@ See [CHANGELOG.md](CHANGELOG.md) and [Version History](docs/version-history.md) 
 
 ### Acknowledgements
 
-- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) for the brand SVG icons used in the console and sub-agent avatars.
+- [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) for the brand SVG icons used in the console and Worker avatars.
 - [TraeClaw](https://github.com/firerlAGI/TraeClaw) for the local bridge and CDP/DOM automation powering the `trae_delegate` channel.
 - [L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily) for the Qoder / Qoder CN daily check-in implementation we ported: the `forceRefresh` live campaign list, the `CLAIM_BENEFIT`-only claim semantics, the token refresh chain, and the device-risk headers (`Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType`) generated from the local UMID component (`runtime-info`). The international daily credits campaign is only issued to requests carrying those headers. Many thanks to the author.
 - [L0NE-6/Trae-AutoCheckin](https://github.com/L0NE-6/Trae-AutoCheckin) for the Trae daily check-in implementation we ported: the `req_source` request body, the requirement to use the client's real registered device id (`iCubeAuthInfo://icube-dc:`), the status → claim → same-device re-check verification chain, the 9095/9074/1001 semantics, and token refresh through the new `ExchangeToken` endpoint with a refreshToken plus an ECDSA P-256 device proof. Many thanks to the author.
