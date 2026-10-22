@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-const { extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow } = await import('../console/checkin.mjs');
+const { extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow, qoderTodayWindowStart } = await import('../console/checkin.mjs');
 const { qoderHeaders, listQoderCampaigns, claimQoderCampaign } = await import('../console/qoder.mjs');
 const device = await import('../console/qoder-device.mjs');
 
@@ -236,4 +236,9 @@ test('没有上一期可等时不产生 pending 窗口', () => {
   // 已经是今天这期（窗口开在今天），不该算「等开窗」
   const todayRow = { campaignId: 'a1', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMED', startAt: 1792634400, endAt: 1792720740 };
   assert.equal(qoderPendingWindow([todayRow], 1792640000), null);
+});
+
+test('早上还没开窗时，重试点是今天 10:00（UTC+8）', () => {
+  assert.equal(qoderTodayWindowStart(1792598400), 1792634400); // 10-22 00:00 +08 → 10:00 +08
+  assert.equal(qoderTodayWindowStart(1792634400 + 60), 1792634400, '开窗后仍是今天这一期');
 });

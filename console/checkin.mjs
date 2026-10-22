@@ -1357,6 +1357,13 @@ export function qoderClaimedToday(row, nowSec = Math.floor(Date.now() / 1000)) {
   return day === qoderDayKey(nowSec);
 }
 
+/** 今天这一期（UTC+8 10:00）的开始时间；用于「上游还没下发活动」时安排重试 */
+export function qoderTodayWindowStart(nowSec = Math.floor(Date.now() / 1000)) {
+  const dayKey = qoderDayKey(nowSec);
+  const midnight = Date.parse(`${dayKey}T00:00:00+08:00`) / 1000;
+  return Number.isFinite(midnight) ? midnight + 10 * 3600 : 0;
+}
+
 /** 当前窗口结束后下一期的开始时间；上游 endAt 是本期最后一分钟，+60s 就是下期 10:00 */
 export function qoderNextWindowStart(row) {
   const e = Number(row?.endAt ?? row?.end_at ?? 0) || 0;
@@ -1528,15 +1535,28 @@ async function checkinQoderOne(acct) {
         retryAt: pend.retryAt
       };
     }
+    // 上游整个列表还没下发（国际版早上常见）也不能收工：约到今天 10:00 再看一次
+    const todayOpen = qoderTodayWindowStart(nowSec);
+    if (todayOpen && nowSec < todayOpen) {
+      const hhmm = new Date((todayOpen + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(11, 16);
+      return {
+        ok: true,
+        status: 'pending',
+        message: `上游暂未下发今日活动，今日 ${hhmm}（UTC+8）开新一期；到点会自动重试`,
+        credits: 0,
+        consecutiveDays: 0,
+        retryAt: todayOpen
+      };
+    }
     // 国际版：定向活动没下发时把原因说清楚，别让人以为接口挂了
     if (worker === 'qoder') {
       if (deviceNote) {
-        return { ok: true, status: 'pending', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
+        return { ok: true, status: 'already', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
       }
       const diag = `[活动 ${campaigns.length} 个：` + (campaigns.map((c) => `${qoderClaimStatus(c) || '?'}`).join('/') || '空') + (staleClaimed.length ? `，其中 ${staleClaimed.length} 个是过期的 CLAIMED` : '') + ']';
     return {
         ok: true,
-        status: 'pending',
+        status: 'already',
         message: diag + ' 上游暂未下发今日活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
           + '常见原因：① 官方窗口每天 10:00 开启，到点会自动重试；② 客户端今天已领过；'
           + '③ 设备指纹（Cosy-MachineToken）过期——回 Windows 跑 qoder-checkin 的 01_extract.py 重新提取，或在 Qoder 客户端重新登录一次',
@@ -1544,7 +1564,7 @@ async function checkinQoderOne(acct) {
         consecutiveDays: 0
       };
     }
-    return { ok: true, status: 'pending', message: '当前没有可领取的签到活动，稍后自动重试', credits: 0, consecutiveDays: 0 };
+    return { ok: true, status: 'already', message: '当前没有可领取的签到活动', credits: 0, consecutiveDays: 0 };
   }
 
   let credits = 0;
@@ -1622,15 +1642,20 @@ export async function checkinQoder(target = 'qoder') {
   }
 
   const okOnes = results.filter((r) => r.status === 'success');
-  const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
-  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : 'already');
+  // pending（等 10:00 开窗）不是失败：别因为一个账号在等窗口就把整个平台标红
+  const badOnes = results.filter((r) => !['success', 'already', 'pending'].includes(r.status));
+  const pendOnes = results.filter((r) => r.status === 'pending');
+  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : (pendOnes.length ? 'pending' : 'already'));
+  const retryAt = status === 'pending' ? (pendOnes.find((r) => r.retryAt)?.retryAt || 0) : 0;
   return {
     platform,
     ok: badOnes.length === 0,
     status,
-    message: results.map((r) => r.message).join('；'),
+    // 多账号时带上账号名，否则「已领取 + 未下发」两段并排看着自相矛盾
+    message: results.map((r) => (results.length > 1 ? `${r.label}：${r.message}` : r.message)).join('；'),
     credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
     consecutiveDays: 0,
+    retryAt,
     accounts: results.map((r) => ({
       name: r.name,
       display: r.label || r.name,
