@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-const { extractQoderCampaigns } = await import('../console/checkin.mjs');
+const { extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow } = await import('../console/checkin.mjs');
 const { qoderHeaders, listQoderCampaigns, claimQoderCampaign } = await import('../console/qoder.mjs');
 const device = await import('../console/qoder-device.mjs');
 
@@ -195,4 +195,45 @@ test('本机 CLI 的 runtime-info 能被识别（执行部分仅 Unix）', async
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+// ------------------------------------------------- 「今天这一期」判定
+// 上游活动窗口按 UTC+8 每天 10:00 刷新，一期 = [今天 10:00, 明天 09:59]，
+// 会跨自然日。线上真实数据（2026-10-22）：startAt=1792634400 (10:00+08)，
+// endAt=1792720740 (次日 09:59+08)。00:00–10:00 之间看到的仍是昨天那期。
+
+test('窗口内 CLAIMED 且窗口从今天开始，才算今日已领', () => {
+  const todayRow = { campaignId: 'a1', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMED', startAt: 1792634400, endAt: 1792720740 };
+  assert.equal(qoderClaimedToday(todayRow, 1792634400 + 3600), true, '11:00 看今天这期');
+  assert.equal(qoderClaimedToday(todayRow, 1792634400 - 3600), false, '09:00 窗口还没开');
+});
+
+test('昨天那期一直到今天 10:00，不能当成今日已签', () => {
+  // 昨天 10:00 → 今天 09:59
+  const yesterdayRow = { campaignId: 'a0', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMED', startAt: 1792548000, endAt: 1792634340 };
+  const atMidnight = 1792598400; // 2026-10-22 00:00 +08
+  assert.ok(atMidnight > yesterdayRow.startAt && atMidnight < yesterdayRow.endAt, '此刻确实还在昨天那期的窗口里');
+  assert.equal(qoderClaimedToday(yesterdayRow, atMidnight), false, '窗口内不等于今天已签');
+  assert.equal(qoderNextWindowStart(yesterdayRow), 1792634400, '下一期 10:00 开');
+});
+
+test('没有窗口字段时退回「窗口内即已领」，避免把正常数据判死', () => {
+  const bare = { campaignId: 'a2', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMED' };
+  assert.equal(qoderInWindow(bare), true);
+  assert.equal(qoderClaimedToday(bare), true, '无 startAt 时无法证伪，按已领处理');
+});
+
+test('0:00–10:00 之间报「待打卡 + 10:00 开窗」，不再谎报已签到', () => {
+  const yesterdayRow = { campaignId: 'a0', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMED', startAt: 1792548000, endAt: 1792634340 };
+  const pend = qoderPendingWindow([yesterdayRow], 1792598400); // 10-22 00:00 +08
+  assert.ok(pend, '应给出等待窗口');
+  assert.equal(pend.retryAt, 1792634400, '到 10:00 再试');
+  assert.match(pend.message, /今日 10:00/);
+});
+
+test('没有上一期可等时不产生 pending 窗口', () => {
+  assert.equal(qoderPendingWindow([], 1792598400), null);
+  // 已经是今天这期（窗口开在今天），不该算「等开窗」
+  const todayRow = { campaignId: 'a1', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMED', startAt: 1792634400, endAt: 1792720740 };
+  assert.equal(qoderPendingWindow([todayRow], 1792640000), null);
 });

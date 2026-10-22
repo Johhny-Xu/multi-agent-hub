@@ -9167,7 +9167,7 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
               <span class="checkin-head-pill" id="checkin-overall-pill">WorkBuddy · Trae免客户端 · CodeArts码道 · Qoder / Qoder CN</span>
             </div>
             <div class="checkin-head-actions">
-              <button type="button" class="qa-btn" id="btn-checkin-refresh" title="刷新各平台打卡与凭据状态">↻ 刷新状态</button>
+              <button type="button" class="qa-btn" id="btn-checkin-refresh" title="刷新各平台状态，并对今日尚未签成的平台重试一次">↻ 刷新状态</button>
               <button type="button" class="qa-btn qa-primary" id="btn-checkin-all" title="一键对所有可用平台执行签到打卡">一键全签</button>
             </div>
           </div>
@@ -9178,9 +9178,9 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
                 <label class="checkin-switch-label">
                   <input type="checkbox" id="checkin-auto-checkbox" checked />
                   <span class="checkin-switch-slider"></span>
-                  <span class="checkin-switch-text">开启每日自动签到 (08:30 静默打卡)</span>
+                  <span class="checkin-switch-text">开启每日自动签到（后台每 30 分钟补签）</span>
                 </label>
-                <span class="checkin-auto-hint">后台服务定时扫描，无需人工干预</span>
+                <span class="checkin-auto-hint">Qoder 每日 10:00 才开新一期，到点自动补签，不必守着刷新</span>
               </div>
               <div class="checkin-nav-tabs">
                 <button type="button" class="checkin-tab-btn active" data-tab="grid">打卡面板</button>
@@ -11842,6 +11842,27 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     return list || [];
   }
 
+  // GUI 通道（如 traecode）的模型是客户端界面里的会话状态，Hub 会拒绝带 model 的派发。
+  function getAgentMeta(agent) {
+    var list = (state.snap && state.snap.agents) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].name === agent) return list[i];
+    return null;
+  }
+
+  function agentModelSelectable(agent) {
+    var meta = getAgentMeta(agent);
+    if (meta && typeof meta.modelSelection === 'boolean') return meta.modelSelection;
+    var w = state.snap && state.snap.capabilities && state.snap.capabilities.workers[agent];
+    return !w || w.model_selection !== false;
+  }
+
+  function agentFixedModelName(agent) {
+    var meta = getAgentMeta(agent);
+    var w = state.snap && state.snap.capabilities && state.snap.capabilities.workers[agent];
+    var id = (meta && meta.defaultModel) || (w && w.default_model) || '';
+    return id ? (getModelDisplayName(agent, id) || id) : '';
+  }
+
   function getModelCapability(agent, model) {
     var worker = state.snap && state.snap.capabilities && state.snap.capabilities.workers[agent];
     var selected = worker && worker.models.find(function (entry) { return entry.id === model || (entry.aliases && entry.aliases.indexOf(model) >= 0); });
@@ -11881,6 +11902,8 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     p.effort = p.effort || '';
     p.permission = p.permission || '';
     delete p.contextTier; delete p.autoTier;
+    // 不可切换模型的通道：一律不发 model，避免 Hub 侧 UNSUPPORTED
+    if (!agentModelSelectable(agent)) p.model = '';
     return p;
   }
 
@@ -11915,9 +11938,14 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
 
   function getModelSummaryText(agent, opts) {
     if (!agent) agent = chat.activeAgent || ($('#chat-target') ? $('#chat-target').value : '') || 'codebuddy';
+    var withAgent = !!(opts && opts.withAgent);
+    if (!agentModelSelectable(agent)) {
+      var fixed = agentFixedModelName(agent);
+      var label = '跟随客户端' + (fixed ? ' · ' + fixed : '');
+      return withAgent ? agent + '/' + label : label;
+    }
     var p = getAgentPrefs(agent);
     var name = getModelDisplayName(agent, p.model);
-    var withAgent = !!(opts && opts.withAgent);
     var parts = [];
     if (withAgent) parts.push(agent + '/' + (name || '默认模型'));
     else if (name) parts.push(name);
@@ -12125,6 +12153,29 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
 
     if (listEl) listEl.hidden = false;
 
+    // GUI 通道（traecode）没法从 API 换模型：别摆一列点了必报错的选项
+    if (!agentModelSelectable(agent)) {
+      if (countEl) countEl.textContent = '';
+      if (listEl) {
+        listEl.textContent = '';
+        var fixedName = agentFixedModelName(agent) || '客户端当前模型';
+        var note = el('div', 'mp-empty');
+        note.style.padding = '14px 16px';
+        note.style.color = 'var(--mcode-text-muted)';
+        note.style.fontSize = '12px';
+        note.style.lineHeight = '1.7';
+        var noteTitle = el('div', null, '跟随客户端 · ' + fixedName);
+        noteTitle.style.cssText = 'color:var(--mcode-text);font-size:13px;margin-bottom:4px';
+        note.appendChild(noteTitle);
+        note.appendChild(el('div', null, '这个通道（' + agent + '）的模型是客户端界面里的会话状态，接口改不了。要换模型请在对应的客户端里切换，这里派发时会沿用它当前的模型。'));
+        listEl.appendChild(note);
+      }
+      var pc = $('#mp-params-container');
+      if (pc) pc.style.display = 'none';
+      updateModelSummaryUI();
+      return;
+    }
+
     var searchInp = $('#mp-search-input');
     var searchVal = (searchInp && searchInp.value) ? String(searchInp.value).trim().toLowerCase() : '';
     var filtered = models.filter(function (m) {
@@ -12220,6 +12271,18 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     var models = getModelCatalog(agentName);
     var prev = sel.value;
     sel.textContent = '';
+    if (!agentModelSelectable(agentName)) {
+      // 模型由客户端界面决定：只展示，不允许在这里选，也不往 Hub 传 model
+      var fixedName = agentFixedModelName(agentName);
+      var fixedOp = el('option', null, '跟随客户端' + (fixedName ? ' · ' + fixedName : ''));
+      fixedOp.value = '';
+      sel.appendChild(fixedOp);
+      sel.disabled = true;
+      sel.value = '';
+      updateModelSummaryUI();
+      return;
+    }
+    sel.disabled = false;
     models.forEach(function (m) {
       var badge = '';
       if (m.credits) {
@@ -17506,15 +17569,18 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
       });
     });
 
-    // 刷新按钮
+    // 刷新按钮：先重读状态，再把「今天还没签成」的平台补签一次。
+    // 只重读状态的话，像 Qoder 这种 10:00 才开新一期的平台，早上点了也一直显示已签。
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
         refreshBtn.disabled = true;
         refreshBtn.textContent = '刷新中...';
-        fetchStatus().finally(() => {
-          refreshBtn.disabled = false;
-          refreshBtn.textContent = '↻ 刷新状态';
-        });
+        executeCheckin('due')
+          .then(() => fetchStatus())
+          .finally(() => {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = '↻ 刷新状态';
+          });
       });
     }
 

@@ -23,7 +23,7 @@ import { QODER_MODELS } from './qoder.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.16';
+const VERSION = '1.0.17';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -238,7 +238,13 @@ export function normalizeCapabilities(value) {
       if (!/^[\w.:/-]{1,160}$/.test(modelId) || !objectValue(failure)) continue;
       failures[modelId] = { code: publicReason(failure.code), reason: publicReason(failure.reason), blocking: failure.blocking === true };
     }
-    workers[name] = { configured: worker.configured === true, default_model: typeof worker.default_model === 'string' ? worker.default_model : null, availability: ready, models, failures };
+    workers[name] = {
+      configured: worker.configured === true,
+      default_model: typeof worker.default_model === 'string' ? worker.default_model : null,
+      // GUI 通道会明确给 false；老 Hub 没这个字段时按「可切换」处理
+      model_selection: worker.model_selection !== false,
+      availability: ready, models, failures,
+    };
   }
   return { schema_version: 2, platform: publicReason(value.platform) || 'unknown', workers,
     attachment_limit_bytes: Number(value.attachment_limit_bytes) > 0 ? Number(value.attachment_limit_bytes) : 1024 * 1024 };
@@ -255,6 +261,11 @@ export function taskCapability(document, agent, model, options = {}) {
   if (options.stream !== undefined && typeof options.stream !== 'boolean') return fail('stream 必须是布尔值');
   const worker = document?.workers?.[agent];
   if (!worker?.configured || !worker.availability?.enabled) return fail(worker?.availability?.reason || '该 worker 尚无可用的能力信息或运行通道');
+  // GUI 通道（traecode）的模型是客户端界面里的会话状态，OpenAPI 传 model 会被 Hub 拒绝。
+  // 在这里先说清楚，别等派发出去再红一条 UNSUPPORTED。
+  if (worker.model_selection === false && model && !['default', '默认'].includes(model) && model !== worker.default_model) {
+    return fail(`${agent} 的模型由客户端界面决定，这里无法切换（当前 ${worker.default_model || '客户端所选'}）；要换请在对应客户端里改`);
+  }
   const requested = !model || ['default', '默认'].includes(model) ? (worker.default_model || (MODEL_CATALOG[agent] || []).find((m) => m.default)?.id) : model;
   const selected = worker.models.find((entry) => entry.id === requested || entry.aliases.includes(requested));
   if (!selected) {
@@ -891,6 +902,9 @@ export async function start(context) {
         const worker = capabilityDocument?.workers[a.name];
         a.models = (modelCatalog[a.name] || []).map((entry) => ({ ...entry, alias: entry.name }));
         a.defaultModel = worker?.default_model || null;
+        // GUI 通道（traecode）模型由客户端界面决定，Hub 会拒绝带 model 的派发；
+        // 前端据此收起模型选择，别让人选了才在发送时报 UNSUPPORTED。
+        a.modelSelection = worker ? worker.model_selection !== false : true;
         a.availability = worker?.availability || { enabled: false, reason: capsResult.error || 'Hub 未提供此 worker 的能力信息' };
         a.modelNote = mi ? mi.note || '' : (a.cli ? '未出现在模型别名表' : '未配置 CLI 通道');
         const isExplicitlyDisabled = a.disabled || (worker && !worker.availability?.enabled && worker.availability?.code === 'profile_disabled');
@@ -3279,5 +3293,11 @@ if (__isMain) {
   });
   console.log(`[agent-hub-console] v${VERSION} standalone → http://${sHost}:${sPort}/dashboard | agent=${SELF_AGENT} | data=${sData} | sub=${SUB_BIND_HOST}:${SUBAGENT_PORTS.join('/')}`);
   await new Promise((res) => { ctrl.signal.addEventListener('abort', res, { once: true }); });
-  // start() 内部监听 signal 后会 dispose 并关闭服务器, 事件循环自然清空退出
+  // start() 内部监听 signal 后会 dispose 并关闭服务器, 事件循环自然清空退出。
+  // 但 SSE 长连接/定时器会让循环不空，systemd 只能等到 TimeoutStopSec(90s) 再 SIGKILL。
+  // 这个兜底定时器 unref：循环空了就立刻退；被 SSE 拖住时 8s 后强制退。
+  setTimeout(() => {
+    console.warn('[agent-hub-console] 优雅退出超时，强制退出');
+    process.exit(0);
+  }, 8000).unref();
 }

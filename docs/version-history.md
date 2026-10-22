@@ -82,3 +82,10 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 - **灰底抠像模式 `--key flat`**：新素材不是绿幕（灰底 ~128 + 白色速度线 ~184 + 渐变），chroma key 要么留下速度线、要么吃掉白衬衫。`alpha_flat()` 改为挖「低饱和 + 亮度在区间内 + 与画面边缘连通」的连通域：白衬衫/白袜子被深色描边包住，flood fill 进不去；速度线连着边缘，一起被挖掉。参数 `--flat-lo/-hi/-sat`（白底段用 `--flat-hi 255`）。
 - **修复设置页误触发看板娘**：切到设置页时 `#panel-chat` 是 `hidden`、dock 的 rect 变成 0，但 `dock.hidden` 仍是 `false`，自动掉落定时器照跑。新增 `mascotOnScreen()`（rect 宽高都 > 0）统一判断。
 - **部署记录**：`console/client/index.html` 已 `scp` 到 n5095 的 `miniapp/client/` 并重启 `agent-hub-console.service`；线上实测拖拽/坠落/擦汗、CodeArts 签到均正常。
+
+`v1.0.17`（2026-10-22）：Qoder 每日窗口判定 + WebUI 模型切换收口 + Meoo 输出修复。
+- **Qoder / Qoder CN 的「今天已领」按 UTC+8 窗口日判定**：上游每天 10:00 开新一期，一期跨自然日 `[今天10:00, 明天09:59]`。旧逻辑只看「CLAIMED 且落在窗口内」，于是 0:00–10:00 会把昨天那期当成今天已签，卡片显示已签到而客户端按钮仍可点。现在要求窗口起始日是今天；上一期已领、今天还没开窗时返回 `pending` + `retryAt`，定时器到点才重试。`POST /api/checkin/run` 新增 `due` 模式，「刷新状态」按钮会把今天没签成的平台补一刀。
+- **GUI 通道的模型选择从 UI 收起**：`normalizeCapabilities()` 之前把 Hub 的 `model_selection` 过滤掉了，前端仍按 `MODEL_CATALOG` 给 traecode 摆 21 个模型，选中就必然 `UNSUPPORTED`。现在保留该字段，不可切换的通道显示「跟随客户端 · <默认模型>」、不发送 `model`；控制台侧也加了前置守卫，报错文案改成「模型由客户端界面决定」。
+- **Meoo 回答重复**：Meoo 事件流的文本语义是 `message.delta` 追加 / `message.snapshot` 整段替换；旧实现只累加 delta，`auto` 模型下上游先发 delta 再发 snapshot 覆盖，`6`+`6`=`66`。现按官方 reducer 处理，CLI 改为 run 结束后一次性输出；顺带识别 `run.input_required`。
+- **控制台重启 90s → 9s**：SSE 长连接拖住退出，systemd 只能等 `TimeoutStopSec`；standalone 入口加 8s unref 兜底强制退出。
+- **14 个 worker 模型切换实测**：9 个非默认模型实跑返回正确答案；codebuddy 账号套餐受限；codebuddy-cn / github-copilot 的 CLI 支持 `--model` 但 agents.json 未声明可选模型；traecode 为 GUI 会话状态不可切换；zcode 控制台禁用。明细见 CHANGELOG 1.0.17。

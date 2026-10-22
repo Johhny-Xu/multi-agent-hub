@@ -71,3 +71,26 @@ test('qd / qdcn aliases resolve to the Qoder workers and dfmodel is the default'
     assert.equal(taskCapability(document, alias, 'dfmodel', { thinking: 'on', stream: true, permission: 'readonly', attachments: [{ mime_type: 'image/png' }] }).allowed, true);
   }
 });
+
+test('GUI 通道（model_selection=false）不能从控制台指定其它模型', () => {
+  const model = (id) => ({
+    id, availability: { enabled: true }, thinking: { allowed: [] }, permission: { allowed: [] },
+    stream: { supported: false }, attachments: { file: { supported: true }, image: { supported: true } },
+  });
+  const document = normalizeCapabilities({
+    schema_version: 2, platform: 'linux',
+    workers: {
+      traecode: {
+        configured: true, default_model: 'DeepSeek-V4.1-Flash', model_selection: false,
+        availability: { enabled: true },
+        models: [model('DeepSeek-V4.1-Flash'), model('GLM-5.3-FlashX')],
+      },
+    },
+  });
+  assert.equal(document.workers.traecode.model_selection, false, '归一化不能把这个字段吃掉');
+  assert.equal(taskCapability(document, 'traecode').allowed, true, '不指定模型时按客户端当前模型走');
+  assert.equal(taskCapability(document, 'traecode', 'DeepSeek-V4.1-Flash').allowed, true, '传默认模型也放行');
+  const blocked = taskCapability(document, 'traecode', 'GLM-5.3-FlashX');
+  assert.equal(blocked.allowed, false);
+  assert.match(blocked.reason, /客户端界面/, '要说清楚为什么换不了，而不是丢一条 UNSUPPORTED');
+});

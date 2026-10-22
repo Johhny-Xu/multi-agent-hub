@@ -1321,11 +1321,58 @@ const qoderClaimStatus = (row) => String(row?.claimStatus || row?.claim_status |
 /** 活动是否在有效期内。开源项目 qoder-checkin 就是靠 startAt~endAt 判断「今日已领」，
  *  不加这个判断会把上一期 CLAIMED 的老活动当成今天已领（Qoder CN 报「已签到」但客户端还有领取按钮就是这个原因）。
  *  没有窗口字段时不做限制，避免把正常数据判死。 */
-function qoderInWindow(row, nowSec = Math.floor(Date.now() / 1000)) {
+export function qoderInWindow(row, nowSec = Math.floor(Date.now() / 1000)) {
   const s = Number(row?.startAt ?? row?.start_at ?? 0) || 0;
   const e = Number(row?.endAt ?? row?.end_at ?? 0) || 0;
   if (!e) return true;
   return s <= nowSec && nowSec < e;
+}
+
+/** 活动按 UTC+8 每天 10:00 刷新（上游文案：每日 10:00（UTC+8）刷新）。
+ *  所以一个「期」是 [今天 10:00, 明天 09:59]，跨自然日；判断「今天这一期」
+ *  必须用窗口起始日的 UTC+8 日期，不能只用 now 落在窗口内。 */
+const QODER_TZ_OFFSET_SEC = 8 * 3600;
+
+function qoderDayKey(sec) {
+  return new Date((Number(sec) + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(0, 10);
+}
+
+export function qoderWindowDay(row) {
+  const s = Number(row?.startAt ?? row?.start_at ?? 0) || 0;
+  return s ? qoderDayKey(s) : '';
+}
+
+/**
+ * 今天这一期是否已经领过。
+ * 只判「窗口内」不够：昨天的窗口会一直持续到今天 10:00，于是 00:00–10:00 之间
+ * 会把昨天的 CLAIMED 当成「今日已签」，卡片显示已签到、客户端按钮却还能点。
+ */
+export function qoderClaimedToday(row, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(row))) return false;
+  if (!qoderInWindow(row, nowSec)) return false;
+  const day = qoderWindowDay(row);
+  // 没有 startAt 就无法证明是「今天这一期」，退回旧行为（窗口内即已领），
+  // 免得把正常数据判成待打卡、一天重试八次。
+  if (!day) return true;
+  return day === qoderDayKey(nowSec);
+}
+
+/** 当前窗口结束后下一期的开始时间；上游 endAt 是本期最后一分钟，+60s 就是下期 10:00 */
+export function qoderNextWindowStart(row) {
+  const e = Number(row?.endAt ?? row?.end_at ?? 0) || 0;
+  return e ? e + 60 : 0;
+}
+
+/** 上一期已领、今天这一期还没开时，算出「几点开窗」。
+ *  0:00–10:00 之间打开控制台就是这种状态：不能报「已签到」（卡片会骗人），
+ *  报 pending + retryAt，让定时器到点再来一次。没有可等待的窗口时返回 null。 */
+export function qoderPendingWindow(staleClaimed, nowSec = Math.floor(Date.now() / 1000)) {
+  const rows = Array.isArray(staleClaimed) ? staleClaimed : [];
+  const prev = rows.find((item) => qoderNextWindowStart(item) > nowSec) || rows[0];
+  const nextStart = prev ? qoderNextWindowStart(prev) : 0;
+  if (!nextStart || nowSec >= nextStart || nextStart - nowSec > 12 * 3600) return null;
+  const hhmm = new Date((nextStart + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(11, 16);
+  return { retryAt: nextStart, message: `上一期已领，今日 ${hhmm}（UTC+8）开新一期；到点会自动重试` };
 }
 
 function qoderResponseMessage(res) {
@@ -1436,8 +1483,8 @@ async function checkinQoderOne(acct) {
   }
   let campaigns = extractQoderCampaigns(res.json);
   let claimable = campaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
-  let claimedBefore = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && qoderInWindow(item));
-  const staleClaimed = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderInWindow(item));
+  let claimedBefore = campaigns.filter((item) => qoderClaimedToday(item));
+  const staleClaimed = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
   let useBase = '';
 
   // 国际版活动列表为空时，换一套环境用同一个 token 再问一次。
@@ -1454,7 +1501,7 @@ async function checkinQoderOne(acct) {
           if (altClaimable.length) {
             campaigns = altCampaigns;
             claimable = altClaimable;
-            claimedBefore = altCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)));
+            claimedBefore = altCampaigns.filter((item) => qoderClaimedToday(item));
             useBase = alt;
           }
         }
@@ -1463,26 +1510,41 @@ async function checkinQoderOne(acct) {
   }
 
   if (!claimable.length) {
+    const nowSec = Math.floor(Date.now() / 1000);
     if (claimedBefore.length) {
       return { ok: true, status: 'already', message: claimedBefore.length > 1 ? `今日 ${claimedBefore.length} 个活动已领取` : '今日已领取', credits: 0, consecutiveDays: 0 };
+    }
+    // 上一期已领、今天这一期还没开：0:00–10:00 之间就是这种状态。
+    // 这时不能报「已签到」（卡片会骗人），报 pending 让定时器到点重试一次。
+    const pend = qoderPendingWindow(staleClaimed, nowSec);
+    if (pend) {
+      return {
+        ok: true,
+        status: 'pending',
+        message: pend.message,
+        credits: 0,
+        consecutiveDays: 0,
+        // 定时器不必在开窗之前反复试：到点再来，免得一天 8 次重试全耗在等窗口上
+        retryAt: pend.retryAt
+      };
     }
     // 国际版：定向活动没下发时把原因说清楚，别让人以为接口挂了
     if (worker === 'qoder') {
       if (deviceNote) {
-        return { ok: true, status: 'already', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
+        return { ok: true, status: 'pending', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
       }
       const diag = `[活动 ${campaigns.length} 个：` + (campaigns.map((c) => `${qoderClaimStatus(c) || '?'}`).join('/') || '空') + (staleClaimed.length ? `，其中 ${staleClaimed.length} 个是过期的 CLAIMED` : '') + ']';
     return {
         ok: true,
-        status: 'already',
-        message: diag + ' 上游暂未下发每日积分活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
-          + '常见原因：① 官方窗口每天 10:00 开启；② 客户端今天已领过；'
+        status: 'pending',
+        message: diag + ' 上游暂未下发今日活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
+          + '常见原因：① 官方窗口每天 10:00 开启，到点会自动重试；② 客户端今天已领过；'
           + '③ 设备指纹（Cosy-MachineToken）过期——回 Windows 跑 qoder-checkin 的 01_extract.py 重新提取，或在 Qoder 客户端重新登录一次',
         credits: 0,
         consecutiveDays: 0
       };
     }
-    return { ok: true, status: 'already', message: '当前没有可领取的签到活动', credits: 0, consecutiveDays: 0 };
+    return { ok: true, status: 'pending', message: '当前没有可领取的签到活动，稍后自动重试', credits: 0, consecutiveDays: 0 };
   }
 
   let credits = 0;
@@ -1833,25 +1895,40 @@ export async function runCheckin(target = 'all') {
   const state = await loadState();
   const results = {};
 
-  if (target === 'all' || target === 'workbuddy') {
+  // due = 只补「今天还没签成」的平台（pending/failed），给「刷新状态」按钮用：
+  // 以前刷新只重读一遍状态，昨天那期已领就一直显示已签，点多少次都不动。
+  let only = null;
+  if (target === 'due') {
+    const today = getTodayStr();
+    only = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'].filter((plat) => {
+      const p = state.platforms[plat] || {};
+      if (p.lastDate !== today) return true;
+      if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
+      return ['failed', 'pending'].includes(p.status) && (p.retryCount || 0) < 8;
+    });
+    if (!only.length) return { ok: true, results: {}, due: [], overview: await getCheckinOverview() };
+  }
+  const want = (plat) => (only ? only.includes(plat) : (target === 'all' || target === plat));
+
+  if (want('workbuddy')) {
     results.workbuddy = await checkinWorkBuddy();
   }
-  if (target === 'all' || target === 'traecode') {
+  if (want('traecode')) {
     results.traecode = await checkinTrae();
   }
-  if (target === 'all' || target === 'codearts') {
+  if (want('codearts')) {
     results.codearts = await checkinCodeArts();
   }
-  if (target === 'all' || target === 'qoder') {
+  if (want('qoder')) {
     results.qoder = await checkinQoder('qoder');
   }
-  if (target === 'all' || target === 'qoder-cn') {
+  if (want('qoder-cn')) {
     results['qoder-cn'] = await checkinQoder('qoder-cn');
   }
-  if (target === 'all' || target === 'minimaxcode') {
+  if (want('minimaxcode')) {
     results.minimaxcode = await checkinMiniMaxPlatform('cn');
   }
-  if (target === 'all' || target === 'meoo') {
+  if (want('meoo')) {
     results.meoo = await checkinMeoo();
   }
 
@@ -1870,7 +1947,9 @@ export async function runCheckin(target = 'all') {
       // 同一天内的失败重试计数：定时器据此决定要不要隔半小时再试一次。
       // 旧逻辑只看 lastDate，失败一次就把今天标成「已处理」，9074 这类
       // 服务端排队错误再也没机会重试。成功后清零。
-      retryCount: failed ? (prev.lastDate === res.today ? (prev.retryCount || 0) + 1 : 1) : 0
+      retryCount: failed ? (prev.lastDate === res.today ? (prev.retryCount || 0) + 1 : 1) : 0,
+      // 平台自己给出「几点再来」（Qoder 每天 10:00 开新一期）：到点前定时器不空转
+      retryAt: res.retryAt || 0
     };
     state.history.unshift({
       time: `${res.today} ${res.time}`,
@@ -1925,13 +2004,16 @@ export function startAutoCheckinScheduler() {
       if (!state.autoCheckin) return;
 
       const today = getTodayStr();
-      // 只补「还没签」和「今天签失败的」平台：
-      // 前者是首次触发；后者给限流/网络抖动留重试机会（每天最多 6 次，约 3 小时）。
+      // 只补「还没签」和「今天没签成」的平台：
+      // 前者是首次触发；后者给限流/网络抖动/等 10:00 开窗留重试机会（每天最多 8 次，约 4 小时）。
+      // pending 必须一起重试：Qoder 每天 10:00 才开新一期，08:30 那次只能标 pending。
       // 旧实现只要有一个平台没签就 runCheckin('all')，会把已签成的平台又打一遍。
-      const pending = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode'].filter((plat) => {
+      const pending = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'].filter((plat) => {
         const p = state.platforms[plat] || {};
         if (p.lastDate !== today) return true;
-        return p.status === 'failed' && (p.retryCount || 0) < 6;
+        // 平台自己约了时间（如 Qoder 10:00 开窗）就别提前空转
+        if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
+        return ['failed', 'pending'].includes(p.status) && (p.retryCount || 0) < 8;
       });
       if (pending.length) {
         console.log(`[Checkin] 触发定时签到（待处理: ${pending.join(', ')}）...`);

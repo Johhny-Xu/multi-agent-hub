@@ -6,6 +6,7 @@ import test from 'node:test';
 
 const html = (await readFile(new URL('../console/client/index.html', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const names = ['getModelCatalog', 'getModelCapability', 'getAgentPrefs', 'saveAgentPrefs', 'getModelDisplayName', 'getModelSummaryText',
+  'getAgentMeta', 'agentModelSelectable', 'agentFixedModelName',
   'getAgentAccent', 'applyAgentAccent', 'updateModelSummaryUI',
   'updateCapabilityUI', 'renderModelPanel', 'populateChatModels', 'sendChat', 'addFiles'];
 const functions = names.map((name) => {
@@ -20,7 +21,7 @@ const selection = (id, { on = true, off = true, stream = true, image = true, fil
   thinking: { allowed: ['default', ...(on ? ['on'] : []), ...(off ? ['off'] : [])], reasons: { on: '不能开启思考', off: '始终思考，不能关闭' } },
   stream: { supported: stream, semantics: 'answer_deltas', reason: '尚未验证流式正文' }, attachments: { image: { supported: image, reason: '图片不支持' }, file: { supported: file, reason: '文件不支持' } },
 });
-function fixture(models = [selection('fixture')]) {
+function fixture(models = [selection('fixture')], opts = {}) {
   const nodes = new Map();
   class Element {
     children = []; style = { setProperty() {} }; value = ''; hidden = false; disabled = false; attributes = {}; listeners = {}; dataset = {};
@@ -53,7 +54,7 @@ function fixture(models = [selection('fixture')]) {
   const context = vm.createContext({ $, el, Object, Array, JSON, localStorage: { setItem() {} },
     document: { documentElement },
     AGENT_THEMES: { probe: { color: '#818cf8', glow: 'rgba(129, 140, 248, 0.35)', label: 'probe' } },
-    state: { snap: { platform: 'linux', capabilities: { workers: { probe: worker } }, modelCatalog: { probe: models.map((model, index) => ({ id: model.id, name: model.id, default: index === 0, available: model.availability.enabled, reason: model.availability.reason, capability: model })) } } },
+    state: { snap: { platform: 'linux', agents: [{ name: 'probe', modelSelection: opts.modelSelection !== false, defaultModel: opts.defaultModel || models[0].id }], capabilities: { workers: { probe: worker } }, modelCatalog: { probe: models.map((model, index) => ({ id: model.id, name: model.id, default: index === 0, available: model.availability.enabled, reason: model.availability.reason, capability: model })) } } },
     chat: { activeAgent: 'probe', activeSessionId: 'session', atts: [], sending: false }, modelSettings: {},
     toast: (message) => notices.push(message), updateStatusBar() {}, renderAttStrip() {}, URL: { revokeObjectURL() {}, createObjectURL() {} },
     api: async (path, body) => { calls.push({ path, body }); return {}; }, loadThreads: async () => {}, selectPlatform: async () => {},
@@ -107,4 +108,34 @@ test('adding file attachments invokes FileReader upload pathway', () => {
   const { context, $, calls } = fixture();
   context.addFiles([{ name: 'test.txt', type: 'text/plain', size: 100 }]);
   assert.ok(calls.length > 0 || context.chat.atts.length > 0);
+});
+
+// GUI 通道（traecode）的模型由客户端界面决定：Hub 会拒绝带 model 的派发，
+// 前端必须既不给选、也不往 payload 里塞 model，否则用户点发送就吃一条 UNSUPPORTED。
+test('模型不可切换的通道不发送 model，胶囊显示「跟随客户端」', async () => {
+  const { context, $, calls } = fixture([selection('fixed-model')], { modelSelection: false, defaultModel: 'fixed-model' });
+  context.modelSettings.probe = { model: 'fixed-model' };
+  $('#chat-mode').value = 'dispatch';
+  context.populateChatModels();
+  assert.equal($('#chat-model').disabled, true, '下拉不给出可点选项');
+  assert.equal($('#chat-model').children.length, 1);
+  assert.equal($('#chat-model').children[0].value, '', '唯一选项的空值代表「跟随客户端」');
+  assert.equal(context.getAgentPrefs('probe').model, '', '偏好里的旧模型要被清掉');
+  assert.match(context.getModelSummaryText('probe'), /跟随客户端/);
+
+  $('#chat-input').value = 'TASK';
+  context.sendChat();
+  await new Promise((done) => setImmediate(done));
+  const payload = calls.find((call) => call.path === '/api/chat/send').body;
+  assert.equal(payload.model, undefined, '不能把 model 传给 Hub');
+});
+
+test('可切换模型的通道照常带上所选模型', async () => {
+  const { context, $, calls } = fixture([selection('a'), selection('b')], { modelSelection: true });
+  context.modelSettings.probe = { model: 'b' };
+  $('#chat-input').value = 'TASK';
+  context.sendChat();
+  await new Promise((done) => setImmediate(done));
+  const payload = calls.find((call) => call.path === '/api/chat/send').body;
+  assert.equal(payload.model, 'b');
 });

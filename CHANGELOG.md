@@ -11,6 +11,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-10-22
+
+### 修复：Qoder CN 早上 0:00–10:00 谎报「已签到」
+
+- **现象**：卡片显示「今日已签 / 今日已领取」，但 Qoder 客户端里「每天领 100 Credits」的按钮还能点；点「刷新状态」也不动。
+- **根因**：上游活动按 **UTC+8 每天 10:00 刷新**，一期是 `[今天 10:00, 明天 09:59]`，**跨自然日**（实测 `startAt=1792634400`、`endAt=1792720740`）。之前只判「CLAIMED 且落在窗口内」，于是 0:00–10:00 之间看到的还是昨天那期、状态是 CLAIMED → 被判成「今日已领」，直接走 `already` 分支，根本不去领今天的新一期。
+- **修法**：`qoderClaimedToday()` 增加「窗口起始日（UTC+8）必须是今天」；没有 `startAt` 时退回旧行为。上一期已领、今天还没开窗时返回 **`pending` + `retryAt`**（下一期 10:00），消息写清「今日 10:00 开新一期」，不再谎报已签。
+- **配套**：定时器把 `pending` 一并纳入重试（原来只重试 `failed`），并尊重 `retryAt`——开窗前不空转，不会把 8 次重试额度全耗在等窗口上。「刷新状态」按钮改成先重读、再调 `POST /api/checkin/run {platform:"due"}` 把今天没签成的平台补一刀（新增 `due` 模式）；开关文案从「08:30 静默打卡」改为「后台每 30 分钟补签」（`autoCheckinTime` 其实从未被调度器使用）。
+- **实测**：10:31 手动跑 `qoder-cn` → 两账号各 +100；当天再跑 → `already`（正确）。
+
+### 修复：WebUI 里给 traecode 选模型，一发送就报 `UNSUPPORTED: GUI 通道无法切换请求的模型`
+
+- **根因**：traecode 的模型是客户端 GUI 的会话状态，Hub 侧 `model_selection=false`、带了 `model` 就拒绝。但控制台的 `normalizeCapabilities()` 把这个字段过滤掉了，前端仍按 `MODEL_CATALOG`（21 条）给人选；而且目录里的 id（`deepseek-v4.1-flash`）和 agents.json 的默认值（`DeepSeek-V4.1-Flash`）不是同一个串，等于必错。
+- **修法**：归一化保留 `model_selection`；前端 `agentModelSelectable()` 判定为否时，模型面板只显示「跟随客户端 · <默认模型>」、下拉单选项置空并禁用，`getAgentPrefs()` 强制 `model=''`（不往 Hub 传）；控制台 `taskCapability()` 增加前置守卫，旧客户端硬塞模型时给「模型由客户端界面决定，这里无法切换」而不是裸的 UNSUPPORTED。
+- **实测**：14 个 worker 逐个用非默认模型派发（见下），12 个可切换、`traecode` 不能、`zcode` 被禁用。
+
+### 改进：控制台重启从 90s 降到 9s
+
+`SIGTERM` 后 SSE 长连接让事件循环不空，systemd 只能等 `TimeoutStopSec=90s` 再 SIGKILL（每次改前端都要等一分半）。standalone 入口加了一个 8s 的 unref 兜底定时器：循环空了立刻退，被 SSE 拖住就 8s 后强制退。
+
+### 检查：14 个 worker 的「能不能换模型」（2026-10-22，真实派发）
+
+| Worker | 能否换模型 | 证据 |
+| --- | --- | --- |
+| antigravity / cline / mimocode / minimaxcode / codearts / opencode / qoder / qoder-cn / meoo | ✅ | 用非默认模型跑 `1+1` 均返回答 `2` |
+| codebuddy | 🟡 参数被接受，账号无权 | `400 model [gpt-5.6-luna] is not allowed for user type [personal_free_user]`，属套餐限制 |
+| codebuddy-cn | ⚠️ CLI 支持（`--model glm-5.3` 实测返回 2），但 agents.json 只声明了 1 个模型 | 加别名即可在 WebUI 里选 |
+| github-copilot | ⚠️ CLI 支持 `--model`，但账号只放行 `auto` | 实测 `gpt-5.4` / `claude-sonnet-4.5` 均报 `Model ... is not available` |
+| traecode | ⛔ 不能 | GUI 会话状态，接口改不了；已从 UI 收起 |
+| zcode | ⏸ 控制台禁用 | 未验证 |
+
 ### 修复：Meoo 回答重复成「22」（`message.snapshot` 没按替换语义处理）
 
 - **现象**：`hub_dispatch_cli(agent="meoo", task="1+1=?")` 返回 `22`，答案是 `2` 却打了两遍。

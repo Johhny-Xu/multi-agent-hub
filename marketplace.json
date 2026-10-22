@@ -4,7 +4,7 @@
     {
       "name": "agenthub-workers",
       "source": "./plugins/agenthub-workers",
-      "version": "1.0.16",
+      "version": "1.0.17",
       "description": "Bridge eleven multi-agent-hub workers as native ZCode subagents, with task/result MCP tools, read-only Hub discovery (hub_discover), official login links, concurrent skills, /hub-status, /hub-login and /hub-discover.",
       "displayName": "multi-agent-hub Workers",
       "displayName_i18n": {
