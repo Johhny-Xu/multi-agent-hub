@@ -2833,7 +2833,9 @@ export async function start(context) {
           const task = str(body.task, 20_000, 'task');
           const model = typeof body.model === 'string' && body.model.trim() && !['默认', 'default'].includes(body.model.trim()) ? body.model.trim().slice(0, 120) : undefined;
           const cwd = typeof body.cwd === 'string' && body.cwd.trim() ? body.cwd.trim().slice(0, 500) : undefined;
-          const to = Number(body.timeout_s) > 0 ? Math.min(Number(body.timeout_s), 600) : undefined;
+          // timeout_s 是「无进展超时」而非总时长（长任务随输出自动续期），
+          // 所以这里可以放宽上限；真正的绝对上限由 worker 的 hard_timeout_s 兜住。
+          const to = Number(body.timeout_s) > 0 ? Math.min(Number(body.timeout_s), 21_600) : undefined;
           const portable = await portableAttachments(uploadAttachments(body.attachments));
           const options = { ...body, attachments: portable };
           await requireTaskCapability(agent, model, options);

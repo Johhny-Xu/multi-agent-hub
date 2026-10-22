@@ -23,7 +23,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from command_runtime import atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
+from command_runtime import CLI_HARD_TIMEOUT_SEC, CLI_IDLE_TIMEOUT_SEC, atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
 from state_store import StateFileLock, safe_component
 from result_store import read_result, update_result
 from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task, platform_name, public_model_capabilities, resolve_model
@@ -446,7 +446,10 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
     if agent == "zcode" and model and not prof.get("model_arg"):
         raise ValueError("UNSUPPORTED: ZCode 旧通道不能验证配置模型；请使用 drivers/zcode_rpc.mjs 与 --model，避免静默调用账号当前模型")
     cwd = args.get("cwd") or prof.get("cwd") or None
-    timeout = _positive_seconds(args.get("timeout_s"), 600)
+    # timeout_s 是「无进展预算」: 长任务只要还在出字就不会被切断,
+    # 连续这么久没有任何新输出才判定卡死 (见 async_worker.run_cmd_mode)。
+    timeout = _positive_seconds(args.get("timeout_s"), CLI_IDLE_TIMEOUT_SEC)
+    hard_timeout = _positive_seconds(args.get("hard_timeout_s"), CLI_HARD_TIMEOUT_SEC)
     if not isinstance(cli, list) or not cli:
         raise ValueError("agents.json 的 cli 必须是非空参数数组")
     has_placeholder = any("{task}" in str(c) for c in cli)
@@ -537,6 +540,7 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         try:
             ref = _start_async(agent, "cmd", task,
                                {"cmd": cmd, "callback_url": cb, "cwd": cwd, "timeout_s": timeout,
+                                "hard_timeout_s": hard_timeout,
                                 "attachment_dir": plan["staging"], "attachment_parent": str((STATE / "attachments").resolve()),
                                 "input_file": plan.get("input_file"), "availability_state": str(STATE), "profile_signature": profile_signature(prof),
                                 "public_options": dict(plan["metadata"], model=model)},
@@ -805,7 +809,8 @@ def tool_hub_result_json(args):
     data = _reap_result(_read_result(ref))
     if not data:
         return json.dumps({"ref": ref, "status": "unknown", "text": "未找到任务结果，请核对 ref。"}, ensure_ascii=False)
-    keys = ("ref", "agent", "status", "text", "progress", "exit_code", "updated_at", "model", "thinking", "stream", "attachments", "usage")
+    keys = ("ref", "agent", "status", "text", "progress", "exit_code", "updated_at", "model", "thinking", "stream", "attachments", "usage",
+            "timeout_kind", "partial_text")
     return json.dumps({key: data[key] for key in keys if key in data}, ensure_ascii=False)
 
 
@@ -915,6 +920,9 @@ def _format_result(d):
     if d.get("status") == "running" and d.get("progress"):
         out += f"\n[执行中·受控端界面快照] {str(d['progress'])[:600]}"
     out += f"\n{_truncate(str(text)) or '(尚无文本)'}"
+    if d.get("status") == "timeout" and d.get("partial_text"):
+        # 超时也要把已产生的成果交回去, 否则长任务的几小时输出等于白跑。
+        out += f"\n[超时前最后输出·仅供续跑] {_truncate(str(d['partial_text']))}"
     if d.get("session_id"):
         out += f"\n(继续对话 session_id: {d['session_id']})"
     if d.get("exit_code") is not None:
@@ -1095,11 +1103,14 @@ TOOL_DEFS = [
      ["key", "value"]),
     ("hub_note_get", "读共享笔记。key 留空则列出全部键名。",
      {"key": {"type": "string"}}, []),
-    ("hub_dispatch_cli", "无头派发任务；模型、思考、流式与附件能力按 worker 配置校验，不支持的组合在执行前拒绝。",
+    ("hub_dispatch_cli", "无头派发任务；模型、思考、流式与附件能力按 worker 配置校验，不支持的组合在执行前拒绝。timeout_s 是「无进展超时」：长任务只要还在产出就会续期，不会被总时长一刀切断。",
      {"agent": {"type": "string"}, "task": {"type": "string"},
       "model": {"type": "string", "description": "模型别名或模型ID, 见 hub_list_models"},
       "extra_args": {"type": "array", "items": {"type": "string"}, "description": "追加到命令尾部的额外参数列表"},
-      "cwd": {"type": "string"}, "timeout_s": {"type": "number"}, **OPTIONS_SCHEMA}, ["agent", "task"]),
+      "cwd": {"type": "string"},
+      "timeout_s": {"type": "number", "description": "无进展超时秒数：连续这么久没有任何新输出才判定卡死并回收；仍在输出则自动续期。默认 900"},
+      "hard_timeout_s": {"type": "number", "description": "单任务绝对上限秒数，默认 21600 (6 小时)，只用于兜住永远有输出却永不结束的死循环"},
+      **OPTIONS_SCHEMA}, ["agent", "task"]),
     ("hub_capabilities", "查询 worker 已配置的模型与思考、流式、附件能力；不返回运行环境或凭据。",
      {"agent": {"type": "string"}, "worker": {"type": "string"}, "model": {"type": "string"},
       "refresh": {"type": "boolean", "description": "只清除本机最近失败状态；不登录、不执行推理"}}, []),

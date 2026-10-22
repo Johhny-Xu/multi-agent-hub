@@ -11,6 +11,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：长任务在 600s 处被整组回收（`agent=qoder status=timeout`）
+
+- **现象**：跑十几分钟的 CLI 任务在中途被切断，记为 `⚠️ 任务未完成（timeout）：CLI 任务超时 (>600.0s), 已回收子进程树`。Qoder 最先暴露，但这是 `async_worker.run_cmd_mode` 的公共路径，所有走异步 CLI 的 worker 都一样。
+- **根因**：只有一条 `deadline = 起始 + timeout_s`（默认 600s）的**总时长**判定，与任务是否仍在干活无关；各层默认值还各说各话（hub 600 / MCP dispatch 900 / console `/api/dispatch` 夹到 600），长任务必撞。
+- **修法**：超时改成分层（常量集中在 `hub/command_runtime.py`）：
+  - `timeout_s` 改为**无进展预算**：连续 `timeout_s` 秒没有任何新字节写入才判卡死，只要还在输出就自动续期——长任务不再被总时长切断（默认 900s，`AGENTHUB_CLI_IDLE_TIMEOUT_S` 可调）。
+  - 新增 `hard_timeout_s` 绝对上限（默认 6 小时，`AGENTHUB_CLI_HARD_TIMEOUT_S` 可调），只兜住「永远有输出、永远不结束」的刷屏型死循环。
+  - 进度信号从「解析文本变化」改为「stdout/stderr 字节增长」：CLI 把进度打在 stderr、或只吐结构化事件时，不会被误判卡死。
+  - 无输出期间每 60s 刷新 `updated_at`（心跳），避免 Hub 的 `HUB_STALE_RUNNING_SEC`（30 分钟无进展）把「正在思考」判成 worker 已死。
+  - 超时不再丢成果：`status=timeout` 时把最后 ≤20000 字符写入 `partial_text`，`hub_result` / `hub_result_json` 都会带出，可据此续跑。
+  - `hub_dispatch_cli` 新增 `hard_timeout_s`；MCP 与 console 的默认值/文案对齐（`/api/dispatch` 上限 600 → 21600）。
+- **验证**：`tests/runtime_regressions.py` 新增 4 例（持续输出不被切、静默按 idle 超时并保留 partial、硬上限生效、timeout 落盘字段）。实测：`timeout_s=1` 下持续输出 4.8s 的任务返回 `completed`；静默任务 2s 判 `timeout`，`partial_text` 保住超时前输出。
+
 ## [1.0.17] - 2026-10-22
 
 ### 修复：Qoder CN 早上 0:00–10:00 谎报「已签到」

@@ -31,7 +31,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from command_runtime import positive_timeout, spawn_owned, terminate_owned
+from command_runtime import CLI_HARD_TIMEOUT_SEC, CLI_IDLE_TIMEOUT_SEC, positive_timeout, spawn_owned, terminate_owned
 from result_store import read_result as stored_result, update_result
 from task_contract import cleanup_attachments
 from output_parser import parse_output, parse_usage
@@ -76,6 +76,10 @@ DOM_DRIVER_ZCODE = (
 TRAE_TIMEOUT = 900
 ZCODE_TIMEOUT = 1000
 PROGRESS_INTERVAL = 6
+# 无新输出时也定期刷新 updated_at, 避免 Hub 的陈旧判定 (HUB_STALE_RUNNING_SEC)
+# 把「正在思考、只是还没打印」误判成 worker 已死。
+HEARTBEAT_INTERVAL = 60
+PARTIAL_LIMIT = 20000
 
 
 def save(ref, only_if_running=False, **kv):
@@ -100,7 +104,7 @@ def load_task_meta(path):
         d = json.loads(raw)
     except ValueError:
         return {"task": raw, "cmd": None, "callback_url": None, "new_chat": False,
-                "cwd": None, "timeout_s": None, "env": None}
+                "cwd": None, "timeout_s": None, "hard_timeout_s": None, "env": None}
     if isinstance(d, dict):
         return {
             "task": d.get("task"),
@@ -109,6 +113,7 @@ def load_task_meta(path):
             "new_chat": d.get("new_chat") is True,
             "cwd": d.get("cwd") or None,
             "timeout_s": d.get("timeout_s"),
+            "hard_timeout_s": d.get("hard_timeout_s"),
             "env": d.get("env"),
             "attachment_dir": d.get("attachment_dir"),
             "attachment_parent": d.get("attachment_parent"),
@@ -124,7 +129,16 @@ def load_task_meta(path):
 
 
 class CommandTimeout(RuntimeError):
-    pass
+    """任务超时。
+
+    kind: idle (长时间无新输出) / hard (达到绝对上限)
+    partial: 超时前已产生的输出尾部, 供落盘后续跑; 不是最终答案。
+    """
+
+    def __init__(self, message, *, kind="timeout", partial=""):
+        super().__init__(message)
+        self.kind = kind
+        self.partial = partial or ""
 
 
 class CommandCancelled(RuntimeError):
@@ -335,8 +349,16 @@ def _read_cli_stderr(path):
     return tail.decode("utf-8", errors="replace").strip(), error
 
 
-def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None, input_file=None, watch_result=False):
-    """执行 CLI 命令并回传输出尾部作为进度; 结束后整组回收子进程。"""
+def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=CLI_IDLE_TIMEOUT_SEC, env=None,
+                 input_file=None, watch_result=False, hard_timeout_s=None):
+    """执行 CLI 命令并回传输出尾部作为进度; 结束后整组回收子进程。
+
+    超时分两层, 不再是「总时长一刀切」(2026-10-22):
+      - timeout_s: 无进展预算。连续这么多秒没有任何新输出才判定卡死并回收;
+        只要输出还在增长就续期, 所以跑得久但一直在干活的任务不会被切断。
+      - hard_timeout_s: 绝对上限 (默认 CLI_HARD_TIMEOUT_SEC), 只兜住
+        「永远有输出、永远不结束」的刷屏型死循环。
+    """
     tmpout = taskfile + ".out"
     tmperr = taskfile + ".err"
     proc = None
@@ -346,32 +368,67 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=600, env=None, inp
     child_env["PYTHONUTF8"] = "1"
     if env:
         child_env.update({str(key): str(value) for key, value in env.items()})
-    timeout_s = positive_timeout(timeout_s, 600)
+    idle_budget = positive_timeout(timeout_s, CLI_IDLE_TIMEOUT_SEC)
+    hard_budget = positive_timeout(hard_timeout_s, CLI_HARD_TIMEOUT_SEC)
     try:
         with open(tmpout, "w", encoding="utf-8") as fo, open(tmperr, "w", encoding="utf-8") as fe:
             if input_file:
                 input_stream = open(input_file, "rb")
             proc = spawn_owned(cmd_list, cwd=cwd, env=child_env, stdin=input_stream or subprocess.DEVNULL,
                                stdout=fo, stderr=fe)
-            deadline = time.monotonic() + timeout_s
+            started = time.monotonic()
+            hard_deadline = started + hard_budget
+            idle_deadline = started + idle_budget
+            heartbeat_at = started
             last = ""
+            last_written = 0
+
+            def timeout_error(message, kind):
+                partial = last
+                try:
+                    partial = _read_cli_output(tmpout)["text"][-PARTIAL_LIMIT:] or partial
+                except OSError:
+                    pass
+                return CommandTimeout(message, kind=kind, partial=partial)
+
             while proc.poll() is None:
                 if watch_result:
                     current = read_result(ref)
                     if current and current.get("status") != "running":
                         raise CommandCancelled("任务已有终态，已停止其剩余子进程；保留原 ref。")
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise CommandTimeout(f"CLI 任务超时 (>{timeout_s}s), 已回收子进程树")
+                now = time.monotonic()
+                if now >= hard_deadline:
+                    raise timeout_error(
+                        f"CLI 任务达到硬上限 (>{hard_budget:.0f}s, 输出还在增长却始终不结束), 已回收子进程树",
+                        "hard")
+                if now >= idle_deadline:
+                    raise timeout_error(
+                        f"CLI 任务已 {idle_budget:.0f}s 没有任何新输出, 判定卡死, 已回收子进程树；"
+                        f"确实只是生成慢的任务请调大 timeout_s 或 AGENTHUB_CLI_IDLE_TIMEOUT_S",
+                        "idle")
                 try:
-                    proc.wait(timeout=min(0.1, remaining))
+                    proc.wait(timeout=min(0.1, max(0.0, idle_deadline - now)))
                 except subprocess.TimeoutExpired:
                     pass
                 try:
-                    tail = _read_cli_output(tmpout)["text"][-20000:]
-                    if tail and tail != last:
+                    # 进度信号用「写入字节数」而不是解析后的文本：CLI 把进度打在
+                    # stderr、或只吐结构化事件时，解析文本可能长时间不变，但进程
+                    # 确实在干活，不能因此被判定卡死。
+                    written = os.path.getsize(tmpout) + os.path.getsize(tmperr)
+                    tail = _read_cli_output(tmpout)["text"][-PARTIAL_LIMIT:]
+                    if written > last_written:
+                        # 有新输出 = 还在干活: 续期, 这就是长任务不再被切断的地方。
+                        last_written = written
+                        idle_deadline = time.monotonic() + idle_budget
+                        heartbeat_at = time.monotonic()
+                    if tail != last:
                         last = tail
                         save(ref, only_if_running=True, progress=tail, exit_code=None)
+                    elif time.monotonic() - heartbeat_at >= HEARTBEAT_INTERVAL:
+                        # 进程活着但暂时安静(模型在思考/工具在跑): 只刷新 updated_at,
+                        # 不改 progress, 免得被 Hub 的陈旧判定当成 worker 已死。
+                        save(ref, only_if_running=True, heartbeat=time.time())
+                        heartbeat_at = time.monotonic()
                 except OSError:
                     pass
         diagnostic, terminal_error = _read_cli_stderr(tmperr)
@@ -477,7 +534,9 @@ def main():
         elif mode == "cmd":
             cmd_list = cmd if isinstance(cmd, list) else json.loads(task)
             text, code = run_cmd_mode(cmd_list, taskfile, ref, cwd=meta.get("cwd"),
-                                      timeout_s=meta.get("timeout_s", 600), env=meta.get("env"), input_file=meta.get("input_file"), watch_result=True)
+                                      timeout_s=meta.get("timeout_s"), env=meta.get("env"),
+                                      input_file=meta.get("input_file"), watch_result=True,
+                                      hard_timeout_s=meta.get("hard_timeout_s"))
             save(ref, only_if_running=True, status="completed" if code == 0 else "error", text=text or "(无输出)",
                  exit_code=code, progress=None)
             outcome = 0 if code == 0 else 1
@@ -491,7 +550,15 @@ def main():
         push_callback(callback_url, read_result(ref))
     except CommandTimeout as e:
         outcome = 1
-        save(ref, only_if_running=True, status="timeout", text=str(e), progress=None)
+        partial = str(getattr(e, "partial", "") or "")
+        fields = {"status": "timeout", "text": str(e), "progress": None,
+                  "timeout_kind": getattr(e, "kind", "timeout")}
+        if partial:
+            # 长任务的成果不能被一句「超时」抹掉: 保留最后一段输出, 供续跑或人工接续。
+            fields["partial_text"] = partial
+            fields["text"] = (f"{e}\n已保留超时前最后 {len(partial)} 字符输出 (result.partial_text)，"
+                              f"可据此续跑；请勿重复派发同一任务。")
+        save(ref, only_if_running=True, **fields)
         push_callback(callback_url, read_result(ref))
     except Exception as e:  # noqa: BLE001 - 任何异常都必须落盘, 否则调用方会永久轮询
         outcome = 1

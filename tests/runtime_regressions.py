@@ -132,6 +132,79 @@ class RuntimeRegressions(unittest.TestCase):
                     worker.run_cmd_mode([sys.executable], str(self.base / "fixture.task"), "fixture", timeout_s=value)
                 spawn.assert_not_called()
 
+    def test_cli_that_keeps_printing_is_not_cut_by_the_idle_budget(self):
+        """长任务只要还在输出就不判超时: timeout_s 是「无进展」预算, 不是总时长。
+
+        回归: 旧实现 deadline = 起始 + 600s 一把刀, Qoder 这类跑十几分钟的
+        CLI 会在干到一半时被整组回收 (agent=qoder status=timeout)。
+        """
+        script = self.base / "chatty.py"
+        script.write_text(
+            "import time\n"
+            "for index in range(20):\n"
+            "    print(f'step {index}', flush=True)\n"
+            "    time.sleep(0.12)\n"
+            "print('DONE', flush=True)\n",
+            encoding="utf-8")
+        with patch.object(worker, "RESULTS", str(self.base / "results")):
+            worker.save("fixture", status="running")
+            began = time.monotonic()
+            text, code = worker.run_cmd_mode(
+                [sys.executable, str(script)], str(self.base / "task"), "fixture", timeout_s=1)
+            elapsed = time.monotonic() - began
+        self.assertEqual(code, 0)
+        self.assertIn("DONE", text)
+        # 总耗时远超 idle 预算, 但一直在出字, 所以不该被回收。
+        self.assertGreater(elapsed, 1.5)
+
+    def test_silent_cli_times_out_on_idle_budget_and_keeps_partial_output(self):
+        script = self.base / "silent.py"
+        script.write_text(
+            "import time\nprint('PARTIAL-ANSWER', flush=True)\ntime.sleep(30)\n", encoding="utf-8")
+        with patch.object(worker, "RESULTS", str(self.base / "results")):
+            worker.save("fixture", status="running")
+            began = time.monotonic()
+            with self.assertRaises(worker.CommandTimeout) as caught:
+                worker.run_cmd_mode([sys.executable, str(script)], str(self.base / "task"), "fixture", timeout_s=1.5)
+            elapsed = time.monotonic() - began
+        self.assertLess(elapsed, 12)
+        self.assertEqual(caught.exception.kind, "idle")
+        self.assertIn("没有任何新输出", str(caught.exception))
+        self.assertIn("PARTIAL-ANSWER", caught.exception.partial)
+
+    def test_hard_cap_stops_a_cli_that_never_ends_while_printing(self):
+        script = self.base / "forever.py"
+        script.write_text(
+            "import time\nwhile True:\n    print('tick', flush=True)\n    time.sleep(0.05)\n",
+            encoding="utf-8")
+        with patch.object(worker, "RESULTS", str(self.base / "results")):
+            worker.save("fixture", status="running")
+            began = time.monotonic()
+            with self.assertRaises(worker.CommandTimeout) as caught:
+                worker.run_cmd_mode([sys.executable, str(script)], str(self.base / "task"), "fixture",
+                                    timeout_s=30, hard_timeout_s=2)
+            elapsed = time.monotonic() - began
+        self.assertLess(elapsed, 12)
+        self.assertEqual(caught.exception.kind, "hard")
+
+    def test_timeout_persists_partial_text_and_marks_the_kind(self):
+        meta = {"task": None, "cmd": [sys.executable, "-c", "pass"], "callback_url": None,
+                "timeout_s": .2, "hard_timeout_s": 5}
+        with patch.object(worker, "RESULTS", str(self.base / "results")):
+            worker.save("fixture", status="running")
+            with patch.object(worker, "load_task_meta", return_value=meta), \
+                    patch.object(worker, "push_callback"), \
+                    patch.object(worker, "cleanup_taskfile"), \
+                    patch.object(sys, "argv", ["worker", "cmd", "fixture", "unused"]), \
+                    patch.object(worker, "run_cmd_mode", side_effect=worker.CommandTimeout(
+                        "CLI 任务已 900s 没有任何新输出, 判定卡死", kind="idle", partial="PARTIAL-ANSWER")):
+                self.assertEqual(worker.main(), 1)
+            result = json.loads((self.base / "results" / "fixture.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["status"], "timeout")
+        self.assertEqual(result["timeout_kind"], "idle")
+        self.assertEqual(result["partial_text"], "PARTIAL-ANSWER")
+        self.assertIn("可据此续跑", result["text"])
+
     def test_unknown_mode_never_drives_zcode(self):
         meta = {"task": "synthetic", "cmd": None, "callback_url": None}
         with patch.object(sys, "argv", ["worker", "typo", "fixture", "unused"]), patch.object(worker, "load_task_meta", return_value=meta), patch.object(worker, "save"), patch.object(worker, "read_result", return_value={}), patch.object(worker, "cleanup_taskfile"), patch.object(worker, "zcode_run", return_value="synthetic") as driver:

@@ -32,7 +32,7 @@ const TOOLS = [
       properties: {
         worker: { type: "string", description: "worker 名或简称（如 agy / cb / trae）" },
         task: { type: "string", description: "任务文本，需自包含" },
-        timeout_s: { type: "number", exclusiveMinimum: 0, maximum: 86400, default: 300, description: "含派发的总等待上限秒数，默认 300" },
+        timeout_s: { type: "number", exclusiveMinimum: 0, maximum: 86400, default: 300, description: "本次阻塞等待的总上限秒数，默认 300；超时后返回 running 与原 ref，任务不会被中断" },
         ...TASK_OPTIONS,
       },
       required: ["worker", "task"],
@@ -74,7 +74,7 @@ const TOOLS = [
       properties: {
         worker: { type: "string", description: "worker 名或简称" },
         task: { type: "string", description: "任务文本，需自包含" },
-        timeout_s: { type: "number", exclusiveMinimum: 0, maximum: 86400, default: 900, description: "worker 侧任务超时秒数，默认 900" },
+        timeout_s: { type: "number", exclusiveMinimum: 0, maximum: 86400, default: 900, description: "worker 侧「无进展超时」秒数：连续这么久没有新输出才判定卡死，仍在输出会自动续期，默认 900" },
         ...TASK_OPTIONS,
       },
       required: ["worker", "task"],

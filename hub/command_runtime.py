@@ -20,6 +20,25 @@ from pathlib import Path
 OWNED_POSIX_GROUP_ENV = "AGENTHUB_OWNED_POSIX_GROUP"
 
 
+def env_seconds(name, default):
+    """读取秒级环境变量; 空值/非法值退回默认值, 不让服务因一处配置起不来。"""
+    try:
+        value = float(os.environ.get(name, "").strip())
+    except ValueError:
+        return float(default)
+    return value if math.isfinite(value) and value > 0 else float(default)
+
+
+# 长任务超时策略 (秒) —— 分两层, 不再用「总时长」一刀切:
+#   CLI_IDLE_TIMEOUT_SEC: 连续多少秒没有任何新输出才判定卡死。
+#       仍在吐字的长任务会不断续期, 因此不会在第 10 分钟被硬切断;
+#       真正的静默卡死 (进程吊住不出结果) 仍在预算内被回收。
+#   CLI_HARD_TIMEOUT_SEC: 单个任务的绝对上限, 只用来兜住「刷屏型死循环」
+#       这类永远有输出、但永远不结束的进程, 默认 6 小时。
+CLI_IDLE_TIMEOUT_SEC = env_seconds("AGENTHUB_CLI_IDLE_TIMEOUT_S", 900)
+CLI_HARD_TIMEOUT_SEC = env_seconds("AGENTHUB_CLI_HARD_TIMEOUT_S", 21600)
+
+
 def prepare_command(argv, env=None):
     if isinstance(argv, (str, bytes)) or not argv:
         raise ValueError("command must be a nonempty argument list")
