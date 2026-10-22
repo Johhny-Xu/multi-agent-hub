@@ -17988,6 +17988,23 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     phase = 'idle';
   }
 
+  // 空中层是 position:fixed 的独立图层，所在面板 hidden 了它也不会跟着消失。
+  // 切到设置页时如果她正在挣扎/坠落/擦汗，必须主动收尾，否则动画会继续盖在设置页上；
+  // rAF 与擦汗定时器也要一起取消，不然 step() 还会把坐标写回去。
+  function abortAir() {
+    if (phase === 'idle' && !air.classList.contains('is-on')) return;
+    cancelAnimationFrame(rafId);
+    clearTimeout(wipeTimer);
+    rafId = 0;
+    wipeTimer = 0;
+    holding = false;
+    dragging = false;
+    phase = 'idle';
+    air.classList.remove('is-on');
+    dock.classList.remove('is-holding');
+    showAir(null);
+  }
+
   // style.left 是相对 offsetParent（#chat-col）的，落点算的是视口坐标，必须换算
   function dockLeftFromViewportX(viewportX) {
     var op = dock.offsetParent;
@@ -18026,6 +18043,8 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     var t0 = (window.performance || Date).now();
     cancelAnimationFrame(rafId);
     function step(now) {
+      // 坠落途中被切到设置页：立刻停住，别把 fixed 定位的俯冲动画留在设置页上。
+      if (!mascotOnScreen()) { abortAir(); return; }
       var p = Math.min(1, (now - t0) / dur);
       var e = p * p;                       // 加速下落
       airY = fromY + (restY - fromY) * e;
@@ -18059,6 +18078,17 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     var r = dock.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   }
+
+  // 面板切走（对话 → 设置/任务/笔记）时立刻收掉空中层。
+  // IntersectionObserver 只负责暂停常态层视频，管不到 fixed 定位的坠落层；
+  // 而 hold / wipe 两个阶段没有 rAF 兜底，必须在这里收尾。
+  (function watchPanelSwitch() {
+    var panelChat = document.getElementById('panel-chat');
+    if (!panelChat || !window.MutationObserver) return;
+    new MutationObserver(function () {
+      if (phase !== 'idle' && !mascotOnScreen()) abortAir();
+    }).observe(panelChat, { attributes: true, attributeFilter: ['hidden', 'class'] });
+  })();
 
   function drop() {
     if (phase !== 'idle' || !mascotOnScreen()) return;
@@ -18130,6 +18160,7 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
     }
     bubble.classList.remove('is-on');
     pauseVideo();
+    abortAir();
     if (!animate) {
       dock.hidden = true;
       return;

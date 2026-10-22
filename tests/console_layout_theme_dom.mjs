@@ -227,3 +227,39 @@ test('model popover, scroll bottom icon, thinking effort format, and card head s
   assert.ok(html.includes('.current-agent-pill .agent-avatar-sm') && html.includes('border-radius: 6.5px !important;'), 'pill avatar has squircle border radius');
 });
 
+
+test('mascot air layer is torn down when the chat panel is switched away', () => {
+  // 回归：看板娘下坠途中点「设置页」，fixed 定位的空中层仍盖在设置页上继续播放。
+  // abortAir() 是唯一收尾入口，必须同时停 rAF、清擦汗定时器、关视频、复位状态。
+  const start = html.indexOf('  function abortAir() {');
+  assert.notEqual(start, -1, 'abortAir must be defined');
+  const end = html.indexOf('\n  }\n', start);
+  const code = html.slice(start, end + 5);
+
+  const airClasses = new Set(['is-on']);
+  const dockClasses = new Set(['is-holding']);
+  const air = { classList: { contains: (name) => airClasses.has(name), remove: (name) => airClasses.delete(name) } };
+  const dock = { classList: { remove: (name) => dockClasses.delete(name) } };
+  const calls = { frames: [], timers: [], airs: [] };
+  const context = vm.createContext({
+    air, dock, phase: 'fall', rafId: 7, wipeTimer: 9, holding: true, dragging: true,
+    cancelAnimationFrame: (id) => calls.frames.push(id),
+    clearTimeout: (id) => calls.timers.push(id),
+    showAir: (which) => calls.airs.push(which),
+  });
+  vm.runInContext(code, context);
+  context.abortAir();
+
+  assert.deepEqual(calls.frames, [7], 'pending fall frame must be cancelled');
+  assert.deepEqual(calls.timers, [9], 'pending wipe timer must be cleared');
+  assert.deepEqual(calls.airs, [null], 'all air videos must be switched off');
+  assert.equal(context.phase, 'idle');
+  assert.equal(context.holding, false);
+  assert.equal(context.dragging, false);
+  assert.equal(airClasses.has('is-on'), false, 'air layer must fade out');
+  assert.equal(dockClasses.has('is-holding'), false, 'dock must leave the holding state');
+
+  // 坠落每帧都要复查「她还在不在屏幕上」，hold / wipe 阶段则靠面板 MutationObserver 收尾。
+  assert.ok(html.includes('if (!mascotOnScreen()) { abortAir(); return; }'), 'fall loop must abort off-screen');
+  assert.ok(html.includes("attributeFilter: ['hidden', 'class']"), 'panel switch must be observed');
+});

@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：看板娘下坠时切到设置页，动画还留在页面上
+
+- **现象**：把她拎起来松手（或自动彩蛋）下坠的 1～2 秒内点「系统设置」，她已经掉到设置页上继续播俯冲／擦汗。
+- **根因**：空中层 `#mascot-air` 是 `position: fixed; z-index: 80` 的独立图层，`#panel-chat` 被 `hidden` 后它不会跟着消失；下坠由 rAF 驱动、擦汗靠定时器，两者都不看面板状态，`mascotOnScreen()` 原来只在「触发掉落」前判一次。
+- **修法**：新增 `abortAir()` 统一收尾（取消 rAF、清擦汗定时器、关空中层视频、退出 holding 态）；坠落每帧复查 `mascotOnScreen()`，hold／wipe 阶段用 `MutationObserver` 监听 `#panel-chat` 的 `hidden`／`class`，一离开对话面板立刻收掉；`HubMascot.hide()` 也走同一收尾。
+- **验证**：`tests/console_layout_theme_dom.mjs` 新增回归（`abortAir` 状态复位 + 帧内守卫 + 面板观察器）；无头 Edge 跑合成夹具实测：下坠中 `air.is-on=true`，点设置后 `air.is-on=false`、空中层可见视频 0 个，hold 阶段同样。
+
 ### 修复：长任务在 600s 处被整组回收（`agent=qoder status=timeout`）
 
 - **现象**：跑十几分钟的 CLI 任务在中途被切断，记为 `⚠️ 任务未完成（timeout）：CLI 任务超时 (>600.0s), 已回收子进程树`。Qoder 最先暴露，但这是 `async_worker.run_cmd_mode` 的公共路径，所有走异步 CLI 的 worker 都一样。
