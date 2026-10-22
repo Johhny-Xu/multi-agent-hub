@@ -75,11 +75,14 @@ async function main() {
   const ak = readAk();
   const project = args.project || process.env.MEOO_PROJECT_URL_ID || ensureProject();
 
+  // 必须等 run 结束再一次性输出：message.snapshot 是整段替换语义，
+  // 边收边打到 stdout 时无法撤回，上游一旦重发/覆盖就会拼成 "66"。
   const r = await runMeooAgent({
     ak, project, message: task, model: args.model, tier: args.tier,
-    onText: (t) => process.stdout.write(t),
   });
-  if (!r.text) process.stdout.write('(无文本输出)\n');
+  if (r.text) process.stdout.write(r.text.endsWith('\n') ? r.text : `${r.text}\n`);
+  else process.stdout.write('(无文本输出)\n');
+  if (r.prompt) process.stderr.write(`[meoo] 需要交互（OpenAPI 不能自动回复）：${r.prompt}\n`);
   process.stderr.write(`\n[meoo] run=${r.runId} status=${r.status} model=${r.model}\n`);
   process.exit(r.status === 'completed' ? 0 : 1);
 }

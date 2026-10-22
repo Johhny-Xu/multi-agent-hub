@@ -11,6 +11,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：Meoo 回答重复成「22」（`message.snapshot` 没按替换语义处理）
+
+- **现象**：`hub_dispatch_cli(agent="meoo", task="1+1=?")` 返回 `22`，答案是 `2` 却打了两遍。
+- **根因**：官方事件流的文本 reducer 是 **`message.delta` 追加 / `message.snapshot` 整段替换**。`runMeooAgent()` 只累加 delta，把 snapshot 的 `content` 当成「没有 delta 就跳过」——上游发过一遍 delta 再发 snapshot 覆盖时，旧 buffer 不会被替换。
+  用 auto 模型抓到的真实序列：`delta="6"` → `delta="6"` → `delta="\n\n"` → `message.snapshot content="6"` → `run.completed`，只认 delta 就是 `66`。
+- **修法**：按官方 reducer 实现（snapshot 赋值替换、delta 追加）；`meoo_agent_cli.mjs` 不再边收边写 stdout，改成 run 结束后一次性输出（管道里的增量收不回来，先打出去就必然重复）。
+  顺带识别 `run.input_required`：以前遇到 Agent 反问会静默等到 300s 超时，现在直接带 `prompt` 退出并在 stderr 说明「OpenAPI 不能自动回复」。
+- **实测**：`hub_dispatch_cli(agent="meoo", task="只回答一个数字：5+5=?")` → `10`（修复前 `1010`）；直接跑 CLI `7+7` → `14`。
+
 ### 修复：`hub_dispatch_cli` 派发 traecode 报「未配置 CLI」
 - **现象**：WebUI 里能正常和 TraeCode 对话，但通过 MCP `hub_dispatch_cli(agent="traecode")` 派发会直接返回「traecode 未配置 CLI (cli 为 null)」。
 - **根因**：traecode / zcode 的 `cli` 本来就是 null，它们走的是**专用通道**（`trae_delegate` / `zcode_delegate`，GUI 驱动）。通用派发函数只认 `cli`，没做转发。

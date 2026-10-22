@@ -47,8 +47,29 @@ async function pickModel(ak, project, want) {
   return j?.models?.[0]?.id || 'auto';
 }
 
-/** 起 Run 并消费 SSE，返回 { text, status, runId } */
-export async function runMeooAgent({ ak, project, message, model = '', tier = 'standard', onText = null, timeoutMs = 300000 }) {
+/**
+ * 官方文本 reducer：`message.delta` 追加、`message.snapshot` 整段替换。
+ * snapshot 是「当前回复的完整文本」，不是增量 —— 当成增量累加就会拼出 "66"。
+ * 纯函数，便于单测（tests/meoo_agent_text.test.mjs）。
+ */
+export function reduceAgentText(text, type, payload) {
+  if (type === 'message.delta') {
+    const d = payload?.delta;
+    return typeof d === 'string' ? text + d : text;
+  }
+  if (type === 'message.snapshot') {
+    const c = payload?.content;
+    return typeof c === 'string' ? c : text;
+  }
+  return text;
+}
+
+/**
+ * 起 Run 并消费 SSE，返回 { text, status, runId, model, prompt }
+ * onText(delta)      —— 实时增量，仅用于展示；调用方自己决定要不要流式输出
+ * onReplace(content) —— snapshot 整段替换时回调，流式场景据此重置展示
+ */
+export async function runMeooAgent({ ak, project, message, model = '', tier = 'standard', onText = null, onReplace = null, timeoutMs = 300000 }) {
   const chosen = await pickModel(ak, project, model);
   const start = await fetch(`${BASE}/projects/${project}/agent/runs`, {
     method: 'POST',
@@ -74,6 +95,7 @@ export async function runMeooAgent({ ak, project, message, model = '', tier = 's
   let buf = '';
   let text = '';
   let status = 'running';
+  let prompt = '';
   const TERMINAL = ['run.completed', 'run.failed', 'run.canceled', 'run.interrupted', 'run.superseded'];
 
   try {
@@ -91,14 +113,19 @@ export async function runMeooAgent({ ak, project, message, model = '', tier = 's
         try { payload = JSON.parse(dataLine); } catch { continue; }
         const type = name || payload?.type || '';
         if (type === 'message.delta' || type === 'message.snapshot') {
-          const t = payload?.delta ?? payload?.content ?? payload?.text ?? '';
-          if (typeof t === 'string' && t) {
-            if (type === 'message.delta') { text += t; if (onText) onText(t); }
+          const next = reduceAgentText(text, type, payload);
+          if (next !== text) {
+            if (type === 'message.snapshot') { text = next; if (onReplace) onReplace(next); }
+            else { text = next; if (onText) onText(payload.delta); }
           }
+        } else if (type === 'run.input_required') {
+          prompt = String(payload?.action?.prompt || payload?.detail || '').slice(0, 300);
+          status = 'input_required';
+          break;
         }
         if (TERMINAL.includes(type)) { status = type.replace('run.', ''); break; }
       }
-      if (TERMINAL.includes(`run.${status}`)) break;
+      if (status !== 'running') break;
     }
   } catch (e) {
     if (e.name !== 'AbortError') throw e;
@@ -107,7 +134,7 @@ export async function runMeooAgent({ ak, project, message, model = '', tier = 's
     clearTimeout(timer);
     try { ctl.abort(); } catch { /* ignore */ }
   }
-  return { text, status, runId, model: chosen };
+  return { text, status, runId, model: chosen, prompt };
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
@@ -118,6 +145,9 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   }
   const ak = readAk();
   process.stdout.write(`▶ project=${args.project} model=${args.model || 'auto'} tier=${args.tier}\n`);
-  const r = await runMeooAgent({ ak, project: args.project, message: args.message, model: args.model, tier: args.tier, onText: (t) => process.stdout.write(t) });
-  process.stdout.write(`\n\n✔ 结束：${r.status}（run_id=${r.runId}）\n`);
+  // 不边跑边打：snapshot 是整段替换，先打出去的增量收不回来（会变 "66"）。
+  const r = await runMeooAgent({ ak, project: args.project, message: args.message, model: args.model, tier: args.tier });
+  process.stdout.write(`${r.text}\n`);
+  if (r.prompt) process.stdout.write(`⚠ 需要交互：${r.prompt}\n`);
+  process.stdout.write(`\n✔ 结束：${r.status}（run_id=${r.runId}）\n`);
 }
