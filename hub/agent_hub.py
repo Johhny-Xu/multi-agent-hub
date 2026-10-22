@@ -407,6 +407,12 @@ def tool_hub_dispatch_cli(args):
     if not task:
         raise ValueError("缺少 task")
     if not cli:
+        # 有些 worker（traecode / zcode）的 cli 是 null，但走的是专用通道（GUI 驱动）。
+        # 以前这里直接报「未配置 CLI」，于是 WebUI 能对话、MCP 派发却失败 —— 现在自动转专用通道。
+        dedicated = {"traecode": tool_trae_delegate, "zcode": tool_zcode_delegate}
+        forward = dedicated.get(agent)
+        if forward is not None:
+            return forward(dict(args, task=task))
         return (f"{agent} 未配置 CLI (agents.json 中 cli 为 null)。"
                 f"确认该工具的无头调用命令后, 填入 agents.json 的 cli 字段即可。")
     model = resolve_model(prof, args.get("model"))

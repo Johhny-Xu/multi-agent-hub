@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：`hub_dispatch_cli` 派发 traecode 报「未配置 CLI」
+- **现象**：WebUI 里能正常和 TraeCode 对话，但通过 MCP `hub_dispatch_cli(agent="traecode")` 派发会直接返回「traecode 未配置 CLI (cli 为 null)」。
+- **根因**：traecode / zcode 的 `cli` 本来就是 null，它们走的是**专用通道**（`trae_delegate` / `zcode_delegate`，GUI 驱动）。通用派发函数只认 `cli`，没做转发。
+- **修法**：`tool_hub_dispatch_cli` 在 `cli` 为空时先查专用通道表，命中就 `forward(dict(args, task=task))`，只有真的没有通道才报「未配置 CLI」。
+- **实测**：`hub_dispatch_cli(agent="traecode", task="1+1=?")` → `status=completed`，返回 `2`，并带 `session_id` 可继续对话。
+
 ### 运维：hub 运行时从 Python 3.12.3 升到 3.14.8
 - 服务器是 Ubuntu 24.04 + `/usr/bin/python3` 3.12.3，系统包升级要 root（无免密 sudo），改用 **uv 用户态安装** 3.14.8。
 - hub 的 ExecStart 被 drop-in（`agent-hub.service.d/90-multi-agent-hub-codearts.conf`）覆盖，改主单元无效；已改 drop-in 并备份 `.bak-20261022`。
