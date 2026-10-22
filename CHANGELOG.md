@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 运维：hub 运行时从 Python 3.12.3 升到 3.14.8
+- 服务器是 Ubuntu 24.04 + `/usr/bin/python3` 3.12.3，系统包升级要 root（无免密 sudo），改用 **uv 用户态安装** 3.14.8。
+- hub 的 ExecStart 被 drop-in（`agent-hub.service.d/90-multi-agent-hub-codearts.conf`）覆盖，改主单元无效；已改 drop-in 并备份 `.bak-20261022`。
+- hub 纯标准库，换解释器无需重建 venv；重启后 MCP 正常、snapshot 仍是 14 个 agent。
+- 回滚方式见 `docs/HANDOVER_20261021.md` 第七节。
+
 ### 改进：Meoo 头像换成官方图标
 - 从 meoo.com 的 `<link rel="icon">` 拿到 184×184 PNG（`gw.alicdn.com`），压成 **64×64 webp（2 KB）** 后 base64 内联。
 - 页面没有静态资源路由，图标只能内联（和看板娘素材同一个原因）。
