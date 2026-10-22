@@ -295,6 +295,25 @@
         "3.1f": "minimax/MiniMax-M3.1-Flash",
         "m3": "minimax/MiniMax-M3"
       }
+    },
+    "meoo": {
+      "role": "Meoo 秒悟 Agent（阿里云 Agent OpenAPI）",
+      "description": "走 https://meoo.com/open/v1 的 Agent Run + SSE，用账号 AK 鉴权，不需要本地客户端；project 复用 ~/.config/agenthub-meoo/project.env（没有会自动建一个）。",
+      "cli": [
+        "node",
+        "/PATH/TO/multi-agent-hub/scripts/meoo_agent_cli.mjs",
+        "--task",
+        "{task}"
+      ],
+      "model_arg": "--model",
+      "models": {
+        "default": "auto",
+        "q38f": "qwen3.8-flash",
+        "q37p": "qwen3.7-plus",
+        "ds41f": "deepseek-v4.1-flash-1017",
+        "kimi": "moonshot/kimi-k3",
+        "glm53f": "bigmodel/glm-5.3-flash"
+      }
     }
   }
 }

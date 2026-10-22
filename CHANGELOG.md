@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 新增：Meoo 作为可派发的 Worker（走 Agent OpenAPI，不是 CLI）
+- Meoo 的 CLI 没有对话能力，但 **Agent OpenAPI 有**：`POST /open/v1/projects/{id}/agent/runs` + SSE，用账号 AK 直接鉴权。
+- 新增 `scripts/meoo_agent_cli.mjs`：把 hub 的 `{task}` 转成一次 Run，把文本结果打到 stdout，退出码按 `run.completed` 判定 ——
+  这样 meoo 能像 qoder / opencode 一样被 hub 当 Worker 调度（后端是 HTTP，接口是 CLI）。
+- project 自动管理：优先 `--project` → `MEOO_PROJECT_URL_ID` → `~/.config/agenthub-meoo/project.env` → 都没有就自动建一个并记住。
+- 已注册到线上 `~/agent-hub/agents.json`（备份 `agents.json.bak-20261022-meoo`），重启后控制台 Worker 从 13 → **14**，`data-agent="meoo"` 已出现。
+- 实测：`--task "用一句话说明你是谁"` → 「我是一个 AI 助手，帮你完成各种任务。」status=completed。
+
 ### 修复：签到日志里平台名显示成「其他平台」
 - 日志渲染的 `platMeta` 只映射了 5 个平台，`minimaxcode` 和 `meoo` 落到兜底值「其他平台」。补齐两个映射（MiniMax Code / Meoo 秒悟）。
 
