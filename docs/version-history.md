@@ -89,3 +89,10 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 - **Meoo 回答重复**：Meoo 事件流的文本语义是 `message.delta` 追加 / `message.snapshot` 整段替换；旧实现只累加 delta，`auto` 模型下上游先发 delta 再发 snapshot 覆盖，`6`+`6`=`66`。现按官方 reducer 处理，CLI 改为 run 结束后一次性输出；顺带识别 `run.input_required`。
 - **控制台重启 90s → 9s**：SSE 长连接拖住退出，systemd 只能等 `TimeoutStopSec`；standalone 入口加 8s unref 兜底强制退出。
 - **14 个 worker 模型切换实测**：9 个非默认模型实跑返回正确答案；codebuddy 账号套餐受限；codebuddy-cn / github-copilot 的 CLI 支持 `--model` 但 agents.json 未声明可选模型；traecode 为 GUI 会话状态不可切换；zcode 控制台禁用。明细见 CHANGELOG 1.0.17。
+
+`v1.0.18`（2026-10-23）：长任务不再按总时长切断 + CodeArts CLI 26.10.9 + 看板娘收尾。
+
+- **长任务超时改为「无进展预算 + 硬上限」**：`async_worker.run_cmd_mode` 原来只有 `deadline = 起始 + timeout_s`（默认 600s）的总时长判定，跑十几分钟的 CLI 任务会在中途被整组回收（`agent=qoder status=timeout`）。现在 `timeout_s` 表示「连续多少秒没有任何新字节写入」才判卡死，仍在输出就自动续期；新增 `hard_timeout_s`（默认 6 小时）兜住刷屏型死循环；无输出期间每 60s 刷心跳，避免被 30 分钟陈旧判定误杀；超时保留最后 20000 字符到 `partial_text`，`hub_result` 可取出续跑。
+- **看板娘下坠时切设置页不再漏动画**：`#mascot-air` 是 `position: fixed` 的独立图层，面板 `hidden` 后不跟着消失。新增 `abortAir()` 统一收尾，坠落每帧复查 `mascotOnScreen()`，hold / wipe 阶段用 `MutationObserver` 监听面板切换。
+- **CodeArts CLI 升级到 26.10.9**：新版启动脚本用 `BASH_SOURCE` 定位目录，`~/.local/bin` 软链会失效（改成 exec 包装）；新增「文件夹信任」门（单用户 Hub 关闭并保留 `/`、`/home/johhny`）；`--format json` 事件流与 `codearts models` 表格未变。模型目录补齐 7 个内置模型，默认改为 **DeepSeek-V4.1-Flash**（`v41f`），新增 Kimi-K3；控制台倍率表同步为 0.70 / 0.70 / 0.70 / 0.32 / 0.79 / 0.18 / 2.38。
+- **验证**：runtime 31 例（新增 4）、hub_core 21、task_contract 23、capability 21、codex_adapter 12、mcp_bridge 117 全绿；无头 Edge 实测看板娘场景；`hub_dispatch_cli` 用 GLM-5.2 / 默认 V4.1-Flash / Kimi-K3 实跑分别返回 10 / 15 / 7。

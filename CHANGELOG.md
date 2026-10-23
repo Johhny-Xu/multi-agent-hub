@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-10-23
+
 ### 升级：Linux CodeArts CLI 26.9.12 → 26.10.9，模型目录对齐 7 个内置模型
 
 - **升级**：服务器 `codearts upgrade` 升到 **26.10.9**（安装包 SHA256 校验通过，旧二进制保留为 `installers/bin/codearts.delete`）。
