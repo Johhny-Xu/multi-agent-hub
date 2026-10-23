@@ -97,11 +97,13 @@ const MODEL_CATALOG = {
   qoder: QODER_MODELS,
   'qoder-cn': QODER_MODELS,
   codearts: [
-    { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.70x', default: true },
     { id: 'huaweicloud-maas/GLM-5.2', name: 'GLM-5.2', credits: '0.70x' },
     { id: 'huaweicloud-maas/glm-5.2-sft-harmony', name: 'GLM-5.2-ArkTS-SPARK', credits: '0.70x' },
     { id: 'huaweicloud-maas/openpangu-2.0-pro', name: 'OpenPangu-2.0-Pro', credits: '0.70x' },
-    { id: 'huaweicloud-maas/openpangu-2.0-flash', name: 'OpenPangu-2.0-Flash', credits: '0.35x' },
+    { id: 'huaweicloud-maas/openpangu-2.0-flash', name: 'OpenPangu-2.0-Flash', credits: '0.32x' },
+    { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.79x' },
+    { id: 'huaweicloud-maas/deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', credits: '0.18x', default: true },
+    { id: 'huaweicloud-maas/kimi-k3', name: 'Kimi-K3', credits: '2.38x' },
   ],
   'github-copilot': [
     { id: 'auto', name: 'Auto (Copilot 自动选型)', default: true },

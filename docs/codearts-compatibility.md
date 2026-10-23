@@ -83,3 +83,17 @@ IDE 的 MCP 设置是工作区 `.codeartsdoer/mcp/mcp_settings.json`，顶层为
 - 交付包与哈希：`codearts-release-artifacts.json`；源码和 Git 历史扫描：`codearts-secret-audit.json`。扫描不等于对所有未知凭据格式的保证。
 
 官方依据：[CLI 运行参数](https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_0034.html)、[CodeArts 原生 Hooks](https://support.huaweicloud.com/usermanual-codeartsagent/codeartsagent_ug_0036.html)、[子智能体](https://support.huaweicloud.com/usermanual-codeartsagent/codeartsagent_ug_0051.html)、[CLI MCP](https://support.huaweicloud.com/usermanual-cli/codeartsagent_cli_0035.html)。实际已安装版本的行为优先于参数名推断。
+
+## 2026-10-23 升级 Linux CLI 26.9.12 → 26.10.9
+
+在线升级：`codearts upgrade`（下载 `codearts-install-26.10.9-linux-x64-baseline.tar.gz`，SHA256 校验通过，旧二进制保留为 `installers/bin/codearts.delete`）。新版与 Hub 驱动之间需要处理三件事：
+
+| 变化 | 现象 | 处理 |
+| --- | --- | --- |
+| 启动脚本改用 `BASH_SOURCE` 定位自身目录 | 经 `~/.local/bin/codearts` 软链调用时报 `.../bin/codearts: No such file or directory` | 把该软链换成 3 行 `exec /home/johhny/.codeartsdoer/installers/codearts "$@"` 包装；`PATH` 里的名字不变，后续升级替换 installers/ 也不会再坏 |
+| 新增「文件夹信任」门（`~/.codeartsdoer/cli-data/settings.json` 的 `security.folderTrust`） | 任务 `cwd` 不在 `trustedFolders` 时直接失败：`文件夹未被信任: <dir>`，驱动归类为 `CODEARTS_PERMISSION_REQUIRED` | 这台单用户 Hub 需保持升级前的行为：`folderTrust.enabled=false`，并把 `/`、`/home/johhny` 留在 `trustedFolders`（备份 `settings.json.bak-20261023-*`） |
+| `--format json` 事件流 | 未变：`step_start` / `text` / `step_finish(reason=stop)`，字段仍是 `sessionID` + `part.id/text`；排队提示（`模型排队`）会混在 stdout，解析器按非 JSON 行忽略，不误判为失败 | 无需改驱动；`codearts models` 仍是 `model_id/model_name` 表格，表头与标尺解析通过 |
+
+模型目录（`codearts models`，7 个，与客户端内置列表一致）：`huaweicloud-maas/GLM-5.2`、`glm-5.2-sft-harmony`（GLM-5.2-ArkTS-SPARK）、`openpangu-2.0-pro`、`openpangu-2.0-flash`、`glm-5.3`、`deepseek-v4.1-flash`、`kimi-k3`。线上 `agents.json` 的 `codearts.models` 已补 `DeepSeek-V4.1-Flash`（别名 `v41f`）与 `Kimi-K3`，默认模型改为 `huaweicloud-maas/deepseek-v4.1-flash`。
+
+升级后实测（`hub_dispatch_cli` 异步派发，均为真实模型回答）：GLM-5.2 → `10`，默认 DeepSeek-V4.1-Flash → `15`，Kimi-K3 → `7`。高峰期 DeepSeek-V4.1-Flash 会提示「模型排队」（曾排到 250+ 位），这是上游配额队列，不是驱动或 Hub 超时；`timeout_s` 现为「无进展超时」，排队期间没有输出仍会按预算回收，需要时可调大或改用低倍率模型。

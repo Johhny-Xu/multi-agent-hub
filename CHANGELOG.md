@@ -11,6 +11,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 升级：Linux CodeArts CLI 26.9.12 → 26.10.9，模型目录对齐 7 个内置模型
+
+- **升级**：服务器 `codearts upgrade` 升到 **26.10.9**（安装包 SHA256 校验通过，旧二进制保留为 `installers/bin/codearts.delete`）。
+- **兼容新版（三处）**：
+  - 新启动脚本改用 `BASH_SOURCE` 定位自身目录，`~/.local/bin/codearts` 的软链会让它去找 `~/.local/bin/bin/codearts` 并报 `No such file`。改成 3 行 `exec` 包装：PATH 里仍叫 `codearts`，后续升级替换 `installers/` 也不会再坏。
+  - 新增「文件夹信任」门：`cwd` 不在 `trustedFolders` 时直接失败（`文件夹未被信任: <dir>`，驱动归类 `CODEARTS_PERMISSION_REQUIRED`）。单用户 Hub 保持升级前行为：`security.folderTrust.enabled=false`，并保留 `/`、`/home/johhny`。
+  - `--format json` 事件流（`step_start`/`text`/`step_finish`）与 `codearts models` 表格格式均未变，驱动无需改动；排队提示 `模型排队` 混在 stdout，被按非 JSON 行忽略，不误判失败。
+- **模型**：线上 `agents.json` 的 `codearts` 增加 `DeepSeek-V4.1-Flash`（别名 `v41f`）与 `Kimi-K3`，默认改为 `huaweicloud-maas/deepseek-v4.1-flash`；`console/server.mjs` 的 `MODEL_CATALOG.codearts` 按客户端内置列表补齐 7 个模型与倍率（0.70x / 0.70x / 0.70x / 0.32x / 0.79x / 0.18x / 2.38x）。
+- **验证**：`hub_capabilities(codearts)` 返回 7 个模型与新默认；`hub_dispatch_cli` 实跑 GLM-5.2 → `10`、默认 V4.1-Flash → `15`、Kimi-K3 → `7`。高峰期 V4.1-Flash 会提示「模型排队」（曾 250+ 位），属上游配额队列。
+
 ### 修复：看板娘下坠时切到设置页，动画还留在页面上
 
 - **现象**：把她拎起来松手（或自动彩蛋）下坠的 1～2 秒内点「系统设置」，她已经掉到设置页上继续播俯冲／擦汗。
