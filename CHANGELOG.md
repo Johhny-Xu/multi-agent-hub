@@ -439,7 +439,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **`scripts/audit_secrets.py` 移除已退役的 hub-token 规则**：该 token 已完成轮换、旧值失效，特定字面量留在面向公开的脚本里没有收益；通用规则（`literal_credential` / `provider_key`）继续覆盖新值被意外硬编码的风险。
 - **两份 README 致谢 [TraeClaw](https://github.com/firerlAGI/TraeClaw)**：`trae_delegate` 通道由 TraeClaw 网关驱动，按开源惯例在「致谢与鸣谢」/「Acknowledgements」中补记。
-- **`docs/HANDOVER_20261016.md` 凭据提示脱敏**：与 `fa48961` 对 20261015 的处理保持一致，发布流程改为通用表述（账号级凭据仅在使用时从本机既有配置读取，不写入仓库、不打印、不落日志）。
+- **`docs/HANDOVER_20261016.md` 凭据提示脱敏**：与 `a068bd9` 对 20261015 的处理保持一致，发布流程改为通用表述（账号级凭据仅在使用时从本机既有配置读取，不写入仓库、不打印、不落日志）。
 - **新增 `CODE_OF_CONDUCT.md`**：贡献者公约（改编自 Contributor Covenant 2.1），补齐 GitHub 社区健康文件。
 
 首发合入的收口修复：
