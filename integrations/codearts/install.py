@@ -15,7 +15,7 @@ import time
 import uuid
 
 SOURCE = Path(__file__).resolve().parent
-VERSION = '1.0.18'
+VERSION = '1.0.19'
 SERVER_NAME = 'multi-agent-hub'
 MCP_FILES = ('server.mjs', 'hub.mjs', 'ask.mjs', 'login.mjs', 'config.mjs', 'discovery.mjs')
 WORKERS = ('antigravity', 'codebuddy', 'codebuddy-cn', 'github-copilot',

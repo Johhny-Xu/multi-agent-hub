@@ -433,3 +433,48 @@ export async function fetchRef(ref) {
   const progress = result.status === "running" ? extractAnswer(t).replace(/^\[执行中·受控端界面快照\]\s*/, "").replace(/\n?\(尚无文本\)$/, "") : undefined;
   return { status: result.status, answer: result.answer, ...(progress ? { progress } : {}) };
 }
+
+/**
+ * 按 ref 探测 worker 是否真的在工作：进程树/CPU/输出/心跳/verdict。
+ * 与 fetchRef 不同，running 时也适合调用；首次调用建基线，10 秒后再查可看增量。
+ */
+export async function taskStatus(ref) {
+  if (typeof ref !== "string" || !/^[\w.-]+-[0-9a-f]+$/i.test(ref)) {
+    return { ok: false, ref, status: "unknown", verdict: "unknown", answer: "ref 格式无效" };
+  }
+  let raw;
+  try {
+    raw = await callTool("hub_task_status", { ref, json: true }, 30_000);
+  } catch (e) {
+    return { ok: false, ref, status: "unknown", verdict: "unknown", answer: "存活查询失败：" + String(e && e.message || e).slice(0, 200) };
+  }
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { ok: false, ref, status: "unknown", verdict: "unknown", answer: "存活查询返回了无效 JSON" };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, ref, status: "unknown", verdict: "unknown", answer: "存活查询返回了无效结构" };
+  }
+  return {
+    ok: value.status !== "unknown",
+    ref,
+    agent: value.agent ?? null,
+    status: value.status ?? "unknown",
+    verdict: value.verdict ?? "unknown",
+    action: value.action ?? "inspect",
+    answer: value.guidance ?? "",
+    pid: value.pid ?? null,
+    process_alive: value.process_alive ?? null,
+    process_count: value.process_count ?? null,
+    cpu_seconds: value.cpu_seconds ?? null,
+    cpu_delta_seconds: value.cpu_delta_seconds ?? null,
+    output_bytes: value.output_bytes ?? 0,
+    output_delta_bytes: value.output_delta_bytes ?? null,
+    last_output_age_s: value.last_output_age_s ?? null,
+    heartbeat_age_s: value.heartbeat_age_s ?? null,
+    elapsed_s: value.elapsed_s ?? null,
+    preserve_ref: value.preserve_ref ?? value.status !== "completed",
+  };
+}

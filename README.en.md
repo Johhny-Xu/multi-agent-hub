@@ -6,7 +6,7 @@
 
 ![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 14 Workers under one scheduler](docs/architecture.en.svg)
 
-**Current version: v1.0.18** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
+**Current version: v1.0.19** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 | Connection Mode | Best For | What You Do |
 | --- | --- | --- |
@@ -21,6 +21,7 @@
 - 🔐 **Log in and switch accounts for all 14 Workers in the WebUI**: Supports 9 OAuth vendors, Cline device-code auth, and opencode API keys; log in, log out, save multiple accounts, and switch in one click without SSH, verifying real on-disk credentials so fake logins never pass.
 - ⚡ **Toggle Workers on or off across every client at once**: Disabling a Worker in the console blocks dispatch requests immediately (`profile_disabled`) before any quota is spent.
 - 🛡️ **Reject empty or truncated answers**: Filters out blank replies, known crash exits, and partial output after timeouts; preserves the original task `ref` (persistent tracking ID) and blocks any Worker from dispatching tasks to itself.
+- 💓 **Sub-agent Liveness Insights (`hub_task_status`)**: After asynchronous dispatch, the main agent can probe whether the sub-agent is truly alive (PID, whole process-tree CPU consumption, incremental output, and heartbeat) with intelligent verdicts (`working`, `alive_waiting`, `worker_exited_result_missing`), eliminating blind timeouts when silent CLIs are computing, with CPU growth automatically resetting idle budgets.
 - 🔄 **Deploy on one machine or split across machines**: Runs on Windows, Linux, or Windows ↔ Linux over LAN or SSH reverse tunnels; keeps config and credentials outside the repo directory so upgrades never wipe task history.
 - 🔍 **Scan the LAN and auto-reconnect**: Clients discover available Hubs via UDP broadcast and reconnect automatically after config changes.
 - 🖥️ **Preview offline in a single file**: Open `demo.html` in any browser to try the full three-pane console without starting a backend.
@@ -73,7 +74,7 @@ cd multi-agent-hub
 **What You See When It Succeeds**
 
 - Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 14 Worker status cards on the right).
-- You can also download `agenthub-1.0.18-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
+- You can also download `agenthub-1.0.19-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
 - Daily start and stop: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
 - Want to preview the UI first? Open `demo.html` directly in your browser.
 
@@ -201,8 +202,8 @@ To install a plugin for just one host, import the prebuilt package or run the ta
 
 | Native Host | Installation Method | Documentation |
 | --- | --- | --- |
-| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.18.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.18-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.19.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.19-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | Run `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | Run `.\install.cmd --component plugins --native-hosts codex --project <workspace path>` to register a local plugin marketplace and write 11 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | Run `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or run `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -219,7 +220,7 @@ To install a plugin for just one host, import the prebuilt package or run the ta
 <details>
 <summary><b>CodeArts two-way integration and workspace switching</b></summary>
 
-The CodeArts native package includes 11 sub-agents, 3 slash commands, 1 dispatch skill, 1 Hooks plugin, and 8 MCP tools. CodeArts can both dispatch tasks as a host and accept tasks as a Worker (`worker="codearts"`, aliases `ca`, `huawei-codearts`).
+The CodeArts native package includes 11 sub-agents, 3 slash commands, 1 dispatch skill, 1 Hooks plugin, and 9 MCP tools. CodeArts can both dispatch tasks as a host and accept tasks as a Worker (`worker="codearts"`, aliases `ca`, `huawei-codearts`).
 
 - **Single call path**: Follows `tool_search → tool_describe → tool_call`; blocks raw XML tags in prose to prevent double dispatch; dispatches each task once and polls thereafter.
 - **Permission handling and terminal state**: Returns `blocked_permission` with the original `ref` immediately if the host denies permission rather than retrying under another tool name; marks a task `completed` only when the Worker returns a non-empty answer.
@@ -275,13 +276,14 @@ The Hub schedules all 14 Workers below. The table shows default models for **fre
 
 ## MCP Tools and Task Contract
 
-Every native host plugin exposes the same **8 MCP tools** through the local bridge and enforces a single contract for attachments and working directories.
+Every native host plugin exposes the same **9 MCP tools** through the local bridge and enforces a single contract for attachments and working directories.
 
 | Tool | Purpose |
 | --- | --- |
 | `hub_ask` | Dispatch a task and wait for the final answer |
 | `hub_dispatch` | Dispatch asynchronously and return a persistent `ref` immediately |
 | `hub_fetch` | Poll task status or retrieve the final result by `ref` |
+| `hub_task_status` | Check sub-agent liveness by `ref` (PID, process-tree CPU, output delta, heartbeat, verdict) |
 | `hub_status` | List online and enabled states for all 14 Workers |
 | `hub_capabilities` | Query supported models, thinking levels, streaming, and attachment limits |
 | `hub_login` | Check login status or start a login flow for a Worker |
@@ -292,7 +294,7 @@ Every native host plugin exposes the same **8 MCP tools** through the local brid
 
 1. **Attachment limit**: `files` accepts up to 8 files totaling at most 1 MiB, staged on the Hub host.
 2. **Working directory**: `cwd` always refers to a path **on the Hub's host machine**; client paths are never mapped automatically.
-3. **Result tracking and verification**: Accepted tasks return a persistent `ref` — poll with `hub_fetch` instead of re-dispatching. A `completed` state means the Worker exited cleanly with a non-empty answer; the caller is still responsible for verifying the output. See [Task Options](docs/task-options.md) for all parameters.
+3. **Result tracking and liveness**: Tasks return a persistent `ref`. For long tasks, use `hub_task_status` to inspect sub-agent liveness (reading PID, process-tree CPU seconds, incremental output, and heartbeats; inspect verdicts such as `working`, `alive_waiting`, or `worker_exited_result_missing` before deciding to wait, establishing a baseline on the first call and checking deltas 10s later) to avoid aborting silent workers prematurely, and fetch final results with `hub_fetch` once completed. A `completed` state means the Worker exited cleanly with a non-empty answer; the caller is still responsible for verifying the output. See [Task Options](docs/task-options.md) for all parameters.
 
 ---
 
@@ -319,7 +321,7 @@ Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispa
 - Top bar (`z-index: 100`) and chat header (`z-index: 50`) maintain independent stacking contexts so dropdowns are never clipped by code blocks or the workbench.
 - Glass mode (`body.has-custom-bg`) applies `backdrop-filter: blur(20px~24px) saturate(180%~190%)`, unifies neutral surfaces to `--gem-bg-card`, and reserves `--gem-surface-high` for hover states and the progress track.
 - Worker accent color `--agent-accent` styles the send button, context progress bar, and `#panel-chat` secondary menus while keeping model names in body color `--gem-text`.
-- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.18` (overridable by backend `snap.version`).
+- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.19` (overridable by backend `snap.version`).
 - Offline demo build: `scripts/build_demo.py` and `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
 
 </details>
@@ -376,11 +378,11 @@ Every release includes `SHA256SUMS` checksums and can be downloaded from Release
 
 | File | Target Use Case |
 | --- | --- |
-| `agenthub-1.0.18-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
-| `agenthub-1.0.18-plugins.zip` | Install host plugins on a coding workstation only |
-| `agenthub-1.0.18-hub.zip` | Run the Hub and Workers on a dedicated server only |
-| `agenthub-workers-1.0.18-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
-| `multi-agent-hub-1.0.18.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
+| `agenthub-1.0.19-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
+| `agenthub-1.0.19-plugins.zip` | Install host plugins on a coding workstation only |
+| `agenthub-1.0.19-hub.zip` | Run the Hub and Workers on a dedicated server only |
+| `agenthub-workers-1.0.19-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
+| `multi-agent-hub-1.0.19.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
 
 ### Development and Test Commands
 
@@ -420,6 +422,7 @@ Before submitting patches, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_C
 
 | Version | Highlights |
 | --- | --- |
+| **1.0.19** | Added `hub_task_status` sub-agent liveness checks: inspect PID, full process-tree CPU, output delta, and heartbeat with verdicts (`working`, `alive_waiting`, `worker_exited_result_missing`); CPU growth resets idle budgets to prevent silent long tasks from false-timeout cuts |
 | **1.0.18** | Long-task timeout replaced by a no-progress budget plus a 6-hour hard cap — no more hard cut at 600 s; partial output is preserved as partial_text on timeout; the mascot collapses immediately when you switch to the settings page while it is falling or struggling; CodeArts CLI upgraded to 26.10.9 with 7 built-in models added and the default changed to DeepSeek-V4.1-Flash (v41f) |
 | **1.0.17** | Qoder's "already claimed today" check now uses the UTC+8 window day (the upstream opens a new window at 10:00 daily, so 00:00–10:00 no longer reports yesterday's claim as today's; a closed window shows as pending and auto-retries); the WebUI hides model selection for GUI-only channels (traecode follows its client and no longer throws UNSUPPORTED); Meoo no longer duplicates answers; console restarts drop from 90 s to 9 s |
 | **1.0.16** | CodeArts check-in recovered (falls back to credit claiming when the benefit-token channel is gone), Qoder International retries against the alternate environment, blank check-in log fixed, draggable mascot; Meoo joins as the 14th Worker |

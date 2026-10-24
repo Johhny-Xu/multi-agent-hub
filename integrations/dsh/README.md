@@ -46,7 +46,7 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 
 ## MCP 与预设
 
-桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode、codearts，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。CodeArts 默认继承官方配置，认证及思考、流式、附件能力以 Hub 检查为准。
+桥暴露 hub_ask、hub_dispatch、hub_fetch、hub_task_status、hub_status、hub_capabilities、hub_login、hub_set_status、hub_discover。DSH 中的 MCP 工具名使用 mcp__agenthub__ 前缀。预设覆盖 antigravity、codebuddy、codebuddy-cn、github-copilot、minimaxcode、mimocode、traecode、zcode、codearts，以及 agenthub-all。模型与可用性以 Hub 配置和能力返回为准。CodeArts 默认继承官方配置，认证及思考、流式、附件能力以 Hub 检查为准。
 
 派发后保留原始 ok、status、ref：
 
@@ -57,7 +57,9 @@ dsh plugin --profile web remove dsh-plugin-multi-agent-hub
 
 同一个 worker 的别名在扇出前去重；桥不会因空输出或未知状态自动重做任务。
 
-桥提供 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover` 七个工具。派发和三份工作流脚本/Node runner 都接受 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files`（DSH 插件机器绝对路径数组）与 `cwd`（Hub 主机目录）。最多 8 个附件、合计 1 MiB，由桥编码内容并在 Hub 暂存，支持跨系统传送。先用 `hub_capabilities` 确认可用能力，未支持的选项在派发前拒绝。模型对提示中的选项与派发次数仍可能不遵守；runner 直接传递选项并确保单次派发。
+桥提供 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_task_status`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_set_status`、`hub_discover` 九个工具。派发和三份工作流脚本/Node runner 都接受 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files`（DSH 插件机器绝对路径数组）与 `cwd`（Hub 主机目录）。最多 8 个附件、合计 1 MiB，由桥编码内容并在 Hub 暂存，支持跨系统传送。先用 `hub_capabilities` 确认可用能力，未支持的选项在派发前拒绝。模型对提示中的选项与派发次数仍可能不遵守；runner 直接传递选项并确保单次派发。
+
+长任务在 `hub_fetch` 返回 running 且暂时没有输出时，先用 `hub_task_status` 看 `verdict`：`working/alive_waiting/gui_working` 表示仍在工作，继续等；`worker_exited_result_missing` 才是进程退出但结果未回传。
 
 `stream=true` 请求流式生成；客户端有 MCP progressToken 才能获得进度通知，无 token 时 `delivery=buffered_no_progress_token`。本次未验证 DSH UI 的实时流式展示。
 

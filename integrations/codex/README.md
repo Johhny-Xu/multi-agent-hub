@@ -40,7 +40,9 @@ python integrations/codex/install.py --project "C:/path/to/project" --apply
 
 每个任务仅派发一次并保留 ref。running/unknown/空输出继续跟踪原任务，不能被当成 completed，也不能自动重派。登录链接按用户请求用 `hub_login` 获取。
 
-桥提供 7 个工具：`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover`。派发支持 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files` 与 `cwd`。先查询目标 worker 的 `hub_capabilities`，未验证的能力会在执行前拒绝。`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥发送文件内容，Hub 在自己的主机暂存，因此可以跨 Windows/Linux 传附件。`cwd` 则是 Hub 主机上的目录。不要发送凭据文件。
+桥提供 9 个工具：`hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_task_status`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_set_status`、`hub_discover`。派发支持 `model`、`thinking`（default/on/off）、`stream`（布尔值）、`files` 与 `cwd`。先查询目标 worker 的 `hub_capabilities`，未验证的能力会在执行前拒绝。`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥发送文件内容，Hub 在自己的主机暂存，因此可以跨 Windows/Linux 传附件。`cwd` 则是 Hub 主机上的目录。不要发送凭据文件。
+
+长任务在 `hub_fetch` 返回 running 且暂时没有输出时，先用 `hub_task_status` 看 `verdict`：`working/alive_waiting/gui_working` 表示仍在工作，继续等；`worker_exited_result_missing` 才是进程退出但结果未回传。
 
 `stream=true` 请求 worker 流式输出。MCP 客户端提供 `_meta.progressToken` 时桥可以发送进度通知；没有该 token 时 `delivery=buffered_no_progress_token`，不能据此宣称客户端已经实时显示。
 

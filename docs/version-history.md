@@ -96,3 +96,10 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 - **看板娘下坠时切设置页不再漏动画**：`#mascot-air` 是 `position: fixed` 的独立图层，面板 `hidden` 后不跟着消失。新增 `abortAir()` 统一收尾，坠落每帧复查 `mascotOnScreen()`，hold / wipe 阶段用 `MutationObserver` 监听面板切换。
 - **CodeArts CLI 升级到 26.10.9**：新版启动脚本用 `BASH_SOURCE` 定位目录，`~/.local/bin` 软链会失效（改成 exec 包装）；新增「文件夹信任」门（单用户 Hub 关闭并保留 `/`、`/home/johhny`）；`--format json` 事件流与 `codearts models` 表格未变。模型目录补齐 7 个内置模型，默认改为 **DeepSeek-V4.1-Flash**（`v41f`），新增 Kimi-K3；控制台倍率表同步为 0.70 / 0.70 / 0.70 / 0.32 / 0.79 / 0.18 / 2.38。
 - **验证**：runtime 31 例（新增 4）、hub_core 21、task_contract 23、capability 21、codex_adapter 12、mcp_bridge 117 全绿；无头 Edge 实测看板娘场景；`hub_dispatch_cli` 用 GLM-5.2 / 默认 V4.1-Flash / Kimi-K3 实跑分别返回 10 / 15 / 7。
+
+`v1.0.19`（2026-10-24）：主代理可查子代理存活状态 + WebUI 退出与移动端收口。
+
+- **`hub_task_status`**：新增进程树存活探测（Linux `/proc`、Windows `OpenProcess` 回退），异步任务记录 `pid`、`started_at`、`output_bytes`、`last_output_at`、`cpu_seconds`、`heartbeat`、`progress_at`。查询返回 `verdict`（`working` / `alive_waiting` / `alive_quiet` / `gui_working` / `gui_waiting` / `worker_exited_result_missing` / 终态）、`action`、`guidance`，以及 CPU/输出增量；首次查询建立基线，10 秒后复查可判断是否真的在推进。7 份宿主 MCP 桥同步新增第 9 个标准工具，主代理不必直连 Hub。
+- **防误杀**：`run_cmd_mode` 的 idle 预算把进程树 CPU 增长也算作进展，静默但真在计算的任务不会被 stdout 空闲阈值切断；`_reap_result` 遇到仍存活的 PID 不再按 `updated_at` 判 timeout。`hub_result_json` 透传 `verdict`/`liveness`，`hub_wait_result` 预算耗尽时显示存活结论，异步受理回执直接提示先查 `hub_task_status`。
+- **WebUI**：自动签到定时器改为可停止并 `unref`，`dispose` 真正退出，`node --test console_smoke.mjs` 不再挂死；移动端状态栏 4px 占位、浅色用户气泡对比与移动端按钮热区收口；看板娘按用户观感保持原停靠位置。
+- **验证**：新增 12 例存活回归；`task_contract` 23 项、`hub_core` + `runtime` 52 项全绿；Windows 派发 smoke 12/13（仅自带 zcode bridge fixture 连接失败，与本次改动无关）。线上 `mimocode` 实跑观察到 `starting → alive_waiting → working（CPU 0→10.18s）→ completed`。

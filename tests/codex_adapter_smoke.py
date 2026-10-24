@@ -265,7 +265,7 @@ class CodexAdapterTests(unittest.TestCase):
             initialized = rpc.call("initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "isolated-codex-adapter-test", "version": "1"}})
             self.assertEqual(initialized["result"]["protocolVersion"], "2025-11-25")
             tools = rpc.call("tools/list")["result"]["tools"]
-            self.assertEqual({tool["name"] for tool in tools}, {"hub_ask", "hub_dispatch", "hub_fetch", "hub_status", "hub_login", "hub_capabilities", "hub_discover", "hub_set_status"})
+            self.assertEqual({tool["name"] for tool in tools}, {"hub_ask", "hub_dispatch", "hub_fetch", "hub_task_status", "hub_status", "hub_login", "hub_capabilities", "hub_discover", "hub_set_status"})
             _, dispatched = rpc.tool("hub_dispatch", {"worker": "mmx", "task": "SUCCESS", "timeout_s": 2})
             self.assertEqual(dispatched["status"], "running")
             self.assertTrue(dispatched["ref"])
@@ -349,7 +349,7 @@ class CodexAdapterTests(unittest.TestCase):
                     initialized = rpc.call("initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
                                                           "clientInfo": {"name": "native-plugin-fixture", "version": "1"}})
                     self.assertEqual(initialized["result"]["protocolVersion"], "2025-11-25")
-                    self.assertEqual(len(rpc.call("tools/list")["result"]["tools"]), 8)  # hub_discover added in 0.9.9.x
+                    self.assertEqual(len(rpc.call("tools/list")["result"]["tools"]), 9)  # hub_task_status added in 1.0.19
                 finally:
                     rpc.close()
 

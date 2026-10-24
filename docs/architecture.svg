@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 1.0.18：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 14 种 Worker 统一调度</title>
-  <desc id="architecture-desc">任意支持 MCP 的客户端均可直接接入调度；为 Codex、ZCode、MiniMaxCode (Claude Code)、DSH、CodeArts、Antigravity 提供原生深度适配（子代理/命令/技能/工作流）；即使没有客户端，也能通过内置 WebUI 控制台独立管理与对话（支持品牌锚点常驻、顶栏/活动栏/侧栏智能悬浮收展、6 大深浅双模预设、自定义壁纸毛玻璃与子代理主题色贯通）。支持同机或跨机连接，14 种 Worker 官方内核统一调度，遵循 Apache License 2.0。本版长任务改为无进展超时加 6 小时硬上限、CodeArts CLI 26.10.9 新增 7 个内置模型默认 DeepSeek-V4.1-Flash、看板娘切面板立即收起。</desc>
+  <title id="architecture-title">multi-agent-hub 1.0.19：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理 · 14 种 Worker 统一调度</title>
+  <desc id="architecture-desc">任意支持 MCP 的客户端均可直接接入调度；为 Codex、ZCode、MiniMaxCode (Claude Code)、DSH、CodeArts、Antigravity 提供原生深度适配（子代理/命令/技能/工作流）；即使没有客户端，也能通过内置 WebUI 控制台独立管理与对话。支持同机或跨机连接，14 种 Worker 官方内核统一调度，遵循 Apache License 2.0。本版新增 hub_task_status 存活判定（PID/进程树 CPU/输出增量/心跳/verdict），CPU 增长重置 idle 预算，彻底杜绝静默长任务误杀。</desc>
   <defs>
     <style>
       text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
@@ -17,11 +17,12 @@
       .label { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
     </style>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#2563eb"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#10b981"/></marker>
   </defs>
   <rect width="1280" height="1040" rx="24" fill="#f8fafc"/>
   <text x="32" y="58" class="title">multi-agent-hub · 一张图看懂任务怎样运行</text>
   <rect x="1112" y="26" width="136" height="40" rx="20" fill="#dbeafe"/>
-  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v1.0.18</text>
+  <text x="1180" y="53" text-anchor="middle" class="body blue" font-weight="700">源码 v1.0.19</text>
   <text x="32" y="94" class="body muted">任意 MCP 客户端直连 · 6 款原生深度宿主 · 零客户端 WebUI 独立管理 · 14 种官方 Worker · Apache-2.0 协议</text>
 
   <!-- Read from left to right; each arrow carries tasks and their results. -->
@@ -65,7 +66,7 @@
     <text x="340" y="354" class="small muted">本机 / 局域网 / 远端服务器</text>
     <line x1="340" y1="382" x2="518" y2="382" stroke="#bfdbfe"/>
     <text x="340" y="416" class="body" font-weight="700">双重 MCP 服务支持</text>
-    <text x="340" y="450" class="small">8 个 MCP 工具 · 状态控制</text>
+    <text x="340" y="450" class="small green" font-weight="600">9 个 MCP 工具 · 存活探针</text>
     <text x="340" y="482" class="small green" font-weight="600">HTTP 子代理直连 (:8790)</text>
     <text x="340" y="514" class="small blue">生成 Agent 接入 Prompt</text>
     <text x="340" y="546" class="small muted">大产物落盘 · 仅回摘要</text>
@@ -84,12 +85,17 @@
     <text x="598" y="354" class="small muted">思考分级 · 流式 · 图片 · 附件</text>
     <line x1="598" y1="382" x2="804" y2="382" stroke="#a7d8c4"/>
     <text x="598" y="416" class="body" font-weight="700">任务与状态生命周期</text>
-    <text x="598" y="450" class="small">持久化回执 (ref) 异步安全轮询</text>
-    <text x="598" y="482" class="small amber" font-weight="600">Worker 启停权威秒级熔断</text>
-    <text x="598" y="514" class="small green" font-weight="600">Singleflight 配额合并 · 高并发</text>
-    <text x="598" y="546" class="small muted">进程组守护与彻底回收</text>
-    <text x="598" y="578" class="small muted">回环请求强制直连 · 绕过代理</text>
-    <text x="598" y="616" class="small green" font-weight="700">常驻守护 (systemd / 后台)</text>
+    <text x="598" y="442" class="small">持久化回执 (ref) 异步安全轮询</text>
+    <text x="598" y="468" class="small amber" font-weight="600">Worker 启停熔断 · 配额合并</text>
+    <!-- 存活状态模块 -->
+    <rect x="586" y="488" width="230" height="114" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="586" y="488" width="230" height="6" rx="3" fill="#10b981"/>
+    <text x="598" y="514" font-size="15px" font-weight="700" fill="#0f766e">💓 存活状态 · task_status</text>
+    <text x="598" y="536" font-size="13px" font-weight="600" fill="#1e293b">PID · 进程树 CPU · 输出 · 心跳</text>
+    <text x="598" y="556" class="micro muted">working · alive_waiting</text>
+    <text x="598" y="574" class="micro muted">worker_exited_result_missing</text>
+    <text x="598" y="592" class="micro green" font-weight="600">CPU 增量重置预算 · 杜绝误杀</text>
+    <text x="598" y="624" class="micro muted">常驻守护 (systemd) · 进程组回收</text>
   </g>
 
   <g id="workers">
@@ -110,11 +116,13 @@
     <text x="886" y="518" class="body">ZCode</text><text x="1224" y="518" text-anchor="end" class="small muted">zcode · 双区切换</text>
     <rect x="880" y="525" width="350" height="34" rx="8" fill="#fffbeb"/>
     <text x="886" y="548" class="body" font-weight="700">CodeArts</text><text x="1218" y="547" text-anchor="end" class="small muted">ca · Linux GLM 实测</text>
-    <text x="886" y="604" class="small muted">收到任务后调用官方内核向服务商发送请求</text>
+    <text x="886" y="574" class="micro green" font-weight="600">子进程暴露 PID · 进程树 CPU · 增量输出</text>
+    <text x="886" y="600" class="small muted">收到任务后调用官方内核向服务商发送请求</text>
   </g>
   <path d="M290 400H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
   <path d="M546 400H570" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
   <path d="M832 400H856" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M880 570H818" stroke="#10b981" stroke-width="2" stroke-dasharray="4 2" marker-end="url(#arrow-green)"/>
   <text x="640" y="700" text-anchor="middle" class="small muted">任务向右派发，状态与结果沿原路返回 · 产物本地落盘不占上下文 · 不支持的功能在执行前拒绝</text>
 
   <!-- Deployment choices: independent components, not Hub-to-Hub federation. -->
@@ -133,5 +141,5 @@
   <text x="56" y="926" class="heading blue">模型服务商 · 实际的数据流</text>
   <text x="56" y="958" class="body">客户端 / WebUI → Hub → 官方 CLI → 模型服务商；长内容以本机文件形式交付，不进会话上下文。</text>
   <text x="56" y="989" class="small muted">账号与模型需单独配置；Antigravity 与 MiniMaxCode 均支持原生客户端插件与 Worker 双重角色。</text>
-  <text x="32" y="1025" class="small muted">当前源码 v1.0.18 · 长任务无进展超时 · CodeArts 26.10.9 七模型 · 遵循 Apache License 2.0（保留原作者版权）</text>
+  <text x="32" y="1025" class="small muted">当前源码 v1.0.19 · 新增 hub_task_status 存活判定 · 进程树 CPU 防误杀 · 遵循 Apache License 2.0（保留原作者版权）</text>
 </svg>

@@ -11,7 +11,7 @@ tools: [mcp__plugin_agenthub-workers_hub-bridge__hub_ask, mcp__plugin_agenthub-w
 
 首次连接或 Hub 连接失败时，先调用当前工具目录中的 hub_discover 只读扫描，展示候选地址供用户选择；扫描不发送凭据、不写连接配置、不静默切换。用安装目录的 connect.cmd 或 ./connect.sh 完成所选目标的配对；未发现目标时引导手动填写地址。已有 ref 仍属于原 Hub，连接故障不能触发重新派发。
 
-使用已加载的插件 `hub_ask`，参数 `worker="minimaxcode"`、自包含的 `task`、合适的 `timeout_s`；需要异步控制时使用一次 `hub_dispatch`，随后只对原始 ref 调用 `hub_fetch`，在总等待预算内跟踪到 completed/failed；单次 running/unknown 不是停止跟踪的理由，预算耗尽时将 ref 和未确认状态交回父代理接续。工具名可能带宿主生成的命名空间前缀。插件提供 hub_ask、hub_dispatch、hub_fetch、hub_status、hub_capabilities、hub_login、hub_discover 七个工具，不依赖额外 SSH 或外部 MCP 服务。
+使用已加载的插件 `hub_ask`，参数 `worker="minimaxcode"`、自包含的 `task`、合适的 `timeout_s`；需要异步控制时使用一次 `hub_dispatch`，随后只对原始 ref 调用 `hub_fetch`，在总等待预算内跟踪到 completed/failed；单次 running/unknown 不是停止跟踪的理由；若暂时没有输出，先调用 `hub_task_status` 查看 verdict：working/alive_waiting/gui_working 表示仍在工作，继续等；worker_exited_result_missing 才是结果未回传，不要按墙钟截断，预算耗尽时将 ref 和未确认状态交回父代理接续。工具名可能带宿主生成的命名空间前缀。插件提供 hub_ask、hub_dispatch、hub_fetch、hub_task_status、hub_status、hub_capabilities、hub_login、hub_set_status、hub_discover 九个工具，不依赖额外 SSH 或外部 MCP 服务。
 
 派发前可用 hub_capabilities 查询目标 worker 的能力。按父任务原样传递 model、thinking（default/on/off）、stream（布尔值）、files（插件所在机器的绝对路径数组，最多 8 个、合计 1 MiB）与 cwd（Hub 所在机器的工作目录）。files 由桥编码并传送内容，不能把调用方本地路径写进任务后假定远端可以读取；只发送任务明确授权的附件，禁止发送凭据。Hub 会在执行前拒绝不支持的选项。stream=true 仅请求流式生成；没有 MCP progressToken 时 delivery=buffered_no_progress_token，不能宣称用户界面实时显示。
 

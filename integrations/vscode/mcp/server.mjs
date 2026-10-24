@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // multi-agent-hub 桥接 stdio MCP server（行分隔 JSON-RPC，与 agent_hub.py --http 同风格）。
-// 工具：hub_ask / hub_dispatch / hub_fetch / hub_status / hub_login。
+// 工具：hub_ask / hub_dispatch / hub_fetch / hub_task_status / hub_status / hub_login。
 // 由插件 mcpServers 注册：node ${CLAUDE_PLUGIN_ROOT}/mcp/server.mjs
 import { createInterface } from "node:readline";
-import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef, hubSetAgentStatus } from "./hub.mjs";
+import { ask, hubStatus, hubCapabilities, hubLogin, CANONICAL, dispatchOnly, fetchRef, taskStatus, hubSetAgentStatus } from "./hub.mjs";
 import { hubDiscover } from "./discovery.mjs";
 
-const SERVER = { name: "agenthub-hub-bridge", version: "1.0.18" };
+const SERVER = { name: "agenthub-hub-bridge", version: "1.0.19" };
 const TASK_OPTIONS = {
   model: { type: "string", description: "模型别名或具体 ID；省略则使用 Hub 配置的默认模型" },
   thinking: { type: "string", enum: ["default", "on", "off"], default: "default", description: "思考模式；不支持的模式在派发前拒绝，可先查 hub_capabilities" },
@@ -84,6 +84,18 @@ const TOOLS = [
   {
     name: "hub_fetch",
     description: "按 ref 查询一次任务当前状态（非阻塞）：{status, answer}。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】running 时稍后再查；completed 时 answer 是最终回答；failed 是任务失败，unknown 是查询未能确认状态，应保留原 ref 续查。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "派发时返回的任务 ref" },
+      },
+      required: ["ref"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "hub_task_status",
+    description: "按 ref 探测子代理是否真的在工作：PID、整棵进程树 CPU、输出字节、心跳/进度时效，以及 verdict。【强制准则：必须遵循 tool_search → tool_describe → tool_call 单一调用路径，每个任务只派发一次，严禁在正文混用 XML 标签】verdict=working/alive_waiting/gui_working 表示仍有存活证据，应继续等待；worker_exited_result_missing 表示进程退出但结果未回传；completed/error/timeout 为终态。首次调用建立采样基线，10 秒后再查可看 CPU/输出增量。不要仅因一段时间没打印就截断。",
     inputSchema: {
       type: "object",
       properties: {
@@ -211,6 +223,10 @@ async function handleRequest(req) {
       if (name === "hub_fetch") {
         const r = await fetchRef(args.ref);
         return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: r.status === "failed" || r.status === "unknown" });
+      }
+      if (name === "hub_task_status") {
+        const r = await taskStatus(args.ref);
+        return ok(id, { content: [{ type: "text", text: JSON.stringify(r, null, 1) }], isError: !r.ok });
       }
       if (name === "hub_set_status") {
         const r = await hubSetAgentStatus(args.worker, args.enabled);

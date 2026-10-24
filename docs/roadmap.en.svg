@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub roadmap: v1.0.18 replaces fixed timeouts with a no-progress budget, upgrades CodeArts CLI with built-in models, and collapses the mascot on settings-panel switch</title>
+  <title id="roadmap-title">multi-agent-hub roadmap: v1.0.19 adds worker liveness for dispatchers, console timer exit and mobile polish</title>
   <desc id="roadmap-desc">Three highlights: long-task timeout is now a no-progress budget plus a 6-hour hard cap; CodeArts CLI upgraded to 26.10.9 with 7 built-in models defaulting to DeepSeek-V4.1-Flash (v41f); the mascot collapses immediately when you switch to the settings page while it is falling or struggling.</desc>
   <defs>
     <style>
@@ -22,17 +22,17 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub roadmap</text>
-  <text x="64" y="108" class="meta">Updated 2026-10-23 · Current version v1.0.18 · 6 native hosts + any MCP client · Apache-2.0</text>
+  <text x="64" y="108" class="meta">Updated 2026-10-24 · Current version v1.0.19 · 6 native hosts + any MCP client · Apache-2.0</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.18 · current focus</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.19 · current focus</text>
     <rect x="916" y="151" width="268" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">Long tasks survive</text>
-    <text x="96" y="227" class="focus">Long runs are no longer cut off at 600s</text>
-    <text x="96" y="262" class="lead">No-progress budget · 6-hour hard cap · partial output kept</text>
+    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">Worker liveness</text>
+    <text x="96" y="227" class="focus">The dispatcher can tell working from waiting, and from a lost result</text>
+    <text x="96" y="262" class="lead">PID · process-tree CPU · output delta · heartbeat · verdict, no wall-clock guessing</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">Already in place</text>
@@ -47,14 +47,14 @@
 
     <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">What this release ships</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">No-progress timeout instead of a 600s cap</text>
+    <text x="716" y="351" class="body">New hub_task_status liveness query</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
-    <text x="716" y="384" class="body">Timed-out runs keep partial_text output</text>
+    <text x="716" y="384" class="body">CPU growth extends the idle budget</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">Mascot collapses on panel switch</text>
+    <text x="716" y="417" class="body">Exited PID + running result = lost delivery</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
-    <text x="716" y="450" class="body">CodeArts CLI 26.10.9 · 7 built-in models</text>
-    <text x="692" y="476" class="note">Audit stays 0 · all 13 Workers from 1.0.1 still stand.</text>
+    <text x="716" y="450" class="body">Console timer exit + mobile polish</text>
+    <text x="692" y="476" class="note">Audit stays 0 · all 14 Worker contracts still stand.</text>
   </g>
 
   <text x="64" y="541" class="section">Version history</text>
@@ -85,9 +85,9 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.18</text>
-    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">Long tasks survive</text>
-    <text x="1024" y="675" class="stage">No-progress budget</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.19</text>
+    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">Worker liveness</text>
+    <text x="1024" y="675" class="stage">Observable state</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->

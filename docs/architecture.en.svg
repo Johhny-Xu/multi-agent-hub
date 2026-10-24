@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="architecture-title architecture-desc">
-  <title id="architecture-title">multi-agent-hub 1.0.18: any MCP client, 6 native deep-integration hosts and a zero-client WebUI - 14 Workers under one scheduler</title>
-  <desc id="architecture-desc">Any MCP-capable client plugs straight in. Codex, ZCode, MiniMaxCode (Claude Code), DSH, CodeArts and Antigravity get native deep integration (sub-agents / commands / skills / workflows). With no client at all, the built-in WebUI console manages and chats on its own (persistent brand anchor, smart hover reveal/collapse for the top bar / activity bar / sidebar, 6 light-dark presets, custom-wallpaper glassmorphism, sub-agent accent colours). Same-machine or cross-machine connections; 14 Workers driven through their official CLIs; Apache License 2.0. This release replaces fixed timeouts with a no-progress budget and a 6-hour hard cap, upgrades CodeArts CLI to 26.10.9 with 7 built-in models defaulting to DeepSeek-V4.1-Flash, and collapses the mascot immediately on settings-panel switch.</desc>
+  <title id="architecture-title">multi-agent-hub 1.0.19: any MCP client, 6 native deep-integration hosts and a zero-client WebUI - 14 Workers under one scheduler</title>
+  <desc id="architecture-desc">Any MCP-capable client plugs straight in. Codex, ZCode, MiniMaxCode (Claude Code), DSH, CodeArts and Antigravity get native deep integration (sub-agents / commands / skills / workflows). With no client at all, the built-in WebUI console manages and chats on its own. Same-machine or cross-machine connections; 14 Workers driven through their official CLIs; Apache License 2.0. This release adds hub_task_status sub-agent liveness checks (PID, process-tree CPU, output delta, heartbeat, verdict), resetting idle budgets on CPU growth to eliminate silent long-task aborts.</desc>
   <defs>
     <style>
       text { font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #0f172a; }
@@ -18,11 +18,12 @@
       .label { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
     </style>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#2563eb"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#10b981"/></marker>
   </defs>
   <rect width="1280" height="1040" rx="24" fill="#f8fafc"/>
   <text x="32" y="58" class="title">multi-agent-hub · how a task actually flows</text>
   <rect x="1096" y="26" width="152" height="40" rx="20" fill="#dbeafe"/>
-  <text x="1172" y="53" text-anchor="middle" class="body blue" font-weight="700">source v1.0.18</text>
+  <text x="1172" y="53" text-anchor="middle" class="body blue" font-weight="700">source v1.0.19</text>
   <text x="32" y="94" class="body muted">Any MCP client · 6 native hosts · zero-client WebUI · 14 official Workers · Apache-2.0</text>
 
   <!-- Read from left to right; each arrow carries tasks and their results. -->
@@ -66,7 +67,7 @@
     <text x="340" y="354" class="small muted">local / LAN / remote</text>
     <line x1="340" y1="382" x2="518" y2="382" stroke="#bfdbfe"/>
     <text x="340" y="416" class="body" font-weight="700">Two MCP endpoints</text>
-    <text x="340" y="450" class="small">8 MCP tools · status</text>
+    <text x="340" y="450" class="small green" font-weight="600">9 MCP tools · liveness probe</text>
     <text x="340" y="482" class="small green" font-weight="600">HTTP subagent (:8790)</text>
     <text x="340" y="514" class="small blue">Agent onboarding prompt</text>
     <text x="340" y="546" class="small muted">Only summaries return</text>
@@ -85,12 +86,17 @@
     <text x="598" y="354" class="small muted">Thinking · stream · files</text>
     <line x1="598" y1="382" x2="804" y2="382" stroke="#a7d8c4"/>
     <text x="598" y="416" class="body" font-weight="700">Task &amp; status flow</text>
-    <text x="598" y="450" class="small">Persistent refs · polling</text>
-    <text x="598" y="482" class="small amber" font-weight="600">Worker on/off · breaker</text>
-    <text x="598" y="514" class="small green" font-weight="600">Singleflight quota merge</text>
-    <text x="598" y="546" class="small muted">Process guard &amp; reclaim</text>
-    <text x="598" y="578" class="small muted">Loopback direct, no proxy</text>
-    <text x="598" y="616" class="small green" font-weight="700">Daemon (systemd / bg)</text>
+    <text x="598" y="442" class="small">Persistent refs · safe polling</text>
+    <text x="598" y="468" class="small amber" font-weight="600">Worker breaker · singleflight</text>
+    <!-- Liveness status module -->
+    <rect x="586" y="488" width="230" height="114" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="586" y="488" width="230" height="6" rx="3" fill="#10b981"/>
+    <text x="598" y="514" font-size="15px" font-weight="700" fill="#0f766e">💓 Liveness · task_status</text>
+    <text x="598" y="536" font-size="13px" font-weight="600" fill="#1e293b">PID · tree CPU · delta · beat</text>
+    <text x="598" y="556" class="micro muted">working · alive_waiting</text>
+    <text x="598" y="574" class="micro muted">worker_exited_result_missing</text>
+    <text x="598" y="592" class="micro green" font-weight="600">CPU growth resets idle budget</text>
+    <text x="598" y="624" class="micro muted">Daemon (systemd) · group guard</text>
   </g>
 
   <g id="workers">
@@ -111,11 +117,13 @@
     <text x="886" y="518" class="worker">ZCode</text><text x="1224" y="518" text-anchor="end" class="small muted">zcode · dual-region</text>
     <rect x="880" y="525" width="350" height="34" rx="8" fill="#fffbeb"/>
     <text x="886" y="548" class="worker" font-weight="700">CodeArts</text><text x="1218" y="547" text-anchor="end" class="small muted">ca · Linux GLM verified</text>
-    <text x="886" y="604" class="small muted">On dispatch it calls the vendor CLI</text>
+    <text x="886" y="574" class="micro green" font-weight="600">Sub-process exposes PID · tree CPU · delta</text>
+    <text x="886" y="600" class="small muted">On dispatch it calls vendor CLI in background</text>
   </g>
   <path d="M290 400H314" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
   <path d="M546 400H570" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
   <path d="M832 400H856" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M880 570H818" stroke="#10b981" stroke-width="2" stroke-dasharray="4 2" marker-end="url(#arrow-green)"/>
   <text x="640" y="700" text-anchor="middle" class="small muted">Tasks flow right; status and results come back the same way · artifacts stay on disk · unsupported features are rejected up front</text>
 
   <!-- Deployment choices: independent components, not Hub-to-Hub federation. -->
@@ -134,5 +142,5 @@
   <text x="56" y="926" class="heading blue">Model vendors · the actual data flow</text>
   <text x="56" y="958" class="body">Client / WebUI → Hub → official CLI → model vendor. Long content ships as local files, never into context.</text>
   <text x="56" y="989" class="small muted">Accounts &amp; models are set per vendor; Antigravity / MiniMaxCode double as both plugin and Worker.</text>
-  <text x="32" y="1025" class="small muted">Current source v1.0.18 · no-progress timeouts · CodeArts 26.10.9 (7 models) · Apache License 2.0 (original copyright retained)</text>
+  <text x="32" y="1025" class="small muted">Current source v1.0.19 · hub_task_status liveness checks · process tree CPU protection · Apache License 2.0</text>
 </svg>

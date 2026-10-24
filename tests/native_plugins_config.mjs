@@ -69,8 +69,9 @@ test('actual Codex launcher exposes discovery with invalid file and rejects disp
       try {
         assert.ok((await call('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'fixture', version: '1' } })).result);
         const list = await call('tools/list');
-        assert.equal(list.result.tools.length, 8);
+        assert.equal(list.result.tools.length, 9);
         assert.ok(list.result.tools.some(tool => tool.name === 'hub_discover'));
+        assert.ok(list.result.tools.some(tool => tool.name === 'hub_task_status'));
         const refused = await call('tools/call', { name: 'hub_dispatch', arguments: { worker: 'mimo', task: 'invalid-connection fixture must not dispatch' } });
         const result = JSON.parse(refused.result.content[0].text);
         assert.equal(result.status, 'failed');

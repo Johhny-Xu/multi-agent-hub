@@ -9,7 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
-## [Unreleased]
+## [1.0.19] - 2026-10-24
+
+### 修复：WebUI 测试进程不退、移动端细节与浅色气泡
+
+- **测试进程挂死**：`console/checkin.mjs` 的 30 分钟自动签到 `setInterval` 句柄被丢弃、未 `unref`，`server.mjs dispose()` 也停不掉它，`node --test console_smoke.mjs` 27 项全过后进程永不退出。现在保存句柄、`unref`，新增 `stopAutoCheckinScheduler()` 并由 `dispose()` 调用；补「子进程 5 秒内自然退出」回归。
+- **移动端 4px 占位**：`.cb-status-bar` 已隐藏但 `.cb-status-bar-wrap` 仍有 padding；移动端连外壳一起 `display:none`。
+- **颜色与热区**：浅色用户气泡改 `align-self:flex-end`，用品牌色淡染提升边框对比；移动端 `#btn-attach` / `#btn-head-more` 用透明 `::after` 把命中区扩到 46×46，视觉尺寸不变。
+- **看板娘**：按用户实际观感要求**保持原停靠位置**，不做整体上移；只在样式覆盖层保留其余三项修复。
+- **验证**：前端 20 项、后端 28 项全过；真机 CDP 复测桌面 1440×900 / 移动端 390×844。
 
 ### 新增：`hub_task_status`，主代理派发后可判断子代理是否真的在工作
 
@@ -22,7 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `worker_exited_result_missing`：进程已退出但结果仍 running，属回传/落盘问题；
   - `completed` / `error` / `timeout`：终态。
   同时返回 `action`（wait / inspect_delivery / done …）、`guidance`、CPU/输出增量，首次查询建立基线，10 秒后复查看增量。
-- **接口**：新增 MCP `hub_task_status(ref, json=false)`；`hub_result_json` 透传 `verdict` 与 `liveness`；`hub_wait_result` 在预算耗尽时显示存活结论；异步受理回执直接提示先查 `hub_task_status`。
+- **接口**：新增 MCP `hub_task_status(ref, json=false)`；`hub_result_json` 透传 `verdict` 与 `liveness`；`hub_wait_result` 在预算耗尽时显示存活结论；异步受理回执直接提示先查 `hub_task_status`。7 份宿主 MCP 桥同步新增第 9 个标准工具 `hub_task_status`（`hub.mjs::taskStatus`），主代理不必直连 Hub 也能查。
 - **防误杀**：`run_cmd_mode` 的 idle 预算现在把**进程树 CPU 增长**也视为进展，静默但真在计算的任务不会被 stdout 空闲阈值切断；`_reap_result` 遇到仍存活的 PID 不再按 `updated_at` 判 timeout。
 - **测试**：新增 `tests/task_liveness_regressions.py`（12 例：进程树探测、working/alive_waiting/GUI/delivery 分类、reaper 不误杀、JSON/文本格式、静默 CPU 任务续期）；扩展异步集成测试断言运行中暴露 PID、完成后 verdict=completed。`task_contract_regressions` 23 项、`hub_core` + `runtime` 52 项全绿。
 

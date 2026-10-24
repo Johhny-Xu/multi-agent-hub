@@ -282,6 +282,7 @@ test("stdio MCP validates requests and respects notifications", async (t) => {
       const list = await request(1, "tools/list");
       assert.deepEqual(replies.map((reply) => reply.id), [1]);
       assert.ok(list.result.tools.some((tool) => tool.name === "hub_login"));
+      assert.ok(list.result.tools.some((tool) => tool.name === "hub_task_status"));
       const missing = await request(2, "tools/call", { name: "hub_dispatch", arguments: { worker: "cb" } });
       assert.equal(missing.error?.code, -32602);
       const stringTimeout = await request(3, "tools/call", { name: "hub_ask", arguments: { worker: "cb", task: "DONE", timeout_s: "1" } });
@@ -326,4 +327,41 @@ test("bridge recovers dynamically when connection configuration is restored", as
 
   const status = await bridge.hubStatus();
   assert.equal(status, 'recovered status');
+});
+
+test("bridge exposes structured worker liveness without treating running as failure", async (t) => {
+  const hub = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const rpc = JSON.parse(body);
+    assert.equal(rpc.params.name, "hub_task_status");
+    assert.deepEqual(rpc.params.arguments, { ref: "codebuddy-abc123", json: true });
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({
+      jsonrpc: "2.0", id: rpc.id,
+      result: { content: [{ type: "text", text: JSON.stringify({
+        ref: "codebuddy-abc123", agent: "codebuddy", status: "running",
+        verdict: "working", action: "wait", guidance: "CPU/输出仍在增长，继续等待",
+        pid: 4321, process_alive: true, process_count: 2,
+        cpu_seconds: 12.5, cpu_delta_seconds: 2.1,
+        output_bytes: 120, output_delta_bytes: 40,
+        last_output_age_s: 3, heartbeat_age_s: 4, elapsed_s: 30, preserve_ref: true,
+      }) }] },
+    }));
+  });
+  await new Promise((resolve) => hub.listen(0, "127.0.0.1", resolve));
+  const original = process.env.AGENTHUB_URL;
+  t.after(() => {
+    hub.close();
+    if (original === undefined) delete process.env.AGENTHUB_URL; else process.env.AGENTHUB_URL = original;
+  });
+  process.env.AGENTHUB_URL = `http://127.0.0.1:${hub.address().port}/mcp`;
+  const bridge = await import(new URL("../mcp/hub.mjs?task-status-test", import.meta.url));
+  const status = await bridge.taskStatus("codebuddy-abc123");
+  assert.equal(status.ok, true);
+  assert.equal(status.verdict, "working");
+  assert.equal(status.action, "wait");
+  assert.equal(status.pid, 4321);
+  assert.equal(status.cpu_delta_seconds, 2.1);
+  assert.match(status.answer, /继续等待/);
 });

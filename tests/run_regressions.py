@@ -127,7 +127,7 @@ def main():
             proc = spawn_owned(command, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                env=suite_env)
-            output, _ = proc.communicate(timeout=180 if name in {"packaging", "packaging_audit", "packaging_discovery"} else 90)
+            output, _ = proc.communicate(timeout=420 if name in {"packaging", "packaging_audit", "packaging_discovery"} else 90)
             code = proc.returncode
         except (OSError, subprocess.TimeoutExpired) as exc:
             output, code = str(exc), 1

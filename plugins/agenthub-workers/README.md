@@ -26,21 +26,25 @@
 
 模型与工具能力以 Hub 配置及 `hub_capabilities` 返回为准。别名由桥归一；国际版和国内版使用独立官方登录。`skills/dispatch-hub/SKILL.md` 提供并发协作与多代理调度指导；`commands/` 提供 `hub-status`、`hub-login`、`hub-discover`。
 
-## 七个 MCP 工具
+## 九个 MCP 工具
 
 server 名为 `hub-bridge`；宿主会给工具名添加插件命名空间。
 
 - `hub_ask`：派发一次并在 `timeout_s` 总预算内等待，返回 `ok/status/worker/ref/answer`。
 - `hub_dispatch`：异步受理并返回原始 `ref`。
 - `hub_fetch`：继续查询同一 `ref`。
+- `hub_task_status`：按 `ref` 探测子代理是否真的在工作（PID、进程树 CPU、输出增量、心跳与 `verdict`）；首次调用建基线，10 秒后再查看增量。
 - `hub_status`：查询 Hub 注册代理与在线状态。
 - `hub_capabilities`：查询每个 worker 已验证的模型与选项能力。
 - `hub_login`：`status/start/cancel` 官方登录流程，仅返回公开状态与用户需要的链接和验证码。
+- `hub_set_status`：启用/禁用指定 worker，与控制台和全端同步。
 - `hub_discover`：只读扫描本机和局域网 Hub，返回候选地址，不发送凭据、不修改连接。
 
 派发接受 `worker`、`task`、`timeout_s`，以及 `model`、`thinking`（`default/on/off`）、`stream`（布尔值）、`files`、`cwd`。`files` 是插件机器上的绝对路径数组，最多 8 个、合计 1 MiB；桥编码内容，Hub 在自己的机器暂存，支持跨 Windows/Linux 附件传送。`cwd` 则是 Hub 主机的目录。先查询能力；不支持的选项在执行前拒绝。禁止发送凭据文件。
 
 `stream=true` 请求流式生成。客户端提供 MCP `_meta.progressToken` 才能收到进度通知；没有 token 时 `delivery=buffered_no_progress_token`。保留原始 `ref` 和状态：只有 `ok=true`、`status=completed` 且答案符合验收条件才表示成功。
+
+长任务不要只看 `hub_fetch` 的 `running` 或输出静默就停：先调 `hub_task_status`。`verdict=working/alive_waiting/gui_working` 表示仍有存活证据，继续等；`worker_exited_result_missing` 才是进程退出但结果未回传，应查回传而不是重派。
 
 ## 加载与配置
 
