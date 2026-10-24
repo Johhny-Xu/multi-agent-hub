@@ -4235,11 +4235,98 @@
     var rail = $('#agents');
     var card = agentCardOf(name);
     if (!rail || !card || card.style.display === 'none') return;
+    AGENT_TOUR.pause();
     agentRailBusyUntil = Date.now() + 900; // 程序化滚动期间不搬家
     // 和打卡滑轨同一套手感：目标卡居中，越界时靠搬家补位，所以能一直循环
     window.HubRail.alignToSlot(rail, card, { center: true, loop: true, duration: 520 });
     setActiveAgentTab(name);
   }
+
+  // ---- 子代理滑轨自动巡览：无人操作时缓慢横滑展示各卡；点击/拖动/横滚轮后停 20 秒再恢复 ----
+  var AGENT_TOUR = (function () {
+    var SPEED_PX_S = 15;   // 「缓慢滑动」一秒 15px，走完一圈要几分钟
+    var RESUME_MS = 20000; // 交互后停止 20 秒
+    var reduced = false;
+    try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* 老浏览器忽略 */ }
+    var rail = null;
+    var tabs = null;
+    var raf = 0;
+    var resumeTimer = 0;
+    var pausedUntil = 0;
+    var lastT = 0;
+    var followAt = 0;
+    var followedName = '';
+    var acc = 0; // Safari/旧 WebKit 对 scrollLeft 赋值取整，0.25px 步进会被吃掉，累计到整像素再走
+
+    function canRun() {
+      if (reduced || !rail) return false;
+      var panel = $('#panel-agents');
+      if (!panel || panel.hidden) return false;   // 设置页子代理选项卡不在前台不巡览
+      if (document.hidden) return false;
+      if (Date.now() < pausedUntil) return false;
+      return rail.scrollWidth > rail.clientWidth + 8; // 卡片装得下就不动
+    }
+    // 巡览时胶囊条跟着高亮走：把当前居中的那张卡对应的胶囊轻推到胶囊条中间。
+    // 目标位用 getBoundingClientRect 相对差算（胶囊条没有 position:relative，offsetLeft 参照系不可靠）。
+    function followActiveTab() {
+      if (!tabs || tabs.scrollWidth <= tabs.clientWidth + 8) return;
+      var pill = tabs.querySelector('.qa-agent-tab.active');
+      if (!pill) return;
+      var name = pill.getAttribute('data-worker') || '';
+      if (!name || name === followedName) return; // 按名字 memo：胶囊每个快照都会重建，节点身份靠不住
+      followedName = name;
+      var inView = pill.getBoundingClientRect().left - tabs.getBoundingClientRect().left + tabs.scrollLeft;
+      var max = tabs.scrollWidth - tabs.clientWidth;
+      var target = inView - (tabs.clientWidth - pill.offsetWidth) / 2;
+      window.HubRail.animate(tabs, Math.max(0, Math.min(max, target)), 420);
+    }
+    function step(now) {
+      raf = 0;
+      if (!canRun()) return;
+      var dt = Math.min(120, now - (lastT || now));
+      lastT = now;
+      acc += SPEED_PX_S * dt / 1000;
+      var px = Math.floor(acc);
+      if (px > 0) {
+        rail.scrollLeft += px;
+        acc -= px;
+      }
+      if (now - followAt > 700) { followAt = now; followActiveTab(); }
+      raf = requestAnimationFrame(step);
+    }
+    function ensure() {
+      if (raf || reduced) return;
+      lastT = 0;
+      raf = requestAnimationFrame(step);
+    }
+    function pause() {
+      if (reduced) return; // reduced 下巡览根本不跑，别白挂 20s 定时器
+      pausedUntil = Date.now() + RESUME_MS;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(function () { resumeTimer = 0; ensure(); }, RESUME_MS + 80);
+    }
+    function bind() {
+      if (rail || reduced) return;
+      var r = $('#agents');
+      var t = $('#qa-agent-tabs');
+      if (!r || !t) return; // 两个都拿到才落引用，半失败状态不能被缓存成「已绑定」
+      rail = r;
+      tabs = t;
+      // 点击卡片、点击/拖动胶囊条、拖动滑轨、横向滚轮（滑轨和胶囊条都要）都算「在看」，立即停下
+      rail.addEventListener('pointerdown', pause);
+      tabs.addEventListener('pointerdown', pause);
+      [rail, tabs].forEach(function (n) {
+        n.addEventListener('wheel', function (ev) { if (Math.abs(ev.deltaX) > 0) pause(); }, { passive: true });
+      });
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) ensure(); });
+      document.querySelectorAll('nav.tabs > button[role="tab"]').forEach(function (t2) {
+        t2.addEventListener('click', function () { setTimeout(ensure, 0); });
+      });
+    }
+    return { bind: bind, ensure: ensure, pause: pause };
+  })();
+
   function renderAgentTabs(agents) {
     var host = $('#qa-agent-tabs');
     if (!host) return;
@@ -4259,6 +4346,8 @@
       host.appendChild(b);
     });
     if (!host.__railBound) window.HubRail.attach(host);
+    AGENT_TOUR.bind();
+    AGENT_TOUR.ensure();
     // 滑轨本身也挂拖动 + 惯性 + 无限循环；高亮跟随「居中」的那张卡
     var rail = $('#agents');
     if (rail && !rail.__railBound) {
