@@ -195,18 +195,24 @@ class TaskContractTests(unittest.TestCase):
                                                  "timeout_s": 3, "attachments": [attachment("跨系统.txt", "ATTACHMENT_ANSWER=37".encode("utf-8"))]})
             import re
             ref = re.search(r"fixture-[0-9a-f]{10}", receipt).group()
+            self.assertIn("hub_task_status", receipt)
             saw_progress = False
+            saw_process = False
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
                 data = json.loads(hub.tool_hub_result_json({"ref": ref}))
                 if data["status"] == "running" and "FIRST_PROGRESS" in (data.get("progress") or ""):
                     saw_progress = True
+                if data["status"] == "running" and data.get("liveness", {}).get("pid"):
+                    saw_process = True
                 if data["status"] in ('completed', 'error', 'timeout'):
                     break
                 time.sleep(.03)
             self.assertEqual(data["status"], "completed")
             self.assertIn("ATTACHMENT_ANSWER=37", data["text"])
             self.assertTrue(saw_progress)
+            self.assertTrue(saw_process, "running task must expose its worker PID for liveness checks")
+            self.assertEqual(data["liveness"]["verdict"], "completed")
             self.assertEqual(data["attachments"][0]["name"], "跨系统.txt")
             self.assertNotIn("env", data)
             for _ in range(20):

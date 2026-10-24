@@ -26,6 +26,7 @@ from pathlib import Path
 from command_runtime import CLI_HARD_TIMEOUT_SEC, CLI_IDLE_TIMEOUT_SEC, atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
 from state_store import StateFileLock, safe_component
 from result_store import read_result, update_result
+from process_liveness import probe_process_tree
 from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task, platform_name, public_model_capabilities, resolve_model
 from availability_store import local_availability, recorded as recorded_failures, record_outcome, refresh as refresh_availability, signature as profile_signature
 from output_parser import parse_output
@@ -126,17 +127,219 @@ def _positive_seconds(value, default):
     return positive_timeout(value, default)
 
 
+# 存活性采样历史只保存在当前 Hub 进程内: 主代理 10 秒后再查一次即可看到
+# CPU / 输出增量。它不参与任务结果判定, 也不写盘, 因此不会污染结果文件。
+_LIVENESS_PROBES = {}
+_LIVENESS_PROBE_LIMIT = 512
+
+
+def _safe_process_probe(pid):
+    try:
+        return probe_process_tree(pid)
+    except Exception:  # noqa: BLE001 - 探活失败不能影响状态查询
+        return {"alive": None, "cpu_seconds": None, "process_count": 0, "children": 0, "source": "error"}
+
+
+def _seconds_ago(value, now):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    return max(0.0, round(now - value, 1))
+
+
+def _task_liveness(data, *, probe=True):
+    """Answer "is this worker actually working?" without relying on wall clock.
+
+    Terminal statuses pass through. For running tasks the verdict uses, in order:
+    live PID tree + CPU growth, output growth, heartbeat/progress freshness.
+    A missing process with a still-running record is a delivery/record problem,
+    not a timeout.
+    """
+    now = _now()
+    ref = str(data.get("ref") or "")
+    status = str(data.get("status") or "unknown")
+    terminal = status in TERMINAL_STATUSES
+    pid = data.get("pid")
+    try:
+        pid = int(pid) if pid is not None else None
+    except (TypeError, ValueError):
+        pid = None
+    process = _safe_process_probe(pid) if (probe and pid and not terminal) else None
+
+    def number(key):
+        try:
+            return int(data.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    output_bytes = number("output_bytes")
+    output_age = _seconds_ago(data.get("last_output_at"), now)
+    heartbeat_age = _seconds_ago(data.get("heartbeat"), now)
+    progress_age = _seconds_ago(data.get("progress_at"), now)
+    record_age = _seconds_ago(data.get("updated_at"), now)
+    started_age = _seconds_ago(data.get("started_at"), now)
+    progress_present = bool(data.get("progress"))
+    cpu_seconds = process.get("cpu_seconds") if process else data.get("cpu_seconds")
+    try:
+        cpu_seconds = round(float(cpu_seconds), 3) if cpu_seconds is not None else None
+    except (TypeError, ValueError):
+        cpu_seconds = None
+    process_count = process.get("process_count") if process else data.get("process_count")
+    alive = process.get("alive") if process else None
+
+    cpu_delta = None
+    output_delta = None
+    sample_window = None
+    previous = _LIVENESS_PROBES.get(ref)
+    if previous:
+        sample_window = round(now - previous["at"], 1)
+        if cpu_seconds is not None and previous.get("cpu") is not None:
+            cpu_delta = round(cpu_seconds - previous["cpu"], 3)
+        output_delta = max(0, output_bytes - int(previous.get("bytes") or 0))
+    if ref:
+        if len(_LIVENESS_PROBES) >= _LIVENESS_PROBE_LIMIT and ref not in _LIVENESS_PROBES:
+            _LIVENESS_PROBES.pop(next(iter(_LIVENESS_PROBES)), None)
+        _LIVENESS_PROBES[ref] = {"at": now, "cpu": cpu_seconds, "bytes": output_bytes}
+
+    verdict = status
+    action = "none"
+    guidance = ""
+    if terminal:
+        if status == "completed":
+            action = "done"
+            guidance = "任务已完成，直接读取结果。"
+        elif status == "timeout":
+            action = "inspect_timeout"
+            guidance = "任务已按超时预算回收；先读 partial_text，确认是否续跑，不要盲目重派。"
+        else:
+            action = "handle_error"
+            guidance = "任务以错误结束；按 error 文本处理。"
+    elif status != "running":
+        action = "inspect"
+        guidance = "任务不是 running 状态，先核对 ref 与结果文件。"
+    elif pid is None:
+        # GUI workers (Trae / ZCode) have no CLI PID; use their UI snapshot heartbeat.
+        if progress_present and (progress_age is not None and progress_age <= 120):
+            verdict = "gui_working"
+            action = "wait"
+            guidance = "GUI 通道界面快照仍在更新，继续等待，不要按墙钟截断。"
+        elif heartbeat_age is not None and heartbeat_age <= 120:
+            verdict = "gui_waiting"
+            action = "wait"
+            guidance = "GUI 通道进程有心跳，但界面暂时没变化（可能在思考/排队）；继续等，别杀。"
+        elif started_age is not None and started_age <= 120:
+            verdict = "starting"
+            action = "wait"
+            guidance = "任务刚开始，尚无存活样本；10 秒后再查一次。"
+        else:
+            verdict = "unknown_no_liveness"
+            action = "inspect_delivery"
+            guidance = "没有进程、心跳或进度证据；先查 GUI 网关与结果回传，不能直接判 worker 失败。"
+    elif alive is False:
+        verdict = "worker_exited_result_missing"
+        action = "inspect_delivery"
+        guidance = "worker 已退出但结果仍是 running：先查 async_worker 日志和结果目录，不要重新派发。"
+    elif alive is True:
+        recent_output = output_age is not None and output_age <= 60
+        cpu_growing = cpu_delta is not None and cpu_delta >= 0.05
+        output_growing = output_delta is not None and output_delta > 0
+        if cpu_growing or output_growing or (recent_output and output_bytes > 0):
+            verdict = "working"
+            action = "wait"
+            guidance = "进程存活且有 CPU/输出进展，继续等待；不要因为一段时间没打印就截断。"
+        elif heartbeat_age is not None and heartbeat_age <= 120:
+            verdict = "alive_waiting"
+            action = "wait"
+            guidance = ("进程仍存活，但最近没有输出/CPU 增量（模型思考、排队或等待上游）。"
+                        + ("" if cpu_delta is not None else " 首次采样无增量基线，10 秒后复查。"))
+        else:
+            verdict = "alive_quiet"
+            action = "wait"
+            guidance = "进程仍存活但心跳偏旧；先确认上游队列/网络，不要直接杀进程。"
+    else:
+        verdict = "unknown_no_liveness"
+        action = "inspect"
+        guidance = "进程探活不可用（平台限制）；改用 hub_result_json 的 updated_at 与 progress 判断。"
+
+    return {
+        "ref": ref,
+        "agent": data.get("agent"),
+        "status": status,
+        "verdict": verdict,
+        "action": action,
+        "guidance": guidance,
+        "preserve_ref": not terminal,
+        "pid": pid,
+        "process_alive": alive,
+        "process_count": process_count,
+        "liveness_source": data.get("liveness_source") or ("process" if pid else "gui"),
+        "cpu_seconds": cpu_seconds,
+        "cpu_delta_seconds": cpu_delta,
+        "output_bytes": output_bytes,
+        "output_delta_bytes": output_delta,
+        "last_output_age_s": output_age,
+        "heartbeat_age_s": heartbeat_age,
+        "progress_age_s": progress_age,
+        "record_age_s": record_age,
+        "elapsed_s": started_age,
+        "sample_window_s": sample_window,
+    }
+
+
+def _format_task_status(liveness):
+    line = f"[{liveness['ref']}] agent={liveness.get('agent')} status={liveness['status']}"
+    line += f"\nverdict={liveness['verdict']} action={liveness['action']}"
+    if liveness.get("status") in TERMINAL_STATUSES:
+        process = "process=finished"
+    elif liveness.get("process_alive") is None:
+        process = f"process=n/a ({liveness.get('liveness_source') or 'gui'})"
+    else:
+        process = (f"process=alive({liveness['process_alive']}) pid={liveness.get('pid')} "
+                   f"tree={liveness.get('process_count')}")
+    if liveness.get("cpu_seconds") is not None:
+        process += f" cpu={liveness['cpu_seconds']}s"
+        if liveness.get("cpu_delta_seconds") is not None:
+            process += f" (+{liveness['cpu_delta_seconds']}s)"
+    line += f"\n{process}"
+    line += f"\noutput={liveness.get('output_bytes', 0)}B"
+    if liveness.get("output_delta_bytes") is not None:
+        line += f" (+{liveness['output_delta_bytes']}B)"
+    if liveness.get("last_output_age_s") is not None:
+        line += f" last_output={liveness['last_output_age_s']}s ago"
+    signals = []
+    for key, label in (("heartbeat_age_s", "heartbeat"), ("progress_age_s", "progress"), ("record_age_s", "record")):
+        if liveness.get(key) is not None:
+            signals.append(f"{label}={liveness[key]}s ago")
+    if liveness.get("elapsed_s") is not None:
+        signals.append(f"elapsed={liveness['elapsed_s']}s")
+    if signals:
+        line += "\n" + " ".join(signals)
+    line += f"\nguidance: {liveness.get('guidance') or '—'}"
+    return line
+
+
 def _reap_result(d):
     """把长期停留在 running 的记录判定为 timeout。
 
     worker 若异常退出(如解析任务文件失败), 结果文件会永远停在 running,
     调用方于是无限轮询、白白消耗 token。这里按 updated_at 判定陈旧并落盘。
+
+    但如果 PID 树还活着, 就不能仅凭 updated_at 判死: 这正是「主代理自己截断」
+    的根源。宁可多等, 也不要误杀仍在计算的 worker。
     """
     if not d or d.get("status") != "running":
         return d
     age = _now() - float(d.get("updated_at") or 0)
     if age < STALE_RUNNING_SEC:
         return d
+    pid = d.get("pid")
+    if pid:
+        live = _safe_process_probe(pid)
+        if live.get("alive"):
+            return d
     ref = d.get("ref")
     if not ref:
         return d
@@ -551,7 +754,9 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         cb_note = f"\n完成后将回调: {cb}" if cb else ""
         return (f"[{agent}/{ref}] 任务已异步受理 (此类任务耗时长, 不阻塞等待)。{cb_note}\n"
                 f"查询结果: hub_result(ref=\"{ref}\")\n"
-                f"轮询至 status=completed 即可取回回答 (running 时附受控端进度快照)。请勿因超时重复派发同一任务。")
+                f"查存活状态: hub_task_status(ref=\"{ref}\")  ← 先看 verdict，再看结果\n"
+                f"verdict=working/alive_waiting/gui_working 时任务仍在工作，不要按墙钟截断；"
+                f"只有终态或 worker_exited_result_missing 才需要处理。")
     # workdir_via: 某些 CLI 的登录态绑定特定目录 (如 codebuddy-cn 绑 home),
     # 用 --add-dir 把真实目标目录挂进工作区, 而进程本身固定在 prof.cwd 下运行
     proc = None
@@ -789,8 +994,13 @@ def tool_hub_wait_result(args):
     if not d:
         return f"[{ref}] status=unknown\n未找到任务结果，请核对 ref。"
     out = (f"[{ref}] status=running (等待预算用尽, 任务仍在执行)\n"
-           f"[受控端界面快照] {last_progress[:500] or '(暂无)'}\n"
-           f"建议: 再次调用本工具 (wait_s=110) 继续等待, 或按 1分钟→2分钟→3分钟→5分钟 节奏轮询。")
+           f"[受控端界面快照] {last_progress[:500] or '(暂无)'}\n")
+    live = _task_liveness(d)
+    out += (f"[存活] verdict={live['verdict']} action={live['action']} "
+            f"pid={live.get('pid') or '-'} cpu={live.get('cpu_seconds')}s "
+            f"output={live.get('output_bytes')}B (+{live.get('output_delta_bytes')}B)\n"
+            f"{live['guidance']}\n")
+    out += "建议: 再次调用本工具 (wait_s=110) 继续等待；看到 verdict=working/alive_waiting 时不要按墙钟截断。"
     return out
 
 
@@ -808,10 +1018,35 @@ def tool_hub_result_json(args):
     ref = safe_component(str(args.get("ref") or "").strip())
     data = _reap_result(_read_result(ref))
     if not data:
-        return json.dumps({"ref": ref, "status": "unknown", "text": "未找到任务结果，请核对 ref。"}, ensure_ascii=False)
+        return json.dumps({"ref": ref, "status": "unknown", "verdict": "unknown",
+                           "text": "未找到任务结果，请核对 ref。"}, ensure_ascii=False)
     keys = ("ref", "agent", "status", "text", "progress", "exit_code", "updated_at", "model", "thinking", "stream", "attachments", "usage",
             "timeout_kind", "partial_text")
-    return json.dumps({key: data[key] for key in keys if key in data}, ensure_ascii=False)
+    out = {key: data[key] for key in keys if key in data}
+    live = _task_liveness(data)
+    out["verdict"] = live["verdict"]
+    out["liveness"] = live
+    return json.dumps(out, ensure_ascii=False)
+
+
+def tool_hub_task_status(args):
+    """Tell the dispatcher whether a worker is working, waiting or gone.
+
+    This is deliberately separate from hub_result: it may be polled while the
+    task is still running, and it must never change the task result.
+    """
+    ref = safe_component(str(args.get("ref") or "").strip())
+    if not ref:
+        raise ValueError("缺少 ref")
+    data = _reap_result(_read_result(ref))
+    if not data:
+        live = {"ref": ref, "agent": None, "status": "unknown", "verdict": "unknown",
+                "action": "inspect", "guidance": "未找到任务结果，请核对 ref。", "preserve_ref": True}
+    else:
+        live = _task_liveness(data)
+    if _as_bool(args.get("json"), False):
+        return json.dumps(live, ensure_ascii=False)
+    return _format_task_status(live)
 
 
 def tool_trae_status(args):
@@ -845,7 +1080,9 @@ def _start_async(agent, mode, task, metadata, session_id="", env=None):
     process_env = dict(os.environ if env is None else env)
     process_env.update(HUB_RESULTS_DIR=str(RESULTS_DIR), TRAE_GATEWAY=TRAE_GATEWAY,
                        HUB_STATE_DIR=str(STATE), TRAE_DOM_READ=TRAE_DOM_READ, ZCODE_DOM_DRIVER=ZCODE_DOM_DRIVER)
-    _save_result(ref, agent=agent, status="running", task=task, **metadata.get("public_options", {}))
+    _save_result(ref, agent=agent, status="running", task=task, started_at=time.time(),
+                 liveness_source="gui" if mode in ("trae", "zcode") else "process",
+                 **metadata.get("public_options", {}))
     try:
         atomic_write_json(task_path, metadata)
         kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
@@ -1123,6 +1360,9 @@ TOOL_DEFS = [
      {"ref": {"type": "string"}}, ["ref"]),
     ("hub_result_json", "查询结构化任务状态和增量进度，不包含私有执行参数。",
      {"ref": {"type": "string"}}, ["ref"]),
+    ("hub_task_status", "查询子代理是否真的在工作：进程树存活、CPU 时间、输出字节、心跳/进度，并给出 verdict 与 action。running 时首次调用建立采样基线，10 秒后再查可看 CPU/输出增量；verdict=working/alive_waiting/gui_working 表示仍有存活证据，不应按墙钟截断。",
+     {"ref": {"type": "string"},
+      "json": {"type": "boolean", "default": False, "description": "true 返回结构化 JSON，默认返回可读文本"}}, ["ref"]),
     ("hub_wait_result", "阻塞等待异步任务完成 (服务端按 0/3/6/12/25/45/70/95秒 前置密集+递进回查)。快任务几秒命中秒回; 长任务预算尽返回进度快照。推荐代替反复 hub_result, 减少模型输入。",
      {"ref": {"type": "string"},
       "wait_s": {"type": "number", "default": 110, "description": "本次阻塞等待预算(秒), 上限 115"}}, ["ref"]),
@@ -1171,6 +1411,7 @@ HANDLERS = {n: (f, ) for n, f in [
     ("trae_new_chat", tool_trae_new_chat),
     ("zcode_delegate", tool_zcode_delegate), ("zcode_result", tool_zcode_result),
     ("hub_result", tool_hub_result), ("hub_result_json", tool_hub_result_json), ("hub_wait_result", tool_hub_wait_result),
+    ("hub_task_status", tool_hub_task_status),
     ("hub_reap", tool_hub_reap)]}
 
 

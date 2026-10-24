@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
@@ -525,6 +526,32 @@ test('auth login supports Unicode profile names and /api/auth/cancel cleans up s
     const polled = await api(`/api/auth/poll?loginId=${encodeURIComponent(started.body.loginId)}`);
     assert.equal(polled.body.ok, false);
   } finally { await stop(); }
+});
+
+test('dispose 后子进程能自然退出（自动签到调度器不钉死事件循环）', async () => {
+  // 回归：startAutoCheckinScheduler 曾把 30 分钟 interval 的句柄丢弃且未 unref，
+  // dispose 清不掉 → node --test 全部用例通过后进程永不退出。
+  const script = `
+    const { start } = await import(${JSON.stringify(pathToFileURL(resolve('console/server.mjs')).href)});
+    const runtime = await start({
+      dataDir: ${JSON.stringify(join(root, 'scheduler-child-data'))},
+      pluginRoot: ${JSON.stringify(join(root, 'plugin'))},
+      listen: { host: '127.0.0.1', port: 0 },
+      signal: new AbortController().signal,
+      logger: { info() {}, warn() {}, debug() {} },
+    });
+    await runtime.dispose();
+  `;
+  await mkdir(join(root, 'scheduler-child-data'), { recursive: true });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', (d) => { stderr += d; });
+  const result = await new Promise((resolveChild) => {
+    const killer = setTimeout(() => child.kill('SIGKILL'), 5000);
+    child.on('close', (code, signal) => { clearTimeout(killer); resolveChild({ code, signal }); });
+  });
+  assert.equal(result.signal, null, `子进程 5 秒内未自然退出（dispose 没停掉签到调度器?）\n${stderr}`);
+  assert.equal(result.code, 0, `子进程异常退出: code=${result.code}\n${stderr}`);
 });
 
 test.after(async () => {

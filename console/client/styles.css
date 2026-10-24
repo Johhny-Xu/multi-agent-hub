@@ -8737,3 +8737,33 @@ html[data-theme="light"] .bubble.agent {
 .composer .send-btn { border-radius: 10px !important; padding: 7px 16px !important; }
 .current-agent-pill { max-width: min(60vw, 560px) !important; }
 .chat-msgs pre, .code-block-wrap { border-radius: 10px !important; }
+
+/* ==========================================================================
+   验收修复（2026-10-24 第二批）：只收定位与命中区，不换设计语言。
+   ========================================================================== */
+
+/* 1) 移动端状态栏内容已隐藏，外层包裹仍有 padding 占位：连外壳一起收起。 */
+html[data-ui="mobile"] .cb-status-bar-wrap { display: none !important; }
+
+/* 2) 用户气泡右靠：align-self 与外层 margin 对齐方向统一为 flex-end；
+      浅色下用品牌色淡染底色 + 品牌色描边，提升与画布的对比，配色体系不变。 */
+.bubble.user { align-self: flex-end !important; }
+html[data-theme="light"] body:not(.has-custom-bg) .bubble.user {
+  background: color-mix(in srgb, var(--gem-primary) 36%, var(--gem-bg-card, #ffffff)) !important;
+  border-color: color-mix(in srgb, var(--gem-primary) 55%, var(--gem-border-strong)) !important;
+}
+
+/* 3) 移动端 #btn-attach / #btn-head-more 视觉尺寸不动，
+      用透明 ::after 把命中热区撑到 46×46（≥44×44；元素本身仍是 37×30 / 34×32）。 */
+html[data-ui="mobile"] #btn-attach,
+html[data-ui="mobile"] #btn-head-more { position: relative; }
+html[data-ui="mobile"] #btn-attach::after,
+html[data-ui="mobile"] #btn-head-more::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  transform: translate(-50%, -50%);
+}

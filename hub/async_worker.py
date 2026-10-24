@@ -36,6 +36,7 @@ from result_store import read_result as stored_result, update_result
 from task_contract import cleanup_attachments
 from output_parser import parse_output, parse_usage
 from availability_store import record_outcome
+from process_liveness import probe_process_tree
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -79,6 +80,9 @@ PROGRESS_INTERVAL = 6
 # 无新输出时也定期刷新 updated_at, 避免 Hub 的陈旧判定 (HUB_STALE_RUNNING_SEC)
 # 把「正在思考、只是还没打印」误判成 worker 已死。
 HEARTBEAT_INTERVAL = 60
+# 进程树 CPU 采样间隔。CPU 增长也视为「仍在工作」, 用于防止静默但真在计算的
+# CLI 被纯 stdout 空闲阈值误杀。
+CPU_SAMPLE_INTERVAL = 10
 PARTIAL_LIMIT = 20000
 
 
@@ -181,14 +185,24 @@ def progress_poller(ref, reader_argv, stop_event):
 
     必须运行在独立线程中: 旧版在主线程同步调用本函数, 而 stop_event 只在
     线程 join 之后才 set, 导致死循环、worker 永不返回。
+
+    GUI 通道没有 CLI 进程可以探活, 所以这里同时维护心跳: 界面快照变化时
+    更新 progress_at; 即使界面暂时不动也每 HEARTBEAT_INTERVAL 秒刷新一次
+    heartbeat, 让主代理能区分「GUI 仍在工作/等待」和「结果回传丢了」。
     """
     last = ""
+    last_heartbeat = time.monotonic()
     while not stop_event.is_set():
         try:
             prog = (subprocess_run(reader_argv, stop_event=stop_event) or "").strip()
             if not stop_event.is_set() and prog and prog != last:
                 last = prog
-                save(ref, only_if_running=True, progress=prog[:800])
+                save(ref, only_if_running=True, progress=prog[:800],
+                     progress_at=time.time(), heartbeat=time.time())
+                last_heartbeat = time.monotonic()
+            elif not stop_event.is_set() and time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL:
+                save(ref, only_if_running=True, heartbeat=time.time())
+                last_heartbeat = time.monotonic()
         except Exception:  # noqa: BLE001 - 轮询失败不应影响主任务
             pass
         stop_event.wait(PROGRESS_INTERVAL)
@@ -376,10 +390,16 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=CLI_IDLE_TIMEOUT_S
                 input_stream = open(input_file, "rb")
             proc = spawn_owned(cmd_list, cwd=cwd, env=child_env, stdin=input_stream or subprocess.DEVNULL,
                                stdout=fo, stderr=fe)
+            # Expose a cheap liveness source to the Hub: the supervisor can probe
+            # this PID tree instead of guessing from stdout silence.
+            save(ref, only_if_running=True, pid=proc.pid, liveness_source="process",
+                 output_bytes=0, last_output_at=time.time(), heartbeat=time.time())
             started = time.monotonic()
             hard_deadline = started + hard_budget
             idle_deadline = started + idle_budget
             heartbeat_at = started
+            cpu_check_at = started
+            last_cpu = None
             last = ""
             last_written = 0
 
@@ -416,19 +436,42 @@ def run_cmd_mode(cmd_list, taskfile, ref, cwd=None, timeout_s=CLI_IDLE_TIMEOUT_S
                     # 确实在干活，不能因此被判定卡死。
                     written = os.path.getsize(tmpout) + os.path.getsize(tmperr)
                     tail = _read_cli_output(tmpout)["text"][-PARTIAL_LIMIT:]
+                    updates = {}
                     if written > last_written:
                         # 有新输出 = 还在干活: 续期, 这就是长任务不再被切断的地方。
                         last_written = written
                         idle_deadline = time.monotonic() + idle_budget
                         heartbeat_at = time.monotonic()
+                        updates["output_bytes"] = written
+                        updates["last_output_at"] = time.time()
                     if tail != last:
                         last = tail
-                        save(ref, only_if_running=True, progress=tail, exit_code=None)
+                        updates["progress"] = tail
+                        updates["exit_code"] = None
+                    if updates:
+                        save(ref, only_if_running=True, **updates)
                     elif time.monotonic() - heartbeat_at >= HEARTBEAT_INTERVAL:
                         # 进程活着但暂时安静(模型在思考/工具在跑): 只刷新 updated_at,
                         # 不改 progress, 免得被 Hub 的陈旧判定当成 worker 已死。
-                        save(ref, only_if_running=True, heartbeat=time.time())
+                        save(ref, only_if_running=True, heartbeat=time.time(), output_bytes=last_written)
                         heartbeat_at = time.monotonic()
+
+                    # CPU 时间增长同样是「还在干活」。有的 CLI 会先长时间计算/等
+                    # 上游，再一次性吐最终答案；只看 stdout 字节会把它误判成卡死。
+                    now_cpu = time.monotonic()
+                    if now_cpu - cpu_check_at >= CPU_SAMPLE_INTERVAL:
+                        info = probe_process_tree(proc.pid)
+                        cpu_seconds = info.get("cpu_seconds")
+                        if cpu_seconds is not None:
+                            grew = last_cpu is not None and cpu_seconds - last_cpu >= 0.05
+                            if grew:
+                                idle_deadline = now_cpu + idle_budget
+                                heartbeat_at = now_cpu
+                            last_cpu = cpu_seconds
+                            save(ref, only_if_running=True, cpu_seconds=cpu_seconds,
+                                 process_count=info.get("process_count"),
+                                 output_bytes=last_written, heartbeat=time.time())
+                        cpu_check_at = now_cpu
                 except OSError:
                     pass
         diagnostic, terminal_error = _read_cli_stderr(tmperr)
@@ -520,7 +563,9 @@ def main():
         current = read_result(ref) or {}
         if current.get("status") and current["status"] != "running":
             return 1
-        initial = {"agent": current.get("agent") or mode, "status": "running"}
+        initial = {"agent": current.get("agent") or mode, "status": "running",
+                   "started_at": time.time(),
+                   "liveness_source": "gui" if mode in ("trae", "zcode") else "process"}
         if mode != "cmd":
             initial["task"] = task
         current = save(ref, only_if_running=bool(current), **initial)
@@ -530,7 +575,7 @@ def main():
             text, sid = trae_run(task, session_id, ref, new_chat=meta.get("new_chat", False),
                                  timeout=positive_timeout(meta.get("timeout_s"), TRAE_TIMEOUT))
             save(ref, only_if_running=True, status="completed", text=text, session_id=sid or None,
-                 progress=None)
+                 progress=None, heartbeat=time.time())
         elif mode == "cmd":
             cmd_list = cmd if isinstance(cmd, list) else json.loads(task)
             text, code = run_cmd_mode(cmd_list, taskfile, ref, cwd=meta.get("cwd"),
@@ -538,12 +583,12 @@ def main():
                                       input_file=meta.get("input_file"), watch_result=True,
                                       hard_timeout_s=meta.get("hard_timeout_s"))
             save(ref, only_if_running=True, status="completed" if code == 0 else "error", text=text or "(无输出)",
-                 exit_code=code, progress=None)
+                 exit_code=code, progress=None, heartbeat=time.time())
             outcome = 0 if code == 0 else 1
         else:
             text = zcode_run(task, session_id, ref, timeout=positive_timeout(meta.get("timeout_s"), ZCODE_TIMEOUT))
             save(ref, only_if_running=True, status="completed", text=text, session_id=session_id or None,
-                 progress=None)
+                 progress=None, heartbeat=time.time())
         push_callback(callback_url, read_result(ref))
     except CommandCancelled:
         outcome = 1

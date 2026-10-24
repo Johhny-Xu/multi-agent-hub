@@ -11,6 +11,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 新增：`hub_task_status`，主代理派发后可判断子代理是否真的在工作
+
+- **问题**：以前主代理只能看 `status=running` 或 `progress`；CLI 只要一段时间不打印，主代理就不知道该等还是该杀，容易按自己的墙钟截断，把仍在计算/排队的 worker 误判成卡死。
+- **采集**：异步 worker 现在记录 `pid`、`started_at`、`output_bytes`、`last_output_at`、`cpu_seconds`、`process_count`、`heartbeat`；GUI 进度轮询也会写 `progress_at` 与心跳。
+- **判定**：新增 `hub/process_liveness.py`（Linux 读 `/proc` 汇总整棵进程树 CPU，其他平台回退 PID 存活探测），`agent_hub.py` 据此给出：
+  - `working`：进程存活且 CPU/输出有增长；
+  - `alive_waiting` / `alive_quiet`：进程活但暂时无输出（思考、排队）；
+  - `gui_working` / `gui_waiting`：无 CLI PID 的 GUI 通道按快照/心跳判断；
+  - `worker_exited_result_missing`：进程已退出但结果仍 running，属回传/落盘问题；
+  - `completed` / `error` / `timeout`：终态。
+  同时返回 `action`（wait / inspect_delivery / done …）、`guidance`、CPU/输出增量，首次查询建立基线，10 秒后复查看增量。
+- **接口**：新增 MCP `hub_task_status(ref, json=false)`；`hub_result_json` 透传 `verdict` 与 `liveness`；`hub_wait_result` 在预算耗尽时显示存活结论；异步受理回执直接提示先查 `hub_task_status`。
+- **防误杀**：`run_cmd_mode` 的 idle 预算现在把**进程树 CPU 增长**也视为进展，静默但真在计算的任务不会被 stdout 空闲阈值切断；`_reap_result` 遇到仍存活的 PID 不再按 `updated_at` 判 timeout。
+- **测试**：新增 `tests/task_liveness_regressions.py`（12 例：进程树探测、working/alive_waiting/GUI/delivery 分类、reaper 不误杀、JSON/文本格式、静默 CPU 任务续期）；扩展异步集成测试断言运行中暴露 PID、完成后 verdict=completed。`task_contract_regressions` 23 项、`hub_core` + `runtime` 52 项全绿。
+
 ### 重构：WebUI 拆成 index.html + styles.css + 三个脚本 + assets
 
 - **动机**：单文件 `index.html` 4.96 MB / 18,343 行（其中 4 MB 是内嵌 base64 视频），任何编辑器或模型都无法整体处理，改一处样式要翻 8,700 行 CSS。

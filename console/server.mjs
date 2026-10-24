@@ -3266,6 +3266,7 @@ export async function start(context) {
     clearInterval(watcherKick);
     clearInterval(resultsSweepTimer);
     try { authMod.cancelAllLogins?.(); } catch { /* noop */ }
+    checkinMod.stopAutoCheckinScheduler?.();
     for (const res of sseClients) { try { res.end(); } catch { /* noop */ } }
     sseClients.clear();
     disposal = new Promise((resolve, reject) => {

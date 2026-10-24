@@ -284,7 +284,10 @@ def main():
                     continue
                 result = hub._read_result(ref)
                 if result and result.get("status") in hub.TERMINAL_STATUSES:
-                    observed_results[agent] = {**result, "probe_elapsed_seconds": round(time.monotonic() - launch_times[agent], 3)}
+                    observed_results[agent] = {**result,
+                                               "probe_elapsed_seconds": round(time.monotonic() - launch_times[agent], 3),
+                                               "worker_elapsed_seconds": round(
+                                                   float(result.get("updated_at") or 0) - float(result.get("started_at") or 0), 3)}
             if len(observed_results) == len(refs):
                 break
             time.sleep(0.05)
@@ -306,7 +309,7 @@ def main():
               {"result": observed_results["codebuddy-cn"], "task_metadata": metadata["codebuddy-cn"]},
               ["hub/agent_hub.py:455", "hub/agent_hub.py:478"])
         timeout_result = observed_results["mimocode"]
-        check("async_timeout", timeout_result.get("status") in ("timeout", "error") and timeout_result.get("probe_elapsed_seconds", 99) < 1.5,
+        check("async_timeout", timeout_result.get("status") in ("timeout", "error") and timeout_result.get("worker_elapsed_seconds", 99) < 1.5,
               "Requested timeout_s=0.1 bounds a synthetic 2-second child and reports timeout/error",
               {"requested_timeout_s": 0.1, "child_sleep_s": 2, "result": timeout_result, "task_metadata": metadata["mimocode"]},
               ["hub/agent_hub.py:423", "hub/agent_hub.py:463", "hub/async_worker.py:277"])

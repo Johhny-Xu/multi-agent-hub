@@ -2017,13 +2017,12 @@ export async function updateCheckinConfig(config) {
 /**
  * 后台定时自动签到调度器
  */
-let timerStarted = false;
+let autoCheckinTimer = null;
 export function startAutoCheckinScheduler() {
-  if (timerStarted) return;
-  timerStarted = true;
+  if (autoCheckinTimer) return;
 
   // 每 30 分钟检查一次是否到达签到时间或尚未今日打卡
-  setInterval(async () => {
+  autoCheckinTimer = setInterval(async () => {
     try {
       const state = await loadState();
       if (!state.autoCheckin) return;
@@ -2048,4 +2047,13 @@ export function startAutoCheckinScheduler() {
       console.error('[Checkin] 自动打卡定时器异常:', e.message);
     }
   }, 30 * 60 * 1000);
+  // unref：调度器不参与事件循环保活，否则 dispose/测试结束后进程无法自然退出
+  autoCheckinTimer.unref?.();
+}
+
+/** 停止后台调度器（server.dispose 调用；停止后可重新 start） */
+export function stopAutoCheckinScheduler() {
+  if (!autoCheckinTimer) return;
+  clearInterval(autoCheckinTimer);
+  autoCheckinTimer = null;
 }
