@@ -86,6 +86,30 @@ class TaskContractTests(unittest.TestCase):
         self.assertTrue(Path(plan["staging"]).is_dir())
         self.assertEqual({item["kind"] for item in plan["metadata"]["attachments"]}, {"image", "file"})
 
+    def test_codearts_file_attachment_rides_driver_attach_and_images_stay_blocked(self):
+        profile = {
+            "cli": ["python3", "drivers/codearts_cli.py", "--task", "{task}"],
+            "model_arg": "--model",
+            "models": {"default": "huaweicloud-maas/deepseek-v4.1-flash"},
+        }
+        caps = public_model_capabilities("codearts", profile, "huaweicloud-maas/deepseek-v4.1-flash")
+        self.assertTrue(caps["attachments"]["file"]["supported"])
+        self.assertFalse(caps["attachments"]["image"]["supported"])
+
+        plan = self.prepare(
+            worker="codearts", profile=profile,
+            attachments=[attachment("notes.txt", "标记行 AGH-ATTACH-OK".encode("utf-8"))],
+        )
+        idx = plan["extra_args"].index("--attach")
+        staged = Path(plan["extra_args"][idx + 1])
+        self.assertTrue(staged.is_file())
+        self.assertEqual(staged.read_text(encoding="utf-8-sig"), "标记行 AGH-ATTACH-OK")
+        self.assertEqual(plan["metadata"]["attachments"][0]["mode"], "cli")
+
+        # 图像通道仍未开放：码道 CLI 的 --file 只按 UTF-8 文本投递
+        with self.assertRaises(UnsupportedCapability):
+            self.prepare(worker="codearts", profile=profile, attachments=[attachment("shot.png", b"png-bytes", "image/png")])
+
     def test_scalar_format_flags_are_replaced_and_attachment_flags_repeat(self):
         command = ['mimo', 'run', '--format', 'json', '--model=old', '{task}']
         result = merge_cli_arguments(command, ['--format', 'json', '--model', 'new', '--file', 'a', '--file', 'b'])

@@ -502,8 +502,9 @@
     },
     "attachments": {
       "file": {
-        "supported": false,
-        "reason": "File attachment delivery has not passed a real authenticated CodeArts model request on this adapter."
+        "mode": "cli",
+        "flag": "--attach",
+        "reason": "Driver validates UTF-8 text (suffix allowlist, <=10MB) and forwards to the CodeArts CLI --file channel."
       },
       "image": {
         "supported": false,
