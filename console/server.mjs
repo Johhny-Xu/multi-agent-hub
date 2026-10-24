@@ -6,7 +6,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir, stat, lstat, rename, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, resolve, sep, dirname, basename } from 'node:path';
+import { join, resolve, sep, dirname, basename, extname } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -693,6 +693,22 @@ export async function start(context) {
   const clientPath = [join(context.pluginRoot, 'miniapp/client/index.html'), join(dirname(fileURLToPath(import.meta.url)), 'client/index.html')].find(existsSync);
   if (!clientPath) throw new Error('控制台页面不存在');
   const clientEntry = await readFile(clientPath);
+  // 页面拆成 index.html + styles.css + js + assets 后，静态资源与入口同目录；
+  // 只登记白名单文件，避免把该目录当成任意文件服务器。
+  const clientDir = dirname(clientPath);
+  const STATIC_MIME = {
+    '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+    '.webm': 'video/webm', '.png': 'image/png', '.ico': 'image/x-icon',
+    '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8',
+  };
+  const staticEntries = new Map();
+  for (const rel of ['styles.css', 'app-main.js', 'qa-grid.js', 'mascot.js',
+    'assets/mascot-loop.webm', 'assets/mascot-hang.webm', 'assets/mascot-fall.webm',
+    'assets/mascot-wipe.webm', 'favicon.png', 'favicon.ico', 'logo.png']) {
+    const full = join(clientDir, rel);
+    if (!existsSync(full)) continue;
+    staticEntries.set(`/${rel}`, { data: await readFile(full), type: STATIC_MIME[extname(rel)] || 'application/octet-stream' });
+  }
   let disposing = false;
   const dataDir = context.dataDir;
   await mkdir(dataDir, { recursive: true });
@@ -2382,6 +2398,15 @@ export async function start(context) {
     };
 
     const route = async () => {
+      if ((request.method === 'GET' || request.method === 'HEAD') && staticEntries.has(p)) {
+        const entry = staticEntries.get(p);
+        response.writeHead(200, {
+          'content-type': entry.type, 'content-length': entry.data.length, 'cache-control': 'no-store',
+        });
+        if (request.method === 'HEAD') { response.end(); return; }
+        response.end(entry.data);
+        return;
+      }
       if ((request.method === 'GET' || request.method === 'HEAD') && (p === '/dashboard' || p === '/')) {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         if (request.method === 'HEAD') { response.end(); return; }

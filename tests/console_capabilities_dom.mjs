@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import test from 'node:test';
 
-const html = (await readFile(new URL('../console/client/index.html', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const clientText = async (name) => (await readFile(new URL(`../console/client/${name}`, import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const html = (await Promise.all(['index.html', 'styles.css', 'app-main.js', 'qa-grid.js', 'mascot.js'].map(clientText))).join('\n');
 const names = ['getModelCatalog', 'getModelCapability', 'getAgentPrefs', 'saveAgentPrefs', 'getModelDisplayName', 'getModelSummaryText',
   'getAgentMeta', 'agentModelSelectable', 'agentFixedModelName',
   'getAgentAccent', 'applyAgentAccent', 'updateModelSummaryUI',

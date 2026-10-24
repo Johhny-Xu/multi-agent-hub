@@ -8,7 +8,9 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = readFileSync(join(ROOT, 'console', 'client', 'index.html'), 'utf-8');
+const CLIENT = join(ROOT, 'console', 'client');
+const CLIENT_FILES = ['index.html', 'styles.css', 'app-main.js', 'qa-grid.js', 'mascot.js'];
+const HTML = CLIENT_FILES.map((name) => readFileSync(join(CLIENT, name), 'utf-8')).join('\n');
 
 function inlineScripts(html) {
   const blocks = [];
@@ -36,6 +38,14 @@ test('every inline script compiles', () => {
       new vm.Script(code, { filename: `console/client/index.html#script-${index}` });
     }, `inline script #${index} has a syntax error`);
   });
+});
+
+
+test('external client scripts compile', () => {
+  for (const name of ['app-main.js', 'qa-grid.js', 'mascot.js']) {
+    const code = readFileSync(join(CLIENT, name), 'utf-8');
+    assert.doesNotThrow(() => new vm.Script(code, { filename: `console/client/${name}` }), `${name} has a syntax error`);
+  }
 });
 
 test('new workers appear in the brand avatar and theme tables', () => {

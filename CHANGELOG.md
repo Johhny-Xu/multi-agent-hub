@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 重构：WebUI 拆成 index.html + styles.css + 三个脚本 + assets
+
+- **动机**：单文件 `index.html` 4.96 MB / 18,343 行（其中 4 MB 是内嵌 base64 视频），任何编辑器或模型都无法整体处理，改一处样式要翻 8,700 行 CSS。
+- **拆分**：`styles.css`（275 KB）、`app-main.js`（278 KB）、`qa-grid.js`（99 KB）、`mascot.js`（22 KB）、`assets/*.webm`（4 段看板娘素材），`index.html` 降到 **169 KB**。机械搬运，内容逐字节保留，head 里的移动端判定脚本仍内联。
+- **服务端**：`console/server.mjs` 增加静态白名单路由（`/styles.css`、`/app-main.js`、`/qa-grid.js`、`/mascot.js`、`/assets/*.webm`、图标），未知路径仍 404。
+- **测试**：三个 DOM/语法测试改为拼接读取拆分后的文件，并新增「外部脚本可编译」用例；20 项全绿。
+- **验证**：线上页面与拆分前一致（同 SHA 的源文件拆分，无逻辑改动），静态资源 200、`Content-Type` 正确。
+
 ## [1.0.18] - 2026-10-23
 
 ### 升级：Linux CodeArts CLI 26.9.12 → 26.10.9，模型目录对齐 7 个内置模型
