@@ -885,6 +885,8 @@ async function customCredentialAccount(platform) {
     identity: identity || 'custom',
     token: raw,
     exp: Number(pl.exp) || 0,
+    // 不带 worker 时 qoder-cn 的自定义 Token 会被 checkinQoderOne 当成国际版（打错 baseUrl）
+    worker: (PLATFORM_WORKERS[platform] || [''])[0],
     active: false,
     source: '自定义 Token',
   };
@@ -1705,12 +1707,15 @@ async function checkinQoderOne(acct) {
   }
   const deviceNote = device?.note || '';
   let fetched = null;
+  let winner = null;
   for (const candidate of candidates) {
     const entry = { ...candidate, expiresAt: candidate.expiresAt || candidate.exp || 0 };
     fetched = await fetchQoderCampaigns(entry, device);
+    winner = entry;
     if (fetched.res.status !== 401 && fetched.res.status !== 403) break;
   }
-  const { res, token } = fetched;
+  const { res } = fetched;
+  let token = fetched.token;
   if (res.status === 401 || res.status === 403) {
     return { ok: false, status: 'expired', message: `签到活动查询失败（HTTP ${res.status}），请确认凭证有效且地区选择正确`, credits: 0, consecutiveDays: 0 };
   }
@@ -1730,8 +1735,29 @@ async function checkinQoderOne(acct) {
   let campaigns = extractQoderCampaigns(res.json);
   let claimable = campaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
   let claimedBefore = campaigns.filter((item) => qoderClaimedToday(item));
-  const staleClaimed = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
+  let staleClaimed = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
   let useBase = '';
+
+  // Qoder CN：完整设备头下 200 但活动列表为空时，改用最小请求头（不带设备指纹）再取一次
+  // （移植 L0NE-6/Qoder-Daily v1.0.10：上游对带完整设备头的请求可能下发空活动列表，最小头才看得到）。
+  // 采纳条件是「最小头列表非空」——今日已领（CLAIMED）也要采纳，否则会把已领态误报成「上游未下发」；
+  // 领取仍走原设备头路径，与上游一致（复取只解决「看不见」，不改变领取请求）。
+  // 最小头仍为空 → 保留首次空结果照常走「无活动」分支；HTTP 401/403 走 fetchQoderCampaigns 内已有的续期重试。
+  if (worker === 'qoder-cn' && device && res.ok && !claimable.length && !claimedBefore.length) {
+    try {
+      const minimal = await fetchQoderCampaigns({ ...winner, token }, null);
+      const minimalCampaigns = minimal.res.ok && minimal.res.json?.success !== false
+        ? extractQoderCampaigns(minimal.res.json)
+        : [];
+      if (minimalCampaigns.length) {
+        campaigns = minimalCampaigns;
+        claimable = minimalCampaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
+        claimedBefore = minimalCampaigns.filter((item) => qoderClaimedToday(item));
+        staleClaimed = minimalCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
+        token = minimal.token;
+      }
+    } catch { /* 最小头复取失败按原结果走 */ }
+  }
 
   // 国际版活动列表为空时，换一套环境用同一个 token 再问一次。
   // 开源项目 qoder-checkin 的 baseUrls 就是让在 openapi.qoder.sh / openapi.qoder.com.cn 之间切，
@@ -1748,6 +1774,7 @@ async function checkinQoderOne(acct) {
             campaigns = altCampaigns;
             claimable = altClaimable;
             claimedBefore = altCampaigns.filter((item) => qoderClaimedToday(item));
+            staleClaimed = altCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
             useBase = alt;
           }
         }
