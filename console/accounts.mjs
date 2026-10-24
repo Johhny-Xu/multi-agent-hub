@@ -13,7 +13,7 @@ import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { clearQuotaCache, decryptZcodeCred } from './vendor-quota.mjs';
+import { clearQuotaCache, decryptZcodeCred, hwsSdkSignedHeaders } from './vendor-quota.mjs';
 import { getSandbox } from './auth.mjs';
 import { readQoderCredential } from './qoder.mjs';
 
@@ -211,6 +211,63 @@ export function isMutableIdentity(identity) {
 }
 
 /**
+ * codearts 账号真实身份：AK/SK 签名调 STS v5/caller-identity，从 principal_urn
+ * （iam::<account_id>:user:<用户名>）解出用户名与账号 ID。
+ * 结果按 AK 哈希落盘缓存（成功永久、失败 6 小时内不重试），listAccounts 高频轮询不会反复打 STS。
+ * @returns {Promise<{user:string, accountId:string}|null>}
+ */
+const CODEARTS_STS_URL = 'https://sts.cn-north-4.myhuaweicloud.com/v5/caller-identity';
+const CODEARTS_IDENTITY_ERR_TTL_MS = 6 * 3600_000;
+const _codeartsIdentityInFlight = new Map();
+async function resolveCodeArtsIdentity(ak, sk, baseHome = HOME) {
+  const key = createHash('sha256').update(ak).digest('hex').slice(0, 16);
+  const cachePath = join(baseHome, '.agenthub', 'accounts', 'codearts', '.identity-cache.json');
+  const readCache = async () => {
+    try { return JSON.parse((await readFile(cachePath, 'utf-8')).replace(/^\uFEFF/, '')); } catch { return {}; }
+  };
+  const writeCache = async (cache) => {
+    try {
+      await mkdir(dirname(cachePath), { recursive: true });
+      await writeFile(cachePath, JSON.stringify(cache, null, 2), 'utf-8');
+    } catch { /* 缓存写失败不影响主流程 */ }
+  };
+  const cached = (await readCache())[key];
+  if (cached?.user) return { user: cached.user, accountId: String(cached.accountId || '') };
+  if (cached?.errAt && Date.now() - cached.errAt < CODEARTS_IDENTITY_ERR_TTL_MS) return null;
+  // 单飞：并发探测同一把 AK 时只发一次请求
+  const pending = _codeartsIdentityInFlight.get(key);
+  if (pending) return pending;
+  const task = (async () => {
+    try {
+      const res = await fetch(CODEARTS_STS_URL, {
+        headers: hwsSdkSignedHeaders(ak, sk, 'GET', CODEARTS_STS_URL),
+        signal: AbortSignal.timeout(8000),
+      });
+      const json = await res.json().catch(() => null);
+      const urn = String(json?.principal_urn || '');
+      const m = urn.match(/:(?:user|agency):([^:]+)$/);
+      const user = m ? cleanProfileLabel(decodeURIComponent(m[1])) : '';
+      const cache = await readCache();
+      if (user) {
+        cache[key] = { user, accountId: String(json?.account_id || '') };
+        await writeCache(cache);
+        return { user, accountId: String(json?.account_id || '') };
+      }
+      cache[key] = { errAt: Date.now() };
+      await writeCache(cache);
+      return null;
+    } catch {
+      const cache = await readCache();
+      cache[key] = { errAt: Date.now() };
+      await writeCache(cache);
+      return null;
+    }
+  })().finally(() => { _codeartsIdentityInFlight.delete(key); });
+  _codeartsIdentityInFlight.set(key, task);
+  return task;
+}
+
+/**
  * 从凭据文件中提取可读的账号标识名称与唯一身份 ID（绝不暴露密钥明文）
  * @param {string} worker
  * @param {string} [baseHome]
@@ -312,12 +369,22 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
     }
     if (worker === 'codearts') {
       const txt = await readFile(join(baseHome, relFiles[0]), 'utf-8');
-      const m = txt.match(/^CODEARTS_CLI_AK=(.+)$/m);
-      const ak = m ? m[1].trim() : '';
+      const ak = (txt.match(/^CODEARTS_CLI_AK=(.+)$/m) || [])[1]?.trim() || '';
+      const sk = (txt.match(/^CODEARTS_CLI_SK=(.+)$/m) || [])[1]?.trim() || '';
       const shortAk = cleanProfileLabel(ak.slice(0, 8)) || shortFp;
-      const label = `ak-${shortAk}`;
-      const display = ak.length > 8 ? `AK:${ak.slice(0, 4)}…${ak.slice(-4)}` : label;
-      return { label, identity: ak || fp, display };
+      const akLabel = `ak-${shortAk}`;
+      // 优先用 STS caller-identity 解出的真实用户名：AK/SK 轮换后名字稳定、不再裂新档案，
+      // 也不会出现「新旧 AK 前缀相同、掩码后肉眼分不出」的假象。解析失败回退 AK 命名。
+      const who = ak && sk ? await resolveCodeArtsIdentity(ak, sk, baseHome) : null;
+      if (who?.user) {
+        return {
+          label: cleanProfileLabel(who.user) || akLabel,
+          identity: who.accountId ? `codearts:${who.accountId}:${who.user}` : `codearts-user:${who.user}`,
+          display: who.user,
+        };
+      }
+      const display = ak.length > 8 ? `AK:${ak.slice(0, 4)}…${ak.slice(-4)}` : akLabel;
+      return { label: akLabel, identity: ak || fp, display };
     }
     if (worker === 'opencode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));

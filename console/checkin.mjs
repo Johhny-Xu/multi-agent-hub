@@ -9,7 +9,7 @@ import { join, dirname, resolve } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { fetchJsonSmart } from './vendor-quota.mjs';
+import { fetchJsonSmart, hwsSdkSignedHeaders as codeArtsSignedHeaders } from './vendor-quota.mjs';
 import { findCodeBuddySharedAuth } from './accounts.mjs';
 import {
   readQoderCredential, readQoderCredentialAt, refreshQoderToken, persistQoderToken,
@@ -672,50 +672,8 @@ export async function listCheckinAccounts(platform) {
   return accounts;
 }
 
-// ---------------------------------------------------------------- 华为云 SDK-HMAC-SHA256 签名
-// 与 huaweicloud-sdk / 开放网关一致。两个必须复刻的坑：
-//   1) CanonicalURI 必须以 / 结尾（path 已带尾斜杠时不能补第二个）
-//   2) CanonicalHeaders 每行自带 \n 后，整体再与 CanonicalRequest 用 \n 连接（即尾部已有一个 \n，不再额外补）
-const _sha256hex = (buf) => createHash('sha256').update(buf).digest('hex');
-const _rfc3986 = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-
-function codeArtsSignedHeaders(ak, sk, method, rawUrl, body, extra = {}) {
-  const u = new URL(rawUrl);
-  const headers = {};
-  for (const [k, v] of Object.entries(extra)) headers[k.toLowerCase()] = v;
-  headers.host = u.host;
-  const d = new Date();
-  const p = (n, w = 2) => String(n).padStart(w, '0');
-  headers['x-sdk-date'] = `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
-
-  const payload = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(method) ? body : null;
-  const names = Object.keys(headers).sort();
-  let canonicalHeaders = '';
-  for (const k of names) canonicalHeaders += `${k}:${String(headers[k]).trim()}\n`;
-  const signedHeaders = names.join(';');
-
-  const segs = (u.pathname || '/').split('/').map((s) => _rfc3986(decodeURIComponent(s)));
-  let canonicalUri = segs.join('/');
-  if (!canonicalUri.endsWith('/')) canonicalUri += '/';
-
-  const canonicalQuery = [...u.searchParams.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([k, v]) => `${_rfc3986(k)}=${_rfc3986(v)}`)
-    .join('&');
-
-  const canonicalRequest = [
-    method,
-    canonicalUri,
-    canonicalQuery,
-    canonicalHeaders,
-    signedHeaders,
-    _sha256hex(payload || Buffer.alloc(0)),
-  ].join('\n');
-  const stringToSign = ['SDK-HMAC-SHA256', headers['x-sdk-date'], _sha256hex(Buffer.from(canonicalRequest, 'utf-8'))].join('\n');
-  const signature = createHmac('sha256', sk).update(stringToSign).digest('hex');
-  headers.authorization = `SDK-HMAC-SHA256 Access=${ak}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-  return headers;
-}
+// 华为云 SDK-HMAC-SHA256 签名实现已抽到 vendor-quota.mjs（hwsSdkSignedHeaders），账号档案模块共用。
+// 两个必须复刻的坑也在那边注释里：CanonicalURI 尾斜杠、CanonicalHeaders 尾部 \n。
 
 const CODEARTS_GATEWAY = 'https://opengw.developer.huaweicloud.com';
 const CODEARTS_SNAP = 'https://snap-access.cn-north-4.myhuaweicloud.com';

@@ -5,7 +5,7 @@
 // 零第三方依赖（Node 22 全局 fetch）。
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
@@ -142,6 +142,48 @@ export async function fetchJsonSmart(url, options = {}, timeoutMs = 15_000) {
       throw new Error(`直连与代理(${PROXY_URL})均不可达: ${pe.message}`);
     }
   }
+}
+
+// ---------------------------------------------------------------- 华为云 SDK-HMAC-SHA256 签名
+// 与 huaweicloud-sdk / 开放网关一致。两个必须复刻的坑：
+//   1) CanonicalURI 必须以 / 结尾（path 已带尾斜杠时不能补第二个）
+//   2) CanonicalHeaders 每行自带 \n 后，整体再与 CanonicalRequest 用 \n 连接（即尾部已有一个 \n，不再额外补）
+const _hwsSha256hex = (buf) => createHash('sha256').update(buf).digest('hex');
+const _hwsRfc3986 = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+export function hwsSdkSignedHeaders(ak, sk, method, rawUrl, body, extra = {}) {
+  const u = new URL(rawUrl);
+  const headers = {};
+  for (const [k, v] of Object.entries(extra)) headers[k.toLowerCase()] = v;
+  headers.host = u.host;
+  const d = new Date();
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  headers['x-sdk-date'] = `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
+
+  const payload = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(method) ? body : null;
+  const names = Object.keys(headers).sort();
+  let canonicalHeaders = '';
+  for (const k of names) canonicalHeaders += `${k}:${String(headers[k]).trim()}\n`;
+  const signedHeaders = names.join(';');
+  const segs = (u.pathname || '/').split('/').map((s) => _hwsRfc3986(decodeURIComponent(s)));
+  let canonicalUri = segs.join('/');
+  if (!canonicalUri.endsWith('/')) canonicalUri += '/';
+  const canonicalQuery = [...u.searchParams.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${_hwsRfc3986(k)}=${_hwsRfc3986(v)}`)
+    .join('&');
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    canonicalQuery,
+    canonicalHeaders,
+    signedHeaders,
+    _hwsSha256hex(payload || Buffer.alloc(0)),
+  ].join('\n');
+  const stringToSign = ['SDK-HMAC-SHA256', headers['x-sdk-date'], _hwsSha256hex(Buffer.from(canonicalRequest, 'utf-8'))].join('\n');
+  const signature = createHmac('sha256', sk).update(stringToSign).digest('hex');
+  headers.authorization = `SDK-HMAC-SHA256 Access=${ak}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  return headers;
 }
 
 // ---------------------------------------------------------------- ZCode enc:v1 凭据加解密（与 ZCode 官方 credentialService 对齐）
