@@ -30,8 +30,13 @@ def package_files(component):
             if (ROOT / 'console' / console_mod).is_file():
                 files['payload/console/' + console_mod] = ROOT / 'console' / console_mod
         for source in (ROOT / 'console/client').rglob('*'):
-            if source.is_file() and source.suffix.lower() in ('.html', '.mjs', '.js', '.css', '.png', '.ico', '.svg'):
-                files['payload/console/client/' + source.relative_to(ROOT / 'console/client').as_posix()] = source
+            relative = source.relative_to(ROOT / 'console/client')
+            # `mascot/` is the legacy pre-split asset location; index.html uses
+            # `assets/*.webm`. Shipping both would duplicate ~3 MB in every ZIP.
+            if relative.parts and relative.parts[0] == 'mascot':
+                continue
+            if source.is_file() and source.suffix.lower() in ('.html', '.mjs', '.js', '.css', '.png', '.ico', '.svg', '.webm', '.webp', '.woff2', '.mp4'):
+                files['payload/console/client/' + relative.as_posix()] = source
     if component in ('plugins', 'both'):
         files['payload/packaging/README.md'] = ROOT / 'packaging/README.md'
         files['payload/LICENSE'] = ROOT / 'LICENSE'

@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **移动端 4px 占位**：`.cb-status-bar` 已隐藏但 `.cb-status-bar-wrap` 仍有 padding；移动端连外壳一起 `display:none`。
 - **颜色与热区**：浅色用户气泡改 `align-self:flex-end`，用品牌色淡染提升边框对比；移动端 `#btn-attach` / `#btn-head-more` 用透明 `::after` 把命中区扩到 46×46，视觉尺寸不变。
 - **看板娘**：按用户实际观感要求**保持原停靠位置**，不做整体上移；只在样式覆盖层保留其余三项修复。
+- **发行包**：`packaging/build.py` 的 console 资源白名单补 `.webm/.webp/.woff2/.mp4`，并排除拆分前的旧 `console/client/mascot/` 目录；否则 1.0.19 ZIP 会漏掉看板娘素材或重复约 3 MB。新增 packaging 断言。
 - **验证**：前端 20 项、后端 28 项全过；真机 CDP 复测桌面 1440×900 / 移动端 390×844。
 
 ### 新增：`hub_task_status`，主代理派发后可判断子代理是否真的在工作

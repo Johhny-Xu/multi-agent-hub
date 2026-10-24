@@ -101,5 +101,5 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 
 - **`hub_task_status`**：新增进程树存活探测（Linux `/proc`、Windows `OpenProcess` 回退），异步任务记录 `pid`、`started_at`、`output_bytes`、`last_output_at`、`cpu_seconds`、`heartbeat`、`progress_at`。查询返回 `verdict`（`working` / `alive_waiting` / `alive_quiet` / `gui_working` / `gui_waiting` / `worker_exited_result_missing` / 终态）、`action`、`guidance`，以及 CPU/输出增量；首次查询建立基线，10 秒后复查可判断是否真的在推进。7 份宿主 MCP 桥同步新增第 9 个标准工具，主代理不必直连 Hub。
 - **防误杀**：`run_cmd_mode` 的 idle 预算把进程树 CPU 增长也算作进展，静默但真在计算的任务不会被 stdout 空闲阈值切断；`_reap_result` 遇到仍存活的 PID 不再按 `updated_at` 判 timeout。`hub_result_json` 透传 `verdict`/`liveness`，`hub_wait_result` 预算耗尽时显示存活结论，异步受理回执直接提示先查 `hub_task_status`。
-- **WebUI**：自动签到定时器改为可停止并 `unref`，`dispose` 真正退出，`node --test console_smoke.mjs` 不再挂死；移动端状态栏 4px 占位、浅色用户气泡对比与移动端按钮热区收口；看板娘按用户观感保持原停靠位置。
+- **WebUI**：自动签到定时器改为可停止并 `unref`，`dispose` 真正退出，`node --test console_smoke.mjs` 不再挂死；移动端状态栏 4px 占位、浅色用户气泡对比与移动端按钮热区收口；看板娘按用户观感保持原停靠位置。发行包补齐 `console/client/assets/*.webm`，不再漏看板娘或重复旧 `mascot/` 目录。
 - **验证**：新增 12 例存活回归；`task_contract` 23 项、`hub_core` + `runtime` 52 项全绿；Windows 派发 smoke 12/13（仅自带 zcode bridge fixture 连接失败，与本次改动无关）。线上 `mimocode` 实跑观察到 `starting → alive_waiting → working（CPU 0→10.18s）→ completed`。

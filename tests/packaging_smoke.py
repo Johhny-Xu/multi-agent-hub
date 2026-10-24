@@ -111,6 +111,10 @@ class DistributionTests(unittest.TestCase):
                 shell = archive.getinfo('agenthub-' + build.VERSION + '-' + component + '/install.sh')
                 self.assertEqual(shell.create_system, 3)
                 self.assertEqual(shell.external_attr >> 16 & 0o777, 0o755)
+                if component in ('hub', 'both'):
+                    names = archive.namelist()
+                    self.assertTrue(any(name.endswith('/console/client/assets/mascot-loop.webm') for name in names),
+                                    'WebUI mascot .webm assets must ship with the console payload')
             for relative in manifest['files']:
                 self.assertNotIn(Path(relative).name, build.DENIED)
                 self.assertNotIn('node_modules', Path(relative).parts)
