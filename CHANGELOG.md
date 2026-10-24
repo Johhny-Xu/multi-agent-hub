@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 样式：采用外部设计的 Console 主题（v3），去掉 cyber 并修三处细节
+
+- **来源**：外部模型交付的 `styles.css`（纯追加 1,837 行、0 删除），设计语言为等宽标签 + 直角 + 发丝线的控制台风格。
+- **去掉 `cyber` 预设**：产品实际只有 `mocha / shell / aurora / dusk / grid / custom` 六种，`data-preset="cyber"` 的两段变量块（71 行）是照着错误的预设清单写的，已删除。
+- **修正三处**：① 助手回答加容器（2px 左边线 + 4.5% 底色 + 内边距），长回答不再裸文本糊在背景上；② 输入台 `textarea` 最小高度 52 → 36px、内边距收紧，1440×900 下底栏不再贴边；③ 状态栏与输入台之间留 2px。
+- **验证**：前端测试 20 项全绿；线上 1440×900 截图核对，明暗两套主题均正常。
+
 ### 重构：WebUI 拆成 index.html + styles.css + 三个脚本 + assets
 
 - **动机**：单文件 `index.html` 4.96 MB / 18,343 行（其中 4 MB 是内嵌 base64 视频），任何编辑器或模型都无法整体处理，改一处样式要翻 8,700 行 CSS。
