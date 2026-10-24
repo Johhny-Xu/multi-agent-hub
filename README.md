@@ -441,7 +441,7 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 - **部署与参数**：[Linux 运行说明](RUN_ON_LINUX.md) · [安装包构建与完整参数](packaging/README.md) · [统一任务选项](docs/task-options.md)
 - **宿主插件指南**：[Codex](integrations/codex/README.md) · [ZCode / MiniMax Code](plugins/agenthub-workers/README.md) · [DSH](integrations/dsh/README.md) · [Antigravity](integrations/antigravity/README.md) · [CodeArts 原生插件](integrations/codearts/README.md) · [CodeArts IDE & VS Code 扩展](integrations/vscode/README.md)
 - **CodeArts 专题**：[双向接入与认证边界](docs/codearts-compatibility.md) · [CodeArts IDE 跟进记录](docs/codearts-ide-followup.md) · [接入已有模型路由](docs/codearts-custom-provider.md)
-- **验收与交接**：[0.9.9 验收记录](docs/release-0.9.9.md) · [网络自动发现验收（v0.8）](docs/release-0.8.md) · [开发交接记录](docs/HANDOVER_20261016.md) · [v1.0.18 交接记录](docs/HANDOVER_20261023.md)
+- **验收与交接**：[0.9.9 验收记录](docs/release-0.9.9.md) · [网络自动发现验收（v0.8）](docs/release-0.8.md) · [开发交接记录](docs/HANDOVER_20261016.md) · [v1.0.18 交接记录](docs/HANDOVER_20261023.md) · [10-24 交接（WebUI 拆分 / 美化 / 贡献图）](docs/HANDOVER_20261024.md)
 
 ### 致谢
 
