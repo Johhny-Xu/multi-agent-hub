@@ -8683,3 +8683,57 @@ html[data-ui="mobile"] .mascot-dock { display: none !important; }
   .mascot-figure.is-hop .mascot-frame { animation: none !important; }
   .mascot-dock.is-entering { animation: none !important; }
 }
+
+/* ==========================================================================
+   观感微调（2026-10-24）：不换设计语言，只收敛间距 / 圆角 / 层级。
+   ========================================================================== */
+.composer {
+  border-radius: 16px !important;
+  padding: 10px 14px 8px !important;
+  box-shadow: 0 6px 24px -18px rgba(0, 0, 0, .5) !important;
+}
+.composer:focus-within {
+  box-shadow: var(--mcode-focus-ring), 0 6px 24px -18px rgba(0, 0, 0, .5) !important;
+}
+.composer textarea { min-height: 52px !important; }
+.composer-bottom-bar { padding-top: 2px !important; }
+
+.bubble { border-radius: 14px !important; padding: 10px 16px !important; }
+.chat-msgs { gap: 18px !important; }
+.bubble.agent {
+  background: rgba(255, 255, 255, .03) !important;
+  border: 1px solid rgba(255, 255, 255, .06) !important;
+  border-left: 2px solid color-mix(in srgb, var(--agent-accent, var(--gem-primary)) 60%, transparent) !important;
+  border-radius: 0 12px 12px 0 !important;
+}
+html[data-theme="light"] .bubble.agent {
+  background: rgba(13, 27, 46, .024) !important;
+  border-color: rgba(13, 27, 46, .07) !important;
+}
+.bubble.user { border-radius: 14px 14px 4px 14px !important; }
+
+.platform-item { padding: 8px 10px; gap: 10px; border-radius: 10px; }
+.platform-item.active {
+  background: color-mix(in srgb, var(--agent-accent, var(--gem-primary)) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--agent-accent, var(--gem-primary)) 22%, transparent) !important;
+}
+.platform-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--agent-accent, var(--gem-primary));
+  border-radius: 2px;
+}
+
+.cb-status-bar { padding-top: 4px !important; }
+
+/* 观感微调（第二批）：输入台再收一点；会话名不再被截成"WebU…" */
+.composer textarea { min-height: 40px !important; }
+.composer-bottom-bar { padding-top: 0 !important; gap: 8px !important; }
+.composer .model-pill, .composer .model-chip, .composer .chip { font-size: 11px !important; }
+.composer .send-btn { border-radius: 10px !important; padding: 7px 16px !important; }
+.current-agent-pill { max-width: min(60vw, 560px) !important; }
+.chat-msgs pre, .code-block-wrap { border-radius: 10px !important; }
