@@ -508,6 +508,7 @@
               <div class="checkin-platform-tabs" id="checkin-platform-tabs" role="tablist" aria-label="按平台筛选打卡卡片">
                 <button type="button" class="checkin-plat-tab active" data-plat="all" role="tab" aria-selected="true">全部</button>
                 <button type="button" class="checkin-plat-tab" data-plat="workbuddy" role="tab" aria-selected="false">WorkBuddy</button>
+                <button type="button" class="checkin-plat-tab" data-plat="codebuddy" role="tab" aria-selected="false">CodeBuddy 国际版</button>
                 <button type="button" class="checkin-plat-tab" data-plat="traecode" role="tab" aria-selected="false">Trae</button>
                 <button type="button" class="checkin-plat-tab" data-plat="codearts" role="tab" aria-selected="false">CodeArts</button>
                 <button type="button" class="checkin-plat-tab" data-plat="qoder" role="tab" aria-selected="false">Qoder</button>
@@ -537,6 +538,30 @@
                   <div class="checkin-card-foot">
                     <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="workbuddy" id="btn-run-wb">立即签到</button>
                     <button type="button" class="qa-btn btn-cfg-token" data-platform="workbuddy" id="btn-cfg-wb">配置 Token</button>
+                  </div>
+                </div>
+
+                <!-- 1.5 CodeBuddy 国际版 -->
+                <div class="checkin-card" id="card-checkin-codebuddy" data-plat-card="codebuddy">
+                  <div class="checkin-card-top">
+                    <div class="checkin-card-brand">
+                      <div class="checkin-brand-icon platform-avatar" data-checkin-agent="codebuddy" data-agent="codebuddy"></div>
+                      <div class="checkin-brand-info">
+                        <div class="checkin-brand-title">CodeBuddy 国际版</div>
+                        <div class="checkin-brand-tag">调用模型发你好 · 每日打卡活跃</div>
+                      </div>
+                    </div>
+                    <span class="checkin-status-badge status-pending" id="badge-cb">检测中...</span>
+                  </div>
+                  <div class="checkin-card-meta">
+                    <div class="checkin-meta-row"><span class="c-label">凭据关联:</span><span class="c-val" id="cred-cb">正在探测...</span></div>
+                    <div class="checkin-meta-row"><span class="c-label">打卡状态:</span><span class="c-val" id="msg-cb">今日尚未执行</span></div>
+                    <div class="checkin-meta-row"><span class="c-label">累计奖励:</span><span class="c-val highlight" id="reward-cb">-</span></div>
+                  </div>
+                  <div class="checkin-acct-list" id="accts-cb"></div>
+                  <div class="checkin-card-foot">
+                    <button type="button" class="qa-btn qa-primary btn-do-checkin" data-platform="codebuddy" id="btn-run-cb">立即签到</button>
+                    <button type="button" class="qa-btn btn-cfg-token" data-platform="codebuddy" id="btn-cfg-cb">配置 Token</button>
                   </div>
                 </div>
 

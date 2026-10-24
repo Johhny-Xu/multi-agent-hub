@@ -12,12 +12,16 @@ import {
 
 test('checkin open source projects catalog covers all three platforms', () => {
   assert.ok(OPEN_SOURCE_PROJECTS.workbuddy.length >= 2, 'WorkBuddy has open source projects');
+  assert.ok(OPEN_SOURCE_PROJECTS.codebuddy.length >= 2, 'CodeBuddy has open source projects');
   assert.ok(OPEN_SOURCE_PROJECTS.traecode.length >= 2, 'Trae has open source projects');
   assert.ok(OPEN_SOURCE_PROJECTS.codearts.length >= 2, 'CodeArts has open source projects');
 
   // Verify key projects exist
   const wbNames = OPEN_SOURCE_PROJECTS.workbuddy.map(p => p.name);
   assert.ok(wbNames.some(n => n.includes('workbuddy')), 'Contains workbuddy checkin project');
+
+  const cbNames = OPEN_SOURCE_PROJECTS.codebuddy.map(p => p.name);
+  assert.ok(cbNames.some(n => n.includes('CodeBuddy') || n.includes('workbuddy')), 'Contains codebuddy checkin project');
 
   const traeNames = OPEN_SOURCE_PROJECTS.traecode.map(p => p.name);
   assert.ok(traeNames.some(n => n.includes('TraeTools') || n.includes('trae-daily-checkin')), 'Contains Trae checkin tool');
@@ -33,6 +37,7 @@ test('checkin open source projects catalog covers all three platforms', () => {
 test('detectCredentials returns structured results for targets', async () => {
   const creds = await detectCredentials();
   assert.ok('workbuddy' in creds);
+  assert.ok('codebuddy' in creds);
   assert.ok('traecode' in creds);
   assert.ok('codearts' in creds);
   assert.ok('qoder' in creds);
@@ -45,6 +50,7 @@ test('getCheckinOverview provides state, history and open source references', as
   assert.equal(overview.ok, true);
   assert.ok(overview.today);
   assert.ok(overview.platforms.workbuddy);
+  assert.ok(overview.platforms.codebuddy);
   assert.ok(overview.platforms.traecode);
   assert.ok(overview.platforms.codearts);
   assert.ok(overview.platforms.qoder);
@@ -65,10 +71,15 @@ test('runCheckin handles platform calls without throwing fatal crashes', async (
   assert.equal(res.ok, true);
   assert.ok(res.results.traecode);
   assert.equal(typeof res.results.traecode.ok, 'boolean');
+
+  const cbRes = await runCheckin('codebuddy');
+  assert.equal(cbRes.ok, true);
+  assert.ok(cbRes.results.codebuddy);
+  assert.equal(typeof cbRes.results.codebuddy.ok, 'boolean');
 });
 
 test('every platform can enumerate its check-in accounts', async () => {
-  for (const platform of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn']) {
+  for (const platform of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn']) {
     const list = await listCheckinAccounts(platform);
     assert.ok(Array.isArray(list), `${platform} returns an array`);
     for (const acct of list) {
@@ -84,11 +95,11 @@ test('every platform can enumerate its check-in accounts', async () => {
 
 test('overview surfaces per-account rows so the UI can list multiple accounts', async () => {
   const overview = await getCheckinOverview();
-  for (const platform of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn']) {
+  for (const platform of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn']) {
     assert.ok(Array.isArray(overview.platforms[platform].accounts), `${platform} has an accounts array`);
     for (const row of overview.platforms[platform].accounts) {
       assert.equal(typeof row.display, 'string');
-      assert.ok(['success', 'already', 'failed', 'expired', 'pending'].includes(row.status), `${platform} row status: ${row.status}`);
+      assert.ok(['success', 'already', 'failed', 'expired', 'pending', 'unconfigured'].includes(row.status), `${platform} row status: ${row.status}`);
     }
   }
 });

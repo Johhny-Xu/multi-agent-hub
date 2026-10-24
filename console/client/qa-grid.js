@@ -1675,6 +1675,24 @@
         }
       }
 
+      // 1.5 CodeBuddy 国际版
+      if (p.codebuddy) {
+        const isSigned = p.codebuddy.status === 'success' || p.codebuddy.status === 'already';
+        updateBadge('badge-cb', p.codebuddy.status, p.codebuddy.status === 'success' ? '今日已签到' : (p.codebuddy.status === 'already' ? '今日已签' : (p.codebuddy.status === 'pending' ? '今日待打卡' : (p.codebuddy.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        const credEl = document.getElementById('cred-cb');
+        if (credEl) credEl.textContent = credentialText(p.codebuddy);
+        const msgEl = document.getElementById('msg-cb');
+        if (msgEl) msgEl.textContent = p.codebuddy.message || '今日尚未执行';
+        const rewEl = document.getElementById('reward-cb');
+        if (rewEl) rewEl.textContent = p.codebuddy.credits ? `${p.codebuddy.credits}${p.codebuddy.consecutiveDays ? ` (连签${p.codebuddy.consecutiveDays}天)` : ''}` : '-';
+        renderAccountRows('accts-cb', p.codebuddy.accounts);
+        const btnCb = document.getElementById('btn-run-cb');
+        if (btnCb) {
+          btnCb.disabled = isSigned;
+          btnCb.textContent = isSigned ? '今日已签' : '立即签到';
+        }
+      }
+
       // 2. Trae (免客户端 / CDP直连)
       if (p.traecode) {
         const isSigned = p.traecode.status === 'success' || p.traecode.status === 'already';
@@ -1788,7 +1806,7 @@
 
       // 顶部统计胶囊
       if (overallPill) {
-        const plats = [p.workbuddy, p.traecode, p.codearts, p.qoder, p['qoder-cn'], p.minimaxcode].filter(Boolean);   // meoo 只同步登录态，不计入签到数
+        const plats = [p.workbuddy, p.codebuddy, p.traecode, p.codearts, p.qoder, p['qoder-cn'], p.minimaxcode].filter(Boolean);   // meoo 只同步登录态，不计入签到数
         const signedCount = plats.filter(x => x.status === 'success' || x.status === 'already').length;
         overallPill.textContent = `${signedCount}/${plats.length} 平台已签到 · ${data.autoCheckin !== false ? '每日自动打卡激活' : '自动打卡已暂停'}`;
       }
@@ -1803,6 +1821,7 @@
           logContainer.innerHTML = history.map(item => {
             const platMeta = {
               workbuddy: ['腾讯 WorkBuddy', '#60a5fa'],
+              codebuddy: ['CodeBuddy 国际版', '#38bdf8'],
               traecode: ['ByteDance Trae', '#c084fc'],
               codearts: ['华为云 CodeArts', '#f87171'],
               qoder: ['Qoder', '#2ADB5C'],
@@ -2090,6 +2109,7 @@
         const plat = btn.getAttribute('data-platform');
         const promptTips = {
           workbuddy: '请输入 WorkBuddy / CodeBuddy 的 AccessToken 或保持为空自动使用本地凭据：',
+          codebuddy: '请输入 CodeBuddy 国际版 AccessToken / JSON（保持为空则自动读取 ~/.codebuddy/）：',
           traecode: '请输入 Trae JWT Token (免客户端请求时使用，或保持为空自动读取 ~/.trae-cn/)：',
           codearts: '请输入华为云 CodeArts Token / Cookie / AK-SK，或保持为空自动读取本地凭据：',
           qoder: '请输入 Qoder 国际版 Bearer Token（保持为空则自动复用 ~/.qoder 的 CLI 凭据）：',

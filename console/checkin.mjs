@@ -48,6 +48,20 @@ export const OPEN_SOURCE_PROJECTS = {
       tags: ['Skill', '本地凭据', '安全隔离']
     }
   ],
+  codebuddy: [
+    {
+      name: 'CodeBuddy 国际版打卡',
+      url: 'https://www.codebuddy.ai',
+      description: '腾讯 CodeBuddy 国际版，通过调用模型发送「你好」完成每日活跃打卡。',
+      tags: ['CodeBuddy', '国际版', '模型调用', '每日打卡']
+    },
+    {
+      name: '88lin/workbuddy-auto-signin',
+      url: 'https://github.com/88lin/workbuddy-auto-signin',
+      description: '腾讯 WorkBuddy / CodeBuddy 凭据探测与自动打卡参考。',
+      tags: ['Python', '凭据管理', '多平台']
+    }
+  ],
   traecode: [
     {
       name: 'L0NE-6/Trae-AutoCheckin',
@@ -201,6 +215,7 @@ function getNowTimeStr() {
 export async function detectCredentials() {
   const creds = {
     workbuddy: { available: false, source: '', token: '' },
+    codebuddy: { available: false, source: '', token: '' },
     traecode: { available: false, source: '', token: '' },
     codearts: { available: false, source: '', ak: '', sk: '', token: '' },
     qoder: { available: false, source: '', token: '' },
@@ -208,9 +223,10 @@ export async function detectCredentials() {
     minimaxcode: { available: false, source: '', token: '' }
   };
 
-  const platforms = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'];
+  const platforms = ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'];
   const live = {
     workbuddy: await readCredFrom('workbuddy', HOME, false),
+    codebuddy: await readCredFrom('codebuddy', HOME, false),
     traecode: await readCredFrom('traecode', HOME, false),
     codearts: await readCredFrom('codearts', HOME, false),
     qoder: await readCredFrom('qoder', HOME, false),
@@ -278,6 +294,7 @@ export async function detectCredentials() {
 /** 平台 → 参与签到的 worker 列表（WorkBuddy 的签到接口只在 www.codebuddy.cn，故仅取 codebuddy-cn） */
 const PLATFORM_WORKERS = {
   workbuddy: ['codebuddy-cn'],
+  codebuddy: ['codebuddy'],
   traecode: ['traecode'],
   codearts: ['codearts'],
   qoder: ['qoder'],
@@ -369,6 +386,35 @@ async function readCredCandidates(platform, dir, flat = false) {
           file: '',
           mtime: await fileMtime(shared.file),
           source: 'WorkBuddy 共享会话（只读）',
+          kind: 'shared',
+        });
+      }
+    } catch { /* ignore */ }
+    return out;
+  }
+
+  if (platform === 'codebuddy') {
+    if (flat) {
+      await addJson('auth.info', '账号档案', { kind: 'profile' });
+      return out;
+    }
+    // CodeBuddy 国际版取 ~/.codebuddy/auth.info
+    await addJson('.codebuddy/auth.info', '~/.codebuddy/auth.info');
+    try {
+      const shared = await findCodeBuddySharedAuth(dir);
+      const tok = String(shared?.data?.auth?.accessToken || '').trim();
+      if (tok && !tok.startsWith('http')) {
+        const pl = jwtPayload(tok) || {};
+        out.push({
+          token: tok,
+          refreshToken: String(shared?.data?.auth?.refreshToken || '').trim(),
+          identity: pl.sub || '',
+          display: pl.nickname || pl.preferred_username || pl.email || '',
+          exp: Number(pl.exp) || 0,
+          domain: String(shared?.data?.auth?.domain || 'www.codebuddy.ai').trim(),
+          file: '',
+          mtime: await fileMtime(shared.file),
+          source: 'CodeBuddy 共享会话（只读）',
           kind: 'shared',
         });
       }
@@ -955,6 +1001,199 @@ export async function checkinWorkBuddy(overrideToken = null) {
     })),
     today,
     time
+  };
+}
+
+/**
+ * 解析 CodeBuddy 国际版可执行 CLI 路径
+ */
+function resolveCodeBuddyIntlBin() {
+  const cands = [
+    process.env.CODEBUDDY_INTL_BIN,
+    join(HOME, '.local', 'bin', 'codebuddy-intl'),
+    join(HOME, '.npm-global', 'bin', 'codebuddy-intl'),
+    process.env.CODEBUDDY_BIN,
+    join(HOME, '.npm-global', 'bin', 'codebuddy'),
+    join(HOME, '.local', 'bin', 'codebuddy'),
+    '/usr/local/bin/codebuddy-intl',
+    '/usr/local/bin/codebuddy',
+    '/opt/homebrew/bin/codebuddy',
+  ].filter(Boolean);
+  for (const c of cands) {
+    try { if (existsSync(c)) return c; } catch { /* ignore */ }
+  }
+  return process.platform === 'win32' ? 'codebuddy.cmd' : 'codebuddy';
+}
+
+/**
+ * 单个 CodeBuddy 国际版账号打卡（调用模型发「你好」）
+ */
+async function checkinCodeBuddyOne(acct) {
+  return new Promise((resolve) => {
+    // 允许通过环境变量或测试钩子模拟打卡成功
+    if (process.env.CODEBUDDY_CHECKIN_MOCK_SUCCESS === '1') {
+      return resolve({
+        ok: true,
+        status: 'success',
+        message: '签到成功（已调用模型发你好：你好！很高兴为您服务。）',
+        credits: '活跃+1',
+        consecutiveDays: 0,
+      });
+    }
+
+    const bin = resolveCodeBuddyIntlBin();
+    const useShell = process.platform === 'win32';
+    const isIntlWrapper = typeof bin === 'string' && bin.includes('codebuddy-intl');
+    const args = ['-p', '你好', '--permission-mode', 'bypassPermissions', '--model', 'deepseek-v4.1-flash'];
+
+    const env = {
+      ...process.env,
+      DISABLE_AUTOUPDATER: '1',
+      NO_COLOR: '1',
+    };
+    if (!isIntlWrapper) {
+      env.CODEBUDDY_INTERNET_ENVIRONMENT = 'external';
+      if (acct?.file) {
+        env.CODEBUDDY_CONFIG_DIR = dirname(acct.file);
+      } else {
+        env.CODEBUDDY_CONFIG_DIR = join(HOME, '.codebuddy');
+      }
+    }
+
+    execFile(bin, args, { env, timeout: 60_000, windowsHide: true, shell: useShell, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = String(stdout || '').trim();
+      const errOut = String(stderr || '').trim();
+      const missing = err?.code === 'ENOENT';
+      const clean = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trim();
+      const isAuthErr = /401\s+Authentication\s+required/i.test(clean) || /401\s+Authentication\s+required/i.test(errOut);
+
+      if (missing) {
+        return resolve({
+          ok: false,
+          status: 'failed',
+          message: '未检测到 codebuddy CLI 命令，请确保已安装 @tencent-ai/codebuddy-code 或配置 codebuddy-intl 路径',
+          credits: 0,
+          consecutiveDays: 0,
+        });
+      }
+
+      if (isAuthErr) {
+        return resolve({
+          ok: false,
+          status: 'expired',
+          message: '登录态已失效，请在客户端或 CLI 重新登录 CodeBuddy 国际版',
+          credits: 0,
+          consecutiveDays: 0,
+        });
+      }
+
+      if (!err && clean.length > 0) {
+        const snippet = clean.split('\n')[0].slice(0, 40);
+        return resolve({
+          ok: true,
+          status: 'success',
+          message: `签到成功（模型响应：${snippet}）`,
+          credits: '活跃+1',
+          consecutiveDays: 0,
+        });
+      }
+
+      return resolve({
+        ok: false,
+        status: 'failed',
+        message: `模型调用返回异常 [exit=${err?.code ?? 1}]：${clean || errOut || err?.message || '无输出'}`,
+        credits: 0,
+        consecutiveDays: 0,
+      });
+    });
+  });
+}
+
+/**
+ * 执行 CodeBuddy 国际版签到（通过调用模型发「你好」完成活跃打卡）
+ */
+export async function checkinCodeBuddy(overrideToken = null) {
+  const today = getTodayStr();
+  const time = getNowTimeStr();
+
+  let accounts;
+  if (overrideToken) {
+    accounts = [{ name: '自定义 Token', display: '自定义 Token', token: overrideToken, exp: 0, source: '自定义 Token', active: true }];
+  } else {
+    accounts = await listCheckinAccounts('codebuddy');
+    const custom = await customCredentialAccount('codebuddy');
+    accounts = mergeCustomAccount(accounts, custom);
+  }
+
+  if (!accounts.length) {
+    return {
+      platform: 'codebuddy',
+      ok: false,
+      status: 'unconfigured',
+      message: '未检测到 CodeBuddy 国际版登录凭据，请先在客户端登录或保存账号档案。',
+      today,
+      time: getNowTimeStr(),
+      accounts: []
+    };
+  }
+
+  const results = [];
+  for (const acct of accounts) {
+    const label = acct.display || acct.name;
+    let fresh = await ensureFreshWorkBuddy(acct);
+    if (fresh.exp && fresh.exp * 1000 < Date.now()) {
+      results.push({
+        ...acct,
+        ok: false,
+        status: 'expired',
+        message: fresh.refreshed ? '凭据续期后仍然过期，请重新登录该账号' : 'CLI 凭据已过期且无法自动续期，请重新登录一次 CLI',
+        label,
+      });
+      continue;
+    }
+
+    try {
+      let r = await checkinCodeBuddyOne({ ...acct, token: fresh.token });
+      if (r.status === 'expired' && acct.refreshToken && acct.file) {
+        const again = await refreshCodeBuddyAuth(acct.file, fresh.refreshToken || acct.refreshToken, acct.domain || 'www.codebuddy.ai');
+        if (again) r = await checkinCodeBuddyOne({ ...acct, token: again.token });
+      }
+      results.push({ ...acct, ...r, refreshed: fresh.refreshed, label });
+    } catch (err) {
+      results.push({ ...acct, ok: false, status: 'failed', message: `调用模型异常：${err.message}`, label });
+    }
+  }
+
+  const anySuccess = results.some((r) => r.ok && r.status === 'success');
+  const anyAlready = results.some((r) => r.status === 'already');
+  const allExpired = results.length > 0 && results.every((r) => r.status === 'expired');
+
+  let finalStatus = 'failed';
+  if (anySuccess) finalStatus = 'success';
+  else if (anyAlready) finalStatus = 'already';
+  else if (allExpired) finalStatus = 'expired';
+
+  const summaryMsg = results.map((r) => `${r.label}: ${r.message}`).join('；');
+
+  return {
+    platform: 'codebuddy',
+    ok: anySuccess || anyAlready,
+    status: finalStatus,
+    message: summaryMsg,
+    today,
+    time,
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.label || r.name,
+      active: !!r.active,
+      status: r.status,
+      message: r.message,
+      credits: r.credits || '',
+      consecutiveDays: r.consecutiveDays || 0,
+      source: r.credentialSource || r.source || ''
+    })),
+    credits: anySuccess ? '活跃+1' : '',
+    consecutiveDays: 0,
   };
 }
 
@@ -1855,7 +2094,7 @@ export async function getCheckinOverview() {
 
   // 整理每个平台的前端渲染数据
   const platforms = {};
-  for (const plat of ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo']) {
+  for (const plat of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo']) {
     const pState = state.platforms[plat] || {};
     const cInfo = creds[plat] || {};
     const isToday = pState.lastDate === today;
@@ -1877,8 +2116,8 @@ export async function getCheckinOverview() {
       source: cInfo.source || '未关联凭据',
       // cli = 直接复用已安装 CLI 的凭据（自动跟随 CLI 刷新）；custom = 手工配置；none = 没找到
       credentialMode: !cInfo.available ? 'none' : (String(cInfo.source || '').includes('CLI 实时') ? 'cli' : 'custom'),
-      // WorkBuddy / Qoder / MiniMax Code 有 refreshToken，签到前会自动续期，不需要人管
-      autoRefresh: ['workbuddy', 'qoder', 'qoder-cn', 'minimaxcode'].includes(plat) && cInfo.refreshable === true,
+      // WorkBuddy / CodeBuddy / Qoder / MiniMax Code 有 refreshToken，签到前会自动续期，不需要人管
+      autoRefresh: ['workbuddy', 'codebuddy', 'qoder', 'qoder-cn', 'minimaxcode'].includes(plat) && cInfo.refreshable === true,
       lastDate: pState.lastDate || '无记录',
       lastTime: pState.lastTime || '',
       status: isToday ? pState.status : (cInfo.available ? 'pending' : 'unconfigured'),
@@ -1925,7 +2164,7 @@ export async function runCheckin(target = 'all') {
   let only = null;
   if (target === 'due') {
     const today = getTodayStr();
-    only = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'].filter((plat) => {
+    only = ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'].filter((plat) => {
       const p = state.platforms[plat] || {};
       if (p.lastDate !== today) return true;
       if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
@@ -1937,6 +2176,9 @@ export async function runCheckin(target = 'all') {
 
   if (want('workbuddy')) {
     results.workbuddy = await checkinWorkBuddy();
+  }
+  if (want('codebuddy')) {
+    results.codebuddy = await checkinCodeBuddy();
   }
   if (want('traecode')) {
     results.traecode = await checkinTrae();
