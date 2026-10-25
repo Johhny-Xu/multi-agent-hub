@@ -13,7 +13,9 @@ description: 使用 multi-agent-hub 的九个 worker 进行独立任务分派、
 
 首次连接或 Hub 连接失败时，先调用当前工具目录中的 hub_discover 只读扫描，展示候选地址供用户选择；扫描不发送凭据、不写连接配置、不静默切换。用安装目录的 connect.cmd 或 ./connect.sh 完成所选目标的配对；未发现目标时引导手动填写地址。已有 ref 仍属于原 Hub，连接故障不能触发重新派发。
 
-使用当前工具目录中的 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_status`、`hub_capabilities`、`hub_login`、`hub_discover` 七个插件工具，名称可能带宿主生成的前缀。不依赖额外 SSH、外部 MCP 服务或固定服务器路径。
+使用当前工具目录中的 `hub_ask`、`hub_dispatch`、`hub_fetch`、`hub_task_status`、`hub_status`、`hub_set_status`、`hub_capabilities`、`hub_login`、`hub_discover` 九个插件工具，名称可能带宿主生成的前缀。不依赖额外 SSH、外部 MCP 服务或固定服务器路径。
+
+`hub_task_status(ref)` 查异步任务的存活状态（进程/CPU/输出/心跳与 verdict：working/alive_waiting/gui_waiting 等表示仍在执行应等待，worker_exited_result_missing 表示要核查交付）。派发后长时间无回音先查它，别按超时直接判死。`hub_set_status(worker, enabled)` 启用/禁用某 worker（额度耗尽或暂时不用时），与 WebUI 控制台双向同步。
 
 `hub_ask` 接受 `{worker,task,timeout_s,model,thinking,stream,files,cwd}`，派发一次并在总等待预算内回收。需要独立控制等待时，对每个任务调用一次 `hub_dispatch`，保存 ref，然后只对该 ref 使用 `hub_fetch`。timeout_s 默认 300 秒，必须是大于 0 且不超过 86400 的有限数字。
 
