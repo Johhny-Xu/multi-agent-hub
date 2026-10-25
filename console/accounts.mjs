@@ -42,7 +42,7 @@ const ACCOUNTS_WRITE_LOCK = 'accounts-write';
 
 /**
  * worker → 该账号身份对应的凭据文件（相对 HOME）。
- * 全部 11 个 worker 均支持档案保存、自动归档、切换与沙箱添加账号。
+ * 全部 12 个 worker 均支持档案保存、自动归档、切换与沙箱添加账号。
  */
 export const WORKER_CRED_FILES = {
   'codebuddy': ['.codebuddy/auth.info'],
@@ -56,6 +56,8 @@ export const WORKER_CRED_FILES = {
   'traecode': ['.trae-cn/trae-jwt-token'],
   'zcode': ['.zcode/v2/credentials.json'],
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
+  // meoo 是 HTTP 后端的 CLI 外壳（scripts/meoo_agent_cli.mjs），单 AK 鉴权，无 OAuth 用户信息
+  'meoo': ['.config/agenthub-meoo/meoo-auth.env'],
   'mimocode': ['.local/share/mimocode/auth.json'],
   'github-copilot': ['.config/github-copilot/copilot-token'],
   'opencode': ['.local/share/opencode/auth.json'],
@@ -385,6 +387,14 @@ export async function detectAccountInfo(worker, baseHome = HOME) {
       }
       const display = ak.length > 8 ? `AK:${ak.slice(0, 4)}…${ak.slice(-4)}` : akLabel;
       return { label: akLabel, identity: ak || fp, display };
+    }
+    if (worker === 'meoo') {
+      const txt = await readFile(join(baseHome, relFiles[0]), 'utf-8');
+      const ak = (txt.match(/^\s*MEOO_AK\s*=\s*(\S+)/m) || [])[1]?.trim() || '';
+      const shortAk = cleanProfileLabel(ak.slice(0, 8)) || shortFp;
+      const label = `meo-${shortAk}`;
+      const display = ak.length > 8 ? `Meoo AK:${ak.slice(0, 4)}…${ak.slice(-4)}` : label;
+      return { label, identity: ak || fp, display };
     }
     if (worker === 'opencode') {
       const raw = JSON.parse((await readFile(join(baseHome, relFiles[0]), 'utf-8')).replace(/^\uFEFF/, ''));

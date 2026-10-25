@@ -221,6 +221,13 @@ export const LOGIN_COMMANDS = {
     note: '把 API Key 粘进来直接提交即可，不用管格式：带 provider 前缀（anthropic:sk-ant-...）就原样采用，裸 Key 会按前缀自动识别（oc_sk_ → opencode、sk-ant- → anthropic、sk-or-v1- → openrouter），识别不出就按 opencode 写入并在日志里提示。后端写入 ~/.local/share/opencode/auth.json 后用 opencode auth list 复核；也可在服务器终端运行 opencode providers login 走浏览器授权',
     callbackHint: '直接粘贴 API Key 即可（oc_sk-… / sk-ant-… / sk-or-v1-… 自动识别），也可写成 provider:api_key',
   },
+  'meoo': {
+    headless: true,
+    mode: 'meoo_ak',
+    needsCallbackInput: true,
+    note: '点击下方链接前往 meoo 控制台获取 API Key（AK），粘贴到下方输入框提交即可（不校验格式）。后端写入 ~/.config/agenthub-meoo/meoo-auth.env 并自动归档账号，Meoo Agent 派发立即生效',
+    callbackHint: '直接粘贴 meoo API Key（AK）',
+  },
   'cline': {
     cmd: [resolveCliBin('cline', join(HOME, '.npm-global', 'bin', 'cline')), 'auth'],
     headless: true,
@@ -255,6 +262,7 @@ const LOGOUT_FILES = {
   'traecode': ['.trae-cn/trae-jwt-token'],
   'zcode': ['.zcode/v2/credentials.json'],
   'codearts': ['.config/agenthub-codearts/codearts-auth.env'],
+  'meoo': ['.config/agenthub-meoo/meoo-auth.env'],
   'mimocode': ['.local/share/mimocode/auth.json'],
   'github-copilot': ['.config/github-copilot/copilot-token'],
   'opencode': ['.local/share/opencode/auth.json'],
@@ -1504,6 +1512,13 @@ function launchWorkerSession(worker, { sandbox = null, name = null, region = '' 
     return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, url: entry.authUrl, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
   }
 
+  // ---------------- 分支 9：meoo 的 API Key (AK) 认证流
+  if (spec.mode === 'meoo_ak') {
+    entry.authUrl = 'https://meoo.com/';
+    entry.buf = '[meoo] 直接粘贴 meoo API Key（AK）并提交即可（不校验格式）。后端写入 ~/.config/agenthub-meoo/meoo-auth.env（0600），Meoo Agent 派发立即生效。\n';
+    return { ok: true, loginId: id, worker, name, sandbox, mode: spec.mode, url: entry.authUrl, note: spec.note, callbackHint: spec.callbackHint, needsCallbackInput: true };
+  }
+
   return { ok: false, error: `未知的登录模式: ${spec.mode}` };
 }
 
@@ -1851,6 +1866,28 @@ export async function submitLoginCallback(loginId, rawInput, extra = {}) {
           ...res,
           accountName: accName,
           note: accName ? `CodeArts 认证成功，已自动添加并切换至账号「${accName}」` : res.note,
+        };
+      }
+
+      // 5b. meoo：API Key (AK) 直填，写入 agenthub-meoo/meoo-auth.env 后归档
+      if (e.worker === 'meoo') {
+        const ak = input.replace(/\s+/g, '');
+        if (!ak) return { ok: false, worker: 'meoo', error: '请粘贴 meoo API Key（AK）' };
+        const envFile = join(e.targetHome, '.config', 'agenthub-meoo', 'meoo-auth.env');
+        await mkdir(dirname(envFile), { recursive: true });
+        await writeFile(envFile, `# Multi-Agent Hub meoo AK (written via WebUI ${new Date().toISOString()})\nMEOO_AK=${ak}\n`, { mode: 0o600 });
+        e.buf += `\n[meoo] ✓ AK 已保存到 ${envFile}\n`;
+        const acc = await finalizeLoginAccount(e, prefName);
+        if (acc && acc.ok === false) return { ok: false, worker: e.worker, error: acc.error || '凭据归档失败，请重试或稍候再检测' };
+        const accName = acc?.name || e.savedAccountName || '';
+        cleanupSessionResources(e);
+        e.code = 0;
+        e.exited = true;
+        return {
+          ok: true,
+          worker: 'meoo',
+          accountName: accName,
+          note: accName ? `meoo 认证成功，已自动添加并切换至账号「${accName}」` : 'meoo AK 已保存',
         };
       }
 
