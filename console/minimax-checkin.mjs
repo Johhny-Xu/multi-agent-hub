@@ -282,17 +282,30 @@ async function recover401(region, ident, cred) {
 /**
  * 执行一次签到。
  * @param {'cn'|'global'} region
- * @param {string} [overrideToken] 手工配置的 accessToken（CLI 未登录时的兜底）
+ * @param {string|{token:string, refreshToken?:string, expiresAtMs?:number, file?:string, source?:string}} [override]
+ *        手工配置的 accessToken（CLI 未登录时的兜底），或一份账号档案凭据（多账号签到用）
  */
-export async function checkinMiniMax(region = 'cn', overrideToken = '') {
+export async function checkinMiniMax(region = 'cn', override = '') {
   const cfg = MINIMAX_REGIONS[region] || MINIMAX_REGIONS.cn;
   const store = await readStore();
   const ident = await resolveIdentity(store);
   store.identity = { uuid: ident.uuid, user_id: ident.user_id, app_version: ident.app_version, device_id: ident.device_id };
   await writeStore(store);
 
-  let cred = await readMinimaxCredential(HOME, cfg.key);
-  const manual = String(overrideToken || '').trim();
+  // override 既可能是「手工粘贴的 token 字符串」，也可能是账号档案里的一整份凭据对象。
+  // 后者带上 refreshToken，401 时仍能自愈，所以多账号签到时优先走这条。
+  const credObj = override && typeof override === 'object' ? override : null;
+  const manual = credObj ? '' : String(override || '').trim();
+  let cred = credObj && credObj.token
+    ? {
+      token: String(credObj.token),
+      refreshToken: String(credObj.refreshToken || ''),
+      expiresAtMs: Number(credObj.expiresAtMs) || 0,
+      file: String(credObj.file || ''),
+      source: String(credObj.source || '账号档案快照'),
+      region: cfg.key,
+    }
+    : await readMinimaxCredential(HOME, cfg.key);
   if (manual) {
     cred = { token: manual, refreshToken: '', expiresAtMs: 0, file: '', source: '自定义 Token（mcode 未登录）', region: cfg.key };
   }

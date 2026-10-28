@@ -5,7 +5,7 @@
 
 import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -220,7 +220,9 @@ export async function detectCredentials() {
     codearts: { available: false, source: '', ak: '', sk: '', token: '' },
     qoder: { available: false, source: '', token: '' },
     'qoder-cn': { available: false, source: '', token: '' },
-    minimaxcode: { available: false, source: '', token: '' }
+    minimaxcode: { available: false, source: '', token: '' },
+    // meoo 以前没占位：控制台配了 customTokens.meoo 时下面那个循环会读到 undefined 直接抛错
+    meoo: { available: false, source: '', ak: '', token: '' }
   };
 
   const platforms = ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'];
@@ -291,7 +293,13 @@ export async function detectCredentials() {
 // 签到必须覆盖「所有已保存的账号」，不能只看当前生效的那一个：
 // 每个档案目录里就是该账号当时的凭据快照（auth.info / trae-jwt-token / codearts-auth.env）。
 
-/** 平台 → 参与签到的 worker 列表（WorkBuddy 的签到接口只在 www.codebuddy.cn，故仅取 codebuddy-cn） */
+/**
+ * 平台 → 参与签到的 worker 列表（WorkBuddy 的签到接口只在 www.codebuddy.cn，故仅取 codebuddy-cn）
+ *
+ * 约定（2026-10-28 起）：**worker 侧保存的账号就是签到账号的来源**。
+ * 在控制台给某个 worker 加了账号，签到区必须自动多出一行，不再各自维护一份名单。
+ * 因此这里每加一个平台，就必须同时给 readCredCandidates 加一个对应分支，否则档案扫得出来也读不出凭据。
+ */
 const PLATFORM_WORKERS = {
   workbuddy: ['codebuddy-cn'],
   codebuddy: ['codebuddy'],
@@ -300,17 +308,12 @@ const PLATFORM_WORKERS = {
   qoder: ['qoder'],
   'qoder-cn': ['qoder-cn'],
   minimaxcode: ['minimaxcode'],
+  meoo: ['meoo'],
 };
 
-/** 各 worker 档案目录内的凭据文件名 */
-const PROFILE_CRED_FILE = {
-  'codebuddy-cn': 'auth.info',
-  codebuddy: 'auth.info',
-  traecode: 'trae-jwt-token',
-  codearts: 'codearts-auth.env',
-  qoder: 'user',
-  'qoder-cn': 'user',
-};
+// 各 worker 档案目录里的凭据文件名由 readCredCandidates 的分支决定（拍平存放：auth.info /
+// trae-jwt-token / codearts-auth.env / user / auth.json / meoo-auth.env），这里不再另维护一张表——
+// 之前那张 PROFILE_CRED_FILE 从没被读过，加了 meoo 反而让人以为改了它就会生效。
 
 /** 解出 JWT 的 payload（失败返回 null，绝不抛错） */
 function jwtPayload(tok) {
@@ -511,8 +514,11 @@ async function readCredCandidates(platform, dir, flat = false) {
 
   if (platform === 'minimaxcode') {
     // mcode 的 OAuth 凭据：~/.minimax/auth/prod/<cn|en>/mcode-public/auth.json
-    // accessToken 是不透明串（不是 JWT），身份只能按区域给一个稳定值：mcode:<region>
+    // accessToken 是不透明串（不是 JWT），拿不到用户身份，所以：
+    //   · 线上那一份 → mcode:<region>（签到永远先签它，能用 refresh 自愈）
+    //   · 档案快照   → mcode:<region>:<档案名>（否则多个 MiniMax 账号会塌缩成同一行，第二个号永远看不见）
     const regions = flat ? ['cn'] : ['cn', 'global'];
+    const profileKey = flat ? basename(dir) : '';
     for (const region of regions) {
       const cfg = MINIMAX_REGIONS[region];
       if (!cfg) continue;
@@ -545,15 +551,35 @@ async function readCredCandidates(platform, dir, flat = false) {
       out.push({
         token: cred.token,
         refreshToken: cred.refreshToken || '',
-        identity: `mcode:${region}`,
+        identity: `mcode:${region}${profileKey ? `:${profileKey}` : ''}`,
         display: cfg.name,
         exp: Math.floor((Number(cred.expiresAtMs) || 0) / 1000),
         file,
         mtime: await fileMtime(file),
-        source: flat ? '账号档案 · MiniMax Code' : (cred.source || `~/${rel}`),
+        source: flat ? `账号档案 · MiniMax Code（${profileKey}）` : (cred.source || `~/${rel}`),
         kind: flat ? 'profile' : 'cli',
       });
     }
+    return out;
+  }
+
+  if (platform === 'meoo') {
+    // Meoo（秒悟）是 AK 鉴权，凭据文件就是一行 MEOO_AK=...，没有 JWT 也没有 refresh。
+    // 账号档案把它拍平成 meoo-auth.env；身份直接用 AK 本身（与 codearts 的 AK 同一套做法）。
+    const rel = flat ? 'meoo-auth.env' : join('.config', 'agenthub-meoo', 'meoo-auth.env');
+    const file = join(dir, rel);
+    try {
+      const txt = await readFile(file, 'utf-8');
+      const ak = (txt.match(/^\s*MEOO_AK\s*=\s*(\S+)/m) || [])[1];
+      if (ak) {
+        const akv = ak.trim();
+        out.push({
+          ak: akv, identity: `meoo:${akv}`, display: `Meoo · ${maskAk(akv)}`,
+          exp: 0, file, mtime: await fileMtime(file),
+          source: flat ? '账号档案 · MEOO_AK' : `~/${rel}`, kind: flat ? 'profile' : 'cli',
+        });
+      }
+    } catch { /* 没有这份文件 */ }
     return out;
   }
 
@@ -661,7 +687,24 @@ export async function listCheckinAccounts(platform) {
     }
   }
 
-  const accounts = [...byIdentity.values()].map((a) => {
+  let accounts = [...byIdentity.values()];
+  // MiniMax Code 的身份只能靠「区域 + 档案名」：线上那一份是 mcode:<region>，档案是 mcode:<region>:<档案名>，
+  // 同一份凭据会因此出现两次。token 相同即同一账号，只保留正在生效（active）那一行，
+  // 但名字/显示名要沿用档案里的（否则线上那行永远叫「(当前登录)」，看不出是哪个号）。
+  if (platform === 'minimaxcode') {
+    const liveRows = accounts.filter((a) => a.active && a.token);
+    const dupProfiles = new Set();
+    for (const prof of accounts.filter((a) => !a.active && a.token)) {
+      const hit = liveRows.find((l) => l.token === prof.token);
+      if (!hit) continue;
+      if (!hit.name || hit.name === '(当前登录)') hit.name = prof.name;
+      hit.display = prof.display || hit.display;
+      hit.worker = hit.worker || prof.worker;
+      dupProfiles.add(prof);
+    }
+    if (dupProfiles.size) accounts = accounts.filter((a) => !dupProfiles.has(a));
+  }
+  accounts = accounts.map((a) => {
     // 同身份的其它候选（不同 token）：首选被服务端注销时按顺序回退
     const alts = (candidates.get(a.identity) || [])
       .filter((c) => c.token && c.token !== a.token)
@@ -957,6 +1000,9 @@ export async function checkinWorkBuddy(overrideToken = null) {
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
+      // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
+      // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
+      identity: r.identity || '',
       source: r.credentialSource || r.source || ''
     })),
     today,
@@ -1150,6 +1196,9 @@ export async function checkinCodeBuddy(overrideToken = null) {
       message: r.message,
       credits: r.credits || '',
       consecutiveDays: r.consecutiveDays || 0,
+      // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
+      // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
+      identity: r.identity || '',
       source: r.credentialSource || r.source || ''
     })),
     credits: anySuccess ? '活跃+1' : '',
@@ -1267,6 +1316,9 @@ export async function checkinTrae(overrideToken = null) {
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
+      // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
+      // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
+      identity: r.identity || '',
       source: r.credentialSource || r.source || '',
     })),
     today,
@@ -1464,6 +1516,9 @@ export async function checkinCodeArts(overrideToken = null) {
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
+      // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
+      // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
+      identity: r.identity || '',
       source: r.credentialSource || r.source || ''
     })),
     today,
@@ -1888,6 +1943,9 @@ export async function checkinQoder(target = 'qoder') {
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
+      // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
+      // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
+      identity: r.identity || '',
       source: r.credentialSource || r.source || '',
     })),
     today,
@@ -1960,38 +2018,23 @@ function runMeoo(args, timeout = 45000) {
   });
 }
 
-/** Meoo 签到：login（= 每日登录）→ account（读积分） */
-export async function checkinMeoo() {
-  const today = getTodayStr();
-  const time = getNowTimeStr();
-  const cred = await readMeooAk();
-  if (!cred.available) {
-    return {
-      platform: 'meoo', ok: false, status: 'failed',
-      message: '未配置 Meoo AK：写到 ~/.config/agenthub-meoo/meoo-auth.env（MEOO_AK=...）或在控制台「配置 Token」里填',
-      credits: 0, consecutiveDays: 0, today, time, accounts: [],
-    };
-  }
-
-  const login = await runMeoo(['login', '--ak', cred.ak]);
-  if (login.missing) {
-    return {
-      platform: 'meoo', ok: false, status: 'failed',
-      message: '没找到 meoo 命令：先 npm i -g @aliyun-meoo/cli',
-      credits: 0, consecutiveDays: 0, today, time, accounts: [],
-    };
-  }
+/**
+ * 单 AK：login（= 每日登录）→ account（读积分）。
+ * @returns {Promise<{ok:boolean, status:string, message:string, user:string, plan:string, balance:number}>}
+ */
+async function checkinMeooOne(ak) {
+  const login = await runMeoo(['login', '--ak', ak]);
+  if (login.missing) return { ok: false, status: 'failed', message: '没找到 meoo 命令：先 npm i -g @aliyun-meoo/cli' };
   const loginText = (login.stdout + ' ' + login.stderr).replace(/\s+/g, ' ').trim();
   if (!login.ok) {
     const bad = /401|403|invalid|expired|无效|失败/i.test(loginText);
     return {
-      platform: 'meoo', ok: false, status: bad ? 'expired' : 'failed',
+      ok: false,
+      status: bad ? 'expired' : 'failed',
       message: bad ? `Meoo 登录失败：AK 无效或已过期（${loginText.slice(0, 120)}）` : `Meoo 登录失败：${loginText.slice(0, 160)}`,
-      credits: 0, consecutiveDays: 0, today, time, accounts: [],
     };
   }
 
-  // 登录成功 → 读账号积分（--json 给的是结构化数据）
   const acc = await runMeoo(['account', '--json']);
   let user = '';
   let balance = 0;
@@ -2005,24 +2048,93 @@ export async function checkinMeoo() {
       balance = Number(d?.points?.availableBalance ?? 0) || 0;
     } catch { /* 解析失败就只报登录成功 */ }
   }
+  return { ok: true, status: 'success', message: '', user, plan, balance };
+}
 
-  const who = user ? `${user} ` : '';
-  const parts = [`${who}登录态已同步`];
-  if (plan) parts.push(plan);
-  if (balance) parts.push(`可用积分 ${balance.toLocaleString('en-US')}`);
-  // 注意：Meoo 的每日积分是「网页登录时服务端自动发放」，CLI 的 login 走 AK 认证、不会触发。
-  // 所以这里只报余额，不承诺涨幅（余额变动多半是用户自己在网页上领的）。
-  let prevBalance = 0;
-  try { prevBalance = Number((await loadState())?.platforms?.meoo?.credits) || 0; } catch { /* ignore */ }
-  if (prevBalance && balance && balance !== prevBalance) {
-    const d = balance - prevBalance;
-    parts.push(d > 0 ? `（较上次 +${d.toLocaleString('en-US')}，多半是网页端领的）` : `（较上次 ${d.toLocaleString('en-US')}）`);
+/** Meoo 签到：login（= 每日登录）→ account（读积分）。覆盖所有已保存的 AK。 */
+export async function checkinMeoo() {
+  const today = getTodayStr();
+  const time = getNowTimeStr();
+
+  // 账号来源与其它平台对齐：worker 档案 + 线上 meoo-auth.env（listCheckinAccounts 已合并两者）
+  let accounts = await listCheckinAccounts('meoo');
+  if (!accounts.length) {
+    const cred = await readMeooAk();
+    if (cred.available) {
+      accounts = [{
+        name: 'meoo',
+        display: `Meoo · ${maskAk(cred.ak)}`,
+        identity: `meoo:${cred.ak}`,
+        ak: cred.ak,
+        active: true,
+        source: cred.source,
+      }];
+    }
   }
+  if (!accounts.length) {
+    return {
+      platform: 'meoo', ok: false, status: 'failed',
+      message: '未配置 Meoo AK：写到 ~/.config/agenthub-meoo/meoo-auth.env（MEOO_AK=...）或在控制台「配置 Token」里填',
+      credits: 0, consecutiveDays: 0, today, time, accounts: [],
+    };
+  }
+
+  // 多账号时余额对比失去意义（state 里只存一个总余额），只在单账号时保留「较上次 +N」
+  let prevBalance = 0;
+  if (accounts.length === 1) {
+    try { prevBalance = Number((await loadState())?.platforms?.meoo?.credits) || 0; } catch { /* ignore */ }
+  }
+
+  const results = [];
+  for (const acct of accounts) {
+    const ak = String(acct.ak || '').trim();
+    if (!ak) {
+      results.push({ ...acct, ok: false, status: 'failed', message: '账号档案里没有 MEOO_AK' });
+      continue;
+    }
+    const r = await checkinMeooOne(ak);
+    if (!r.ok) { results.push({ ...acct, ...r }); continue; }
+
+    const who = r.user ? `${r.user} ` : '';
+    const parts = [`${who}登录态已同步`];
+    if (r.plan) parts.push(r.plan);
+    if (r.balance) parts.push(`可用积分 ${r.balance.toLocaleString('en-US')}`);
+    // 注意：Meoo 的每日积分是「网页登录时服务端自动发放」，CLI 的 login 走 AK 认证、不会触发。
+    // 所以这里只报余额，不承诺涨幅（余额变动多半是用户自己在网页上领的）。
+    if (prevBalance && r.balance && r.balance !== prevBalance) {
+      const d = r.balance - prevBalance;
+      parts.push(d > 0 ? `（较上次 +${d.toLocaleString('en-US')}，多半是网页端领的）` : `（较上次 ${d.toLocaleString('en-US')}）`);
+    }
+    results.push({ ...acct, ok: true, status: 'success', message: parts.join('，'), user: r.user, balance: r.balance });
+  }
+
+  // meoo login 会把该 AK 写成「当前登录」；多账号轮完后把正在生效的那个写回去，
+  // 不然签完一轮，CLI 停在最后一个账号上（下次手动跑 meoo 会莫名换了人）。
+  const active = accounts.find((a) => a.active && a.ak);
+  if (accounts.length > 1 && active) {
+    try { await runMeoo(['login', '--ak', String(active.ak)]); } catch { /* 恢复失败不影响签到结果 */ }
+  }
+
+  const badOnes = results.filter((r) => !r.ok);
   return {
-    platform: 'meoo', ok: true, status: 'success',
-    message: parts.join('，'),
-    credits: 0, consecutiveDays: 0, today, time,
-    accounts: [{ name: user || 'meoo', display: user || 'Meoo 账号', active: true, status: 'success', message: parts.join('，'), credits: 0, source: cred.source }],
+    platform: 'meoo',
+    ok: badOnes.length === 0,
+    status: badOnes.length ? 'failed' : 'success',
+    message: results.map((r) => (results.length > 1 ? `${r.display || r.name}：${r.message}` : r.message)).join('；'),
+    credits: 0,
+    consecutiveDays: 0,
+    today,
+    time,
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.user ? `${r.user}` : (r.display || r.name),
+      identity: r.identity || '',
+      active: !!r.active,
+      status: r.status,
+      message: r.message,
+      credits: 0,
+      source: r.source || '',
+    })),
   };
 }
 
@@ -2046,27 +2158,140 @@ export async function checkinMiniMaxPlatform(region = 'cn') {
       accounts: [],
     };
   }
-  const r = await checkinMiniMax(cfg.key, custom);
+
+  // 多账号：worker 里保存的每个 mcode 档案都要签，不能只签当前生效的那一个。
+  // 线上那份（active）走 CLI 原文件，保留 401 自动续期能力；档案快照把 token 一起传进去。
+  let accounts = await listCheckinAccounts('minimaxcode');
+  if (!accounts.length) {
+    // 没有档案（或还没登录）时保持旧行为：签线上这一份 / 或手工 Token
+    accounts = [{ name: `mcode-${cfg.key}`, display: cfg.name, identity: `mcode:${cfg.key}`, active: true, source: custom ? '自定义 Token' : (cred?.source || '') }];
+  }
+
+  const results = [];
+  for (const acct of accounts) {
+    const label = acct.display || acct.name;
+    try {
+      const override = acct.active || !acct.token
+        ? (custom || '')
+        : { token: acct.token, refreshToken: acct.refreshToken || '', expiresAtMs: (Number(acct.exp) || 0) * 1000, file: acct.file || '', source: acct.source || '账号档案快照', region: cfg.key };
+      const r = await checkinMiniMax(cfg.key, override);
+      results.push({ ...acct, ...r, label });
+    } catch (err) {
+      results.push({ ...acct, ok: false, status: 'failed', message: `请求异常：${err.message}`, credits: 0, consecutiveDays: 0, label });
+    }
+  }
+
+  const okOnes = results.filter((r) => r.status === 'success');
+  const badOnes = results.filter((r) => !['success', 'already', 'pending'].includes(r.status));
   return {
     platform: 'minimaxcode',
-    ok: r.ok,
-    status: r.status,
-    message: r.message,
-    credits: r.credits,
-    consecutiveDays: r.consecutiveDays,
+    ok: badOnes.length === 0,
+    status: badOnes.length ? 'failed' : (okOnes.length ? 'success' : (results.some((r) => r.status === 'pending') ? 'pending' : 'already')),
+    message: results.map((r) => (results.length > 1 ? `${r.label}：${r.message}` : r.message)).join('；'),
+    credits: results.reduce((s, r) => s + (Number(r.credits) || 0), 0),
+    consecutiveDays: results[0]?.consecutiveDays || 0,
     today,
     time,
-    accounts: [{
-      name: `mcode-${cfg.key}`,
-      display: cfg.name,
-      active: true,
+    accounts: results.map((r) => ({
+      name: r.name,
+      display: r.label || r.name,
+      identity: r.identity || '',
+      active: !!r.active,
       status: r.status,
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
-      source: r.source || cred?.source || (custom ? '自定义 Token' : ''),
-    }],
+      source: r.source || r.credentialSource || '',
+    })),
   };
+}
+
+/**
+ * 把「worker 侧当前账号」与「今日已签快照」合成前端渲染用的账号行。
+ *
+ * 这是 2026-10-28 的核心修正：旧实现只要有今日快照就直接用快照，
+ * 于是「上午 10:22 签完，13:00 在 worker 里加了个账号」这种再正常不过的操作，
+ * 签到区会一直装作没看见，直到第二天才冒出来。
+ * 新规则：
+ *   · 账号集合以 **worker 档案 + 线上凭据**（实时扫描）为准；
+ *   · 今日快照只负责给同身份的行补状态（已签/失败/积分），不决定行是否存在；
+ *   · 实时有、快照没有 → 新增账号，pending；
+ *   · 快照有、实时没有 → 凭据今日被删/被切走，仍保留一行并标记 stale，避免历史凭空消失。
+ *
+ * @param {Array<object>} liveAccounts listCheckinAccounts 的结果
+ * @param {Array<object>} snapshotRows  state.platforms[plat].accounts
+ * @param {string} platform
+ */
+function mergeAccountRows(liveAccounts, snapshotRows, platform) {
+  const snaps = (Array.isArray(snapshotRows) ? snapshotRows : []).filter(Boolean);
+  /** 快照行的匹配键：新快照带 identity；旧快照只有名字，靠平台规则归一 */
+  const keysOf = (row) => {
+    const keys = new Set();
+    if (row.identity) keys.add(String(row.identity));
+    if (row.name) keys.add(String(row.name));
+    if (platform === 'minimaxcode') {
+      // 老快照写的是 mcode-cn（= mcode:cn），实时行 identiy 也是 mcode:cn，归一后就能对上
+      const m = String(row.name || '').match(/^mcode-(.+)$/);
+      if (m) keys.add(`mcode:${m[1]}`);
+    }
+    return keys;
+  };
+
+  const used = new Set();
+  const rows = [];
+  for (const acct of liveAccounts) {
+    let hit = null;
+    const liveKeys = [acct.identity, acct.name].filter(Boolean).map(String);
+    for (const s of snaps) {
+      if (used.has(s)) continue;
+      const k = keysOf(s);
+      if (liveKeys.some((x) => k.has(x))) { hit = s; used.add(s); break; }
+    }
+    const base = {
+      name: acct.name,
+      display: acct.display || acct.name,
+      identity: acct.identity || '',
+      active: !!acct.active,
+      source: acct.credentialSource || acct.source || '',
+    };
+    if (hit) {
+      rows.push({
+        ...base,
+        status: hit.status || 'pending',
+        message: hit.message || '',
+        credits: hit.credits,
+        consecutiveDays: hit.consecutiveDays,
+        // 凭据来源以签到当时的记录为准（说明这一行是谁签的）
+        source: hit.source || base.source,
+      });
+    } else {
+      rows.push({ ...base, status: 'pending', message: '新增账号 · 今日待打卡', fresh: true });
+    }
+  }
+
+  const leftSnaps = snaps.filter((s) => !used.has(s));
+  const unmatchedLive = rows.filter((r) => r.fresh);
+  // meoo 的老快照记录的是「用户名」（Johhny），worker 档案名却是「meo-meoo_ak_」，两边名字天然对不上，
+  // 而这一列在升级当天只会有 1 个账号，所以「两边各剩一行」必然是同一个号 —— 配起来，避免多出一行假新增。
+  // 其它平台不做这种兜底配对：同日「删掉一个号 + 新加一个号」会被错配成同一个账号，宁可多一行。
+  if (platform === 'meoo' && leftSnaps.length === 1 && unmatchedLive.length === 1) {
+    const snap = leftSnaps.pop();
+    const row = unmatchedLive[0];
+    Object.assign(row, {
+      // meoo 的快照里 display 是登录后拿到的用户名（Johhny），比「Meoo · meoo…5gIV」好认
+      display: snap.display || row.display,
+      status: snap.status || 'pending',
+      message: snap.message || '',
+      credits: snap.credits,
+      consecutiveDays: snap.consecutiveDays,
+      source: snap.source || row.source,
+      fresh: false,
+    });
+  }
+  for (const s of leftSnaps) {
+    rows.push({ ...s, stale: true, message: s.message || '凭据已不在 worker 账号里' });
+  }
+  return rows;
 }
 
 /**
@@ -2084,17 +2309,15 @@ export async function getCheckinOverview() {
     const cInfo = creds[plat] || {};
     const isToday = pState.lastDate === today;
 
-    // 本次签到的账号行（含各自的凭据来源），没签过就现读一份用于展示
-    const accountRows = isToday && Array.isArray(pState.accounts) && pState.accounts.length
-      ? pState.accounts
-      : (await listCheckinAccounts(plat)).map((a) => ({
-        name: a.name,
-        display: a.display,
-        active: !!a.active,
-        status: 'pending',
-        message: '今日待打卡',
-        source: a.credentialSource || a.source || '',
-      }));
+    // 账号行 = 实时账号集合（worker 档案 + CLI 凭据）∪ 今日快照状态。
+    // 以前只要 isToday 就直接回放快照，导致「签完之后在 worker 里新加的账号」当天永远不出现。
+    const accountRows = mergeAccountRows(
+      await listCheckinAccounts(plat),
+      isToday ? pState.accounts : [],
+      plat,
+    );
+    // 还有几个账号今天没签成：前端据此把「今日已签」按钮改成「补签新增账号」
+    const pendingAccounts = accountRows.filter((r) => ['pending', 'failed', 'expired'].includes(String(r.status))).length;
 
     platforms[plat] = {
       available: cInfo.available,
@@ -2110,6 +2333,9 @@ export async function getCheckinOverview() {
       credits: pState.credits || '',
       consecutiveDays: pState.consecutiveDays || 0,
       accounts: accountRows,
+      // >0 表示「今天还有账号没签成」——可能是刚在 worker 里加的，也可能是某个号失败了
+      pendingAccounts,
+      accountCount: accountRows.length,
     };
   }
 
@@ -2122,6 +2348,35 @@ export async function getCheckinOverview() {
     history: (state.history || []).slice(0, 20),
     openSourceProjects: OPEN_SOURCE_PROJECTS
   };
+}
+
+/**
+ * 今天还有「新账号没签」的平台列表。
+ *
+ * 场景：上午签完了，下午在 worker 面板里又加了一个账号 —— 它必须当天就能签，
+ * 而不是等第二天定时任务。这里只认「今日快照里完全没有这个身份」的账号（fresh），
+ * 已经尝试过并失败的不算：失败重试由平台级 retryCount 负责，否则每半小时都会把失败号重打一遍。
+ *
+ * @param {object} [state] 已加载的状态（省一次读盘）
+ * @returns {Promise<string[]>}
+ */
+export async function pendingAccountPlatforms(state = null) {
+  const st = state || (await loadState());
+  const today = getTodayStr();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const out = [];
+  for (const plat of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo']) {
+    const p = st.platforms?.[plat] || {};
+    // 平台自己约了时间（Qoder 每天 10:00 开新一期）就别提前空转
+    if (p.retryAt && nowSec < Number(p.retryAt)) continue;
+    const rows = mergeAccountRows(
+      await listCheckinAccounts(plat),
+      p.lastDate === today ? p.accounts : [],
+      plat,
+    );
+    if (rows.some((r) => r.fresh)) out.push(plat);
+  }
+  return out;
 }
 
 /**
@@ -2155,6 +2410,10 @@ export async function runCheckin(target = 'all') {
       if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
       return ['failed', 'pending'].includes(p.status) && (p.retryCount || 0) < 8;
     });
+    // 已经签成、但 worker 里又新加了账号的平台：也要在「刷新/补签」里带上，
+    // 否则新账号当天永远签不到（旧逻辑只看平台级状态，账号级新增完全看不见）。
+    const fresh = await pendingAccountPlatforms(state);
+    only = [...new Set([...only, ...fresh])];
     if (!only.length) return { ok: true, results: {}, due: [], overview: await getCheckinOverview() };
   }
   const want = (plat) => (only ? only.includes(plat) : (target === 'all' || target === plat));
@@ -2266,6 +2525,10 @@ export function startAutoCheckinScheduler() {
         if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
         return ['failed', 'pending'].includes(p.status) && (p.retryCount || 0) < 8;
       });
+      // worker 侧新增的账号同样要当天补签（只补「从没签过」的，失败重试仍归 retryCount 管）
+      for (const plat of await pendingAccountPlatforms(state)) {
+        if (!pending.includes(plat)) pending.push(plat);
+      }
       if (pending.length) {
         console.log(`[Checkin] 触发定时签到（待处理: ${pending.join(', ')}）...`);
         for (const plat of pending) await runCheckin(plat);

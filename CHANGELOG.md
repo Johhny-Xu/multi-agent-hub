@@ -9,6 +9,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 版本日期为 Git 发布日期；实现、测试和构建记录保留各自实际日期。源码标签与安装包附件分开管理，是否上传附件以各版交付记录为准。检查点来源见 [版本记录](docs/version-history.md)。
 
+## [Unreleased]
+
+### 修复：签到区与 worker 账号不再各维护一份名单
+
+- **现象**（线上实测 10-28）：10:22 一键签完，13:00 在 worker 面板里新加一个 Qoder 账号（`Kangsheng-Xu-745491318`），签到区到第二天仍只显示旧的两行。
+- **根因**：`getCheckinOverview` 只要「今天签过」就直接回放 `state.platforms[plat].accounts` 快照，实时账号扫描根本不参与展示；`runCheckin('due')` 与 30 分钟定时器也只看平台级 `status`，账号级新增完全看不见。
+- **修法**：账号集合改为由 **worker 档案 + 线上凭据**实时派生，今日快照只负责补状态（已签/失败/积分）：
+  - 实时有、快照没有 → `fresh` + `pending`（前端显示「（新增）」），并计入新增的 `pendingAccounts`；
+  - 快照有、实时没有 → 保留该行并标 `stale`（凭据被删/切走，但当天历史不能消失）；
+  - 快照行开始写 `identity`，下次按身份精确配对（老快照按名字/MiniMax 的名字规则归一）。
+  - 前端：平台状态是「已签」但仍有账号没签时，按钮不再锁死，改成「补签新增账号 N」。
+- **补签链路**：新增 `pendingAccountPlatforms()`，把「有新增账号」的平台并进 `runCheckin('due')` 与定时队列。只补「从没签过」的账号，失败重试仍归平台级 `retryCount`，不会每半小时重打失败号。
+- **Meoo**：接上账号档案扫描（`PLATFORM_WORKERS.meoo` + `readCredCandidates` 分支，identity = `meoo:<AK>`），签到改为遍历所有已保存的 AK；多账号轮完后把生效账号 `login` 写回本地，避免 CLI 停在最后一个号上。
+- **MiniMax Code**：身份从 `mcode:<region>` 改为 `mcode:<region>:<档案名>`，多个账号不再塌缩成一行；线上那一份与同 token 的档案合并，并沿用档案名（不再是「(当前登录)」）。`checkinMiniMax` 的 override 支持传整份凭据，档案账号也能用 refresh_token 自愈。
+- **顺带**：`detectCredentials` 补 `meoo` 占位（控制台配了 `customTokens.meoo` 时会读 undefined 抛错）；删掉从未被读取的 `PROFILE_CRED_FILE`——改了它不生效，容易误导。
+- **测试**：新增 `tests/console_checkin_account_sync.mjs`（8 例：新增账号即时可见、补签队列、无新增时归零、老快照配对、stale 保留、meoo 派生去重、MiniMax 多账号不塌缩/同 token 合并）；console 相关 134 项全绿。
+- **线上验证**：qoder 3 行且新增号标 pending、`due: qoder`；补签后该号返回「今日已领」；meoo 行显示用户名；MiniMax 行沿用档案名。
+
 ## [1.0.19] - 2026-10-24
 
 ### 修复：WebUI 测试进程不退、移动端细节与浅色气泡

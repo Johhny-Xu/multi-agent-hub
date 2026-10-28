@@ -1636,7 +1636,8 @@
         const stateText = st === 'success'
           ? (a.credits ? `+${a.credits}` : '已签到')
           : (st === 'already' ? '今日已签' : (st === 'failed' ? (a.message || '失败') : (st === 'expired' ? '凭据失效' : '待打卡')));
-        const name = escapeHtml(a.display || a.name || '未知账号');
+        const name = escapeHtml((a.display || a.name || '未知账号')
+          + (a.fresh ? '（新增）' : (a.stale ? '（已切走）' : '')));
         const cls = st === 'expired' ? 'failed' : st;
         const tip = [a.message, a.source ? `凭据：${a.source}` : ''].filter(Boolean).join(' · ');
         return `<div class="checkin-acct-row is-${escapeHtml(cls)}" title="${escapeHtml(tip)}">
@@ -1803,6 +1804,27 @@
           btnMo.textContent = isSigned ? '登录态正常' : '刷新登录态';
         }
       }
+
+      // 账号级补签：worker 侧新加的账号当天也必须能签。
+      // 平台级状态是「已签」时旧逻辑会把按钮锁死，于是「上午签完、下午加号」永远补不上。
+      // 只要还有账号没签（pendingAccounts > 0），按钮就保持可用，并直接写明待补个数。
+      document.querySelectorAll('.btn-do-checkin').forEach((btn) => {
+        const key = btn.dataset.platform;
+        const info = key ? p[key] : null;
+        if (!info) return;
+        const settled = info.status === 'success' || info.status === 'already';
+        const pending = Number(info.pendingAccounts) || 0;
+        if (!settled) { btn.disabled = false; return; }
+        if (pending > 0) {
+          btn.disabled = false;
+          btn.textContent = key === 'meoo' ? `补签 ${pending} 个账号` : `补签新增账号 ${pending}`;
+          btn.title = `还有 ${pending} 个账号今天没签（多为在 worker 里新加的），点一下补签`;
+        } else {
+          btn.disabled = true;
+          btn.title = '';
+          if (key === 'meoo') btn.textContent = '登录态正常';
+        }
+      });
 
       // 顶部统计胶囊
       if (overallPill) {
