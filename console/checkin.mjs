@@ -2317,7 +2317,12 @@ export async function getCheckinOverview() {
       plat,
     );
     // 还有几个账号今天没签成：前端据此把「今日已签」按钮改成「补签新增账号」
-    const pendingAccounts = accountRows.filter((r) => ['pending', 'failed', 'expired'].includes(String(r.status))).length;
+    // 平台处在「等下一期开窗」（Qoder 每天 0:00 / 10:00）时不算待补：那时候点也只会再拿到一次 pending，
+    // 白让按钮闪一下，用户还以为漏签了。
+    const waitingWindow = isToday && Number(pState.retryAt) > 0 && Math.floor(Date.now() / 1000) < Number(pState.retryAt);
+    const pendingAccounts = waitingWindow
+      ? 0
+      : accountRows.filter((r) => ['pending', 'failed', 'expired'].includes(String(r.status))).length;
 
     platforms[plat] = {
       available: cInfo.available,

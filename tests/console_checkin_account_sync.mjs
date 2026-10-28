@@ -148,6 +148,27 @@ test('凭据今天被删/切走的账号仍保留一行，并标记 stale', asyn
   assert.equal(gone?.stale, true);
 });
 
+test('平台在等下一期开窗时不算「待补签」，按钮不闪', async () => {
+  await resetFixtures();
+  await writeAuthProfile('codebuddy-cn', 'first', TOKEN_A);
+  const future = Math.floor(Date.now() / 1000) + 3600;
+  await writeFile(STATE_FILE, JSON.stringify({
+    autoCheckin: true,
+    platforms: {
+      workbuddy: {
+        lastDate: localToday(), lastTime: '10:22:00', status: 'pending', message: '等下一期开窗',
+        accounts: [{ name: 'other', display: '另一个号', identity: 'user-z', status: 'pending', message: '等开窗' }],
+        retryCount: 1, retryAt: future,
+      },
+    },
+    history: [],
+  }, null, 2), 'utf-8');
+
+  const ov = await getCheckinOverview();
+  assert.equal(ov.platforms.workbuddy.accounts.filter((r) => r.status === 'pending').length, 2);
+  assert.equal(ov.platforms.workbuddy.pendingAccounts, 0, '等待窗口内不催补签');
+});
+
 test('Meoo 账号从 worker 档案派生，并与线上同一 AK 去重', async () => {
   await resetFixtures();
   const ak = 'mk-test-0001';

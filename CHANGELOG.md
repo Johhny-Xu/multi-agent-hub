@@ -19,7 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - 实时有、快照没有 → `fresh` + `pending`（前端显示「（新增）」），并计入新增的 `pendingAccounts`；
   - 快照有、实时没有 → 保留该行并标 `stale`（凭据被删/切走，但当天历史不能消失）；
   - 快照行开始写 `identity`，下次按身份精确配对（老快照按名字/MiniMax 的名字规则归一）。
-  - 前端：平台状态是「已签」但仍有账号没签时，按钮不再锁死，改成「补签新增账号 N」。
+  - 前端：平台状态是「已签」但仍有账号没签时，按钮不再锁死，改成「补签新增账号 N」；
+    平台处在「等下一期开窗」（`retryAt` 未到）时不计入待补，避免按钮白闪。
 - **补签链路**：新增 `pendingAccountPlatforms()`，把「有新增账号」的平台并进 `runCheckin('due')` 与定时队列。只补「从没签过」的账号，失败重试仍归平台级 `retryCount`，不会每半小时重打失败号。
 - **Meoo**：接上账号档案扫描（`PLATFORM_WORKERS.meoo` + `readCredCandidates` 分支，identity = `meoo:<AK>`），签到改为遍历所有已保存的 AK；多账号轮完后把生效账号 `login` 写回本地，避免 CLI 停在最后一个号上。
 - **MiniMax Code**：身份从 `mcode:<region>` 改为 `mcode:<region>:<档案名>`，多个账号不再塌缩成一行；线上那一份与同 token 的档案合并，并沿用档案名（不再是「(当前登录)」）。`checkinMiniMax` 的 override 支持传整份凭据，档案账号也能用 refresh_token 自愈。
