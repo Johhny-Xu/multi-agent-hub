@@ -85,13 +85,19 @@ export function minimaxAuthDir(baseHome, region) {
  */
 export async function readMinimaxCredential(baseHome = HOME, region = 'cn') {
   const cfg = MINIMAX_REGIONS[region] || MINIMAX_REGIONS.cn;
-  const dir = minimaxAuthDir(baseHome, region);
-  const file = join(dir, 'auth.json');
+  const cred = await readMinimaxCredentialFile(join(minimaxAuthDir(baseHome, region), 'auth.json'), cfg.key);
+  return cred ? { ...cred, source: `~/.minimax/auth/prod/${cfg.authDir}/mcode-public/auth.json` } : null;
+}
+
+export async function readMinimaxCredentialFile(file, region = 'cn') {
   const data = await readJsonSafe(file);
   const records = data?.records;
   if (!records || typeof records !== 'object') return null;
+  const state = await readJsonSafe(join(dirname(file), 'auth-state.json'));
+  const status = String(state?.status || '').toLowerCase();
+  if (status && status !== 'authenticated') return null;
   let best = null;
-  for (const value of Object.values(records)) {
+  for (const [recordKey, value] of Object.entries(records)) {
     if (!value || typeof value !== 'object') continue;
     const token = String(value.accessToken || '').trim();
     if (!token) continue;
@@ -102,44 +108,43 @@ export async function readMinimaxCredential(baseHome = HOME, region = 'cn') {
         refreshToken: String(value.refreshToken || '').trim(),
         expiresAtMs: exp,
         clientId: String(value.clientId || CLIENT_ID),
+        recordKey,
       };
     }
   }
   if (!best) return null;
-  const state = await readJsonSafe(join(dir, 'auth-state.json'));
-  return {
-    ...best,
-    region: String(state?.region || cfg.key),
-    status: String(state?.status || '').toLowerCase(),
-    file,
-    source: `~/.minimax/auth/prod/${cfg.authDir}/mcode-public/auth.json`,
-  };
+  const regionKey = String(state?.region || region);
+  return { ...best, region: regionKey === 'en' ? 'global' : regionKey, status, file, source: file };
+}
+
+export function minimaxCredentialVersion(cred) {
+  return cred?.token ? createHash('sha256').update(JSON.stringify([cred.token, cred.refreshToken || ''])).digest('hex') : '';
 }
 
 /** 把续期后的新凭据回写 mcode 的登录态，保证 CLI 与签到两边同步 */
-async function writeBackCredential(file, credentials) {
-  if (!file || !credentials?.token) return;
-  const data = await readJsonSafe(file);
+async function writeBackCredential(cred, credentials) {
+  if (!cred?.file || !credentials?.token) return;
+  const data = await readJsonSafe(cred.file);
   const records = data?.records;
   if (!records || typeof records !== 'object') return;
-  for (const record of Object.values(records)) {
-    if (!record || typeof record !== 'object' || !record.accessToken) continue;
-    record.accessToken = credentials.token;
-    if (credentials.refreshToken) record.refreshToken = credentials.refreshToken;
-    if (credentials.expiresAtMs) record.expiresAtMs = Number(credentials.expiresAtMs);
-    record.generation = Number(record.generation || 0) + 1;
-    try {
-      await writeFile(file, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
-      const stateFile = join(dirname(file), 'auth-state.json');
-      const state = await readJsonSafe(stateFile);
-      if (state) {
-        if (credentials.expiresAtMs) state.expiresAtMs = Number(credentials.expiresAtMs);
-        state.generation = Number(state.generation || 0) + 1;
-        await writeFile(stateFile, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
-      }
-    } catch { /* 回写失败不影响本次签到 */ }
-    return;
-  }
+  const record = cred.recordKey ? records[cred.recordKey] : Object.values(records).find((r) => r?.accessToken === cred.token);
+  // 刷新期间可能完成了新登录，不能将新授权覆盖回旧会话。
+  if (!record || record.accessToken !== cred.token) return;
+  record.accessToken = credentials.token;
+  if (credentials.refreshToken) record.refreshToken = credentials.refreshToken;
+  if (credentials.expiresAtMs) record.expiresAtMs = Number(credentials.expiresAtMs);
+  record.generation = Number(record.generation || 0) + 1;
+  try {
+    await writeFile(cred.file, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    const stateFile = join(dirname(cred.file), 'auth-state.json');
+    const state = await readJsonSafe(stateFile);
+    if (state) {
+      if (credentials.expiresAtMs) state.expiresAtMs = Number(credentials.expiresAtMs);
+      state.generation = Number(state.generation || 0) + 1;
+      await writeFile(stateFile, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
+    }
+    return true;
+  } catch { /* 回写失败不影响本次签到 */ }
 }
 
 /** OAuth 续期：POST {account}/oauth2/token（refresh_token 模式） */
@@ -270,19 +275,51 @@ function todayPanel(panel) {
 }
 
 /** 401 自愈：用 refresh_token 续期后重试一次 */
+/**
+ * 401 自愈：refresh_token 换新 access_token，回写后重试一次 status。
+ *
+ * 以前这里失败统一返回 null，调用方就把两种完全不同的情况都写成
+ * 「登录态已失效，refresh_token 也续不动了」：
+ *   · 真的是 refresh 被上游作废 → 只能重新登录；
+ *   · refresh 明明成功了，只是重试的 status 又被打回来（403/429/5xx/风控）→ 那是另一回事。
+ * 后者被误报成「请重新登录」，2026-10-29 那批 401 就是典型：token 已经换新，
+ * 却仍然提示用户重登。现在返回结构化结果，由调用方按 phase 给不同的处置。
+ *
+ * @returns {Promise<{ok:true, panel:object} | {ok:false, phase:'oauth_refresh'|'status_after_refresh', httpStatus:number, message:string}>}
+ */
 async function recover401(region, ident, cred) {
   const refreshed = await oauthRefresh(region, cred?.refreshToken);
-  if (!refreshed) return null;
-  await writeBackCredential(cred.file, refreshed);
-  const res = await apiCall(region, refreshed.token, ident, API_STATUS);
-  if (res.status !== 200) return null;
-  return { ...cred, ...refreshed, panel: res.json?.data || {}, refreshed: true };
+  if (!refreshed) {
+    return {
+      ok: false,
+      phase: 'oauth_refresh',
+      httpStatus: 401,
+      message: 'MiniMax 登录态已失效（access_token 过期且 refresh_token 续期失败），需要在控制台重新登录。',
+    };
+  }
+  const saved = await writeBackCredential(cred, refreshed);
+  if (saved && cred.profileCredential) {
+    await writeBackCredential(cred.profileCredential, refreshed);
+    Object.assign(cred.profileCredential, refreshed);
+  }
+  Object.assign(cred, refreshed);
+  const res = await apiCall(region, cred.token, ident, API_STATUS);
+  if (res.status !== 200) {
+    return {
+      ok: false,
+      phase: 'status_after_refresh',
+      httpStatus: res.status,
+      // 这一条不能再让人去重登：凭据是新的，问题在重试请求本身
+      message: `OAuth 刷新成功，但 signin/status 重试仍失败（HTTP ${res.status}）：${String(res.text || '').slice(0, 120)}`,
+    };
+  }
+  return { ok: true, ...cred, panel: res.json?.data || {}, refreshed: true };
 }
 
 /**
  * 执行一次签到。
  * @param {'cn'|'global'} region
- * @param {string|{token:string, refreshToken?:string, expiresAtMs?:number, file?:string, source?:string}} [override]
+ * @param {string|{token:string, refreshToken?:string, expiresAtMs?:number, file?:string, recordKey?:string, profileCredential?:object, source?:string}} [override]
  *        手工配置的 accessToken（CLI 未登录时的兜底），或一份账号档案凭据（多账号签到用）
  */
 export async function checkinMiniMax(region = 'cn', override = '') {
@@ -302,6 +339,8 @@ export async function checkinMiniMax(region = 'cn', override = '') {
       refreshToken: String(credObj.refreshToken || ''),
       expiresAtMs: Number(credObj.expiresAtMs) || 0,
       file: String(credObj.file || ''),
+      recordKey: String(credObj.recordKey || ''),
+      profileCredential: credObj.profileCredential || null,
       source: String(credObj.source || '账号档案快照'),
       region: cfg.key,
     }
@@ -324,14 +363,16 @@ export async function checkinMiniMax(region = 'cn', override = '') {
   let res = await apiCall(cfg.key, cred.token, ident, API_STATUS);
   if (res.status === 401) {
     const healed = await recover401(cfg.key, ident, cred);
-    if (!healed) {
+    if (!healed.ok) {
       return {
         ok: false,
-        status: 'expired',
-        message: 'MiniMax 登录态已失效（HTTP 401），refresh_token 也续不动了，请在控制台重新登录。',
+        // 只有 refresh 真的失败才算「凭据失效」；refresh 成功但重试仍被打回来是另一种故障
+        status: healed.phase === 'oauth_refresh' ? 'expired' : 'failed',
+        message: healed.message,
         credits: 0,
         consecutiveDays: 0,
         region: cfg.key,
+        credentialVersion: minimaxCredentialVersion(cred),
         source: cred.source,
       };
     }
@@ -340,7 +381,7 @@ export async function checkinMiniMax(region = 'cn', override = '') {
   }
   if (res.status !== 200) {
     const hint = res.status === 429 ? '请求过于频繁（HTTP 429），请稍后重试' : `接口返回 HTTP ${res.status}：${String(res.text || '').slice(0, 160)}`;
-    return { ok: false, status: 'failed', message: hint, credits: 0, consecutiveDays: 0, region: cfg.key, source: cred.source };
+    return { ok: false, status: 'failed', message: hint, credits: 0, consecutiveDays: 0, region: cfg.key, credentialVersion: minimaxCredentialVersion(cred), source: cred.source };
   }
 
   const panel = res.json?.data || {};
@@ -359,21 +400,22 @@ export async function checkinMiniMax(region = 'cn', override = '') {
       credits: 0,
       consecutiveDays: dayNo,
       region: cfg.key,
+      credentialVersion: minimaxCredentialVersion(cred),
       source: sourceNote,
     };
   }
   if (dayStatus === DAY.DISABLED) {
-    return { ok: false, status: 'failed', message: '今日签到入口未开放（上游 status=4）', credits: 0, consecutiveDays: dayNo, region: cfg.key, source: sourceNote };
+    return { ok: false, status: 'failed', message: '今日签到入口未开放（上游 status=4）', credits: 0, consecutiveDays: dayNo, region: cfg.key, credentialVersion: minimaxCredentialVersion(cred), source: sourceNote };
   }
   if (dayStatus === DAY.UPCOMING) {
-    return { ok: true, status: 'already', message: '今日签到尚未开始（上游 status=1），稍后再试', credits: 0, consecutiveDays: dayNo, region: cfg.key, source: sourceNote };
+    return { ok: true, status: 'already', message: '今日签到尚未开始（上游 status=1），稍后再试', credits: 0, consecutiveDays: dayNo, region: cfg.key, credentialVersion: minimaxCredentialVersion(cred), source: sourceNote };
   }
 
   // 可领取 → 领
   let claim = await apiCall(cfg.key, cred.token, ident, API_CLAIM, 'POST');
   if (claim.status === 401) {
     const healed = await recover401(cfg.key, ident, cred);
-    if (healed) {
+    if (healed.ok) {
       cred = healed;
       claim = await apiCall(cfg.key, cred.token, ident, API_CLAIM, 'POST');
     }
@@ -386,6 +428,7 @@ export async function checkinMiniMax(region = 'cn', override = '') {
       credits: 0,
       consecutiveDays: dayNo,
       region: cfg.key,
+      credentialVersion: minimaxCredentialVersion(cred),
       source: sourceNote,
     };
   }
@@ -406,6 +449,7 @@ export async function checkinMiniMax(region = 'cn', override = '') {
     credits: already ? 0 : total,
     consecutiveDays: claimedDay,
     region: cfg.key,
+    credentialVersion: minimaxCredentialVersion(cred),
     source: sourceNote,
   };
 }
@@ -422,7 +466,16 @@ export async function fetchMiniMaxSignin(region = 'cn') {
   let res = await apiCall(cfg.key, cred.token, ident, API_STATUS);
   if (res.status === 401) {
     const healed = await recover401(cfg.key, ident, cred);
-    if (!healed) return { status: 401, panel: null, source: cred.source };
+    // 保留 phase/httpStatus/message：调用方要能区分「凭据真失效」和「刷新后重试仍被拒」
+    if (!healed.ok) {
+      return {
+        status: healed.phase === 'oauth_refresh' ? 401 : (healed.httpStatus || res.status),
+        panel: null,
+        phase: healed.phase,
+        message: healed.message,
+        source: cred.source,
+      };
+    }
     res = { status: 200, json: { data: healed.panel } };
   }
   if (res.status !== 200) return { status: res.status, panel: null, source: cred.source };

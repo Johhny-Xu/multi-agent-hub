@@ -907,12 +907,10 @@ async function _addFromSandbox(worker, name, loginId) {
   return { ok: true, worker, name: finalName, identity, display, switched: sw.ok === true, note: `新账号「${finalName}」已自动添加并切换生效` };
 }
 
-/** 切换到指定档案：先把当前未保存凭据自动归档并备份，再复制目标档案文件到生效位 */
+/** 切换到指定档案：调用方已提前归档，此处备份当前凭据，再复制目标档案文件到生效位 */
 async function _switchAccount(worker, name) {
   const relFiles = WORKER_CRED_FILES[worker];
   if (!relFiles) return { ok: false, error: `不支持的 worker: ${worker}` };
-  // 切换前若当前生效凭据尚未归档，自动归档以防丢失
-  try { await _autoSyncLiveAccount(worker); } catch { /* ignore */ }
 
   const src = profileDir(worker, name);
   let archived = 0;
@@ -955,6 +953,12 @@ async function _deleteAccount(worker, name) {
 // ---- 并发加固：以下导出为串行互斥包装（内部实现为 _<name>） ----
 export function autoSyncLiveAccount(worker, preferredName = '') { return withLock(ACCOUNTS_WRITE_LOCK, () => _autoSyncLiveAccount(worker, preferredName)); }
 export function saveAccount(worker, name) { return withLock(ACCOUNTS_WRITE_LOCK, () => _saveAccount(worker, name)); }
-export function switchAccount(worker, name) { return withLock(ACCOUNTS_WRITE_LOCK, () => _switchAccount(worker, name)); }
+export function switchAccount(worker, name) {
+  return withLock(ACCOUNTS_WRITE_LOCK, async () => {
+    // 普通切换前保护当前凭据；沙箱添加已在写入新 OAuth 前归档，不能在内部切换时重复覆盖。
+    try { await _autoSyncLiveAccount(worker); } catch { /* ignore */ }
+    return _switchAccount(worker, name);
+  });
+}
 export function addFromSandbox(worker, name, loginId) { return withLock(ACCOUNTS_WRITE_LOCK, () => _addFromSandbox(worker, name, loginId)); }
 export function deleteAccount(worker, name) { return withLock(ACCOUNTS_WRITE_LOCK, () => _deleteAccount(worker, name)); }

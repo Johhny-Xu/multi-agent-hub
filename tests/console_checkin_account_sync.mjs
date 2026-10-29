@@ -8,7 +8,7 @@
 // 这里锁死新约定：账号集合永远以 worker 档案 + 线上凭据为准，今日快照只补状态。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,7 +16,7 @@ const root = await mkdtemp(join(tmpdir(), 'agenthub-checkin-sync-'));
 process.env.AGENTHUB_HOME = root;
 process.env.AGENTHUB_CHECKIN_STATE = join(root, 'checkin-state.json');
 
-const { getCheckinOverview, listCheckinAccounts, pendingAccountPlatforms } = await import('../console/checkin.mjs');
+const { getCheckinOverview, listCheckinAccounts, pendingAccountPlatforms, checkinMiniMaxPlatform, runCheckin } = await import('../console/checkin.mjs');
 
 const STATE_FILE = join(root, 'checkin-state.json');
 
@@ -214,5 +214,212 @@ test('MiniMax 线上凭据与同 token 的档案快照合并成一行', async ()
   assert.equal(active.length, 1);
   assert.equal(active[0].token, 'tok-one');
   assert.equal(active[0].name, 'mmx-one', '合并后要沿用档案名，不能退化成「(当前登录)」');
-  assert.equal(accounts.filter((a) => a.identity === 'mcode:cn:mmx-one').length, 0, '重复的档案行被合掉');
+  assert.equal(accounts.filter((a) => a.identity === 'mcode:cn:mmx-one').length, 1, '沿用档案身份，刷新或切换后不变');
+});
+
+async function writeMiniMax(name, token, { region = 'cn', active = false } = {}) {
+  const dir = name
+    ? join(root, '.agenthub', 'accounts', 'minimaxcode', name)
+    : join(root, '.minimax', 'auth', 'prod', region === 'global' ? 'en' : 'cn', 'mcode-public');
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'auth.json'), JSON.stringify({
+    records: { [`oauth-${region}`]: { accessToken: token, refreshToken: `refresh-${token}`, expiresAtMs: Date.now() + 86400000 } },
+  }));
+  await writeFile(join(dir, 'auth-state.json'), JSON.stringify({ status: 'authenticated', region }));
+  if (name && active) await writeFile(join(root, '.agenthub', 'accounts', 'minimaxcode', '.active'), name);
+}
+
+function mockMiniMax(t, validTokens) {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, opts = {}) => {
+    const token = String(opts.headers?.Authorization || '').replace(/^Bearer /, '');
+    calls.push({ url: String(url), token });
+    if (String(url).includes('/oauth2/token')) return new Response('{}', { status: 401 });
+    assert.match(String(url), /\/signin\/status/);
+    if (!validTokens.includes(token)) return new Response('{}', { status: 401 });
+    return Response.json({ data: { days: [{ day_no: 1, status: 3, is_today: true }] } });
+  });
+  return calls;
+}
+
+test('MiniMax Worker 新 OAuth 优先于签到手工旧 Token', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('current', 'new-oauth', { active: true });
+  await writeMiniMax('', 'new-oauth');
+  await writeState('minimaxcode', [], { customTokens: { minimaxcode: 'expired-manual' } });
+  const calls = mockMiniMax(t, ['new-oauth']);
+  const result = await checkinMiniMaxPlatform();
+  assert.equal(result.status, 'already');
+  assert.deepEqual(calls.map((c) => c.token), ['new-oauth']);
+});
+
+test('MiniMax 仅有 Worker 档案时仍可签到，手工 Token 不覆盖档案', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('saved', 'profile-oauth', { active: true });
+  await writeState('minimaxcode', [], { customTokens: { minimaxcode: 'expired-manual' } });
+  const calls = mockMiniMax(t, ['profile-oauth']);
+  const result = await checkinMiniMaxPlatform();
+  assert.equal(result.status, 'already');
+  assert.equal(result.accounts[0].name, 'saved');
+  assert.deepEqual(calls.map((c) => c.token), ['profile-oauth']);
+  const overview = await getCheckinOverview();
+  assert.equal(overview.platforms.minimaxcode.available, true);
+  assert.equal(overview.platforms.minimaxcode.credentialMode, 'cli');
+  assert.equal(overview.platforms.minimaxcode.autoRefresh, true);
+});
+
+test('MiniMax 没有 Worker 凭据时才使用手工 Token', async (t) => {
+  await resetFixtures();
+  await writeState('minimaxcode', [], { customTokens: { minimaxcode: 'manual-only' } });
+  const calls = mockMiniMax(t, ['manual-only']);
+  assert.equal((await checkinMiniMaxPlatform()).status, 'already');
+  assert.deepEqual(calls.map((c) => c.token), ['manual-only']);
+});
+
+test('MiniMax active 档案旧 OAuth 被实时新 OAuth 替换，不重复签到旧凭据', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('current', 'old-oauth', { active: true });
+  await writeMiniMax('other', 'other-oauth');
+  await writeMiniMax('', 'new-oauth');
+  await writeState('minimaxcode', []);
+  const calls = mockMiniMax(t, ['new-oauth', 'other-oauth']);
+  const accounts = await listCheckinAccounts('minimaxcode');
+  assert.equal(accounts.length, 2);
+  assert.equal(accounts.find((a) => a.active)?.name, 'current');
+  assert.equal(accounts.find((a) => a.active)?.token, 'new-oauth');
+  assert.equal((await checkinMiniMaxPlatform()).status, 'already');
+  assert.deepEqual(calls.map((c) => c.token).sort(), ['new-oauth', 'other-oauth']);
+});
+
+test('MiniMax 同一档案更新 OAuth 后，耗尽重试的失败签到自动重新入队且只重试一次', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('current', 'expired-oauth', { active: true });
+  await writeMiniMax('', 'expired-oauth');
+  await writeState('minimaxcode', []);
+  mockMiniMax(t, ['new-oauth']);
+  const first = await runCheckin('minimaxcode');
+  assert.equal(first.results.minimaxcode.accounts[0].status, 'expired');
+  assert.ok(!(await pendingAccountPlatforms()).includes('minimaxcode'), '未换凭据不得无限重试');
+  const state = JSON.parse(await readFile(STATE_FILE, 'utf-8'));
+  state.platforms.minimaxcode.retryCount = 8;
+  for (const plat of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'meoo']) {
+    state.platforms[plat] = { lastDate: localToday(), status: 'already', accounts: [] };
+  }
+  await writeFile(STATE_FILE, JSON.stringify(state));
+  await writeMiniMax('', 'new-oauth');
+  const overview = await getCheckinOverview();
+  const rows = overview.platforms.minimaxcode.accounts;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, 'pending');
+  assert.equal(rows[0].fresh, true);
+  assert.equal(overview.platforms.minimaxcode.pendingAccounts, 1);
+  assert.ok((await pendingAccountPlatforms()).includes('minimaxcode'));
+  const retried = await runCheckin('due');
+  assert.deepEqual(Object.keys(retried.results), ['minimaxcode']);
+  assert.equal(retried.results.minimaxcode.status, 'already');
+  assert.ok(!(await pendingAccountPlatforms()).includes('minimaxcode'));
+  const saved = await readFile(STATE_FILE, 'utf-8');
+  assert.ok(!saved.includes('new-oauth') && !saved.includes('expired-oauth'), '状态文件不能持久化 OAuth 明文');
+});
+
+test('MiniMax 成功签到后正常刷新 OAuth，不重复入队', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('current', 'oauth-before', { active: true });
+  await writeMiniMax('', 'oauth-before');
+  await writeState('minimaxcode', []);
+  mockMiniMax(t, ['oauth-before']);
+  await runCheckin('minimaxcode');
+  await writeMiniMax('', 'oauth-after');
+  assert.equal((await getCheckinOverview()).platforms.minimaxcode.accounts.length, 1);
+  assert.ok(!(await pendingAccountPlatforms()).includes('minimaxcode'));
+});
+
+test('MiniMax 已移走的失效 OAuth 不再占据签到账号和待签计数', async () => {
+  await resetFixtures();
+  await writeMiniMax('current', 'new-oauth', { active: true });
+  await writeState('minimaxcode', [{ name: 'removed', identity: 'mcode:cn:removed', status: 'expired' }]);
+  const overview = await getCheckinOverview();
+  assert.equal(overview.platforms.minimaxcode.accounts.length, 1);
+  assert.equal(overview.platforms.minimaxcode.pendingAccounts, 1);
+});
+
+test('MiniMax 国内与国际凭据各走自己的区域，不遗漏另一套实时凭据', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('', 'cn-oauth');
+  await writeMiniMax('', 'global-oauth', { region: 'global' });
+  await writeMiniMax('global', 'global-oauth', { region: 'global' });
+  await writeState('minimaxcode', []);
+  const calls = mockMiniMax(t, ['cn-oauth', 'global-oauth']);
+  assert.equal((await checkinMiniMaxPlatform()).accounts.length, 2);
+  assert.ok(calls.some((c) => c.token === 'cn-oauth' && new URL(c.url).hostname === 'agent.minimax.cn'));
+  assert.ok(calls.some((c) => c.token === 'global-oauth' && new URL(c.url).hostname === 'agent.minimax.io'));
+});
+
+test('MiniMax Worker 已归为历史快照的旧身份，不再作为另一个签到账号', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('legacy', 'old-oauth');
+  await writeMiniMax('current', 'new-oauth', { active: true });
+  await writeMiniMax('', 'new-oauth');
+  const dir = join(root, '.agenthub', 'accounts', 'minimaxcode');
+  await writeFile(join(dir, 'legacy', 'meta.json'), JSON.stringify({ identity: 'aabbccddeeff' }));
+  await writeFile(join(dir, 'current', 'meta.json'), JSON.stringify({ identity: 'mcode:cn', display: 'Worker 当前账号' }));
+  await writeState('minimaxcode', [{ name: 'legacy', identity: 'mcode:cn:legacy', status: 'expired' }]);
+  const calls = mockMiniMax(t, ['new-oauth']);
+  const accounts = await listCheckinAccounts('minimaxcode');
+  assert.equal(accounts.length, 1);
+  assert.equal(accounts[0].display, 'Worker 当前账号');
+  assert.equal((await checkinMiniMaxPlatform()).status, 'already');
+  assert.deepEqual(calls.map((c) => c.token), ['new-oauth']);
+  assert.equal((await getCheckinOverview()).platforms.minimaxcode.accounts.length, 1);
+});
+
+test('MiniMax 只有档案且未配置手工 Token 时也不会误报未登录', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('saved', 'profile-only');
+  await writeState('minimaxcode', []);
+  mockMiniMax(t, ['profile-only']);
+  assert.equal((await checkinMiniMaxPlatform()).status, 'already');
+});
+
+test('MiniMax 不同具名身份都保留，即使 Worker 元数据将 mcode 标为可变身份', async (t) => {
+  await resetFixtures();
+  for (const name of ['alice', 'bob']) {
+    await writeMiniMax(name, `oauth-${name}`, { active: name === 'alice' });
+    await writeFile(join(root, '.agenthub', 'accounts', 'minimaxcode', name, 'meta.json'), JSON.stringify({ identity: `mcode:cn:${name}` }));
+  }
+  await writeMiniMax('', 'oauth-alice');
+  await writeState('minimaxcode', []);
+  const calls = mockMiniMax(t, ['oauth-alice', 'oauth-bob']);
+  const result = await checkinMiniMaxPlatform();
+  assert.equal(result.accounts.length, 2);
+  assert.equal(result.status, 'already');
+  assert.deepEqual(calls.map((c) => c.token).sort(), ['oauth-alice', 'oauth-bob']);
+});
+
+test('MiniMax 双区域续期同步原档案，不因 active 只指向国内账号而裂档', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('cn-profile', 'cn-oauth', { active: true });
+  await writeMiniMax('', 'cn-oauth');
+  await writeMiniMax('global-profile', 'global-old', { region: 'global' });
+  await writeMiniMax('', 'global-old', { region: 'global' });
+  await writeState('minimaxcode', []);
+  let refreshes = 0;
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    if (String(url).includes('/oauth2/token')) {
+      refreshes++;
+      assert.equal(new URL(url).hostname, 'account.minimax.io');
+      return Response.json({ access_token: 'global-new', refresh_token: 'global-refreshed', expires_in: 3600 });
+    }
+    if (opts.headers.Authorization === 'Bearer global-old') return new Response('{}', { status: 401 });
+    assert.ok(['Bearer global-new', 'Bearer cn-oauth'].includes(opts.headers.Authorization));
+    return Response.json({ data: { days: [{ status: 3, is_today: true }] } });
+  });
+  const result = await runCheckin('minimaxcode');
+  assert.equal(result.results.minimaxcode.status, 'already');
+  assert.equal((await listCheckinAccounts('minimaxcode')).length, 2);
+  assert.ok(!(await pendingAccountPlatforms()).includes('minimaxcode'));
+  const profile = JSON.parse(await readFile(join(root, '.agenthub', 'accounts', 'minimaxcode', 'global-profile', 'auth.json'), 'utf-8'));
+  assert.equal(profile.records['oauth-global'].accessToken, 'global-new');
+  assert.equal((await checkinMiniMaxPlatform()).accounts.length, 2);
+  assert.equal(refreshes, 1);
 });

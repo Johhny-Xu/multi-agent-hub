@@ -10,14 +10,14 @@ import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fetchJsonSmart, hwsSdkSignedHeaders as codeArtsSignedHeaders } from './vendor-quota.mjs';
-import { findCodeBuddySharedAuth } from './accounts.mjs';
+import { findCodeBuddySharedAuth, isMutableIdentity } from './accounts.mjs';
 import {
   readQoderCredential, readQoderCredentialAt, refreshQoderToken, persistQoderToken,
   listQoderCampaigns, claimQoderCampaign, isQoderTokenExpired, qoderRegion, altQoderBaseUrl,
 } from './qoder.mjs';
 import { resolveQoderDevice } from './qoder-device.mjs';
 import { checkinTraeAccount, readTraeDesktopAuth, readTraeTokenCache, jwtUid } from './trae-checkin.mjs';
-import { checkinMiniMax, fetchMiniMaxSignin, readMinimaxCredential, MINIMAX_REGIONS } from './minimax-checkin.mjs';
+import { checkinMiniMax, fetchMiniMaxSignin, readMinimaxCredential, readMinimaxCredentialFile, minimaxCredentialVersion, MINIMAX_REGIONS } from './minimax-checkin.mjs';
 
 // AGENTHUB_HOME 仅用于测试：把「已安装 CLI 的凭据目录」指到临时目录
 const HOME = process.env.AGENTHUB_HOME ? resolve(process.env.AGENTHUB_HOME) : homedir();
@@ -233,7 +233,7 @@ export async function detectCredentials() {
     codearts: await readCredFrom('codearts', HOME, false),
     qoder: await readCredFrom('qoder', HOME, false),
     'qoder-cn': await readCredFrom('qoder-cn', HOME, false),
-    minimaxcode: await readCredFrom('minimaxcode', HOME, false),
+    minimaxcode: (await listCheckinAccounts('minimaxcode')).find((a) => a.active),
     meoo: await readMeooAk(),
   };
 
@@ -513,51 +513,24 @@ async function readCredCandidates(platform, dir, flat = false) {
   }
 
   if (platform === 'minimaxcode') {
-    // mcode 的 OAuth 凭据：~/.minimax/auth/prod/<cn|en>/mcode-public/auth.json
-    // accessToken 是不透明串（不是 JWT），拿不到用户身份，所以：
-    //   · 线上那一份 → mcode:<region>（签到永远先签它，能用 refresh 自愈）
-    //   · 档案快照   → mcode:<region>:<档案名>（否则多个 MiniMax 账号会塌缩成同一行，第二个号永远看不见）
     const regions = flat ? ['cn'] : ['cn', 'global'];
     const profileKey = flat ? basename(dir) : '';
     for (const region of regions) {
-      const cfg = MINIMAX_REGIONS[region];
-      if (!cfg) continue;
-      // 账号档案目录里的文件被拍平成 auth.json / auth-state.json，路径和线上不同
-      const rel = flat ? 'auth.json' : join('.minimax', 'auth', 'prod', cfg.authDir, 'mcode-public', 'auth.json');
-      const file = join(dir, rel);
-      let cred = null;
-      if (flat) {
-        try {
-          const raw = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
-          let best = null;
-          for (const value of Object.values(raw?.records || {})) {
-            const token = String(value?.accessToken || '').trim();
-            if (!token) continue;
-            const exp = Number(value?.expiresAtMs) || 0;
-            if (!best || exp > best.expiresAtMs) {
-              best = { token, refreshToken: String(value?.refreshToken || '').trim(), expiresAtMs: exp };
-            }
-          }
-          if (best) cred = best;
-        } catch { /* 档案里没有这份文件 */ }
-      } else {
-        try {
-          cred = await readMinimaxCredential(dir, region);
-        } catch {
-          cred = null;
-        }
-      }
+      const cred = flat
+        ? await readMinimaxCredentialFile(join(dir, 'auth.json'), region)
+        : await readMinimaxCredential(dir, region);
       if (!cred?.token) continue;
+      const cfg = MINIMAX_REGIONS[cred.region];
+      if (!cfg) continue;
       out.push({
-        token: cred.token,
-        refreshToken: cred.refreshToken || '',
-        identity: `mcode:${region}${profileKey ? `:${profileKey}` : ''}`,
+        ...cred,
+        identity: `mcode:${cfg.key}${profileKey ? `:${profileKey}` : ''}`,
         display: cfg.name,
         exp: Math.floor((Number(cred.expiresAtMs) || 0) / 1000),
-        file,
-        mtime: await fileMtime(file),
-        source: flat ? `账号档案 · MiniMax Code（${profileKey}）` : (cred.source || `~/${rel}`),
+        mtime: await fileMtime(cred.file),
+        source: flat ? `账号档案 · MiniMax Code（${profileKey}）` : cred.source,
         kind: flat ? 'profile' : 'cli',
+        credentialVersion: minimaxCredentialVersion(cred),
       });
     }
     return out;
@@ -646,12 +619,49 @@ export async function listCheckinAccounts(platform) {
         active: false,
         source: `账号档案 · ${name}`,
         ...cred,
+        ...(platform === 'minimaxcode' ? { workerIdentity: meta.identity || '', display: meta.display || cred.display } : {}),
         kind: 'profile',
         credentialSource: '账号档案快照',
       };
       remember(acct);
       byIdentity.set(acct.identity, betterOf(byIdentity.get(acct.identity), acct));
     }
+  }
+
+  if (platform === 'minimaxcode') {
+    let accounts = [...byIdentity.values()];
+    let activeName = '';
+    try { activeName = (await readFile(join(HOME, '.agenthub', 'accounts', 'minimaxcode', '.active'), 'utf-8')).trim(); } catch { /* 没有生效档案 */ }
+    for (const live of await readCredCandidates(platform, HOME, false)) {
+      const sameRegion = accounts.filter((a) => a.region === live.region);
+      const matches = sameRegion.filter((a) => a.token === live.token);
+      // OAuth 轮换会改变 token；worker 的 active 档案仍是同一个账号。
+      const profile = matches.find((a) => a.name === activeName) || matches[0]
+        || sameRegion.find((a) => a.name === activeName);
+      const row = {
+        ...live,
+        name: profile?.name || `mcode-${live.region}`,
+        identity: profile?.identity || live.identity,
+        display: profile?.display || live.display,
+        worker: 'minimaxcode',
+        active: true,
+        credentialSource: live.source,
+        liveFile: live.file,
+        profileCredential: profile ? { file: profile.file, recordKey: profile.recordKey, token: profile.token } : null,
+      };
+      accounts = accounts.filter((a) => {
+        if (a === profile || matches.includes(a)) return false;
+        const stale = a.region === live.region && profile?.workerIdentity
+          && isMutableIdentity(a.workerIdentity) && !/^mcode:[^:]+:.+/.test(a.workerIdentity)
+          && a.workerIdentity !== profile.workerIdentity;
+        return !stale;
+      });
+      accounts.push(row);
+    }
+    if (accounts.length && !accounts.some((a) => a.active)) {
+      (accounts.find((a) => a.name === activeName) || accounts[0]).active = true;
+    }
+    return accounts;
   }
 
   const live = await readCredFrom(platform, HOME, false);
@@ -688,22 +698,6 @@ export async function listCheckinAccounts(platform) {
   }
 
   let accounts = [...byIdentity.values()];
-  // MiniMax Code 的身份只能靠「区域 + 档案名」：线上那一份是 mcode:<region>，档案是 mcode:<region>:<档案名>，
-  // 同一份凭据会因此出现两次。token 相同即同一账号，只保留正在生效（active）那一行，
-  // 但名字/显示名要沿用档案里的（否则线上那行永远叫「(当前登录)」，看不出是哪个号）。
-  if (platform === 'minimaxcode') {
-    const liveRows = accounts.filter((a) => a.active && a.token);
-    const dupProfiles = new Set();
-    for (const prof of accounts.filter((a) => !a.active && a.token)) {
-      const hit = liveRows.find((l) => l.token === prof.token);
-      if (!hit) continue;
-      if (!hit.name || hit.name === '(当前登录)') hit.name = prof.name;
-      hit.display = prof.display || hit.display;
-      hit.worker = hit.worker || prof.worker;
-      dupProfiles.add(prof);
-    }
-    if (dupProfiles.size) accounts = accounts.filter((a) => !dupProfiles.has(a));
-  }
   accounts = accounts.map((a) => {
     // 同身份的其它候选（不同 token）：首选被服务端注销时按顺序回退
     const alts = (candidates.get(a.identity) || [])
@@ -2144,8 +2138,8 @@ export async function checkinMiniMaxPlatform(region = 'cn') {
   const cfg = MINIMAX_REGIONS[region] || MINIMAX_REGIONS.cn;
   const state = await loadState();
   const custom = String(state.customTokens?.minimaxcode || '').trim();
-  const cred = await readMinimaxCredential(HOME, cfg.key);
-  if (!cred && !custom) {
+  let accounts = await listCheckinAccounts('minimaxcode');
+  if (!accounts.length && !custom) {
     return {
       platform: 'minimaxcode',
       ok: false,
@@ -2159,22 +2153,15 @@ export async function checkinMiniMaxPlatform(region = 'cn') {
     };
   }
 
-  // 多账号：worker 里保存的每个 mcode 档案都要签，不能只签当前生效的那一个。
-  // 线上那份（active）走 CLI 原文件，保留 401 自动续期能力；档案快照把 token 一起传进去。
-  let accounts = await listCheckinAccounts('minimaxcode');
   if (!accounts.length) {
-    // 没有档案（或还没登录）时保持旧行为：签线上这一份 / 或手工 Token
-    accounts = [{ name: `mcode-${cfg.key}`, display: cfg.name, identity: `mcode:${cfg.key}`, active: true, source: custom ? '自定义 Token' : (cred?.source || '') }];
+    accounts = [{ name: `mcode-${cfg.key}`, display: cfg.name, identity: `mcode:${cfg.key}`, region: cfg.key, active: true, source: '自定义 Token' }];
   }
 
   const results = [];
   for (const acct of accounts) {
     const label = acct.display || acct.name;
     try {
-      const override = acct.active || !acct.token
-        ? (custom || '')
-        : { token: acct.token, refreshToken: acct.refreshToken || '', expiresAtMs: (Number(acct.exp) || 0) * 1000, file: acct.file || '', source: acct.source || '账号档案快照', region: cfg.key };
-      const r = await checkinMiniMax(cfg.key, override);
+      const r = await checkinMiniMax(acct.region || cfg.key, acct.token ? acct : custom);
       results.push({ ...acct, ...r, label });
     } catch (err) {
       results.push({ ...acct, ok: false, status: 'failed', message: `请求异常：${err.message}`, credits: 0, consecutiveDays: 0, label });
@@ -2202,6 +2189,7 @@ export async function checkinMiniMaxPlatform(region = 'cn') {
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
       source: r.source || r.credentialSource || '',
+      credentialVersion: r.credentialVersion || '',
     })),
   };
 }
@@ -2253,8 +2241,14 @@ function mergeAccountRows(liveAccounts, snapshotRows, platform) {
       identity: acct.identity || '',
       active: !!acct.active,
       source: acct.credentialSource || acct.source || '',
+      ...(platform === 'minimaxcode' ? { credentialVersion: acct.credentialVersion || '' } : {}),
     };
-    if (hit) {
+    const replaced = platform === 'minimaxcode' && hit
+      && ['expired', 'failed', 'unconfigured'].includes(hit.status)
+      && base.credentialVersion && hit.credentialVersion !== base.credentialVersion;
+    if (replaced) {
+      rows.push({ ...base, status: 'pending', message: 'Worker 授权已更新 · 今日待打卡', fresh: true });
+    } else if (hit) {
       rows.push({
         ...base,
         status: hit.status || 'pending',
@@ -2289,6 +2283,7 @@ function mergeAccountRows(liveAccounts, snapshotRows, platform) {
     });
   }
   for (const s of leftSnaps) {
+    if (platform === 'minimaxcode' && !['success', 'already'].includes(s.status)) continue;
     rows.push({ ...s, stale: true, message: s.message || '凭据已不在 worker 账号里' });
   }
   return rows;
