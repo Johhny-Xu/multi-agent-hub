@@ -11,6 +11,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### 修复：MiniMax 401 的错误归因（refresh 成功却被报成「请重新登录」）
+
+- **现象**（2026-10-29）：00:20 起 minimaxcode 连续 401 失败，界面提示
+  「MiniMax 登录态已失效（HTTP 401），refresh_token 也续不动了，请在控制台重新登录」；
+  但 `auth.json` 的 mtime 正是那次签到时刻、`expiresAtMs` 是 +1 小时 —— **refresh 其实是成功的**。
+  22:16:36 一次重新登录（`oauth-add`）后，22:27 自动签到成功（连续第 5 天 +400 积分）。
+- **根因**：`recover401()` 把「refresh 失败」和「refresh 成功但重试仍被拒」都返回 `null`，
+  调用方只能统一解释成「refresh 也续不动了」，把风控/签名/上游抖动一类问题误导成「需要重登」。
+- **修法**：`recover401()` 改为结构化返回 `{ ok, phase, httpStatus, message }`：
+  - `phase: 'oauth_refresh'` → 凭据真失效，`status: expired`，提示重新登录；
+  - `phase: 'status_after_refresh'` → 刷新成功但重试被 401/403/429/5xx 拒，`status: failed`，
+    透出真实状态码且**不再劝人重登**。
+  三处调用点（首次 status / claim 重试 / `fetchMiniMaxSignin`）改用 `healed.ok` 与 `phase`。
+- **证伪的假设**：曾怀疑 `yy` 签名路径与实发 URL 的编码不一致（空格 `%20` 双编码）；
+  同 token A/B 实测 current 与 wire-encoded 两种构造均返回 200，签名无问题。
+- **测试**：`console_minimax_daily` +3（refresh 成功仍 401 不报重登、refresh 失败才报重登、
+  `fetchMiniMaxSignin` 透出 phase 与真实状态码）。
+
 ### 修复：签到区与 worker 账号不再各维护一份名单
 
 - **现象**（线上实测 10-28）：10:22 一键签完，13:00 在 worker 面板里新加一个 Qoder 账号（`Kangsheng-Xu-745491318`），签到区到第二天仍只显示旧的两行。
