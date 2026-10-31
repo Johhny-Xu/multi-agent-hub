@@ -94,6 +94,8 @@ IDE 的 MCP 设置是工作区 `.codeartsdoer/mcp/mcp_settings.json`，顶层为
 | 新增「文件夹信任」门（`~/.codeartsdoer/cli-data/settings.json` 的 `security.folderTrust`） | 任务 `cwd` 不在 `trustedFolders` 时直接失败：`文件夹未被信任: <dir>`，驱动归类为 `CODEARTS_PERMISSION_REQUIRED` | 这台单用户 Hub 需保持升级前的行为：`folderTrust.enabled=false`，并把 `/`、`/home/johhny` 留在 `trustedFolders`（备份 `settings.json.bak-20261023-*`） |
 | `--format json` 事件流 | 未变：`step_start` / `text` / `step_finish(reason=stop)`，字段仍是 `sessionID` + `part.id/text`；排队提示（`模型排队`）会混在 stdout，解析器按非 JSON 行忽略，不误判为失败 | 无需改驱动；`codearts models` 仍是 `model_id/model_name` 表格，表头与标尺解析通过 |
 
-模型目录（`codearts models`，7 个，与客户端内置列表一致）：`huaweicloud-maas/GLM-5.2`、`glm-5.2-sft-harmony`（GLM-5.2-ArkTS-SPARK）、`openpangu-2.0-pro`、`openpangu-2.0-flash`、`glm-5.3`、`deepseek-v4.1-flash`、`kimi-k3`。线上 `agents.json` 的 `codearts.models` 已补 `DeepSeek-V4.1-Flash`（别名 `v41f`）与 `Kimi-K3`，默认模型改为 `huaweicloud-maas/deepseek-v4.1-flash`。
+模型目录（`codearts models`，2026-10-31 实测 10 个）：`huaweicloud-maas/deepseek-v4.1-flash`、`deepseek-v4.1-flash-1017`、`GLM-5.2`、`glm-5.2-sft-harmony`（GLM-5.2-ArkTS-SPARK）、`glm-5.3`、`glm-5.3-flash`、`kimi-k3`、`kimi-k3.1-pro`（Kimi-K3.1-Pro）、`openpangu-2.0-pro`、`openpangu-2.0-flash`。线上 `agents.json` 的 `codearts.models` 已补 `DeepSeek-V4.1-Flash`（别名 `v41f`）、`Kimi-K3` 与 `Kimi-K3.1-Pro`（别名 `kimi-k3.1-pro` / `k3.1pro`，`--model huaweicloud-maas/kimi-k3.1-pro` 实测返回正常），默认模型为 `huaweicloud-maas/deepseek-v4.1-flash`。
+
+WebUI 的模型下拉以 `console/server.mjs` 的 `MODEL_CATALOG.codearts` 为基准、再并入 hub 上报的别名表条目，所以**新模型要两处都加**（console 目录 + `agents.json`），否则列表与派发校验会不一致。K3.1-Pro 在 console 侧暂未标注倍率（MaaS 目录不返回该系数），只带 `tag: 新`。
 
 升级后实测（`hub_dispatch_cli` 异步派发，均为真实模型回答）：GLM-5.2 → `10`，默认 DeepSeek-V4.1-Flash → `15`，Kimi-K3 → `7`。高峰期 DeepSeek-V4.1-Flash 会提示「模型排队」（曾排到 250+ 位），这是上游配额队列，不是驱动或 Hub 超时；`timeout_s` 现为「无进展超时」，排队期间没有输出仍会按预算回收，需要时可调大或改用低倍率模型。

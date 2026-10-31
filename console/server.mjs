@@ -104,6 +104,9 @@ const MODEL_CATALOG = {
     { id: 'huaweicloud-maas/glm-5.3', name: 'GLM-5.3', credits: '0.79x' },
     { id: 'huaweicloud-maas/deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash', credits: '0.18x', default: true },
     { id: 'huaweicloud-maas/kimi-k3', name: 'Kimi-K3', credits: '2.38x' },
+    // 上游 id 已实测（2026-10-31：`--model huaweicloud-maas/kimi-k3.1-pro` 返回正常结果）。
+    // 倍率暂不写：MaaS 目录里拿不到 K3.1-Pro 的确切系数，宁可不显示也别标错价。
+    { id: 'huaweicloud-maas/kimi-k3.1-pro', name: 'Kimi-K3.1-Pro', tag: '新' },
   ],
   'github-copilot': [
     { id: 'auto', name: 'Auto (Copilot 自动选型)', default: true },
