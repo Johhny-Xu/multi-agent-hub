@@ -99,3 +99,53 @@ IDE 的 MCP 设置是工作区 `.codeartsdoer/mcp/mcp_settings.json`，顶层为
 WebUI 的模型下拉以 `console/server.mjs` 的 `MODEL_CATALOG.codearts` 为基准，再并入 hub 上报的别名表条目，所以**新模型要两处都加**（console 目录 + `agents.json`），否则列表与派发校验会不一致。这三条新模型在 console 侧暂未标注倍率（MaaS 目录不返回该系数），只带 `tag: 新`。
 
 升级后实测（`hub_dispatch_cli` 异步派发，均为真实模型回答）：GLM-5.2 → `10`，默认 DeepSeek-V4.1-Flash → `15`，Kimi-K3 → `7`。高峰期 DeepSeek-V4.1-Flash 会提示「模型排队」（曾排到 250+ 位），这是上游配额队列，不是驱动或 Hub 超时；`timeout_s` 现为「无进展超时」，排队期间没有输出仍会按预算回收，需要时可调大或改用低倍率模型。
+
+## 2026-11-03 工具审批：为什么写不了文件，怎么放开
+
+**现象**：任何要落盘的任务都报 `CODEARTS_PERMISSION_REQUIRED`，`exit=1`，连工作目录内写文件都拒。
+
+**根因**（反编译 `installers/bin/codearts` 确认）：
+
+1. `codearts run`（headless）的事件循环里，**任何** `permission.asked` 都被硬编码成拒绝：
+
+   ```js
+   if (m.type === "permission.asked") {
+     z.println("!", `permission requested: ${p.permission} (${p.patterns.join(", ")}); auto-rejecting`)
+     await t.permission.reply({ requestID: p.id, reply: "reject" })   // ← 没有分支，无条件拒
+   }
+   ```
+
+   也就是说 headless 下没有任何人能批权限，`run` 也没有交互入口。
+
+2. `--auto` 的 help 写的是 “run commands in always_allow mode”，实现是
+   `setBashModeWithoutPersist("always_allow")` ——**只放行 bash**。
+   `write` / `edit` 没有对应开关，照样被拒。
+
+3. 配置侧也不通：
+   - `~/.codeartsdoer/cli-data/settings.json` 的 schema 只有
+     `security.folderTrust` / `security.trustedFolders`（见
+     `folder-trust-service` 的 `Jw()/WJ()`），**没有 permission 段**；
+   - 往 `OPENCODE_CONFIG`（`~/.codeartsdoer/codearts_cli.json`）写 `{"permission": {...}}`
+     直接 `Error: Configuration is invalid … Invalid input permission`。
+
+所以「让 codearts 干活」的可行路径只有一条：**放行 bash，并让模型把落盘走 shell**。
+
+**驱动怎么做的**（`drivers/codearts_cli.py`）：
+
+| 开关 | 行为 |
+| --- | --- |
+| `AGENTHUB_CODEARTS_AUTO` 未设置 / `0` | 命令不加 `--auto`；权限被拒就是失败（默认，最安全） |
+| `AGENTHUB_CODEARTS_AUTO=1` | 命令加 `--auto`；任务尾部补一句 `SHELL_ONLY_NOTE`（write/edit 会被拒，落盘走 bash）；权限类诊断降级为「可恢复」，不再误杀成功的任务 |
+
+开关取值顺序：进程环境变量 → `~/.config/agenthub-codearts/codearts-auth.env`
+（所以改完**不用重启 hub**，驱动每次启动自读）。认不出的值一律保持关闭。
+
+**实测**（2026-11-03，Kimi-K3.1-Pro，原始 prompt `写一个好字的网页给我`）：
+
+- 开启前：`status=error` / `CODEARTS_PERMISSION_REQUIRED` / 208 秒，零产出。
+- 开启后：`index.html`（13–18 KB）正常落盘，全程只用 `bash` 工具，
+  零 `permission requested`、零 `user rejected`。
+
+**注意**：放开后 `bash` 是 always_allow（不会逐条问你），
+相当于把这个 worker 当成可执行任意命令处理；单用户 Hub 可接受，
+多用户/对外暴露的部署应保持默认关闭。

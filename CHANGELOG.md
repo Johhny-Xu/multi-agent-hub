@@ -11,6 +11,453 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.20] - 2026-11-03
+
+### 新增：存活探针的「活跃窗口」可配置（`AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S`）
+
+- **问题**：`_task_liveness()` 里判断「正在产出」的窗口硬编码 60 秒，
+  于是任务派出去后一分钟内只要有输出就一律 `working`，
+  「思考中」（`alive_waiting`）总要等满 60 秒才可能出现。
+- **修复**：新增 `_liveness_active_output_seconds()`，读
+  `AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S`（默认 `60`，合法闭区间 `[5, 600]`，
+  空串/非数字/越界/NaN/inf 一律回落默认），`recent_output` 改用它；
+  `alive_waiting` 的 guidance 末尾带上当前窗口（`…；活跃窗口 20s`）。
+  其它判定顺序与阈值未动。
+- **线上**：`~/agent-hub/hub.env` 加 `AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S=20`，
+  现在长任务 20 秒没输出就会显示「思考中」，不用再等一分钟。
+- **顺带修**：控制台 `/api/result` 的 liveness 字段名对拷错误——hub 返回的是
+  `process_alive` / `cpu_delta_seconds` / `output_delta_bytes` / `last_output_age_s` /
+  `heartbeat_age_s`，之前直接按短名取，结果前端存活证据全是 `null`。现已映射。
+- **测试**：`tests/task_liveness_regressions.py` 新增 `LivenessWindowTests`（4 项，
+  默认值/合法边界/非法回落/端到端判定 + guidance 文案），Linux 上 16 项全通过。
+- **怎么改的（dogfooding）**：这次按用户要求拆给两个子代理做——
+  `meoo` 的 `k31p`（Kimi-K3.1-Pro）出 20%（单元测试），
+  `codearts` 的 `k3.1pro` 出 80%（实现），我负责定契约、审 diff、修集成问题、
+  跑测试和部署。codearts 那侧的写权限正好用上了上一条修的 `--auto`。
+
+### 新增：控制台异步任务接上探针，实时区分「思考中」和「已退出」
+
+- **问题**：Hub 早就有 `hub_task_status` 探针（进程树存活 / CPU 时间 / 输出字节 /
+  心跳，给出 `working` / `alive_waiting` / `worker_exited_result_missing` 等 verdict），
+  但控制台只读 `hub_result` 的 `status`，运行期永远显示一个死板的 `running`——
+  「模型在思考」和「worker 已经死了但结果没落盘」在界面上长得一模一样，只能靠
+  人肉等墙钟去猜。另外聊天里派发的任务根本不会进异步任务列表
+  （`addInflight` 只在「派活给子代理」弹窗里调用）。
+- **服务端**：`/api/result` 在非终态时额外调 `hub_task_status(ref, json=true)`，
+  回包带上 `verdict` / `action` / `guidance` / `liveness`（pid、cpu_seconds、
+  cpu_delta、output_bytes、output_delta、alive、output_age、heartbeat_age）。
+  探针不可用（旧桥/旧 Hub）时静默退化为纯 `status`，不影响结果读取。
+- **前端**：
+  - 新增 `console/client/task-verdict.js`（UMD，浏览器与单测共用）：verdict → 徽章
+    文案/配色、存活证据行、探针建议语、是否继续轮询。
+  - 异步任务卡片：徽章从 `running` 换成 `思考中` / `工作中` / `启动中` /
+    `存活·静默` / `worker 已退出·无结果` / `无探活证据`，并多一行
+    `PID 419161 · CPU 60.6s +0.4s · 输出 2.0KB +1.5KB · 8s 前有输出`，
+    再附一行探针原始建议；按钮改名「探针刷新」。
+  - 聊天里的「执行中」指示器也按 verdict 换文案/配色（红=已退出，黄=静默存活）。
+  - `syncInflightFromThreads()`：把聊天线程 `pending` 的 ref 自动同步进异步任务列表，
+    聊天派发的任务终于有地方看实时状态了。
+- **测试**：新增 `tests/console_task_verdict.mjs`（12 项：思考中/工作中/已退出/
+  终态覆盖/无 verdict 兜底/存活证据行/字节与年龄格式化）。
+- **线上实测**（`/api/result`，用真实存活 `sleep` 进程造夹具）：
+  `verdict=working` → 杀掉进程后 `verdict=worker_exited_result_missing`
+  + guidance「worker 已退出但结果仍是 running：先查 async_worker 日志和结果目录」。
+
+### 修复：CodeArts 派活的写操作一律被拒（CODEARTS_PERMISSION_REQUIRED）
+
+- **现象**：任何需要落盘的任务（例：`写一个好字的网页给我`）必然 `status=error`
+  + `CODEARTS_PERMISSION_REQUIRED`，exit=1。连工作目录内写文件都拒。
+- **根因**（反编译 `codearts` 二进制确认）：`codearts run` 的 headless 事件循环里，
+  **任何** `permission.asked` 都被硬编码成
+  `await t.permission.reply({requestID, reply: "reject"})`；
+  `--auto` 的实现只是 `setBashModeWithoutPersist("always_allow")`——**只放行 bash**，
+  `write` / `edit` 没有任何放行开关。
+  另外 `~/.codeartsdoer/cli-data/settings.json` 的 schema 只有
+  `security.folderTrust` / `security.trustedFolders`，`codearts_cli.json` 里写
+  `permission` 会直接 `Error: Configuration is invalid … Invalid input permission`，
+  所以配置侧无法放开写权限。
+- **修复**：
+  - 新增 `AGENTHUB_CODEARTS_AUTO`（环境变量优先，其次
+    `~/.config/agenthub-codearts/codearts-auth.env`）显式开启 `--auto`；
+    **默认关闭**，安全默认不变。
+  - 开启时在任务尾部补一句环境说明（`SHELL_ONLY_NOTE`）：
+    write/edit 必被拒、落盘请走 bash —— 否则模型会在 `write` 上吃一次拒绝后
+    直接放弃并向用户反问（实测）。
+  - `parse_events(..., permission_is_fatal=False)`：`--auto` 下中途一次
+    `auto-rejecting` 是可恢复的（CLI 自己重试后收尾），不再把成功的任务误判成失败；
+    关闭时语义不变（被拒就是失败，不许「只解释一句」算成功）。
+  - `diagnostic_error()` 补 `the user rejected permission` 文案：工具级拒绝
+    （`state.status=error`）此前只匹配 stderr 那行，属于漏判。
+  - 无正文时优先报 `CODEARTS_PERMISSION_REQUIRED`，不再误报成空回复。
+  - **默认超时 300s → 900s**（`DEFAULT_TIMEOUT_SEC`）：真正放开干活后，
+    生成多文件页面 + 跑 `npm install` 实测 5 分钟不够，会出现「文件都写完了却报
+    CODEARTS_TIMEOUT」。与 traecode(900) / zcode(1000) 对齐，Hub 侧仍有自己的
+    无进展超时兜底。
+- **测试**：`tests/codearts_driver_regressions.py` 35 项通过（新增 6 项：开关解析、
+  `--auto` 只在开启时出现、权限默认致命、`--auto` 下可恢复、无正文仍按权限拦截、
+  默认超时覆盖真实工作量）。
+- **线上启用方式**：`~/.config/agenthub-codearts/codearts-auth.env` 追加
+  `AGENTHUB_CODEARTS_AUTO=1` 即可，驱动每次启动自读，**不需要重启 hub**。
+- **实测**：原始任务复跑后文件正常落盘（`bash` 工具，零权限拒绝）。
+
+### 修复：Qoder 国际版「活动 0 个 / 未派发」（设备指纹串了地区）
+
+- **根因**：`QODER_MACHINE_TOKEN/CODE/TYPE` 是**全局**变量，`device.env` 里放的其实是
+  **中国版**的三件套（从 Windows 上 `.qoder-cn/umid-cache.json` 提的，
+  `environment=0`）。国际版账号也拿到了这份指纹，上游按设备下发活动时看到的是
+  「另一台设备的中国版客户端」，于是 `campaigns` 返回空数组。
+  对照参考实现 L0NE-6/Qoder-Daily 的约定：**地区隔离设备身份**——中国版读
+  `Qoder CN / qoderclicn`，国际版读 `Qoder / qodercli`。
+  同一台 Windows 上两份指纹前缀相同、正文不同：
+  - 国际版（`environment=4`）：`P1gAGri9W-…` / `2cca32f49157e10942` / `3944a47200066faae3`
+  - 中国版（`environment=0`）：`P1gAxveT2…` / `64e527ea91460d13b4` / `6c6603d9006166ec9f`
+- **修复**：
+  - `console/qoder-device.mjs`：设备三件套按地区取值，
+    `qoder` → `QODER_INTL_MACHINE_*`、`qoder-cn` → `QODER_CN_MACHINE_*`，
+    `QODER_MACHINE_*` 降级为通用兜底（`source: 'env:legacy'`）。
+    地区级只填一半时明确报错，不静默回落；兜底告警走 `console.warn` 而**不写 note**——
+    `checkinQoderOne` 把非空 note 当作「设备身份缺失」会直接停掉补拉。
+  - 线上 `~/.config/agenthub-qoder/device.env` 补上两份地区级三件套（国际版取自
+    本机 `~/.qoder/umid-cache.json`），中国版的值与改动前逐字节相同。
+  - `console/checkin.mjs`：`campaigns` 只保留 `CLAIM_BENEFIT` 行，
+    诊断串补上「另有 N 个非领取类活动」——否则「活动 0 个：空」会让人误判成
+    上游什么都没下发（实测 Henry-Baker 那个账号今天只有一条 `VIEW_DETAILS/CLAIMED`，
+    从来没有每日 Credits 行）。
+- **线上验证**：修复后国际版「花凄」那个账号的
+  `CLAIM_BENEFIT` 行正常出现并**领取成功 +100 Credits**；中国版两个账号
+  （johhny / nick7258859701）状态与积分保持不变（success / 200）。
+- **测试**：新增 `tests/console_qoder_device_env.mjs`（6 项），覆盖地区隔离、
+  地区级优先于通用、只有通用指纹时 CN 行为不变、半套变量不静默回落。
+
+### 新增：子代理账号的实时配额显示
+
+- **后端**（`console/vendor-quota.mjs` + 新增 `console/quota-deep.mjs`）：
+  - 新增 **Qoder / Qoder CN** 实时配额：`GET {openapi}/api/v2/quota/usage`，
+    读取 `userQuota` / `addOnQuota` / `dedicatedResourcePackages` /
+    `orgResourcePackage`。该端点必须带完整设备指纹（`Cosy-MachineToken` /
+    `MachineCode` / `MachineType` + `Cosy-Version`），只用最小四件套会被拒；
+    令牌过期就地用 refresh token 续期，不落盘（配额是只读展示，不抢签到写权）。
+  - **Trae CN** 从「只解析 JWT 有效期」升级为真实积分：
+    `POST /trae/api/v2/pay/user_current_entitlement_list`（`usage_summary`，
+    缺失时按权益包 `credits_limit` 求和兜底）+ `checkin_credits/status`
+    显示今日签到。令牌须先合并 `~/.agenthub/trae-token-cache.json` 里续期后的
+    那份，401/1001 时现场续期一次；**只读，不调 claim**。
+  - **CodeArts** 从「只显示 AK 掩码」升级为真实配额：
+    `snap-manager/v1/statistics/plugin`（AK/SK SDK-HMAC-SHA256），
+    输出积分总额 / 基础包 / 赠送包 + 套餐名 + 本期到期日。
+  - **MiniMax Code** 增加签到积分额度项（今日基础+奖励），不再只有一句文案。
+  - 新增 `normalizeQuotas()`：quotas 统一归一化为**数组**（历史 fetcher 里存在
+    对象 map 形态），前端只认一种结构。
+  - 跨模块依赖（`qoder.mjs` / `qoder-device.mjs` / `trae-checkin.mjs` 反过来
+    import 本模块）在调用期动态 `import()`，避免 ESM 初始化期循环依赖。
+- **前端**：
+  - 新增 `console/client/quota-view.js`（浏览器与 Node 单测共用）：
+    平台映射、quotas 归一化、主额度挑选、严重度分级、胶囊文案与 tooltip。
+  - 侧栏子代理卡片恢复**额度胶囊**（`剩22.4K` / `余87%` / `不限额`，
+    `<40%` 警告、`<15%` 危险配色），点击打开配额详情浮层（可强制刷新）。
+  - 修掉一处**串号**：`codebuddy-cn` 原来映射到 `codebuddy`（国际版）worker，
+    显示的是另一个账号的额度；两个 CodeBuddy 是两条独立凭据，现已分开。
+  - 状态栏配额、悬浮提示、弹窗三处合并到 `quotaSummaryOf()` 一个口径，
+    删除各自复制的平台分支。
+  - `server.mjs` 静态白名单加入 `quota-view.js`（否则 404）。
+- **顺带修掉的线上隐患**：`agent-hub-console.service`（user unit）曾因
+  `run.sh` 遗留的孤儿进程占着 8890 而无限重启（restart counter 已到 10674），
+  且该 unit 缺 `HUBCONSOLE_DATA_DIR`。现已补齐环境变量并交回 systemd 托管，
+  `NRestarts=0`。
+- **测试**：新增 `tests/console_vendor_quota.mjs`（19 项），覆盖形态归一化、
+  codebuddy 双端隔离、签到不抢主口径、严重度分级、无数据降级。
+
+### 修复：Qoder CN 页面报“已签到”但本期实际未领取
+
+- **根因**：00:00–09:59 的开放窗口属于**昨天 10:00 开的那一期**。此时领到的分被
+  `runCheckin` 记成 `lastDate=今天 + status=success`，10:00 新一期开窗后
+  `platformNeedsRetry` 认为今天已完成，不再补签；页面因此显示已签，实际活动行仍是
+  `CLAIMABLE`。
+- **修复**：
+  - `checkinQoderOne()` 增加 `currentPeriod`（窗口起始日 vs 今天）；在上一期窗口内
+    领到的分照常领取并报告 credits，但平台状态返回 `pending/awaiting_window`，
+    `retryAt` 指向当天 10:00，不再写成今天 success。
+  - 新增 `qoderPeriodNeedsCheck()`；`selectAutoCheckinPlatforms()` 在 10:00 后对
+    “lastTime 早于本期开窗”的 Qoder/Qoder CN success/already 强制核对一次，
+    修复已经落在状态文件里的跨期遗留。
+- **线上验证**：控制台自动触发 `qoder-cn` 补签，johhny 本期
+  `act-20261102-840` 从 `CLAIMABLE` → `CLAIMED`，+100 Credits；
+  账号级状态 `success`，nick 为 `already`，平台 `already`。
+- **核对工具**：新增 `scripts/qoder_cn_audit.mjs`（只读、不领取、不输出 token），
+  对比 state 的 storedStatus 与上游 `actualClaimStatus`；已部署到
+  `~/.agenthub/tools/qoder-cn-audit.mjs`。
+- **定时任务**：WorkBuddy 自动化 `Qoder CN 签到真实核对`，每天 10:20 执行只读核对；
+  id `4542d523-77fe-4cf6-aca4-225b2898876d`。
+- **回归**：`tests/console_qoder_window_poll.mjs` 21/21，覆盖
+  “00:57 领上一期 → pending + 10:00 补领”和“跨期 success 遗留 → 定时器强制核对”。
+
+### 新增：MiniMax Code（mcode）登录持久化与自动保活
+
+- **根因**：`mcode` 的 access token 只有 1 小时，refresh grant 会轮换 refresh token，
+  但 CLI 不会自动续期；`auth-state.json` 仍为 `authenticated`，Hub 因此误报就绪，
+  实际 `mcode exec` 返回 `Sign in to MiniMax`。
+- **实现**：新增 `hub/minimax_auth.py`，按官方 refresh grant 只传
+  `client_id` / `grant_type` / `refresh_token`，刷新后原子回写 `auth.json` 与
+  `auth-state.json`（同步 generation / expiresAtMs、保留 record key、0600 权限）。
+  不代理任何上游请求。
+- **保活**：`agent_hub.py --http` 启动守护线程，默认每 600 秒扫描，距过期不足
+  1200 秒即刷新；可用 `AGENTHUB_MINIMAX_KEEPALIVE*` 环境变量调整或关闭。
+- **状态修正**：`minimax_logged_in()` 现在同时校验 `status=authenticated` 与 access
+  token 未过期，不再把过期 token 报成已登录。
+- **安全**：跨进程文件锁串行化刷新；刷新期间若发生新登录则跳过旧结果；日志与
+  返回值不包含 token。
+- **测试**：新增 `tests/minimax_auth_regressions.py`（过期/有效/拒绝/轮换/原子写/
+  不泄露），并更新 `tests/login_manager_smoke.py` 的过期登录态断言。
+
+### 新增：AgentHub 补齐 Qoder 国际版 / 国内版 worker 与 Kimi-K3.1-Pro 规划通道
+
+- **桥接层缺口**：Hub 服务端早已注册 `qoder` / `qoder-cn`，但插件 `ask.mjs`、MCP
+  `hub_ask` / `hub_dispatch` 的别名表没有这两个名字，调用会直接报“未知 worker”。
+  现补 `qd` / `qoder`、`qdcn` / `qodercn` / `qoder-cn`，并同步全部 7 份桥接副本。
+- **原生路由代理**：`plugins/agenthub-workers/agents/` 新增 `qoder.md`、`qoder-cn.md`；
+  Antigravity 与 CodeArts 原生包各补 `hub-qoder.md`、`hub-qoder-cn.md`，插件代理总数
+  从 11 增至 13。
+- **K3.1 Pro 不是默认模型**：线上 `qodercli --list-models` 与 `qoderclicn --list-models`
+  均确认存在 `Kimi-K3.1-Pro`。Hub 配置新增 `k31p` / `k31pro` / `k3.1pro` /
+  `kimi-k3.1-pro` 四个别名映射；规划任务必须显式传 `model=k31pro`，禁止用默认
+  `dfmodel`（DeepSeek-Flash）冒充。
+- **线上验证**：`hub_capabilities` 对两个 worker 均返回 `Kimi-K3.1-Pro` 及其别名。
+- **附件上限修复**：Qoder CLI 实际只收 5 个附件，但 Hub 全局允许 8 个，超过时
+  要等上传并启动 CLI 后才报 `too many attachments`。现于 `capabilities.json` 声明
+  `max_count: 5`，并由 `task_contract.py` 在创建暂存目录和启动进程前拒绝；能力查询
+  同时返回该上限。
+- **回归**：`tests/mcp_bridge.test.mjs` 增加 `qd` / `qodercn` / `qdcn` 别名断言
+  （118 项通过）；`tests/task_contract_regressions.py` 增加 6 附件预拒绝断言
+  （25 项通过）。
+
+### 修复：接管复核发现的签到状态机缺陷
+
+- **新账号被平台 retryAt 挡住**：`pendingAccountPlatforms()` 在检测实时账号前，
+  因平台未来的 `retryAt` 直接跳过；Qoder 本期已领等下一期时，新加账号当天无法补签。
+  现先合并账号并识别 `fresh`，有 fresh 就无条件入队；概览在等待期也保留 fresh 的
+  待签计数，前端「补签新增账号」按钮不再被禁用。
+- **同平台并发重复执行**：手动点击与定时 tick 可同时跑同一平台，重复请求上游，
+  且后完成的旧结果覆盖新结果。新增按平台共享的执行 Promise：上游只跑一次，
+  后到调用复用结果且不重复写 `history`。
+- **状态文件非原子 + 损坏被吞**：`saveState()` 改同目录临时文件 + `rename`；
+  `loadState()` 仅在 `ENOENT` 时返回默认值，JSON 损坏时备份 `.corrupt-<ts>` 并抛错，
+  不再静默清空平台状态和手工 Token。
+- **`await_credits` 文案错位**：补进平台原因优先级；CodeBuddy 卡片显示
+  「积分待确认 / 待确认」并禁用，不再套用 Qoder 的「上游活动行没下发」。
+- **额度 403 仍试备用凭据**：`checkinQoderOne()` 在 `quota.kind` 命中时立即终止候选回退，
+  避免冷却期继续请求旧 token、最后把额度问题误报成凭据失效。
+- **Qoder 时间字段兼容**：新增 `qoderEpoch()`，秒/毫秒/ISO 字符串统一为秒；
+  避免上游换格式后 `Number(ISO)` 得到 NaN、窗口判断退化成「永远在窗口内」。
+- **stale 账号不参与统计**：被切走的旧号仍展示为「已切走」，但不计入
+  `accountCount` / `signedAccounts` / 待签数，避免补签数量虚高。
+
+### 修复：Qoder 国际版仍会丢 100 Credits——重试调度把**还开着的领奖窗口**跳过去了
+
+- **实测坐实的更深一层根因**：上一条修的是「活动行没下发却被判 already」。本轮在服务器上直接拉了三个
+  国际版账号此刻的真实活动行，发现**我们自己的重试调度会跳过仍然开着的领奖窗口**：
+  - 2026-11-02 02:10（UTC+8）的真实数据：`act-20261101-825` 的窗口是
+    **11-01 10:00 → 11-02 09:59**（跨自然日）。Kangsheng / 花凄 两个号已 `CLAIMED`
+    （11-02 00:57 各领到 +100）；**Henry-Baker 这个号上游至今没发这一期**，但他的窗口 **09:59 才关**。
+  - 旧逻辑给「没有活动行」的账号排的 `retryAt` 是**下一期开窗（10:00）** —— 恰好落在他的窗口关闭**之后**。
+    这 7.8 小时里上游一旦补发活动行，我们再也看不到，那一期 100 Credits 永久作废。
+  - 服务端签到历史印证同一件事：11-01 10:09 判 `already` 之后，**到 11-02 00:57 整整 14.8 小时零重试**。
+- **本轮实现**：
+  - 新增 `qoderOpenWindow()` / `qoderPollAt()`：**窗口还开着就继续补拉** —— 开窗后 1 小时内每 10 分钟
+    （参考实现 v1.0.12 的 10 分钟 × 6 次），之后每小时一次，一直补到**窗口关闭前 5 分钟**；
+    只有进入窗口最后 5 分钟才等下一期开窗。补拉点保证落在本期窗口内，不可能越过窗口。
+  - 区分「本期已领」与「本期行还没下发」：不再用**自然日**比对窗口起始日（00:00 一翻篇，
+    还在窗口内的本期行会被算成「上一期」，实测 11-02 00:57 领到的行在 00:00 后就被算成上一期）。
+  - **重试预算按平台走**：Qoder 国际版/国内版 32 次（通用 8 次会在窗口中途耗光 → 之后连下一期开窗都进不去，
+    实测 `retryCount` 已用到 4/8）；老状态文件没有 `retryBudget` 字段时按平台名兜底。
+  - 平台级 `pendingReason` 改为**按优先级取**（缺设备身份 > 额度冷却 > 等上游下发 > 活动关闭 > 等开窗），
+    卡片不再显示「待活动开启」而实际还在窗口内补拉。
+  - 前端 `awaiting_campaign` 徽章改为「等上游下发」，按钮保持可点（点了是真去拉一次，不是空转）。
+- **测试**：新增 `tests/console_qoder_window_poll.mjs`（14 项：开放窗口边界、补拉节奏、预算、
+  原因优先级、空活动列表端到端判 pending + 窗口内补拉）。
+- **新一期开窗后实测闭环（2026-11-02 10:07）**：`act-20261102-691`（窗口 11-02 10:00 → 11-03 09:59）
+  下发后被领到 —— Kangsheng `success` **+100 Credits**、花凄 `already`；
+  平台级 `partial signed=2/3 credits=100`，卡片显示「部分成功（2/3）」+「补签 1 个账号」。
+  补拉节奏按设计工作：定时器在窗口内整点唤醒（03:57 → 09:57 → 开窗后 10 分钟一次），
+  `retryCount=13 / retryBudget=32`（旧的通用 8 次预算在 05:57 就会耗光 → 后面连新窗口都进不去）。
+  Henry-Baker 那个号上游仍未给他发行，窗口内继续补拉中。
+
+### 修复：Qoder 国际版签不上的真正根因——「活动行没下发」被谎报成「今日已签」，当天零重试
+
+- **参考实现**：[L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily)（`qoder_daily.py` v1.0.12）。
+- **根因（实测坐实，不是推断）**：上游每日活动行是**开窗后延迟下发**的。同一账号在
+  2026-11-01 10:09（开窗后 9 分钟）拉不到行，**同一窗口** 11-02 00:57 就拿到了并领到 +100。
+  旧代码把「没拿到行」判成 `status:'already'` → `platformNeedsRetry` 只重试 `failed/pending`
+  → **当天不再拉第二次** → 每日 100 Credits 直接丢。现在一律判 `pending` + `pendingReason` +
+  `retryAt`，开窗后 1 小时内按 **10 分钟 × 6 次**补拉（参考实现 v1.0.12）。
+- **设备指纹不是原因**（实测排除）：同一 token 用「完全不带设备头」/「本机 `runtime-info` 组件」/
+  「`~/.config/agenthub-qoder/device.env` 落盘三件套」三种身份请求 campaigns，
+  **返回的活动行完全相同**；带不带 `?forceRefresh=true` 也完全相同。
+- **口径对齐参考实现**（`console/qoder.mjs` / `console/qoder-device.mjs` / `console/checkin.mjs`）：
+  - 活动列表**不再带** `?forceRefresh=true`（参考 v1.0.6：官方客户端从不发送，带上服务端会过滤每日活动行）；
+  - **删除**跨地区 openapi 重试（`altQoderBaseUrl` 已移除，参考 v1.0.10：国际版不做任何降级）；
+  - UMID 运行环境码**按地区固定**（国际版 3 / 国内版 0，与组件来源无关），客户端资源目录严格地区隔离，
+    缓存改按地区分目录 `~/.agenthub/qoder-umid/<地区>/`，官方包提取支持国内版 `@qodercn-ai/qoderclicn`；
+  - 兜底客户端版本对齐 `1.1.69`；
+  - **额度类 403 分流**（参考 v1.0.11）：`112`/`pricingUrl` → 冷却 30 分钟；`110`/`Billing daily count exceeded`
+    → 冷却到本地零点（封顶 6 小时）；**不触发续期、不判登录失效**；
+  - **会话失效分流**：只有普通 401/403 或业务码 `105`/`10019901001` 才续期（新增 `qoderAuthDead()`）；
+  - **领奖判定**：只有 `409 + ALREADY_CLAIMED/REPLAYED` 算「今日已领」；`BLOCKED` /
+    `SAME_PERSON_ALREADY_CLAIMED` 是**没领到**（旧实现一律当已领，会报成功但其实没到账）；
+  - 中国版空活动列表改用**最小鉴权四件套**（`Authorization`/`cosy-clienttype`/`User-Agent`/`Content-Type`）
+    复取一次，且错误**原样透传**（不再静默吞掉）；国际版不做这个降级。
+
+### 修复：两个国际版签到卡片「点了没反应」——按钮不再谎报「立即签到」，点击有可见反馈
+
+- **前端根因**：`client/qa-grid.js` 里每个平台各写一份 `isSigned`，只认 `status === 'success' || 'already'`，
+  其余状态（`pending`/`failed`/`restricted`）一律渲染成**可点的「立即签到」**；点击后只重渲染
+  同一份 overview，状态没变 → 用户看到的就是「点了没用」。账号级补签文案也只对 `settled` 平台生效，
+  国际版处于 pending 时补签提示永远不出现。
+- **服务端根因**：平台级聚合把「有任一账号成功」当成整体成功，**掩盖**了另一个账号的 pending；
+  `pending` 同时被「等开窗」「上游活动没开」「积分未确认」三种完全不同的语义占用。
+- **本轮实现**：
+  - 新增 `pendingReason` 贯穿账号级 → 平台级 → 概览：`awaiting_window`（等上游开窗）/
+    `awaiting_campaign`（等活动行下发）/ `identity_missing`（缺设备身份）/
+    `quota_cooldown`（额度冷却）/ `campaign_closed`（上游活动未开启）/ `await_credits`（等积分到账）；
+  - 新增统一聚合函数 `aggregatePlatformStatus()`：部分账号签成 → **`partial`**（不再粉饰成 success），
+    两个国际版共用同一套口径；
+  - 概览新增 `signedAccounts`，前端据此显示「部分成功（2/3）」；
+  - 前端抽出独立模块 `client/checkin-card-state.js`（浏览器与 Node 单测共用），
+    **收敛掉 8 份复制粘贴**的 `isSigned` + 徽章 + 按钮写法，改为一张状态→UI 映射表；
+  - 按钮语义改为如实反映：等开窗 → 禁用并显示「待开启 10:00」；额度冷却 → 禁用「冷却中」；
+    缺设备身份 → 禁用并说明原因；上游活动未开启 → 可点「再试一次」；
+  - **点击有可见反馈**：点完在按钮上闪示本次结果（3 秒）并写明「在等什么」，
+    一键全签后按钮给出「全签完成 x/y · N 个待补」的汇总并列出仍在等的平台。
+
+### 修复：CodeBuddy 国际版「活动没开」会白耗当天的重试预算
+
+- `pending` 且 `campaign_closed`（上游活动未开启）时，`retryAt` 约到 **3 小时后**再探。
+  以前 `retryAt=0` → 定时器当天空转，8 次/天的重试预算被「活动没开」迅速耗光
+  （线上实测已用到 6/8），活动万一中途开启反而没机会了。
+
+### 修复：meoo 子代理此前根本无法通过枢纽派活
+
+- `~/.config/agenthub-codearts/agents.json` 的 meoo 段缺 `async_default`，
+  枢纽会走**同步**分支 → 控制台 130 秒超时必断（`502 枢纽请求超时`）。补上后与其余 worker 一致。
+- 补齐模型目录：`k31p → moonshot/kimi-k3.1-pro`（Kimi K3.1 Pro，此前只有 `moonshot/kimi-k3`）。
+- meoo 的项目 `rpwv1ry9vnby` 已起不了新 run（`409 run_conflict`：被取消的 run 会把项目卡住，
+  只有被消费到终态的 run 才不卡），已切到 `z5wve84ay10t`。
+
+### 修复：国际版「当日活跃」的触发方式错了——调模型换不到积分，改走上游真正认的两发
+
+- **参考实现**：[L0NE-6/WorkBuddy-Daily](https://github.com/L0NE-6/WorkBuddy-Daily)（`workbuddy_intl_daily.py`，v3.9 起对齐上游 3.0.4–3.0.8）。
+- **根因**：国际版的「每日活跃」**不是**调模型换积分，而是一组事件上报。旧实现把「调模型发你好」
+  当成活跃触发，可那只是**保活对话**——上游的「当日活跃」计数根本不认它（issue #277：
+  桌面端对话与 `/v2/report` 都不进该计数）。所以它永远换不到积分，
+  旧实现却每天报「签到成功（活跃+1）」。
+- **正确链路**（本轮实现，`console/checkin.mjs`）：
+  1. `POST /billing/meter/checkin-activity-status` 探测活动是否开放、今天是否已领；
+  2. `POST /v2/billing/meter/daily-checkin` 活动开放且今日未领时领取；
+  3. `POST /v2/report`（`chat_request_send` 事件，`userId` 必填）→ 点亮成长中心连登，
+     再 `GET /activity/growth/streak` 回读连登天数；
+  4. `POST /console/as/conversations/` **网页会话 → 上游「当日活跃」计数只认这一发**；
+  5. `POST /v2/chat/completions` 保活对话（**只维持「账号有调用」，不算活跃**，
+     仅在网页会话没建起来时才兜底跑一次）。
+  上游口径：**活跃上报或网页会话任一成功即算当日活跃完成**，积分由上游异步发放。
+- **顺带修掉一个真 bug**：探测端点之前用的是废弃的 `/v2/billing/meter/checkin-status`，
+  它**恒返回 `active=false`** → `codeBuddyCampaignClosed()` 永远判「活动关闭」→
+  永远跳过 5 分钟等待 → **活动真开了也只会报 pending**。现在换成正确端点。
+- **连带删除**旧的 CLI 活跃路径（`resolveCodeBuddyIntlBin` / `prepareCodeBuddySandbox` /
+  `readCliAuthIdentities` / `codeBuddyAccountMatches` / `runCodeBuddyCli` 等）——
+  它正是「包装器永远用默认账号」假成功的根源；新链路全程用该账号自己的 Bearer token，
+  账号归属由构造保证，不再需要靠 CLI 日志反查「这一枪打到了谁」。
+  凭据续期本来就是 HTTP 实现（`/v2/plugin/auth/token/refresh`），不受影响。
+- **新增**：账号级风控 `11140 / request illegal` 单独识别为 `restricted`（本轮停止，不续期不重试）。
+- **实测**（n5095，真实账号）：活跃上报 HTTP 200 code=0、网页会话创建成功（会话 id 21169277）；
+  但上游**签到活动当前关闭**（`active=false`、`claim_button_text` 空、`action_button.show=false`），
+  连登停在 2 天、积分 336 秒内零变化 ⇒ 结论 `pending`，
+  消息如实写明「签到活动未开启或已过期；活跃链路已完成（活跃上报成功（连登 2 天），网页会话已建），
+  上游积分异步发放，待活动开启后重试」，**不白等 5 分钟**。
+- **回归**：签到相关 84 项全绿（codebuddy 11 / service 7 / account_sync 21 / credentials 12 / smoke 28 / client_syntax 5）。
+
+### 修复：国际版「活跃」改为**积分到账**才算成功——旧实现每天报的都是假成功
+
+- **用户口径**（2026-11-01）：国际版活跃成功会发积分，**5 分钟内积分没到账 = 活跃没成功**。
+- **实测取证**（n5095，真实调用）：
+  1. 国际版**有官方签到接口**，与国内版同款：`POST https://www.codebuddy.ai/v2/billing/meter/checkin-status`
+     与 `POST https://www.codebuddy.ai/v2/billing/meter/daily-checkin`；
+     前者返回 `active / today_checked_in / daily_credit / today_credit / total_credits / streak_days`。
+  2. 当前两个账号 `active=false`，`daily-checkin` 返回 `code=10001「签到活动未开启或已过期」`
+     —— **国际版签到活动此刻并未开启**。
+  3. 「调模型发你好」**不发积分**：模型调用成功（真实回复「你好！有什么可以帮你的吗？」，耗时 8.4s），
+     随后 338 秒内 `get-user-resource` 的全部向量（TotalCount / TotalDosage / 存活包数 /
+     包额度合计 / 包剩余合计 / 免费额度已用 / 免费额度剩余 / 最新包创建时间）
+     **一个都没动**，`checkin-status` 的 `today_credit`/`total_credits` 也一直是 0。
+  4. 只读探针翻两个账号的全部额度包（19 / 20 条）得到 Bonus Pack 时间序列：
+     `henrybaker2689` 最新一个包停在 **10-21**，`johhny.xks` 最新停在 **10-30**；
+     **10-31 与 11-01 两天，两个账号都没有任何新包**。
+     也就是说旧实现每天报的「签到成功（活跃+1）」在最近几天**从未真正发过积分**——假成功彻底坐实。
+- **改法**（[`console/checkin.mjs`](console/checkin.mjs)）：
+  - 判定链路换成「积分到账」：查 `checkin-status` →（`today_checked_in` 则 already）
+    → 官方 `daily-checkin` 领取 → 再调模型保持账号活跃 → 取积分基线
+    → **统一并行轮询 5 分钟**（多账号共用一个窗口）→ 到账 = success（显示 +N），未到账 = failed；
+  - 活动未开启（`active=false` 或接口回「未开启或已过期」）→ 记 **pending** 并写明原因，
+    **不白等 5 分钟**，等活动开启后由调度器重试；
+  - 新增 `fetchCodeBuddyCredits()` / `codeBuddyCreditsArrived()`（只认正向变化：
+    新包 / 额度变大 / 总量上升；消耗不算到账）+ 单测覆盖。
+- **实测**：线上跑一次国际版签到，23 秒出结论，两个账号均为
+  `pending | 签到活动未开启或已过期（官方签到返回「签到活动未开启或已过期」，checkin-status active=false）；
+  模型已调用但上游未发积分，待活动开启后重试` —— 结论诚实，不再报假成功。
+
+### 修复：minimaxcode 上的 Agent Hub 控制台插件升级到最新内核 + 恢复「走服务器枢纽」通信
+
+- **背景**：minimaxcode 里装的 `agent-hub-console` 本地插件停在 **2026-09-19 的 0.9.4 快照**
+  （`~/.minimax/plugins/agent-hub-console/`），服务器上的控制台已是 1.0.19，两边功能差距很大。
+- **插件升级**（`~/.minimax/plugins/agent-hub-console/`，清单版本 1.4.0 → 1.5.0）：
+  - `miniapp/node/` 与 `miniapp/client/` 全部换成仓库最新 `console/`（含多平台签到、账号档案派生、
+    模型目录、Qoder/MiniMax/Trae 各模块；`secret-get.py` 必须与模块同目录，已一并带上）；
+  - 客户端补齐 `app-main.js` / `styles.css` / `qa-grid.js` / `mascot.js` / `assets/*.webm`
+    （旧包只有一个内联了全部脚本的 index.html，新版是拆包结构）；
+  - `miniapp/server.mjs` 这份历史重复副本同步为新代码，避免留下会跑旧逻辑的旧文件。
+- **通信修复（关键）**：本机插件的 `config.json` 里存的是**过期枢纽 token**，
+  枢纽侧 `agent-hub.service` 的 `HUB_TOKEN` 早已轮换 → 本机控制台每一次轮询都被 401 拒绝
+  （枢纽日志实测 **30 分钟 364 次 `401 unauthorized from 192.168.2.14`**），
+  界面拿不到任何代理/任务数据。已把 token 更新为枢纽当前值，并给本机控制台独立身份
+  `selfAgent: console-win`（避免与服务器控制台共用 `console` 身份互相覆盖）。
+  控制台给枢纽带 token 的方式是 URL 查询参数 `?token=`（不是 Authorization 头）。
+- **顺手修掉一个跨实例隐患**（[`console/server.mjs`](console/server.mjs)）：
+  子代理直通端点写共享笔记 `subagent-endpoint` 时，**只在对端可达时才写**——
+  本机控制台绑在 127.0.0.1，对 LAN 上的代理不可用，让它覆盖服务器的通告会让别人连到自己的 localhost。
+- **验证**：
+  - 本机插件运行内核版本 `subagent-endpoint.json` = **1.0.19**（原 0.9.4）；
+  - 枢纽日志：修复后 45 秒窗口内来自本机的 401 = **0**（此前约每 6 秒一次）；
+  - 对照实验：停掉服务器控制台后枢纽仍有 7 次/30s 请求 → 确认这些成功请求来自本机控制台；
+  - 服务器共享笔记 `subagent-endpoint` 仍指向 `http://192.168.2.29:8790`（未被本机覆盖）；
+  - 插件包校验：manifest JSON 合法、无 BOM、图标为有效 PNG、37 文件 / 7.6 MiB（在 V1 限额内），
+    Desktop 识别正常、无扫描诊断。
+
+### 修复：CodeBuddy 国际版「自动活跃」假成功——打卡打的其实是另一个账号
+
+- **现象**（2026-11-01）：签到区「CodeBuddy 国际版」卡片显示两个账号都签到成功（credits「活跃+1」），
+  但 `henrybaker2689@gmail.com` 的活跃其实**从未生效**——上游只记了 `johhny.xks@gmail.com` 那个号。
+  控制台一直报「成功」，用户看到的却是「自动活跃没有起作用」。
+- **根因**：`checkinCodeBuddyOne` 调的是 `~/.local/bin/codebuddy-intl` 包装器，
+  而包装器按 `AC_intl_dir=$HOME/.codebuddy` **永远使用默认账号**（johhny.xks），
+  并把它的 `auth.info` 覆盖进隔离 HOME 的共享存储。旧代码见 `isIntlWrapper` 就跳过
+  `CODEBUDDY_CONFIG_DIR=dirname(acct.file)`，于是**每个账号都被用默认账号打了一遍**。
+  诱饵实测：cfg 里放 A 号、共享存储放 B 号，CLI 认的是 **B 号**——
+  CLI 的登录态在 XDG 共享存储里（`$HOME/.local/share/CodeBuddyExtension/Data/Public/auth/
+  Tencent-Cloud.coding-copilot.info`），**不是** `CODEBUDDY_CONFIG_DIR/auth.info`。
+- **修法**（[`console/checkin.mjs`](console/checkin.mjs)）：
+  - 每个账号一个独立沙箱 `~/.agenthub/checkin-sandbox/codebuddy/<uid>/`：
+    独立 HOME（共享存储里只放该账号的登录态）+ 独立配置目录（models.json / settings.json 跟线上国际版一致），
+    并绕开包装器、直连 `~/.npm-global/bin/codebuddy`（`CODEBUDDY_REAL_BIN` 可覆盖）；
+  - 打卡后从 CLI 日志里读 `[AuthenticationSessionListener] [auth_success: <邮箱>]` 与 `"userId"`，
+    与目标账号比对：**对不上就判失败**，不再报成功（假成功防线）；
+  - CLI 在沙箱里轮换过 refreshToken 时把新 `auth` 块写回 hub 管理的凭据文件，避免那份 refreshToken 变废；
+  - 沙箱内 logs/traces 保留 2 天，防止一年攒几个 G。
+- **顺带修复**：自动调度器的平台清单曾手写一份并**漏掉 `codebuddy`（国际版）**，
+  国际版失败一次后当天再无重试机会（账号补签只管「从没签过的新账号」）。
+  现统一为唯一事实来源 `CHECKIN_PLATFORMS`，并抽出纯函数
+  `platformNeedsRetry()` / `selectAutoCheckinPlatforms()` 供单测覆盖。
+- **验证**：线上（n5095）实跑，两个账号各用自己的凭据、各自沙箱 `auth_success` 与目标一致；
+  `selectAutoCheckinPlatforms` 在国际版失败时必含 `codebuddy`、成功后不含；
+  新增 5 项单测（`tests/console_codebuddy_checkin.mjs`），签到相关 76 项全绿。
+
 ### 修复：MiniMax 401 的错误归因（refresh 成功却被报成「请重新登录」）
 
 - **现象**（2026-10-29）：00:20 起 minimaxcode 连续 401 失败，界面提示

@@ -26,6 +26,33 @@ MODEL_ID = re.compile(r"[A-Za-z0-9_.:-]+/[A-Za-z0-9_.:/-]+\Z")
 TEXT_SUFFIXES = {".txt", ".md", ".rst", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".csv", ".tsv", ".xml", ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".sh", ".ps1", ".sql", ".go", ".rs", ".java", ".c", ".h", ".cpp", ".hpp", ".log"}
 MAX_OUTPUT = 16 * 1024 * 1024
 
+# 单个任务默认上限（秒）。原来 300s，但一旦真的让它干活（跑 npm install、
+# 生成多文件页面）实测 5 分钟不够，会以 CODEARTS_TIMEOUT 收尾——文件都写完了却报失败。
+# 与 traecode(900) / zcode(1000) 对齐；Hub 侧还有自己的「无进展超时」兜底。
+DEFAULT_TIMEOUT_SEC = 900
+
+# 工具调用审批模式。
+#   --pure 是无交互 headless，没有任何人可以批权限：CLI 会把每次 write/edit/bash
+#   都打成 `permission requested: …; auto-rejecting`，于是「写个网页」这类任务
+#   必然失败（归类 CODEARTS_PERMISSION_REQUIRED）。
+#   CLI 的 `--auto`（always_allow）能让工具调用不再逐次申请，但那是把审批门整个
+#   拿掉，所以必须显式开启，默认保持关闭。
+AUTO_PERMISSION_ENV = "AGENTHUB_CODEARTS_AUTO"
+_AUTO_TRUTHY = {"1", "true", "yes", "on", "auto", "always_allow", "always-allow"}
+_AUTO_FALSY = {"0", "false", "no", "off", "ask"}
+
+# 为什么只有 bash 能用：`codearts run`（headless）的事件循环里，
+# **任何** permission.asked 都被硬编码成 `reply: "reject"`，`--auto` 只是把 bash
+# 设成 always_allow（源码里就是 setBashModeWithoutPersist("always_allow")）。
+# write/edit 没有对应的放行开关，所以模型必须先知道「落盘走 shell」，否则它会在
+# write 上吃一次拒绝、然后放弃并向用户反问（实测 2026-11-03）。
+SHELL_ONLY_NOTE = (
+    "[运行环境] 本通道只有 bash 被放行；write/edit 工具会被自动拒绝。"
+    "创建或修改文件请直接用 bash（如 cat > 文件 <<'EOF' … EOF / tee），"
+    "不要因为这个权限限制停下来向用户确认。"
+)
+
+
 
 class AdapterError(Exception):
     def __init__(self, code: str, status: str = "failed"):
@@ -86,7 +113,7 @@ def diagnostic_error(text: str) -> AdapterError | None:
         return AdapterError("CODEARTS_PROVIDER_UNAVAILABLE", "blocked_auth")
     if re.search(r"(?:model[^\r\n]{0,80}(?:not found|unavailable)|ProviderModelNotFoundError)", text, re.I):
         return AdapterError("CODEARTS_MODEL_UNAVAILABLE", "blocked_model")
-    if re.search(r"文件夹未被信任|permission requested:[^\r\n]*auto-rejecting|permission[^\r\n]{0,80}(?:denied|rejected)", text, re.I):
+    if re.search(r"文件夹未被信任|permission requested:[^\r\n]*auto-rejecting|permission[^\r\n]{0,80}(?:denied|rejected)|the user rejected permission", text, re.I):
         return AdapterError("CODEARTS_PERMISSION_REQUIRED", "blocked_permission")
     return None
 
@@ -129,8 +156,14 @@ def parse_model_catalog(stdout: str) -> set[str]:
     return catalog
 
 
-def parse_events(stdout: str, stderr: str, returncode: int, model="") -> dict:
-    """Accept one fresh session with an explicit completed final model step."""
+def parse_events(stdout: str, stderr: str, returncode: int, model="", *, permission_is_fatal: bool = True) -> dict:
+    """Accept one fresh session with an explicit completed final model step.
+
+    `permission_is_fatal=False` 只在 `--auto`（always_allow）下使用：
+    那种模式里偶发一次 `permission requested … auto-rejecting` 是**可恢复的**
+    （CLI 会自己重试并最终完成），若仍按致命处理，明明写成功的任务会被报成
+    CODEARTS_PERMISSION_REQUIRED。关闭时不改语义：权限被拒就是任务失败。
+    """
     records, diagnostics = [], [stderr]
     for line in stdout.splitlines():
         try:
@@ -141,7 +174,8 @@ def parse_events(stdout: str, stderr: str, returncode: int, model="") -> dict:
         if isinstance(record, dict):
             records.append(record)
     error = diagnostic_error("\n".join(diagnostics))
-    if error:
+    permission_seen = bool(error and error.status == "blocked_permission")
+    if error and not (permission_seen and not permission_is_fatal):
         return envelope(error.status, code=error.code, model=model)
     session, parts, completed, protocol_error = None, {}, False, False
     for record in records:
@@ -179,24 +213,68 @@ def parse_events(stdout: str, stderr: str, returncode: int, model="") -> dict:
             if isinstance(state, dict) and state.get("status") == "error":
                 denied = diagnostic_error(str(state.get("error", "")))
                 if denied and denied.status == "blocked_permission":
-                    return envelope(denied.status, code=denied.code, model=model, session_id=session)
+                    permission_seen = True
+                    if permission_is_fatal:
+                        return envelope(denied.status, code=denied.code, model=model, session_id=session)
     if returncode != 0:
         return envelope(code="CODEARTS_PROCESS_FAILED", model=model, session_id=session)
     if protocol_error:
         return envelope(code="CODEARTS_INVALID_EVENTS", model=model, session_id=session)
     text = "".join(parts.values())
     if not text.strip():
+        # 没有正文时，权限被拒才是真因（否则会被误报成「空回复」）
+        if permission_seen:
+            return envelope("blocked_permission", code="CODEARTS_PERMISSION_REQUIRED", model=model, session_id=session)
         return envelope(code="CODEARTS_EMPTY_RESPONSE", model=model, session_id=session)
     if not completed:
+        if permission_seen and not permission_is_fatal:
+            return envelope("blocked_permission", code="CODEARTS_PERMISSION_REQUIRED", model=model, session_id=session)
         return envelope("unknown", code="CODEARTS_COMPLETION_NOT_CONFIRMED", model=model, session_id=session)
     return envelope("completed", text=text, model=model, session_id=session)
+
+
+def auth_env_path(env=None, home=None) -> Path:
+    env = os.environ if env is None else env
+    override = env.get("CODEARTS_AUTH_ENV")
+    if override:
+        return Path(override)
+    return Path(home or Path.home()) / ".config" / "agenthub-codearts" / "codearts-auth.env"
+
+
+def _auth_env_flag(name: str, env=None, home=None) -> str:
+    """Read one key from the deployment's auth env file (never exported anywhere)."""
+    try:
+        for line in auth_env_path(env, home).read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() == name:
+                return value.strip()
+    except OSError:
+        pass
+    return ""
+
+
+def auto_permission(env=None, home=None) -> bool:
+    """Whether to pass `--auto` (always_allow) so tool calls stop asking for approval.
+
+    Order: process env, then `<auth env file>` (so a deployment can opt in without
+    touching the service supervisor). Anything unrecognised keeps the safe default.
+    """
+    env = os.environ if env is None else env
+    raw = str(env.get(AUTO_PERMISSION_ENV, "") or "").strip().lower()
+    if not raw:
+        raw = _auth_env_flag(AUTO_PERMISSION_ENV, env, home).lower()
+    if raw in _AUTO_FALSY:
+        return False
+    return raw in _AUTO_TRUTHY
 
 
 def runtime_environment(cli: Path, runtime: Path, *, env=None, home=None) -> dict:
     result = dict(os.environ if env is None else env)
     home = Path(home or Path.home())
-    auth_env_override = result.get("CODEARTS_AUTH_ENV")
-    auth_env = Path(auth_env_override) if auth_env_override else (home / ".config" / "agenthub-codearts" / "codearts-auth.env")
+    auth_env = auth_env_path(result, home)
     if auth_env.is_file():
         try:
             for line in auth_env.read_text(encoding="utf-8").splitlines():
@@ -319,7 +397,7 @@ def _validate_files(attachments):
     return paths
 
 
-def run_task(*, task, cli=None, model="", timeout=300, stream="off", thinking="default", attachments=(), cwd=None, capture: Callable | None = None, env=None):
+def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="off", thinking="default", attachments=(), cwd=None, capture: Callable | None = None, env=None):
     capture = capture or _capture
     try:
         if not isinstance(task, str) or not task.strip():
@@ -342,6 +420,9 @@ def run_task(*, task, cli=None, model="", timeout=300, stream="off", thinking="d
         if not workdir.is_dir():
             raise AdapterError("CODEARTS_INVALID_WORKDIR")
         files = _validate_files(attachments)
+        permission_auto = auto_permission(env)
+        # 放开审批时补一句环境说明：write/edit 一定被拒，落盘只能走 bash。
+        prompt = f"{task}\n\n{SHELL_ONLY_NOTE}" if permission_auto else task
         deadline = time.monotonic() + timeout
         with tempfile.TemporaryDirectory(prefix="agenthub-codearts-task-") as temp:
             runtime = Path(temp)
@@ -357,6 +438,10 @@ def run_task(*, task, cli=None, model="", timeout=300, stream="off", thinking="d
             # Linux 26.9.12 lacks --dir; setting the child process cwd works on
             # both official runtimes without relying on that newer option.
             command = [str(path), "run", "--pure", "--format", "json", "--title", "multi-agent-hub task"]
+            if permission_auto:
+                # always_allow：headless 下没人能批权限，不放开就只能读不能写。
+                # 默认关闭，由 AGENTHUB_CODEARTS_AUTO（环境变量或 auth env 文件）显式开启。
+                command.append("--auto")
             if model:
                 command.extend(("--model", model))
             for file in files:
@@ -364,8 +449,8 @@ def run_task(*, task, cli=None, model="", timeout=300, stream="off", thinking="d
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise AdapterError("CODEARTS_TIMEOUT", "timeout")
-            stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=remaining, stdin=task)
-            return parse_events(stdout, stderr, code, model)
+            stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=remaining, stdin=prompt)
+            return parse_events(stdout, stderr, code, model, permission_is_fatal=not permission_auto)
     except AdapterError as error:
         return envelope(error.status, code=error.code, model=model)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
@@ -377,7 +462,7 @@ def main(argv=None):
     parser.add_argument("--task")
     parser.add_argument("--cli")
     parser.add_argument("--model", default="")
-    parser.add_argument("--timeout", type=float, default=300)
+    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SEC)
     parser.add_argument("--stream", choices=("on", "off"), default="off")
     parser.add_argument("--thinking", choices=("default", "on", "off"), default="default")
     parser.add_argument("--attach", action="append", default=[])

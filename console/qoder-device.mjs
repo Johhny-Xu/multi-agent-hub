@@ -23,8 +23,11 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { qoderRegion } from './qoder.mjs';
 
-/** 与上游 Qoder 客户端版本对齐的默认值；真实版本优先取客户端 build-manifest.json */
-export const QODER_DEFAULT_CLIENT_VERSION = '0.2.5';
+/**
+ * 与上游 Qoder 客户端版本对齐的默认值；真实版本优先取客户端 build-manifest.json。
+ * 兜底值对齐参考实现 v1.0.8：当前桌面 worker runtime 为 1.1.69（旧的 0.2.5 已过期）。
+ */
+export const QODER_DEFAULT_CLIENT_VERSION = '1.1.69';
 /** 风控身份有效期（上游实测 50 分钟足够稳，超过后 token 可能被判定过期） */
 const RISK_TTL_MS = 50 * 60 * 1000;
 /** 组件调用超时：runtime-info 首次运行要做设备指纹采集，给足 25 秒 */
@@ -32,7 +35,22 @@ const COMPONENT_TIMEOUT_MS = 25_000;
 
 const NPM_REGISTRIES = ['https://registry.npmmirror.com', 'https://registry.npmjs.org'];
 const NPM_AUTHORITY = 'https://registry.npmjs.org';
-const NPM_PACKAGE_PATH = '@qoder-ai%2fqodercli';
+
+/**
+ * 官方 CLI 包（缺组件时的兜底来源）：**按地区严格隔离**。
+ * 国际版用 `@qoder-ai/qodercli`，中国版用 `@qodercn-ai/qoderclicn`。
+ * 参考实现 L0NE-6/Qoder-Daily 的 install_umid_component 两个 bundle 入口都试。
+ */
+const NPM_PACKAGES = {
+  qoder: {
+    path: '@qoder-ai%2fqodercli',
+    bundles: ['package/bundle/qodercli.js', 'package/bundle/qoder-worker-runtime.mjs'],
+  },
+  'qoder-cn': {
+    path: '@qodercn-ai%2fqoderclicn',
+    bundles: ['package/bundle/qoder-worker-runtime.mjs', 'package/bundle/qodercli.js'],
+  },
+};
 const BUNDLE_ENTRY = 'package/bundle/qodercli.js';
 
 const DEVICE_CACHE = new Map();
@@ -111,9 +129,15 @@ export async function readQoderMachineId(home, worker = 'qoder') {
   return value;
 }
 
-/** 客户端 resources 目录候选：先本区域客户端，再另一区域，最后本机解包目录 */
+/**
+ * 客户端 resources 目录候选：**严格按地区隔离**。
+ * 国际版只认 Qoder（运行环境码 3），国内版只认 Qoder CN / QoderCN（运行环境码 0）。
+ * 参考实现 L0NE-6/Qoder-Daily v1.0.8 明确「地区隔离，互不混用」——
+ * 跨地区拿组件会用错地区的指纹去要活动，服务端按地区过滤，活动行整行不下发。
+ */
 export function qoderResourceDirs(home, worker = 'qoder') {
-  const names = worker === 'qoder' ? ['Qoder', 'Qoder CN'] : ['Qoder CN', 'Qoder'];
+  const global = worker === 'qoder';
+  const names = global ? ['Qoder'] : ['Qoder CN', 'QoderCN'];
   const dirs = [];
   for (const name of names) {
     if (process.platform === 'win32') {
@@ -136,8 +160,13 @@ export function qoderResourceDirs(home, worker = 'qoder') {
     }
   }
   if (process.platform !== 'win32' && process.platform !== 'darwin') {
-    // 本机部署形态：deb 解包到 ~/qoder-app、~/qoder-cn-app 后直接运行
-    for (const [app, name] of [['qoder-app', 'Qoder'], ['qoder-cn-app', 'Qoder CN']]) {
+    // 国内版上游安装目录还可能是这两种写法
+    if (!global) {
+      dirs.push('/opt/Qoder-CN/resources', '/opt/QoderCN/resources');
+    }
+    // 本机部署形态：deb 解包到 ~/qoder-app、~/qoder-cn-app 后直接运行（同样按地区分开）
+    const apps = global ? [['qoder-app', 'Qoder']] : [['qoder-cn-app', 'Qoder CN']];
+    for (const [app, name] of apps) {
       dirs.push(join(home, app, 'opt', name, 'resources'));
       dirs.push(join(home, app, 'resources'));
     }
@@ -159,9 +188,24 @@ export async function detectQoderClientVersion(home, worker = 'qoder') {
 
 const umidExeName = () => (process.platform === 'win32' ? 'runtime-info.exe' : 'runtime-info');
 
-/** ~/.qoder 与 ~/.qoder-cn 的 .bin 目录：兼容 umid-<ver>/runtime-info 与 runtime-info-<plat> 两种布局 */
-async function findCliUmid(home, worker) {
+/**
+ * 组件的运行环境码：**按地区固定**，与组件来源无关。
+ * 参考实现 L0NE-6/Qoder-Daily v1.0.8：国际版一律 3，国内版一律 0
+ * （客户端目录、CLI 缓存、官方包提取出来的都是同一个码）。
+ * 传错码 → 生成的设备指纹对不上 → 服务端按错误地区过滤，每日活动行整行不下发。
+ */
+export const QODER_UMID_RUNTIME_ENV = { qoder: 3, 'qoder-cn': 0 };
+
+/**
+ * ~/.qoder 与 ~/.qoder-cn 的 .bin 目录：兼容 umid-<ver>/runtime-info 与 runtime-info-<plat> 两种布局。
+ *
+ * 导出给单测：客户端安装目录是**机器全局**的（不随 home 走），
+ * 在装了 Qoder 客户端的机器上 findQoderUmidComponent 会先命中 app 源，
+ * 只有直接测这个函数才能断言 CLI 布局的识别与地区码。
+ */
+export async function findCliUmid(home, worker) {
   const bin = join(home, qoderRegion(worker).configDir, '.bin');
+  const env = QODER_UMID_RUNTIME_ENV[worker] ?? 3;
   let entries = [];
   try {
     entries = await readdir(bin);
@@ -171,13 +215,13 @@ async function findCliUmid(home, worker) {
   for (const entry of entries.sort().reverse()) {
     if (entry.startsWith('umid-')) {
       const path = join(bin, entry, umidExeName());
-      if (await isFile(path)) return { path, env: worker === 'qoder' ? 4 : 0, source: 'qodercli' };
+      if (await isFile(path)) return { path, env, source: 'qodercli' };
     }
   }
   for (const entry of entries.sort().reverse()) {
     if (entry.startsWith('runtime-info-')) {
       const path = join(bin, entry);
-      if (await isFile(path)) return { path, env: worker === 'qoder' ? 4 : 0, source: 'qodercli' };
+      if (await isFile(path)) return { path, env, source: 'qodercli' };
     }
   }
   return null;
@@ -193,24 +237,33 @@ async function isFile(path) {
 }
 
 /**
- * 定位 UMID 组件。返回 { path, env, source }：
- * env 是组件的运行环境码（客户端=3/0，CLI 与缓存=4/0，国际版/国内版不同）。
+ * 定位 UMID 组件。返回 { path, env, source }。
+ *
+ * env 是组件的运行环境码：**按地区固定**（国际版 3 / 中国版 0），与组件来源无关。
+ * 取值顺序（对齐参考实现 L0NE-6/Qoder-Daily 的 find_umid_component）：
+ *   1. 地区专属环境变量 QODER_RUNTIME_INFO / QODERCN_RUNTIME_INFO
+ *   2. 通用环境变量 QODER_UMID_PATH
+ *   3. 本地区客户端的 resources/umid/runtime-info
+ *   4. 本地区 CLI 的 ~/.qoder 或 ~/.qoder-cn 下的 .bin/runtime-info
+ *   5. 本地区缓存 ~/.agenthub/qoder-umid/<地区>/runtime-info
  */
 export async function findQoderUmidComponent(home = homedir(), worker = 'qoder') {
+  const env = QODER_UMID_RUNTIME_ENV[worker] ?? 3;
+  const regional = String(process.env[worker === 'qoder-cn' ? 'QODERCN_RUNTIME_INFO' : 'QODER_RUNTIME_INFO'] || '').trim();
+  if (regional && await isFile(regional)) return { path: regional, env, source: 'env' };
   const custom = String(process.env.QODER_UMID_PATH || '').trim();
-  if (custom && await isFile(custom)) return { path: custom, env: worker === 'qoder' ? 4 : 0, source: 'env' };
+  if (custom && await isFile(custom)) return { path: custom, env, source: 'env' };
 
-  const appEnv = worker === 'qoder' ? 3 : 0;
   for (const resources of qoderResourceDirs(home, worker)) {
     const path = join(resources, 'umid', umidExeName());
-    if (await isFile(path)) return { path, env: appEnv, source: 'app' };
+    if (await isFile(path)) return { path, env, source: 'app' };
   }
 
   const cli = await findCliUmid(home, worker);
   if (cli) return cli;
 
-  const cached = join(home, '.agenthub', 'qoder-umid', umidExeName());
-  if (await isFile(cached)) return { path: cached, env: 4, source: 'cache' };
+  const cached = join(home, '.agenthub', 'qoder-umid', worker, umidExeName());
+  if (await isFile(cached)) return { path: cached, env, source: 'cache' };
   return null;
 }
 
@@ -270,8 +323,8 @@ async function fetchBytes(url, timeoutMs = 180_000) {
   return Buffer.from(await res.arrayBuffer());
 }
 
-async function npmMeta(registry) {
-  const body = await fetchBytes(`${registry}/${NPM_PACKAGE_PATH}/latest`, 30_000);
+async function npmMeta(registry, packagePath = NPM_PACKAGES.qoder.path) {
+  const body = await fetchBytes(`${registry}/${packagePath}/latest`, 30_000);
   const payload = JSON.parse(body.toString('utf-8'));
   const dist = payload?.dist && typeof payload.dist === 'object' ? payload.dist : {};
   const tarball = firstText(dist.tarball);
@@ -321,19 +374,25 @@ export function extractUmidElf(bundleText, machine) {
   return null;
 }
 
-/** 下载官方 qodercli 包并提取 UMID 组件，写到 ~/.agenthub/qoder-umid/runtime-info */
-export async function installQoderUmidComponent(home = homedir()) {
-  const arch = qoderMachineOs().split('_')[0];
+/**
+ * 从官方 CLI 包里抠出本机架构的 runtime-info ELF：写到 ~/.agenthub/qoder-umid/<地区>/runtime-info
+ *
+ * @param {string} home
+ * @param {'qoder'|'qoder-cn'} worker 地区：国际版 qodercli / 中国版 qoderclicn
+ */
+export async function installQoderUmidComponent(home = homedir(), worker = 'qoder') {
+  const pkg = NPM_PACKAGES[worker] || NPM_PACKAGES.qoder;
+  const arch = qoderMachineOs().replace(/_(?:linux|win32|darwin)$/, '');
   const machine = arch === 'x86_64' ? 62 : arch === 'aarch64' ? 183 : 0;
   if (!machine) throw new Error('当前 CPU 架构不受支持');
   let authority = null;
   try {
-    authority = await npmMeta(NPM_AUTHORITY);
+    authority = await npmMeta(NPM_AUTHORITY, pkg.path);
   } catch { /* 官方源不可达时只做单源校验 */ }
   const errors = [];
   for (const registry of NPM_REGISTRIES) {
     try {
-      const meta = await npmMeta(registry);
+      const meta = await npmMeta(registry, pkg.path);
       if (registry !== NPM_AUTHORITY && authority) {
         if (authority.version && meta.version && authority.version !== meta.version) {
           errors.push(`${registry}：版本与官方源不一致`);
@@ -352,9 +411,15 @@ export async function installQoderUmidComponent(home = homedir()) {
           continue;
         }
       }
-      const entry = readTarGzEntry(body);
+      // 两个 bundle 入口都试（参考实现 install_umid_component 同款）
+      let entry = null;
+      let usedEntry = '';
+      for (const candidate of pkg.bundles) {
+        entry = readTarGzEntry(body, candidate);
+        if (entry) { usedEntry = candidate; break; }
+      }
       if (!entry) {
-        errors.push(`${registry}：包里没有 ${BUNDLE_ENTRY}`);
+        errors.push(`${registry}：包里没有 ${pkg.bundles.join(' 或 ')}`);
         continue;
       }
       const elf = extractUmidElf(entry.toString('utf-8'), machine);
@@ -362,12 +427,13 @@ export async function installQoderUmidComponent(home = homedir()) {
         errors.push(`${registry}：包里没有本机架构的 UMID 组件`);
         continue;
       }
-      const dir = join(home, '.agenthub', 'qoder-umid');
+      // 缓存按地区分目录：两个地区的指纹不混用
+      const dir = join(home, '.agenthub', 'qoder-umid', worker);
       await mkdir(dir, { recursive: true });
       const path = join(dir, umidExeName());
       await writeFile(path, elf, { mode: 0o755 });
       try { await chmod(path, 0o755); } catch { /* Windows 无执行位 */ }
-      return { path, version: meta.version || '', source: 'npm' };
+      return { path, version: meta.version || '', source: 'npm', entry: usedEntry };
     } catch (error) {
       errors.push(`${registry}：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -380,13 +446,44 @@ export async function installQoderUmidComponent(home = homedir()) {
 // 真实设备指纹（Cosy-MachineToken/Code/Type）落在 ~/.config/agenthub-qoder/device.env。
 // 上游按设备下发活动：指纹不对，活动列表就是空的（Qoder 国际版长期签不上的根因）。
 // 环境变量优先，文件兜底；三件套必须齐全才生效。
+//
+// ⚠️ 设备身份**按地区隔离**（对齐参考实现 L0NE-6/Qoder-Daily：
+//    `地区隔离设备身份：中国版读取 Qoder CN / qoderclicn，国际版读取 Qoder / qodercli`）。
+//    同一台 Windows 机器上，两个地区的 machineToken 前缀相同但正文不同：
+//      国际版 environment=4  P1gAGri9W-…  / 2cca32f49157e10942 / 3944a47200066faae3
+//      中国版 environment=0  P1gAxveT2…   / 64e527ea91460d13b4 / 6c6603d9006166ec9f
+//    把中国版的指纹喂给国际版账号，上游看到的是「另一台设备的中国版客户端」，
+//    下发的活动行就是空的（表现：活动 0 个 / 未派发）。
+//
+// 变量优先级：地区级 > 通用兜底（通用是为旧部署与单测保留的）
+//   qoder      → QODER_INTL_MACHINE_{TOKEN,CODE,TYPE}
+//   qoder-cn   → QODER_CN_MACHINE_{TOKEN,CODE,TYPE}
+//   任意地区兜底 → QODER_MACHINE_{TOKEN,CODE,TYPE}
+const QODER_REGION_ENV_PREFIX = {
+  qoder: 'QODER_INTL_MACHINE',
+  'qoder-cn': 'QODER_CN_MACHINE',
+};
+const QODER_LEGACY_ENV_PREFIX = 'QODER_MACHINE';
+const QODER_TRIPLE_KEYS = ['TOKEN', 'CODE', 'TYPE'];
+/** 通用兜底的告警只打一次，避免每个账号每次签到刷一行 */
+let legacyEnvWarned = false;
+
+/** 从 `<prefix>_TOKEN/_CODE/_TYPE` 读三件套：齐全 → 对象；只填了一部分 → 'incomplete'；没填 → null */
+function readTripleFromEnv(prefix) {
+  if (!prefix) return null;
+  const vals = QODER_TRIPLE_KEYS.map((k) => firstText(process.env[`${prefix}_${k}`]));
+  const filled = vals.filter(Boolean).length;
+  if (filled === 0) return null;
+  if (filled < QODER_TRIPLE_KEYS.length) return 'incomplete';
+  return { machineToken: vals[0], machineCode: vals[1], machineType: vals[2] };
+}
+
 function loadQoderDeviceEnv() {
-  if (process.env.QODER_MACHINE_TOKEN && process.env.QODER_MACHINE_CODE && process.env.QODER_MACHINE_TYPE) return;
   try {
     const file = join(homedir(), '.config', 'agenthub-qoder', 'device.env');
     const raw = readFileSync(file, 'utf-8');
     for (const line of raw.split('\n')) {
-      const m = line.match(/^\s*(QODER_MACHINE_(?:TOKEN|CODE|TYPE))\s*=\s*(\S+)/);
+      const m = line.match(/^\s*((?:QODER_INTL_MACHINE|QODER_CN_MACHINE|QODER_MACHINE)_(?:TOKEN|CODE|TYPE))\s*=\s*(\S+)/);
       if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
     }
   } catch { /* 没这个文件就走原来的探测逻辑 */ }
@@ -394,14 +491,30 @@ function loadQoderDeviceEnv() {
 
 async function resolveRisk(worker, home, uid) {
   loadQoderDeviceEnv();
-  const envToken = firstText(process.env.QODER_MACHINE_TOKEN);
-  const envCode = firstText(process.env.QODER_MACHINE_CODE);
-  const envType = firstText(process.env.QODER_MACHINE_TYPE);
-  if (envToken || envCode || envType) {
-    if (envToken && envCode && envType) {
-      return { risk: { machineToken: envToken, machineCode: envCode, machineType: envType }, source: 'env', note: '' };
-    }
+
+  // 1) 地区级三件套（正确姿势）
+  const scoped = readTripleFromEnv(QODER_REGION_ENV_PREFIX[worker]);
+  if (scoped === 'incomplete') {
+    const p = QODER_REGION_ENV_PREFIX[worker];
+    return { risk: null, source: '', note: `${p}_TOKEN / _CODE / _TYPE 三件套不完整` };
+  }
+  if (scoped) return { risk: scoped, source: `env:${worker}`, note: '' };
+
+  // 2) 通用兜底：单地区部署或旧配置
+  const legacy = readTripleFromEnv(QODER_LEGACY_ENV_PREFIX);
+  if (legacy === 'incomplete') {
     return { risk: null, source: '', note: '设备风控环境变量不完整（需要 QODER_MACHINE_TOKEN / QODER_MACHINE_CODE / QODER_MACHINE_TYPE 三件套）' };
+  }
+  if (legacy) {
+    // ⚠️ 这里**不能**把提示写进 note：checkinQoderOne 把非空 note 当作「设备身份缺失」
+    // 直接判 identity_missing 并停掉补拉。跨地区共用指纹只是降级告警，不该阻断签到，
+    // 所以走 source 标记 + 一条进程级 warn，只用真正缺身份时才用 note。
+    if (!legacyEnvWarned) {
+      legacyEnvWarned = true;
+      console.warn(`[qoder-device] 使用通用 QODER_MACHINE_* 兜底（${worker}）；`
+        + `跨地区共用同一份指纹会导致活动列表为空，建议配置 ${QODER_REGION_ENV_PREFIX[worker]}_TOKEN/_CODE/_TYPE`);
+    }
+    return { risk: legacy, source: 'env:legacy', note: '' };
   }
 
   const custom = String(process.env.QODER_UMID_PATH || '').trim();
@@ -411,10 +524,10 @@ async function resolveRisk(worker, home, uid) {
   }
 
   let component = await findQoderUmidComponent(home, worker);
-  if (!component && worker === 'qoder' && !String(process.env.QODER_UMID_NO_INSTALL || '').trim()) {
+  if (!component && !String(process.env.QODER_UMID_NO_INSTALL || '').trim()) {
     try {
-      const installed = await installQoderUmidComponent(home);
-      component = { path: installed.path, env: 4, source: 'npm' };
+      const installed = await installQoderUmidComponent(home, worker);
+      component = { path: installed.path, env: QODER_UMID_RUNTIME_ENV[worker] ?? 3, source: 'npm' };
     } catch (error) {
       return { risk: null, source: '', note: `设备风控组件安装失败：${error instanceof Error ? error.message : String(error)}` };
     }

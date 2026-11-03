@@ -70,6 +70,8 @@ class TaskContractTests(unittest.TestCase):
             self.assertEqual(caps["stream"]["semantics"], "answer_snapshots")
             self.assertTrue(caps["attachments"]["file"]["supported"])
             self.assertTrue(caps["attachments"]["image"]["supported"])
+            self.assertEqual(caps["attachments"]["file"]["max_count"], 5)
+            self.assertEqual(caps["attachments"]["image"]["max_count"], 5)
             self.assertEqual(caps["thinking"]["allowed"], ["default", "on", "off"])
             self.assertEqual(caps["permission"]["allowed"], ["default", "readonly", "edit", "full"])
 
@@ -85,6 +87,17 @@ class TaskContractTests(unittest.TestCase):
         self.assertEqual(plan["extra_args"].count("--attachment"), 2)
         self.assertTrue(Path(plan["staging"]).is_dir())
         self.assertEqual({item["kind"] for item in plan["metadata"]["attachments"]}, {"image", "file"})
+
+    def test_qoder_rejects_more_than_five_attachments_before_staging(self):
+        profile = {
+            "cli": ["qodercli", "-p", "{task}"],
+            "model_arg": "-m",
+            "models": {"default": "dfmodel"},
+        }
+        files = [attachment(f"part-{index}.txt", b"x") for index in range(6)]
+        with self.assertRaisesRegex(ValueError, "at most 5 files"):
+            self.prepare(worker="qoder", profile=profile, attachments=files)
+        self.assertFalse(self.attachments.exists())
 
     def test_codearts_file_attachment_rides_driver_attach_and_images_stay_blocked(self):
         profile = {

@@ -255,7 +255,7 @@ test('Qoder 一键签到会拉取活动并逐个领取（幂等重放不重复�
     assert.equal(res.results.qoder.credits, 100, '只为 CLAIMABLE 活动计数');
     assert.match(res.results.qoder.message, /领取 1 个活动/);
     assert.match(res.results.qoder.message, /1 个今日已领/);
-    assert.ok(calls.some((c) => c.includes('/me/campaigns?forceRefresh=true')), '活动列表必须带 forceRefresh');
+    assert.ok(calls.some((c) => c.includes('/me/campaigns') && !c.includes('forceRefresh')), '活动列表不能带 forceRefresh（会被服务端过滤每日活动行）');
     assert.ok(calls.some((c) => c.startsWith('POST ') && c.includes('/campaigns/c1/claim')));
     assert.ok(!calls.some((c) => c.includes('/campaigns/c2/claim')), '已领取的活动不再请求');
     assert.ok(!calls.some((c) => c.includes('/campaigns/v1/claim')), 'VIEW_DETAILS 活动不参与领取');
@@ -296,6 +296,33 @@ test('清空后再清一次是幂等的', async () => {
   const res = await mod.clearCheckinHistory();
   assert.equal(res.ok, true);
   assert.equal(res.removed, 0);
+});
+
+test('跨自然日但 retryAt 仍在未来时，概览保留等待原因和倒计时', async () => {
+  const fixedNow = new Date(2026, 10, 2, 0, 0, 1);
+  const retryAt = Math.floor(fixedNow.getTime() / 1000) + 3600;
+  await writeFile(process.env.AGENTHUB_CHECKIN_STATE, JSON.stringify({
+    autoCheckin: true,
+    platforms: {
+      qoder: {
+        lastDate: '2026-11-01', status: 'pending', pendingReason: 'awaiting_window',
+        message: '下一期 10:00 开启', retryAt, accounts: [],
+      },
+    },
+    history: [],
+  }), 'utf-8');
+  const originalNow = Date.now;
+  Date.now = () => fixedNow.getTime();
+  let overview;
+  try {
+    overview = await mod.getCheckinOverview();
+  } finally {
+    Date.now = originalNow;
+  }
+  assert.equal(overview.platforms.qoder.status, 'pending');
+  assert.equal(overview.platforms.qoder.pendingReason, 'awaiting_window');
+  assert.equal(overview.platforms.qoder.retryAt, retryAt);
+  assert.equal(overview.platforms.qoder.message, '下一期 10:00 开启');
 });
 
 test.after(async () => {

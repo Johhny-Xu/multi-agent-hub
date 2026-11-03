@@ -54,25 +54,17 @@ def qoder_logged_in(check):
 def minimax_logged_in():
     """MiniMax Code CLI（mcode）没有 `auth status` 子命令。
 
-    登录态落在 `~/.minimax/auth/<env>/<region>/mcode-public/auth-state.json`，其中
-    `status` 为 `authenticated` 才算登录（登出后 auth.json 还在，但 status 会翻转）。
-    目录带 region 一层，因此按 `auth/*/*/mcode-public/` 扫。只读 status 字段，
-    不解析、不返回任何 token。
+    登录态落在 `~/.minimax/auth/<env>/<region>/mcode-public/auth.json`，只看
+    `auth-state.json` 的 status 会导致过期 token 仍被判「已登录」（线上就是这样
+    报就绪、实际 exec 却要求 Sign in）。现在同时要求存在未过期的 access token；
+    续期由 minimax_auth 的保活线程负责。只读，不解析或返回任何 token。
     """
     root = Path(os.path.expanduser(os.path.expandvars(os.environ.get("MCODE_AUTH_DIR") or "~/.minimax/auth")))
     try:
-        candidates = sorted(root.glob("*/*/mcode-public/auth-state.json"))
-    except OSError:
+        from minimax_auth import has_valid_login
+        return has_valid_login(root=root)
+    except Exception:
         return False
-    for candidate in candidates:
-        try:
-            with candidate.open("r", encoding="utf-8") as handle:
-                state = json.load(handle)
-        except (OSError, ValueError):
-            continue
-        if str(state.get("status") or "").strip().lower() == "authenticated":
-            return True
-    return False
 
 
 def safe_url(value, worker):

@@ -11,6 +11,7 @@
 """
 
 import json
+import math
 import os
 import random
 import secrets
@@ -32,7 +33,7 @@ from availability_store import local_availability, recorded as recorded_failures
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "1.0.19"
+SERVER_VERSION = "1.0.20"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -150,6 +151,24 @@ def _seconds_ago(value, now):
     return max(0.0, round(now - value, 1))
 
 
+def _liveness_active_output_seconds():
+    """活跃窗口（秒）：这段时间内有输出就算 working。可用 env 覆盖。
+
+    默认 60 秒；设 AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S 可在 [5, 600] 内调整。
+    窗口越小，长时间没输出的任务越早被判成 alive_waiting（前端显示「思考中」）。
+    """
+    raw = os.environ.get("AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S", "")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 60.0
+    if not math.isfinite(value):
+        return 60.0
+    if value < 5 or value > 600:
+        return 60.0
+    return value
+
+
 def _task_liveness(data, *, probe=True):
     """Answer "is this worker actually working?" without relying on wall clock.
 
@@ -243,7 +262,7 @@ def _task_liveness(data, *, probe=True):
         action = "inspect_delivery"
         guidance = "worker 已退出但结果仍是 running：先查 async_worker 日志和结果目录，不要重新派发。"
     elif alive is True:
-        recent_output = output_age is not None and output_age <= 60
+        recent_output = output_age is not None and output_age <= _liveness_active_output_seconds()
         cpu_growing = cpu_delta is not None and cpu_delta >= 0.05
         output_growing = output_delta is not None and output_delta > 0
         if cpu_growing or output_growing or (recent_output and output_bytes > 0):
@@ -253,7 +272,7 @@ def _task_liveness(data, *, probe=True):
         elif heartbeat_age is not None and heartbeat_age <= 120:
             verdict = "alive_waiting"
             action = "wait"
-            guidance = ("进程仍存活，但最近没有输出/CPU 增量（模型思考、排队或等待上游）。"
+            guidance = (f"进程仍存活，但最近没有输出/CPU 增量（模型思考、排队或等待上游；活跃窗口 {int(_liveness_active_output_seconds())}s）。"
                         + ("" if cpu_delta is not None else " 首次采样无增量基线，10 秒后复查。"))
         else:
             verdict = "alive_quiet"
@@ -1595,7 +1614,7 @@ class HubHTTPServer(ThreadingHTTPServer):
         super().server_bind()
 
 
-def run_http(port: int, host: str = "127.0.0.1"):
+def run_http(port: int, host: str = "127.0.0.1", minimax_keepalive: bool = False):
     try:
         sys.stderr.reconfigure(line_buffering=True)  # 保证强杀进程后日志已落盘
     except (AttributeError, OSError):
@@ -1605,6 +1624,9 @@ def run_http(port: int, host: str = "127.0.0.1"):
     server = HubHTTPServer((host, port), _HTTPHandler)
     from discovery import start_discovery
     discovery = start_discovery(host, server.server_address[1], bool(HUB_TOKEN))
+    if minimax_keepalive:
+        from minimax_auth import start_keepalive
+        start_keepalive()
     auth = "已启用 token 鉴权" if HUB_TOKEN else "未鉴权 (仅限本机回环!)"
     sys.stderr.write("[agent-hub] HTTP MCP 端点: http://%s:%d/mcp (%s)\n" % (host, server.server_address[1], auth))
     sys.stderr.write("[agent-hub] 状态目录: %s\n" % STATE)
@@ -1613,6 +1635,9 @@ def run_http(port: int, host: str = "127.0.0.1"):
     except KeyboardInterrupt:
         pass
     finally:
+        if minimax_keepalive:
+            from minimax_auth import stop_keepalive
+            stop_keepalive()
         if discovery is not None:
             discovery.close()
         from login_manager import MANAGER
@@ -1626,7 +1651,7 @@ def main():
         i = argv.index("--http")
         port = int(argv[i + 1]) if i + 1 < len(argv) and argv[i + 1].isdigit() else int(os.environ.get("AGENTHUB_PORT", "8765"))
         host = argv[argv.index("--host") + 1] if "--host" in argv else os.environ.get("AGENTHUB_HOST", "127.0.0.1")
-        run_http(port, host)
+        run_http(port, host, minimax_keepalive=True)
     else:
         run_stdio()
 

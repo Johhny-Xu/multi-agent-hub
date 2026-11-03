@@ -44,6 +44,8 @@ const ALIASES = {
   ca: "codearts", codearts: "codearts", "huawei-codearts": "codearts",
   cline: "cline",
   oc: "opencode", opencode: "opencode",
+  qd: "qoder", qoder: "qoder",
+  qdcn: "qoder-cn", qodercn: "qoder-cn", "qoder-cn": "qoder-cn",
 };
 
 export const CANONICAL = [...new Set(Object.values(ALIASES))].sort();

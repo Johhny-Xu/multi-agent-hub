@@ -1601,10 +1601,10 @@
       } else if (status === 'already') {
         el.classList.add('status-already');
         el.textContent = text || '今日已签';
-      } else if (status === 'pending') {
+      } else if (status === 'pending' || status === 'partial') {
         el.classList.add('status-pending');
         el.textContent = text || '今日待打卡';
-      } else if (status === 'failed') {
+      } else if (status === 'failed' || status === 'restricted' || status === 'expired') {
         el.classList.add('status-failed');
         el.textContent = text || '签到异常';
       } else {
@@ -1648,9 +1648,35 @@
       }).join('');
     };
 
+    // ---------------------------------------------------------------- 签到卡片状态
+    // 状态 → UI 的判定抽到独立文件 console/client/checkin-card-state.js，
+    // 浏览器与 Node 单测共用同一份实现，避免前后端口径漂移。
+    // 以前这段散在每张卡片里、只认 success/already，
+    // 于是 pending（等开窗 / 等额度冷却 / 上游活动没开）一律渲染成可点的「立即签到」，
+    // 用户点下去状态不变、界面只是重渲染同一份数据 → 体感就是「点了没用」。
+    const CardState = (typeof window !== 'undefined' && window.CheckinCardState) || null;
+    if (!CardState) console.error('[qa-grid] 未加载 checkin-card-state.js，签到卡片状态会退化');
+    const checkinCardState = CardState
+      ? CardState.cardState
+      : () => ({ badge: '今日待打卡', btn: '立即签到', clickable: true, tip: '' });
+    const checkinVerdictText = CardState
+      ? CardState.verdictText
+      : (r) => String((r && r.status) || '');
+    const parseRunResponse = CardState
+      ? CardState.parseRunResponse
+      : async (res) => {
+        const json = await res.json();
+        if (!res.ok || json?.ok !== true) throw new Error(json?.error || `HTTP ${res.status}`);
+        return json;
+      };
+    const allCheckinSummary = CardState
+      ? CardState.allCheckinSummary
+      : () => ({ ok: false, text: '未取得平台状态', title: '无法确认签到结果', still: [] });
+    const CHECKIN_BADGE_IDS = CardState ? CardState.CHECKIN_BADGE_IDS : {};
+
     const renderOverview = (data) => {
-      currentCheckinData = data;
       if (!data || !data.platforms) return;
+      currentCheckinData = data;
 
       if (autoCheckbox) {
         autoCheckbox.checked = data.autoCheckin !== false;
@@ -1660,8 +1686,7 @@
 
       // 1. WorkBuddy
       if (p.workbuddy) {
-        const isSigned = p.workbuddy.status === 'success' || p.workbuddy.status === 'already';
-        updateBadge('badge-wb', p.workbuddy.status, p.workbuddy.status === 'success' ? '今日已签到' : (p.workbuddy.status === 'already' ? '今日已签' : (p.workbuddy.status === 'pending' ? '今日待打卡' : (p.workbuddy.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-wb');
         if (credEl) credEl.textContent = credentialText(p.workbuddy);
         const msgEl = document.getElementById('msg-wb');
@@ -1669,17 +1694,11 @@
         const rewEl = document.getElementById('reward-wb');
         if (rewEl) rewEl.textContent = p.workbuddy.credits ? `${p.workbuddy.credits}${p.workbuddy.consecutiveDays ? ` (连签${p.workbuddy.consecutiveDays}天)` : ''}` : '-';
         renderAccountRows('accts-wb', p.workbuddy.accounts);
-        const btnWb = document.getElementById('btn-run-wb');
-        if (btnWb) {
-          btnWb.disabled = isSigned;
-          btnWb.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 1.5 CodeBuddy 国际版
       if (p.codebuddy) {
-        const isSigned = p.codebuddy.status === 'success' || p.codebuddy.status === 'already';
-        updateBadge('badge-cb', p.codebuddy.status, p.codebuddy.status === 'success' ? '今日已签到' : (p.codebuddy.status === 'already' ? '今日已签' : (p.codebuddy.status === 'pending' ? '今日待打卡' : (p.codebuddy.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-cb');
         if (credEl) credEl.textContent = credentialText(p.codebuddy);
         const msgEl = document.getElementById('msg-cb');
@@ -1687,17 +1706,11 @@
         const rewEl = document.getElementById('reward-cb');
         if (rewEl) rewEl.textContent = p.codebuddy.credits ? `${p.codebuddy.credits}${p.codebuddy.consecutiveDays ? ` (连签${p.codebuddy.consecutiveDays}天)` : ''}` : '-';
         renderAccountRows('accts-cb', p.codebuddy.accounts);
-        const btnCb = document.getElementById('btn-run-cb');
-        if (btnCb) {
-          btnCb.disabled = isSigned;
-          btnCb.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 2. Trae (免客户端 / CDP直连)
       if (p.traecode) {
-        const isSigned = p.traecode.status === 'success' || p.traecode.status === 'already';
-        updateBadge('badge-trae', p.traecode.status, p.traecode.status === 'success' ? '今日已签到' : (p.traecode.status === 'already' ? '今日已签' : (p.traecode.status === 'pending' ? '今日待打卡' : (p.traecode.status === 'failed' ? '凭据过期/异常' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-trae');
         if (credEl) credEl.textContent = credentialText(p.traecode);
         const msgEl = document.getElementById('msg-trae');
@@ -1705,17 +1718,11 @@
         const rewEl = document.getElementById('reward-trae');
         if (rewEl) rewEl.textContent = p.traecode.credits ? `${p.traecode.credits}${p.traecode.consecutiveDays ? ` (连签${p.traecode.consecutiveDays}天)` : ''}` : '-';
         renderAccountRows('accts-trae', p.traecode.accounts);
-        const btnTrae = document.getElementById('btn-run-trae');
-        if (btnTrae) {
-          btnTrae.disabled = isSigned;
-          btnTrae.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 3. CodeArts
       if (p.codearts) {
-        const isSigned = p.codearts.status === 'success' || p.codearts.status === 'already';
-        updateBadge('badge-ca', p.codearts.status, p.codearts.status === 'success' ? '今日已签到' : (p.codearts.status === 'already' ? '今日已签' : (p.codearts.status === 'pending' ? '今日待打卡' : (p.codearts.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-ca');
         if (credEl) credEl.textContent = credentialText(p.codearts);
         const msgEl = document.getElementById('msg-ca');
@@ -1723,17 +1730,11 @@
         const rewEl = document.getElementById('reward-ca');
         if (rewEl) rewEl.textContent = p.codearts.credits ? `${p.codearts.credits}` : '-';
         renderAccountRows('accts-ca', p.codearts.accounts);
-        const btnCa = document.getElementById('btn-run-ca');
-        if (btnCa) {
-          btnCa.disabled = isSigned;
-          btnCa.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 4. Qoder (国际版)
       if (p.qoder) {
-        const isSigned = p.qoder.status === 'success' || p.qoder.status === 'already';
-        updateBadge('badge-qd', p.qoder.status, p.qoder.status === 'success' ? '今日已领取' : (p.qoder.status === 'already' ? '今日已签' : (p.qoder.status === 'pending' ? '今日待打卡' : (p.qoder.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-qd');
         if (credEl) credEl.textContent = credentialText(p.qoder);
         const msgEl = document.getElementById('msg-qd');
@@ -1741,18 +1742,12 @@
         const rewEl = document.getElementById('reward-qd');
         if (rewEl) rewEl.textContent = p.qoder.credits ? `${p.qoder.credits} Credits` : '-';
         renderAccountRows('accts-qd', p.qoder.accounts);
-        const btnQd = document.getElementById('btn-run-qd');
-        if (btnQd) {
-          btnQd.disabled = isSigned;
-          btnQd.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 5. Qoder CN (国内版)
       if (p['qoder-cn']) {
         const qdcn = p['qoder-cn'];
-        const isSigned = qdcn.status === 'success' || qdcn.status === 'already';
-        updateBadge('badge-qdcn', qdcn.status, qdcn.status === 'success' ? '今日已领取' : (qdcn.status === 'already' ? '今日已签' : (qdcn.status === 'pending' ? '今日待打卡' : (qdcn.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-qdcn');
         if (credEl) credEl.textContent = credentialText(qdcn);
         const msgEl = document.getElementById('msg-qdcn');
@@ -1760,18 +1755,12 @@
         const rewEl = document.getElementById('reward-qdcn');
         if (rewEl) rewEl.textContent = qdcn.credits ? `${qdcn.credits} Credits` : '-';
         renderAccountRows('accts-qdcn', qdcn.accounts);
-        const btnQdcn = document.getElementById('btn-run-qdcn');
-        if (btnQdcn) {
-          btnQdcn.disabled = isSigned;
-          btnQdcn.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 6. MiniMax Code（海螺 AI / mcode）
       if (p.minimaxcode) {
         const mm = p.minimaxcode;
-        const isSigned = mm.status === 'success' || mm.status === 'already';
-        updateBadge('badge-mm', mm.status, mm.status === 'success' ? '今日已领取' : (mm.status === 'already' ? '今日已签' : (mm.status === 'pending' ? '今日待打卡' : (mm.status === 'failed' ? '签到失败' : '未关联凭据'))));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-mm');
         if (credEl) credEl.textContent = credentialText(mm);
         const msgEl = document.getElementById('msg-mm');
@@ -1779,18 +1768,12 @@
         const rewEl = document.getElementById('reward-mm');
         if (rewEl) rewEl.textContent = mm.credits ? `${mm.credits} 积分${mm.consecutiveDays ? ` (连签${mm.consecutiveDays}天)` : ''}` : (mm.consecutiveDays ? `连签${mm.consecutiveDays}天` : '-');
         renderAccountRows('accts-mm', mm.accounts);
-        const btnMm = document.getElementById('btn-run-mm');
-        if (btnMm) {
-          btnMm.disabled = isSigned;
-          btnMm.textContent = isSigned ? '今日已签' : '立即签到';
-        }
       }
 
       // 7. Meoo（秒悟）
       if (p.meoo) {
         const mo = p.meoo;
-        const isSigned = mo.status === 'success' || mo.status === 'already';
-        updateBadge('badge-meoo', mo.status, mo.status === 'success' ? '已登录' : (mo.status === 'already' ? '今日已签' : (mo.status === 'failed' ? '签到失败' : '未关联凭据')));
+        // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-meoo');
         if (credEl) credEl.textContent = credentialText(mo);
         const msgEl = document.getElementById('msg-meoo');
@@ -1798,32 +1781,30 @@
         const rewEl = document.getElementById('reward-meoo');
         if (rewEl) rewEl.textContent = mo.credits ? `${mo.credits} 积分` : '-';
         renderAccountRows('accts-meoo', mo.accounts);
-        const btnMo = document.getElementById('btn-run-meoo');
-        if (btnMo) {
-          btnMo.disabled = isSigned;
-          btnMo.textContent = isSigned ? '登录态正常' : '刷新登录态';
-        }
       }
 
-      // 账号级补签：worker 侧新加的账号当天也必须能签。
-      // 平台级状态是「已签」时旧逻辑会把按钮锁死，于是「上午签完、下午加号」永远补不上。
-      // 只要还有账号没签（pendingAccounts > 0），按钮就保持可用，并直接写明待补个数。
+      // 徽章 + 按钮统一渲染（唯一的状态→UI 判定，见上面的 checkinCardState）。
+      // 旧逻辑把「非 success/already」一律渲染成可点的「立即签到」，
+      // 于是两个国际版在 pending 时永远显示「立即签到」，点了状态也不变 → 看着就是「点了没用」。
       document.querySelectorAll('.btn-do-checkin').forEach((btn) => {
         const key = btn.dataset.platform;
         const info = key ? p[key] : null;
-        if (!info) return;
-        const settled = info.status === 'success' || info.status === 'already';
-        const pending = Number(info.pendingAccounts) || 0;
-        if (!settled) { btn.disabled = false; return; }
-        if (pending > 0) {
-          btn.disabled = false;
-          btn.textContent = key === 'meoo' ? `补签 ${pending} 个账号` : `补签新增账号 ${pending}`;
-          btn.title = `还有 ${pending} 个账号今天没签（多为在 worker 里新加的），点一下补签`;
-        } else {
-          btn.disabled = true;
-          btn.title = '';
-          if (key === 'meoo') btn.textContent = '登录态正常';
+        if (!info || btn._busy) return;
+        const badgeId = CHECKIN_BADGE_IDS[key];
+        if (key === 'meoo') {
+          // meoo 只同步登录态，不是签到平台：保持自己的语义
+          const moOk = info.status === 'success' || info.status === 'already';
+          if (badgeId) updateBadge(badgeId, info.status, moOk ? '登录态正常' : '待刷新');
+          btn.disabled = moOk;
+          btn.textContent = moOk ? '登录态正常' : '刷新登录态';
+          btn.title = moOk ? '' : '登录态异常，点一下重新登录';
+          return;
         }
+        const st = checkinCardState({ ...info, platform: key });
+        if (badgeId) updateBadge(badgeId, info.status, st.badge);
+        btn.disabled = !st.clickable;
+        btn.textContent = st.btn;
+        btn.title = st.tip || '';
       });
 
       // 顶部统计胶囊
@@ -1871,20 +1852,25 @@
     const fetchStatus = async () => {
       try {
         const res = await fetch('/api/checkin/status');
-        if (res.ok) {
-          const json = await res.json();
-          renderOverview(json);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json?.platforms) throw new Error('状态响应缺少 platforms');
+        renderOverview(json);
+        return json;
       } catch (err) {
         console.error('[Checkin] 获取签到状态失败:', err);
+        return null;
       }
     };
 
     // 执行签到
     const executeCheckin = async (platform, btn) => {
+      if (btn?._busy) return null;
       if (btn) {
+        btn._busy = true;
         btn.disabled = true;
         btn.textContent = '签到中...';
+        btn.title = '';
       }
       try {
         const res = await fetch('/api/checkin/run', {
@@ -1892,14 +1878,40 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ platform })
         });
-        const json = await res.json();
-        if (json.ok && json.overview) {
-          renderOverview(json.overview);
+        const json = await parseRunResponse(res);
+        if (btn) btn._busy = false;
+        let overview = null;
+        if (json.overview?.platforms) {
+          overview = json.overview;
+          renderOverview(overview);
+        } else {
+          overview = await fetchStatus();
         }
+        // 必须把「这一次的结果」显式展示出来。
+        // 以前只重渲染 overview：状态没变时界面看起来毫无反应，用户就以为「点了没用」。
+        const r = json.results?.[platform];
+        if (btn && r) {
+          btn.textContent = checkinVerdictText(r);
+          btn.title = r.message || '';
+          if (btn._flashTimer) clearTimeout(btn._flashTimer);
+          btn._flashTimer = setTimeout(() => {
+            btn._flashTimer = null;
+            // 闪示结束回到真实状态（可能已经变成「今日已签」或「待开启」）
+            if (currentCheckinData) renderOverview(currentCheckinData);
+          }, 3000);
+        }
+        return overview;
       } catch (err) {
+        if (btn) btn._busy = false;
+        const overview = await fetchStatus();
+        if (btn && platform !== 'all' && !overview) {
+          btn.disabled = false;
+          btn.textContent = '重试签到';
+        }
         alert('签到请求异常: ' + err.message);
+        return null;
       } finally {
-        if (btn) btn.disabled = false;
+        if (btn) btn._busy = false;
       }
     };
 
@@ -2108,11 +2120,22 @@
     // 一键全签按钮
     if (checkinAllBtn) {
       checkinAllBtn.addEventListener('click', () => {
+        if (checkinAllBtn._flashTimer) clearTimeout(checkinAllBtn._flashTimer);
         checkinAllBtn.disabled = true;
         checkinAllBtn.textContent = '全签中...';
-        executeCheckin('all', checkinAllBtn).finally(() => {
+        executeCheckin('all', checkinAllBtn).then((overview) => {
+          const summary = overview
+            ? allCheckinSummary(overview)
+            : { text: '全签失败，可重试', title: '本次请求未取得有效概览' };
+          checkinAllBtn.textContent = summary.text;
+          checkinAllBtn.title = summary.title;
+        }).finally(() => {
           checkinAllBtn.disabled = false;
-          checkinAllBtn.textContent = '一键全签';
+          checkinAllBtn._flashTimer = setTimeout(() => {
+            checkinAllBtn._flashTimer = null;
+            checkinAllBtn.textContent = '一键全签';
+            checkinAllBtn.title = '';
+          }, 4000);
         });
       });
     }

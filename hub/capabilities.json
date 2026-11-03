@@ -195,6 +195,7 @@
       }
     },
     "attachments": {
+      "max_count": 5,
       "file": {
         "mode": "cli",
         "flag": "--attachment"
@@ -266,6 +267,7 @@
       }
     },
     "attachments": {
+      "max_count": 5,
       "file": {
         "mode": "cli",
         "flag": "--attachment"

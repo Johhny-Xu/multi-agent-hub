@@ -6,7 +6,7 @@
 
 ![multi-agent-hub architecture: any MCP client plugs in, 6 native deep-integration hosts, and a zero-client WebUI — 14 Workers under one scheduler](docs/architecture.en.svg)
 
-**Current version: v1.0.19** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
+**Current version: v1.0.20** · License: [Apache-2.0](LICENSE) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 | Connection Mode | Best For | What You Do |
 | --- | --- | --- |
@@ -74,7 +74,7 @@ cd multi-agent-hub
 **What You See When It Succeeds**
 
 - Open `http://localhost:8890` in your browser to access the three-pane Web console (activity bar and session tree on the left, chat in the center, workbench and 14 Worker status cards on the right).
-- You can also download `agenthub-1.0.19-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
+- You can also download `agenthub-1.0.20-both.zip` from [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases), extract it, and run the same install command. When run from a git checkout, the installer builds a release bundle in a temporary directory automatically.
 - Daily start and stop: `sh start.sh` / `sh stop.sh` (Windows: `start.bat` / `stop.bat`).
 - Want to preview the UI first? Open `demo.html` directly in your browser.
 
@@ -124,7 +124,7 @@ Clone https://github.com/Johhny-Xu/multi-agent-hub.git, read its README.md, and 
   ```
 - **ZCode (IDE / CLI)**
   ```text
-  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd --native-hosts zcode (sh install.sh on Linux) to register the plugins/agenthub-workers native plugin (11 external Worker sub-agents plus the MCP bridge) with my ZCode environment, and start the Hub.
+  Clone https://github.com/Johhny-Xu/multi-agent-hub.git, run install.cmd --native-hosts zcode (sh install.sh on Linux) to register the plugins/agenthub-workers native plugin (13 external Worker sub-agents plus the MCP bridge) with my ZCode environment, and start the Hub.
   ```
 - **OpenAI Codex**
   ```text
@@ -202,8 +202,8 @@ To install a plugin for just one host, import the prebuilt package or run the ta
 
 | Native Host | Installation Method | Documentation |
 | --- | --- | --- |
-| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.19.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.19-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **Huawei CodeArts / VS Code** | In the Extensions panel choose "Install from VSIX/CARTS" and import `multi-agent-hub-1.0.20.carts` / `.vsix` / `.cloudide`; or run `.\install.cmd --component plugins --native-hosts codearts --project <workspace path>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | Import `agenthub-workers-1.0.20-minimax-plugin.zip` in the desktop or cloud app; or start the CLI with `mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | Run `.\install.cmd --component plugins --native-hosts zcode`; or set `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` in `zcode.json` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | Run `.\install.cmd --component plugins --native-hosts codex --project <workspace path>` to register a local plugin marketplace and write 11 sub-agents to `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | Run `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`; or run `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -321,7 +321,7 @@ Pass `--with-console` at startup and open `http://localhost:8890` to chat, dispa
 - Top bar (`z-index: 100`) and chat header (`z-index: 50`) maintain independent stacking contexts so dropdowns are never clipped by code blocks or the workbench.
 - Glass mode (`body.has-custom-bg`) applies `backdrop-filter: blur(20px~24px) saturate(180%~190%)`, unifies neutral surfaces to `--gem-bg-card`, and reserves `--gem-surface-high` for hover states and the progress track.
 - Worker accent color `--agent-accent` styles the send button, context progress bar, and `#panel-chat` secondary menus while keeping model names in body color `--gem-text`.
-- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.19` (overridable by backend `snap.version`).
+- Clicking anywhere on the bottom status bar opens the metric picker (model, latency, TPS, tokens, quota); the model drawer provides thinking-level and streaming toggles; the footer displays `v1.0.20` (overridable by backend `snap.version`).
 - Offline demo build: `scripts/build_demo.py` and `scripts/demo_engine.js` generate `demo.html` and `demo/index.html`.
 
 </details>
@@ -378,11 +378,11 @@ Every release includes `SHA256SUMS` checksums and can be downloaded from Release
 
 | File | Target Use Case |
 | --- | --- |
-| `agenthub-1.0.19-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
-| `agenthub-1.0.19-plugins.zip` | Install host plugins on a coding workstation only |
-| `agenthub-1.0.19-hub.zip` | Run the Hub and Workers on a dedicated server only |
-| `agenthub-workers-1.0.19-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
-| `multi-agent-hub-1.0.19.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
+| `agenthub-1.0.20-both.zip` | Run both the Hub and client plugins on the same machine (recommended) |
+| `agenthub-1.0.20-plugins.zip` | Install host plugins on a coding workstation only |
+| `agenthub-1.0.20-hub.zip` | Run the Hub and Workers on a dedicated server only |
+| `agenthub-workers-1.0.20-minimax-plugin.zip` | Import into MiniMax Code desktop or cloud (Plugin V1 format) |
+| `multi-agent-hub-1.0.20.vsix` / `.carts` / `.cloudide` | Install into Huawei CodeArts IDE, VS Code, or compatible cloud / desktop editors |
 
 ### Development and Test Commands
 
@@ -422,7 +422,7 @@ Before submitting patches, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_C
 
 | Version | Highlights |
 | --- | --- |
-| **1.0.19** | Added `hub_task_status` sub-agent liveness checks: inspect PID, full process-tree CPU, output delta, and heartbeat with verdicts (`working`, `alive_waiting`, `worker_exited_result_missing`); CPU growth resets idle budgets to prevent silent long tasks from false-timeout cuts |
+| **1.0.20** | Added `hub_task_status` sub-agent liveness checks: inspect PID, full process-tree CPU, output delta, and heartbeat with verdicts (`working`, `alive_waiting`, `worker_exited_result_missing`); CPU growth resets idle budgets to prevent silent long tasks from false-timeout cuts |
 | **1.0.18** | Long-task timeout replaced by a no-progress budget plus a 6-hour hard cap — no more hard cut at 600 s; partial output is preserved as partial_text on timeout; the mascot collapses immediately when you switch to the settings page while it is falling or struggling; CodeArts CLI upgraded to 26.10.9 with 7 built-in models added and the default changed to DeepSeek-V4.1-Flash (v41f) |
 | **1.0.17** | Qoder's "already claimed today" check now uses the UTC+8 window day (the upstream opens a new window at 10:00 daily, so 00:00–10:00 no longer reports yesterday's claim as today's; a closed window shows as pending and auto-retries); the WebUI hides model selection for GUI-only channels (traecode follows its client and no longer throws UNSUPPORTED); Meoo no longer duplicates answers; console restarts drop from 90 s to 9 s |
 | **1.0.16** | CodeArts check-in recovered (falls back to credit claiming when the benefit-token channel is gone), Qoder International retries against the alternate environment, blank check-in log fixed, draggable mascot; Meoo joins as the 14th Worker |
@@ -450,7 +450,7 @@ See [CHANGELOG.md](CHANGELOG.md) and [Version History](docs/version-history.md) 
 
 - [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons) for the brand SVG icons used in the console and Worker avatars.
 - [TraeClaw](https://github.com/firerlAGI/TraeClaw) for the local bridge and CDP/DOM automation powering the `trae_delegate` channel.
-- [L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily) for the Qoder / Qoder CN daily check-in implementation we ported: the `forceRefresh` live campaign list, the `CLAIM_BENEFIT`-only claim semantics, the token refresh chain, and the device-risk headers (`Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType`) generated from the local UMID component (`runtime-info`). The international daily credits campaign is only issued to requests carrying those headers. Many thanks to the author.
+- [L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily) for the Qoder / Qoder CN daily check-in implementation we ported: the `CLAIM_BENEFIT`-only claim semantics, the region-isolated device identity (runtime env code 3 for the international build, 0 for the China build), the token refresh chain, and the device-risk headers (`Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType`) generated from the local UMID component (`runtime-info`). The international daily credits campaign is only issued to requests carrying those headers. Many thanks to the author.
 - [L0NE-6/Trae-AutoCheckin](https://github.com/L0NE-6/Trae-AutoCheckin) for the Trae daily check-in implementation we ported: the `req_source` request body, the requirement to use the client's real registered device id (`iCubeAuthInfo://icube-dc:`), the status → claim → same-device re-check verification chain, the 9095/9074/1001 semantics, and token refresh through the new `ExchangeToken` endpoint with a refreshToken plus an ECDSA P-256 device proof. Many thanks to the author.
 - [@user_3a370331/totorosir-minimax-checkin](https://skillhub.cn/skills/user_3a370331/totorosir-minimax-checkin) by 龙猫科技说 (longmaoit) for the MiniMax Code (Hailuo AI) daily check-in we ported: the `signin/status` → `signin/claim` flow, the `x-signature` / `yy` signing schemes with their fixed parameter ordering, the day-status and `claim_result` semantics, and refreshing the OAuth token with a refresh token while writing the new credential back to the client's login state. Many thanks to the author.
 - Huawei CodeArts, Google Antigravity, Tencent CodeBuddy, GitHub Copilot, Xiaomi MiMo, MiniMax, ByteDance Trae, Z.ai, opencode, Cline, their official CLIs, and everyone who contributed feedback.

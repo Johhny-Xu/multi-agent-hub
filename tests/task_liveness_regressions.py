@@ -155,5 +155,62 @@ class TaskLivenessTests(unittest.TestCase):
         self.assertEqual(text.strip(), "SILENT_CPU_DONE")
 
 
+class LivenessWindowTests(unittest.TestCase):
+    """活跃窗口可配置：AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S（默认 60，范围 [5,600]）。
+
+    窗口越小，长时间没输出的任务越早被判成 alive_waiting（控制台显示「思考中」），
+    而不是一直挂在 working。
+    """
+
+    ENV_KEY = "AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S"
+
+    def test_default_when_environment_variable_is_unset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(hub._liveness_active_output_seconds(), 60.0)
+
+    def test_valid_values_and_closed_interval_boundaries(self):
+        with patch.dict(os.environ, {}, clear=True):
+            for raw_value, expected in (("20", 20.0), ("5", 5.0), ("600", 600.0)):
+                with self.subTest(raw_value=raw_value):
+                    os.environ[self.ENV_KEY] = raw_value
+                    self.assertEqual(hub._liveness_active_output_seconds(), expected)
+
+    def test_invalid_values_fall_back_to_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            for raw_value in ("abc", "", "3", "601", "nan", "inf"):
+                with self.subTest(raw_value=raw_value):
+                    os.environ[self.ENV_KEY] = raw_value
+                    self.assertEqual(hub._liveness_active_output_seconds(), 60.0)
+
+    def test_task_liveness_uses_configured_window(self):
+        # 30 秒前有过输出、心跳是新的、进程存活：
+        # 窗口 10s → 超出窗口，应判 alive_waiting；窗口 60s → 仍在窗口内，判 working。
+        # 探活结果用桩顶掉，避免依赖真实进程表（Windows/容器里探活不可用会误判）。
+        now = time.time()
+        base = {
+            "status": "running",
+            "pid": 4242,
+            "output_bytes": 100,
+            "last_output_at": now - 30,
+            "heartbeat": now,
+        }
+        quiet = dict(base, ref="test-window-a")
+        active = dict(base, ref="test-window-b")
+        alive_probe = {"alive": True, "cpu_seconds": 5.0, "process_count": 1,
+                       "children": 0, "source": "synthetic"}
+
+        with patch.object(hub, "_safe_process_probe", return_value=alive_probe), \
+                patch.dict(os.environ, {self.ENV_KEY: "10"}, clear=True):
+            self.assertEqual(hub._task_liveness(quiet)["verdict"], "alive_waiting")
+        with patch.object(hub, "_safe_process_probe", return_value=alive_probe), \
+                patch.dict(os.environ, {self.ENV_KEY: "60"}, clear=True):
+            self.assertEqual(hub._task_liveness(active)["verdict"], "working")
+        # guidance 里带上当前窗口，前端 tooltip 直接显示
+        with patch.object(hub, "_safe_process_probe", return_value=alive_probe), \
+                patch.dict(os.environ, {self.ENV_KEY: "10"}, clear=True):
+            live = hub._task_liveness(dict(base, ref="test-window-c"))
+            self.assertIn("活跃窗口 10s", live["guidance"])
+
+
 if __name__ == "__main__":
     unittest.main()

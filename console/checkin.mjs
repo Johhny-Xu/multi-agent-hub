@@ -3,7 +3,7 @@
 // 支持 WorkBuddy、Trae (免客户端直签)、CodeArts (华为云码道) 自动化打卡与多账号福利领取
 // 接口参考开源逆向成果与无客户端实现
 
-import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, stat, rename, copyFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname, resolve, basename } from 'node:path';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
@@ -13,7 +13,7 @@ import { fetchJsonSmart, hwsSdkSignedHeaders as codeArtsSignedHeaders } from './
 import { findCodeBuddySharedAuth, isMutableIdentity } from './accounts.mjs';
 import {
   readQoderCredential, readQoderCredentialAt, refreshQoderToken, persistQoderToken,
-  listQoderCampaigns, claimQoderCampaign, isQoderTokenExpired, qoderRegion, altQoderBaseUrl,
+  listQoderCampaigns, claimQoderCampaign, isQoderTokenExpired, qoderRegion,
 } from './qoder.mjs';
 import { resolveQoderDevice } from './qoder-device.mjs';
 import { checkinTraeAccount, readTraeDesktopAuth, readTraeTokenCache, jwtUid } from './trae-checkin.mjs';
@@ -52,7 +52,7 @@ export const OPEN_SOURCE_PROJECTS = {
     {
       name: 'CodeBuddy 国际版打卡',
       url: 'https://www.codebuddy.ai',
-      description: '腾讯 CodeBuddy 国际版，通过调用模型发送「你好」完成每日活跃打卡。',
+      description: '腾讯 CodeBuddy 国际版，通过活跃上报（/v2/report）+ 网页会话（/console/as/conversations/）完成每日活跃，并以积分到账为准判定成功。',
       tags: ['CodeBuddy', '国际版', '模型调用', '每日打卡']
     },
     {
@@ -118,7 +118,7 @@ export const OPEN_SOURCE_PROJECTS = {
     {
       name: 'L0NE-6/Qoder-Daily',
       url: 'https://github.com/L0NE-6/Qoder-Daily',
-      description: 'Qoder 每日签到脚本（中国版 / 国际版），本项目的签到链路移植自该项目：forceRefresh 实时活动、CLAIM_BENEFIT 定向活动筛选、本机 UMID 组件生成的设备风控头与 token 续期。',
+      description: 'Qoder 每日签到脚本（中国版 / 国际版），本项目的签到链路移植自该项目：CLAIM_BENEFIT 定向活动筛选、本机 UMID 组件生成的设备风控头与 token 续期。',
       tags: ['活动签到', 'UMID 设备风控', '多账号', 'GitHub Actions']
     },
     {
@@ -152,10 +152,12 @@ export const OPEN_SOURCE_PROJECTS = {
 
 /** @returns {Promise<object>} */
 async function loadState() {
+  let raw;
   try {
-    const raw = await readFile(STATE_FILE, 'utf-8');
-    return JSON.parse(raw.replace(/^\uFEFF/, ''));
-  } catch {
+    raw = await readFile(STATE_FILE, 'utf-8');
+  } catch (err) {
+    // 文件不存在 = 首次运行，可以返回默认值；其它读取错误不能静默当成空状态。
+    if (err?.code !== 'ENOENT') throw err;
     return {
       autoCheckin: true,
       autoCheckinTime: '08:30',
@@ -180,13 +182,25 @@ async function loadState() {
       history: []
     };
   }
+  try {
+    return JSON.parse(raw.replace(/^\uFEFF/, ''));
+  } catch (err) {
+    // 半截 JSON 不能当成「没有状态」：那会把所有平台状态和手工 Token 静默清空。
+    // 留一份带时间戳的现场副本，方便人工恢复，也不会被下一次保存覆盖。
+    await copyFile(STATE_FILE, `${STATE_FILE}.corrupt-${Date.now()}`).catch(() => {});
+    throw new Error(`签到状态文件损坏（${STATE_FILE}）：${err.message}`);
+  }
 }
 
 /** @param {object} state */
 async function saveState(state) {
   try {
     await mkdir(dirname(STATE_FILE), { recursive: true });
-    await writeFile(STATE_FILE, JSON.stringify(state, null, 2) + '\n', 'utf-8');
+    // 先写同目录临时文件再原子替换，避免轮询读到半截 JSON；
+    // 临时文件带 pid/时间，多个进程同时写也不会互相截断。
+    const temp = `${STATE_FILE}.tmp-${process.pid}-${Date.now()}`;
+    await writeFile(temp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
+    await rename(temp, STATE_FILE);
   } catch (err) {
     console.error('[Checkin] 保存签到状态失败:', err.message);
   }
@@ -310,6 +324,27 @@ const PLATFORM_WORKERS = {
   minimaxcode: ['minimaxcode'],
   meoo: ['meoo'],
 };
+
+/**
+ * 参与签到的平台总表（唯一事实来源）。
+ *
+ * 自动调度器、「补签」、账号补签三处必须用同一份清单：
+ * 早先自动调度器手写了一份列表，**漏掉了 'codebuddy'（国际版）**，
+ * 结果国际版失败一次后当天再没有重试机会（账号补签只认「从没签过的新账号」，
+ * 失败过的账号不归它管）。
+ */
+export const CHECKIN_PLATFORMS = Object.keys(PLATFORM_WORKERS);
+
+/**
+ * 每个平台每天最多重试多少次（通用 8 次 ≈ 4 小时，够覆盖一次网络抖动）。
+ *
+ * Qoder 需要放宽：它的每日活动行是「窗口内随时可能下发」的，开窗后要一直补拉到窗口关闭，
+ * 一天下来十几次（开窗 1 小时内每 10 分钟 + 之后每小时）。8 次预算会在窗口中途就耗光，
+ * 后面连**下一期开窗**都进不去（实测 2026-11-02 的 retryCount 已经用到 4/8，
+ * 而那一期的窗口 09:59 才关 —— 预算耗光 = 这期 100 Credits 白丢）。
+ */
+export const CHECKIN_RETRY_BUDGET = { qoder: 32, 'qoder-cn': 32 };
+export const retryBudgetFor = (plat) => CHECKIN_RETRY_BUDGET[plat] || 8;
 
 // 各 worker 档案目录里的凭据文件名由 readCredCandidates 的分支决定（拍平存放：auth.info /
 // trae-jwt-token / codearts-auth.env / user / auth.json / meoo-auth.env），这里不再另维护一张表——
@@ -1004,113 +1039,606 @@ export async function checkinWorkBuddy(overrideToken = null) {
   };
 }
 
-/**
- * 解析 CodeBuddy 国际版可执行 CLI 路径
- */
-function resolveCodeBuddyIntlBin() {
-  const cands = [
-    process.env.CODEBUDDY_INTL_BIN,
-    join(HOME, '.local', 'bin', 'codebuddy-intl'),
-    join(HOME, '.npm-global', 'bin', 'codebuddy-intl'),
-    process.env.CODEBUDDY_BIN,
-    join(HOME, '.npm-global', 'bin', 'codebuddy'),
-    join(HOME, '.local', 'bin', 'codebuddy'),
-    '/usr/local/bin/codebuddy-intl',
-    '/usr/local/bin/codebuddy',
-    '/opt/homebrew/bin/codebuddy',
-  ].filter(Boolean);
-  for (const c of cands) {
-    try { if (existsSync(c)) return c; } catch { /* ignore */ }
-  }
-  return process.platform === 'win32' ? 'codebuddy.cmd' : 'codebuddy';
+// ---------------------------------------------------------------- CodeBuddy 国际版：活跃打卡
+//
+// ⚠️ 这一段曾经踩过三个实打实的坑，现在**整条 CLI 路径已经删掉**，原因记在这里免得有人改回去：
+//
+// 1) CLI 的登录态在 **XDG 共享存储** 里（$HOME/.local/share/CodeBuddyExtension/Data/Public/auth/
+//    Tencent-Cloud.coding-copilot.info），**不是** CODEBUDDY_CONFIG_DIR/auth.info。
+//    诱饵实测：cfg 里放 A 号、共享存储放 B 号，CLI 认的是 B 号。
+//
+// 2) 走 ~/.local/bin/codebuddy-intl 包装器 = 永远用默认账号（AC_intl_dir=$HOME/.codebuddy）。
+//    旧实现正是这样，于是「henrybaker 档案」那一行照样报签到成功，实际打的却是 johhny.xks，
+//    另一个账号的活跃根本没记上——本地假成功，上游没生效。
+//
+// 3) 就算绕开包装器、自搭沙箱，「调模型发你好」也只是**保活对话**：上游的「当日活跃」计数
+//    根本不认它（issue #277），所以它永远换不到积分。
+//
+// 现在国际版改走**上游真正认的那两发**（活跃上报 + 网页会话），全程用该账号自己的
+// Bearer token，账号归属由构造保证，不再需要靠 CLI 日志反查「这一枪打到了谁」。
+
+/** 读 auth.info 里的账号标识：uid（= JWT sub）与邮箱（= account.nickname） */
+async function readCodeBuddyAccountInfo(file) {
+  if (!file) return { uid: '', email: '' };
+  try {
+    const doc = JSON.parse((await readFile(file, 'utf-8')).replace(/^\uFEFF/, ''));
+    const pl = jwtPayload(String(doc?.auth?.accessToken || '')) || {};
+    return {
+      uid: String(doc?.account?.uid || pl.sub || '').trim(),
+      email: String(doc?.account?.nickname || pl.email || pl.preferred_username || '').trim(),
+    };
+  } catch { return { uid: '', email: '' }; }
 }
 
 /**
- * 单个 CodeBuddy 国际版账号打卡（调用模型发「你好」）
+ * 读账号当前的积分/资源快照。
+ *
+ * 活跃成功的唯一依据是**积分到账**：上游会在活跃成功后发一次积分，
+ * 能在插件同一套接口里看到（插件配额面板用的就是它）：
+ *   POST https://www.codebuddy.ai/v2/billing/meter/get-user-resource
+ * 只看「模型有没有回话」或「链路有没有返回 200」都会误判——
+ * 旧实现就是用回话判成功，于是打成别的账号也算成功，而上游根本没给那个号发积分。
  */
-async function checkinCodeBuddyOne(acct) {
-  return new Promise((resolve) => {
-    // 允许通过环境变量或测试钩子模拟打卡成功
-    if (process.env.CODEBUDDY_CHECKIN_MOCK_SUCCESS === '1') {
-      return resolve({
-        ok: true,
-        status: 'success',
-        message: '签到成功（已调用模型发你好：你好！很高兴为您服务。）',
-        credits: '活跃+1',
-        consecutiveDays: 0,
-      });
-    }
-
-    const bin = resolveCodeBuddyIntlBin();
-    const useShell = process.platform === 'win32';
-    const isIntlWrapper = typeof bin === 'string' && bin.includes('codebuddy-intl');
-    const args = ['-p', '你好', '--permission-mode', 'bypassPermissions', '--model', 'deepseek-v4.1-flash'];
-
-    const env = {
-      ...process.env,
-      DISABLE_AUTOUPDATER: '1',
-      NO_COLOR: '1',
-    };
-    if (!isIntlWrapper) {
-      env.CODEBUDDY_INTERNET_ENVIRONMENT = 'external';
-      if (acct?.file) {
-        env.CODEBUDDY_CONFIG_DIR = dirname(acct.file);
-      } else {
-        env.CODEBUDDY_CONFIG_DIR = join(HOME, '.codebuddy');
-      }
-    }
-
-    execFile(bin, args, { env, timeout: 60_000, windowsHide: true, shell: useShell, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const out = String(stdout || '').trim();
-      const errOut = String(stderr || '').trim();
-      const missing = err?.code === 'ENOENT';
-      const clean = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trim();
-      const isAuthErr = /401\s+Authentication\s+required/i.test(clean) || /401\s+Authentication\s+required/i.test(errOut);
-
-      if (missing) {
-        return resolve({
-          ok: false,
-          status: 'failed',
-          message: '未检测到 codebuddy CLI 命令，请确保已安装 @tencent-ai/codebuddy-code 或配置 codebuddy-intl 路径',
-          credits: 0,
-          consecutiveDays: 0,
-        });
-      }
-
-      if (isAuthErr) {
-        return resolve({
-          ok: false,
-          status: 'expired',
-          message: '登录态已失效，请在客户端或 CLI 重新登录 CodeBuddy 国际版',
-          credits: 0,
-          consecutiveDays: 0,
-        });
-      }
-
-      if (!err && clean.length > 0) {
-        const snippet = clean.split('\n')[0].slice(0, 40);
-        return resolve({
-          ok: true,
-          status: 'success',
-          message: `签到成功（模型响应：${snippet}）`,
-          credits: '活跃+1',
-          consecutiveDays: 0,
-        });
-      }
-
-      return resolve({
-        ok: false,
-        status: 'failed',
-        message: `模型调用返回异常 [exit=${err?.code ?? 1}]：${clean || errOut || err?.message || '无输出'}`,
-        credits: 0,
-        consecutiveDays: 0,
-      });
+async function fetchCodeBuddyCredits(token, domain = 'www.codebuddy.ai') {
+  if (!token) return null;
+  try {
+    const res = await fetchJsonSmart(`https://${domain}/v2/billing/meter/get-user-resource`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: '{}',
+    }, 15_000);
+    if (!res.ok || res.json?.code !== 0) return null;
+    const data = res.json?.data?.Response?.Data || {};
+    const accounts = Array.isArray(data.Accounts) ? data.Accounts : [];
+    const nowMs = Date.now();
+    // 已彻底过期的包不算（否则「历史包被消耗」会被误读成积分变化）
+    const alive = accounts.filter((a) => {
+      const de = Number(a.DeductionEndTime);
+      return !Number.isFinite(de) || !de || de > nowMs;
     });
+    const packs = alive.map((a) => ({
+      id: String(a.AccountId ?? ''),
+      name: String(a.PackageName || a.SubProductName || ''),
+      size: Number(a.CapacitySize) || 0,
+      remain: Number(a.CapacityRemain) || 0,
+      used: Number(a.CapacityUsed) || 0,
+      created: Number(a.CreateTime) || 0,
+    }));
+    return {
+      count: Number(data.TotalCount) || 0,
+      dosage: Number(data.TotalDosage) || 0,
+      packs,
+      packCount: packs.length,
+      creditsRemain: packs.reduce((s, p) => s + p.remain, 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 积分是否到账：资源向量出现**正向**变化。
+ * 只认增加（新包 / 额度变大 / 总量上升 / 剩余积分变多）；
+ * 消耗（额度变小）不算到账。
+ */
+export function codeBuddyCreditsArrived(before, after) {
+  if (!before || !after) return false;
+  if (after.count > before.count) return true;
+  if (after.dosage > before.dosage) return true;
+  if (after.creditsRemain > before.creditsRemain) return true;
+  const beforeIds = new Set(before.packs.map((p) => p.id));
+  if (after.packs.some((p) => p.id && !beforeIds.has(p.id))) return true;
+  const old = new Map(before.packs.map((p) => [p.id, p]));
+  return after.packs.some((p) => {
+    const o = old.get(p.id);
+    return !!o && (p.remain > o.remain || p.size > o.size);
   });
 }
 
+/** 用户口径：5 分钟内积分没到账，就当活跃没成功 */
+const CODEBUDDY_CREDIT_WAIT_MS = 5 * 60 * 1000;
+const CODEBUDDY_CREDIT_POLL_MS = 15 * 1000;
+
+// ---------------------------------------------------------------- CodeBuddy 国际版：活跃链路
+//
+// 参考实现：https://github.com/L0NE-6/WorkBuddy-Daily（workbuddy_intl_daily.py，v3.9 起对齐上游 3.0.4–3.0.8）
+//
+// 国际版的「每日活跃」**不是**调模型换积分，而是一组事件上报：
+//   1) POST /billing/meter/checkin-activity-status   探测签到活动是否开放、今天是否已领
+//      ⚠️ 这个端点**没有 /v2 前缀**。旧的 /v2/billing/meter/checkin-status 是废弃口径，
+//      恒返回 active=false / 全 0 积分，拿它判断会让「活动其实开着」也被误判成关闭。
+//   2) POST /v2/billing/meter/daily-checkin           活动开放且今日未领时领取
+//   3) POST /v2/report                                 活跃上报（chat_request_send）→ 点亮成长中心连登
+//      GET  /activity/growth/streak                    回读连登天数
+//   4) POST /console/as/conversations/                 网页会话 → 上游「当日活跃」计数只认这一发
+//      （issue #277：桌面端对话与 /v2/report 都不进这个计数）
+//   5) POST /v2/chat/completions                       保活对话（只维持「账号有调用」，**不算**当日活跃）
+//
+// 上游口径（v3.0.8）：活跃上报或网页会话任一成功即算当日活跃完成，积分由上游异步发放。
+// 本实现仍以**积分到账**为唯一成功判据（用户口径：5 分钟内没到账 = 活跃没成功）。
+
+const CODEBUDDY_INTL_UA = 'WorkBuddy/5.5.2 WorkBuddy AI/5.5.2 CLI/2.137.1';
+const CODEBUDDY_CHAT_UA = 'WorkBuddy/5.8.4 workbuddy-ai/5.8.4 CLI/2.161.0';
+const CODEBUDDY_WEB_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+  + '(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+/** 保活 / 网页会话共用的免费模型链（可用 CODEBUDDY_ACTIVITY_MODELS 覆盖） */
+const CODEBUDDY_ACTIVITY_MODELS = (process.env.CODEBUDDY_ACTIVITY_MODELS
+  || 'deepseek-v4.1-flash,hy3,hy4-preview,hy4-preview-f')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
+/** 国际版通用请求头族（对齐官方客户端 5.5.2） */
+function codeBuddyIntlHeaders(token, uid = '', extra = {}) {
+  const h = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    'User-Agent': CODEBUDDY_INTL_UA,
+    'X-IDE-Type': 'WorkBuddy',
+    'X-IDE-Name': 'WorkBuddy AI',
+    'X-IDE-Version': '5.5.2',
+    'X-Product': 'WorkBuddy AI',
+  };
+  if (uid) h['X-User-Id'] = uid;
+  return { ...h, ...extra };
+}
+
 /**
- * 执行 CodeBuddy 国际版签到（通过调用模型发「你好」完成活跃打卡）
+ * 国际版签到活动状态（正确端点：/billing/meter/checkin-activity-status，无 /v2 前缀）。
+ * 字段：active=活动是否开放、today_checked_in=今天是否已领、
+ *       daily_credit/today_credit=每日与今日的奖励额度、total_credits=活动累计发放、streak_days=活动连签。
+ */
+async function fetchCodeBuddyActivityStatus(token, domain = 'www.codebuddy.ai', uid = '') {
+  if (!token) return null;
+  try {
+    const res = await fetchJsonSmart(`https://${domain}/billing/meter/checkin-activity-status`, {
+      method: 'POST',
+      headers: codeBuddyIntlHeaders(token, uid),
+      body: '{}',
+    }, 15_000);
+    if (!res.ok || res.json?.code !== 0) return null;
+    const d = res.json?.data || {};
+    return {
+      active: !!d.active,
+      todayCheckedIn: !!d.today_checked_in,
+      dailyCredit: Number(d.daily_credit) || 0,
+      todayCredit: Number(d.today_credit) || 0,
+      totalCredits: Number(d.total_credits) || 0,
+      streakDays: Number(d.streak_days) || 0,
+      isStreakDay: !!d.is_streak_day,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 账号级风控：11140 / request illegal（国际版命中后要停掉该账号本轮） */
+export function isCodeBuddyAccountRestricted(status, payload) {
+  const code = payload?.code;
+  if (code === 11140 || code === '11140') return true;
+  const blob = JSON.stringify(payload ?? '').toLowerCase();
+  const markers = ['11140', 'account restricted', 'request illegal', '账号受限', '账号被限制', '账户受限'];
+  return Number(status) === 403 && markers.some((m) => blob.includes(m));
+}
+
+/** 活跃上报事件（chat_request_send，官方客户端同形状；userId 必填，缺了会被上游静默丢弃） */
+export function buildCodeBuddyActivityEvent(uid) {
+  const nowMs = Date.now();
+  const cid = `wbintl-${randomUUID().replace(/-/g, '')}`;
+  return {
+    eventCode: 'chat_request_send',
+    timestamp: nowMs,
+    reportDelay: 0,
+    mode: 'craft',
+    conversationId: cid,
+    requestId: cid,
+    inputLength: 12,
+    requestModelId: 'deepseek-v4.1-flash',
+    requestModelName: 'DeepSeek V4.1 Flash',
+    isPlan: false,
+    isAutoExecuteTerminal: false,
+    isAutoModify: false,
+    codebaseEnable: false,
+    maxToken: 0,
+    maxSteps: 0,
+    temperature: 0,
+    maxRetries: 0,
+    mentionContexts: [],
+    knowledgeId: [],
+    knowledgeName: [],
+    codebaseId: '',
+    mentionContextCount: 0,
+    command: '',
+    expertId: '',
+    recommendId: '',
+    skillId: '',
+    skillCount: 0,
+    totalCount: 0,
+    fileUri: '',
+    presentAt: nowMs,
+    traceId: '',
+    rootRequestId: cid,
+    parentConversationId: cid,
+    agentName: 'default',
+    agentType: 'conversation',
+    userId: String(uid || ''),
+  };
+}
+
+/** 回读成长中心连登天数 */
+async function fetchCodeBuddyStreakDays(token, uid, domain = 'www.codebuddy.ai') {
+  try {
+    const res = await fetchJsonSmart(`https://${domain}/activity/growth/streak`, {
+      method: 'GET',
+      headers: codeBuddyIntlHeaders(token, uid),
+    }, 20_000);
+    if (!res.ok || res.json?.code !== 0) return null;
+    const days = Number(res.json?.data?.streak?.days);
+    return Number.isFinite(days) ? days : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 活跃上报（/v2/report）：点亮成长中心「连登」的唯一通道 */
+async function reportCodeBuddyActivity(token, uid, domain = 'www.codebuddy.ai') {
+  if (!uid) return { ok: false, note: '缺少账号 uid，无法上报活跃' };
+  try {
+    const res = await fetchJsonSmart(`https://${domain}/v2/report`, {
+      method: 'POST',
+      headers: codeBuddyIntlHeaders(token, uid),
+      body: JSON.stringify([buildCodeBuddyActivityEvent(uid)]),
+    }, 25_000);
+    const json = res.json || {};
+    if (!res.ok || (json.code !== 0 && json.code !== undefined)) {
+      return {
+        ok: false,
+        note: `HTTP ${res.status} code=${json.code ?? '-'}`,
+        restricted: isCodeBuddyAccountRestricted(res.status, json),
+      };
+    }
+    const days = await fetchCodeBuddyStreakDays(token, uid, domain);
+    return {
+      ok: true,
+      note: days == null ? '活跃上报成功' : `活跃上报成功，连登 ${days} 天`,
+      days,
+    };
+  } catch (err) {
+    return { ok: false, note: `请求异常：${err.message}` };
+  }
+}
+
+/** 网页会话（/console/as/conversations/）：上游「当日活跃」计数只认这一发 */
+async function createCodeBuddyWebConversation(token, uid, domain = 'www.codebuddy.ai') {
+  if (!uid) return { ok: false, note: '缺少账号 uid，无法建网页会话' };
+  let last = '网页会话创建失败（模型链全部未建成）';
+  for (const model of CODEBUDDY_ACTIVITY_MODELS) {
+    const body = {
+      prompt: 'Hi',
+      model,
+      conversationOrigin: 'workbuddy-app',
+      plugins: [{ name: 'weixinpay', marketplace: 'codebuddy-builtin' }],
+    };
+    try {
+      const res = await fetchJsonSmart(`https://${domain}/console/as/conversations/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*',
+          'User-Agent': CODEBUDDY_WEB_UA,
+          Origin: `https://${domain}`,
+          Referer: `https://${domain}/app`,
+          Authorization: `Bearer ${token}`,
+          'X-User-Id': uid,
+        },
+        body: JSON.stringify(body),
+      }, 40_000);
+      const json = res.json || {};
+      const data = json.data && typeof json.data === 'object' ? json.data : {};
+      if (res.ok && (json.code === 0 || json.code === undefined) && data.id) {
+        return { ok: true, note: '网页会话已创建', model, conversationId: String(data.id) };
+      }
+      last = `HTTP ${res.status} code=${json.code ?? '-'}`;
+      if (isCodeBuddyAccountRestricted(res.status, json)) return { ok: false, note: last, restricted: true };
+    } catch (err) {
+      last = `请求异常：${err.message}`;
+    }
+  }
+  return { ok: false, note: last };
+}
+
+/** 对话链路请求头族（对齐国际版客户端 5.8.4；渠道校验 11-128 按这组头识别客户端） */
+function codeBuddyChatHeaders(token, uid, domain = 'www.codebuddy.ai') {
+  const conversationId = randomUUID();
+  const requestId = randomUUID().replace(/-/g, '');
+  const messageId = randomUUID().replace(/-/g, '');
+  const traceId = randomUUID().replace(/-/g, '');
+  const spanId = randomUUID().replace(/-/g, '').slice(0, 16);
+  const h = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+    'User-Agent': CODEBUDDY_CHAT_UA,
+    'X-IDE-Type': 'WorkBuddy',
+    'X-IDE-Name': 'WorkBuddy',
+    'X-IDE-Version': '5.8.4',
+    'X-Product': 'SaaS',
+    'X-Agent-Intent': 'craft',
+    'X-Agent-Purpose': 'conversation',
+    'X-Agent-Type': 'main',
+    'X-Private-Data': 'true',
+    'X-Conversation-ID': conversationId,
+    'X-Conversation-Request-ID': requestId,
+    'X-Root-Request-ID': requestId,
+    'X-Conversation-Message-ID': messageId,
+    'X-Request-ID': messageId,
+    'X-Trace-ID': traceId,
+    traceparent: `00-${traceId}-${spanId}-01`,
+    b3: `${traceId}-${spanId}-1`,
+    'X-B3-TraceId': traceId,
+    'X-B3-SpanId': spanId,
+    'X-B3-Sampled': '1',
+    'Accept-Language': 'en-US',
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-CodeBuddy-Request': '1',
+    Origin: `https://${domain}`,
+    Referer: `https://${domain}/`,
+    'X-Domain': domain,
+    Authorization: `Bearer ${token}`,
+  };
+  if (uid) h['X-User-Id'] = uid;
+  return h;
+}
+
+/**
+ * 保活对话：只维持「账号有调用」。
+ * ⚠️ 上游口径：**只保活对话成功不算当日活跃**（它不进「当日活跃」计数，也不点亮连登）。
+ */
+async function keepaliveCodeBuddyChat(token, uid, domain = 'www.codebuddy.ai') {
+  let last = '未知错误';
+  for (const model of CODEBUDDY_ACTIVITY_MODELS) {
+    const body = {
+      model,
+      stream: false,
+      max_tokens: 16,
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'hi' },
+      ],
+    };
+    try {
+      const res = await fetchJsonSmart(`https://${domain}/v2/chat/completions`, {
+        method: 'POST',
+        headers: codeBuddyChatHeaders(token, uid, domain),
+        body: JSON.stringify(body),
+      }, 60_000);
+      if (res.ok) return { ok: true, note: `保活成功（${model}）` };
+      if (res.status === 403) {
+        last = 'HTTP 403（模型无权限，非账号风控）';
+        continue;
+      }
+      last = `HTTP ${res.status}`;
+    } catch (err) {
+      last = `请求异常：${err.message}`;
+    }
+  }
+  return { ok: false, note: last };
+}
+
+/**
+ * 国际版官方签到接口（同国内版 daily-checkin）。
+ * 活动未开启时上游返回 code=10001「签到活动未开启或已过期」。
+ */
+async function claimCodeBuddyCheckin(token, domain = 'www.codebuddy.ai') {
+  if (!token) return { ok: false, code: 0, msg: '无凭据' };
+  try {
+    const res = await fetchJsonSmart(`https://${domain}/v2/billing/meter/daily-checkin`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-Domain': 'codebuddy.ai',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CodeBuddy/1.0.0',
+        Accept: 'application/json',
+      },
+      body: '{}',
+    }, 15_000);
+    const json = res.json || {};
+    const data = json?.data || {};
+    const msg = String(json.msg || json.message || '');
+    if (!res.ok || json.code !== 0) {
+      return { ok: false, code: Number(json.code) || res.status, msg: msg || `HTTP ${res.status}`, data };
+    }
+    return {
+      ok: true,
+      code: 0,
+      msg,
+      credit: Number(data.credit ?? data.today_credit ?? 0) || 0,
+      streakDays: Number(data.streak_days) || 0,
+      data,
+    };
+  } catch (err) {
+    return { ok: false, code: -1, msg: `请求异常：${err.message}` };
+  }
+}
+
+/**
+ * 活动是否处于「未开启/已结束」状态（决定要不要白等 5 分钟）。
+ * 口径以**正确端点** checkin-activity-status 的 active 为准；
+ * 官方领取接口的错误码/文案只作补充（10001=未开启或已过期，41000=未开始或已结束）。
+ */
+function codeBuddyCampaignClosed(claim, status) {
+  const code = Number(claim?.code) || 0;
+  if (code === 10001 || code === 41000) return true;
+  const msg = String(claim?.msg || '');
+  if (/未开启|已过期|未开始|已结束/.test(msg)) return true;
+  if (status && status.active === false && !status.todayCheckedIn) return true;
+  return false;
+}
+
+/**
+ * 国际版打卡的**判定**（纯函数，便于单测）。
+ *
+ * 输入：活动状态 + 官方领取结果 + 活跃链路各腿结果 + 积分基线；
+ * 输出：status / message / 是否去等积分。
+ *
+ * 口径（用户）：**积分到账才算成功**，5 分钟内没到账即视为没成功。
+ * 这里只负责「该不该去等积分」——等不等由 actStatus 决定：
+ * 活动压根没开 → 上游没有奖励可发 → 不白等 5 分钟，记 pending。
+ */
+export function decideCodeBuddyOutcome({ actStatus, claim, report, web, keep, creditsBefore } = {}) {
+  const chainOk = !!(report?.ok || web?.ok);
+  const chainNote = [
+    report?.ok
+      ? `活跃上报成功${report.days != null ? `（连登 ${report.days} 天）` : ''}`
+      : `活跃上报未成功（${report?.note || '未知'}）`,
+    web?.ok ? '网页会话已建' : `网页会话未建（${web?.note || '未知'}）`,
+  ].join('，');
+  const keepNote = keep
+    ? (keep.ok ? '保活对话成功（仅维持账号有调用，不计入活跃）' : `保活对话未成功（${keep.note}）`)
+    : '';
+
+  // 上游口径：活跃上报或网页会话任一成功即算当日活跃完成；
+  // 两发都没成功 → 当日活跃没点亮。
+  if (!chainOk) {
+    return {
+      status: 'failed',
+      message: `活跃链路未点亮：${chainNote}${keepNote ? `；${keepNote}` : ''}。当日活跃只认「活跃上报」或「网页会话」，调模型不算`,
+      credits: 0,
+    };
+  }
+
+  const campaignClosed = codeBuddyCampaignClosed(claim, actStatus);
+  if (campaignClosed) {
+    return {
+      status: 'pending',
+      message: `签到活动未开启或已过期（${claim?.msg || 'active=false'}）；活跃链路已完成（${chainNote}），上游积分异步发放，待活动开启后重试`,
+      credits: 0,
+      campaignClosed: true,
+      pendingReason: 'campaign_closed',
+      // 上游活动没开的开启时间未知：约 3 小时后再探一次。
+      // 不这么设的话，8 次/天的重试预算会被「活动没开」这种空转迅速耗光，
+      // 活动万一中途开启反而没机会了（实测已经用到 6/8）。
+      retryAt: Math.floor(Date.now() / 1000) + 3 * 3600,
+    };
+  }
+
+  // 读不到积分基线就没法判断到账，不能自称成功（用户口径：只有积分到账才算）
+  if (!creditsBefore) {
+    return {
+      status: 'pending',
+      message: `活跃链路已完成（${chainNote}）；但积分接口读取失败，本次未能确认到账，稍后重试`,
+      credits: 0,
+      pendingReason: 'await_credits',
+    };
+  }
+
+  return {
+    status: 'success',
+    message: `活跃链路已完成（${chainNote}）${claim?.ok ? '，官方签到已受理' : ''}，待确认积分到账`,
+    credits: '活跃+1',
+    creditsBefore,
+    awaitCredits: true,
+  };
+}
+
+/**
+ * 单个 CodeBuddy 国际版账号打卡。
+ *
+ * 判定口径（用户）：**积分到账才算活跃成功**，5 分钟内没到账即视为没成功。
+ * 触发方式（上游口径，见上方「活跃链路」注释）：
+ *   探测活动 → 活动开着就领官方签到 → 活跃上报(/v2/report) + 网页会话(/console/as/conversations/)
+ *   → 平台层统一轮询 5 分钟看积分到账。
+ *
+ * ⚠️ 旧实现拿「调模型发你好」当活跃触发——那只是**保活对话**，上游的「当日活跃」计数不认它，
+ *    所以永远换不到积分（旧实现还因此报了一堆假成功）。现在换成上游真正认的那两发。
+ */
+async function checkinCodeBuddyOne(acct) {
+  // 允许通过环境变量或测试钩子模拟打卡成功
+  if (process.env.CODEBUDDY_CHECKIN_MOCK_SUCCESS === '1') {
+    return {
+      ok: true,
+      status: 'success',
+      message: '签到成功（测试钩子：活跃上报与网页会话均已成功，积分已到账）',
+      credits: '活跃+1',
+      consecutiveDays: 0,
+    };
+  }
+
+  const expected = await readCodeBuddyAccountInfo(acct.file);
+  const domain = acct.domain || 'www.codebuddy.ai';
+  const token = acct.token || '';
+  // uid = JWT sub：/v2/report 缺 userId 会被上游静默丢弃，网页会话也必须带 X-User-Id
+  const uid = expected.uid || String(jwtPayload(token)?.sub || '');
+
+  // 1) 探测签到活动（正确端点：无 /v2 前缀的 checkin-activity-status）
+  const actStatus = await fetchCodeBuddyActivityStatus(token, domain, uid);
+  if (actStatus?.todayCheckedIn) {
+    return {
+      ok: true,
+      status: 'already',
+      message: `今日已领取（checkin-activity-status today_checked_in=true，活动连签 ${actStatus.streakDays} 天）`,
+      credits: '活跃+1',
+      consecutiveDays: actStatus.streakDays,
+    };
+  }
+
+  // 2) 积分基线要在一切动作**之前**取，后面才有得比
+  const creditsBefore = await fetchCodeBuddyCredits(token, domain);
+
+  // 3) 活动开放且今日未领 → 官方领取（活动关闭时上游没有每日奖励可发，不空打）
+  const claim = actStatus?.active
+    ? await claimCodeBuddyCheckin(token, domain)
+    : { ok: false, code: 0, msg: actStatus ? '活动未开启' : '活动状态读取失败' };
+
+  // 4) 活跃链路：活跃上报 + 网页会话（上游口径：任一成功即算当日活跃完成）
+  const report = await reportCodeBuddyActivity(token, uid, domain);
+  if (report.restricted) {
+    return {
+      ok: false,
+      status: 'restricted',
+      message: '账号受限（上游返回 11140 / request illegal），本轮停止，不续期也不重试',
+      credits: 0,
+      consecutiveDays: 0,
+    };
+  }
+  const web = await createCodeBuddyWebConversation(token, uid, domain);
+  if (web.restricted) {
+    return {
+      ok: false,
+      status: 'restricted',
+      message: '账号受限（上游返回 11140 / request illegal），本轮停止，不续期也不重试',
+      credits: 0,
+      consecutiveDays: 0,
+    };
+  }
+  // 4.5) 网页会话没建起来时，退一步用保活对话维持「账号有调用」
+  //      （⚠️ 上游口径：只保活对话成功**不算**当日活跃，只是别让账号彻底闲置）
+  let keep = null;
+  if (!web.ok) {
+    keep = await keepaliveCodeBuddyChat(token, uid, domain);
+  }
+
+  const outcome = decideCodeBuddyOutcome({ actStatus, claim, report, web, keep, creditsBefore });
+  return {
+    ok: outcome.status === 'success',
+    status: outcome.status,
+    message: outcome.message,
+    credits: outcome.credits,
+    consecutiveDays: 0,
+    // pendingReason / retryAt 必须透传：前端靠它区分「上游活动没开」「等积分到账」，
+    // 调度器靠 retryAt 决定什么时候再来（漏传就退化成笼统的「立即签到」+ 空转重试）。
+    ...(outcome.pendingReason ? { pendingReason: outcome.pendingReason } : {}),
+    ...(outcome.retryAt ? { retryAt: outcome.retryAt } : {}),
+    ...(outcome.campaignClosed ? { campaignClosed: true } : {}),
+    ...(outcome.awaitCredits ? { creditsBefore: outcome.creditsBefore, awaitCredits: true } : {}),
+  };
+}
+
+/**
+ * 执行 CodeBuddy 国际版签到（活跃上报 + 网页会话触发当日活跃，积分到账才算成功）
  */
 export async function checkinCodeBuddy(overrideToken = null) {
   const today = getTodayStr();
@@ -1164,16 +1692,51 @@ export async function checkinCodeBuddy(overrideToken = null) {
     }
   }
 
+  // 活跃成功的唯一依据是**积分到账**（用户口径：5 分钟内没到账 = 没活跃成功）。
+  // 所有账号的模型调用都结束后再统一并行轮询，多个账号共用一个 5 分钟窗口。
+  const pending = results.filter((r) => r.awaitCredits && r.creditsBefore);
+  if (pending.length) {
+    const waitMs = Number(process.env.CODEBUDDY_CREDIT_WAIT_MS) || CODEBUDDY_CREDIT_WAIT_MS;
+    const deadline = Date.now() + waitMs;
+    const settled = new Map(pending.map((r) => [r, { arrived: false, after: null }]));
+    for (;;) {
+      await Promise.all(pending.map(async (r) => {
+        if (settled.get(r).arrived) return;
+        const after = await fetchCodeBuddyCredits(r.token, r.domain || 'www.codebuddy.ai');
+        if (codeBuddyCreditsArrived(r.creditsBefore, after)) settled.set(r, { arrived: true, after });
+      }));
+      if ([...settled.values()].every((s) => s.arrived)) break;
+      const left = deadline - Date.now();
+      if (left <= 0) break;
+      await new Promise((res) => setTimeout(res, Math.min(CODEBUDDY_CREDIT_POLL_MS, left)));
+    }
+    for (const r of pending) {
+      const s = settled.get(r);
+      if (s.arrived) {
+        const delta = s.after && r.creditsBefore ? (s.after.creditsRemain - r.creditsBefore.creditsRemain) : 0;
+        r.ok = true;
+        r.status = 'success';
+        r.message = `活跃成功（积分已到账${delta ? ` +${delta}` : ''}）`;
+      } else {
+        r.ok = false;
+        r.status = 'failed';
+        r.message = `活跃链路已完成，但 ${Math.round(waitMs / 1000)} 秒内积分未到账，活跃未生效`;
+      }
+      delete r.awaitCredits;
+      delete r.creditsBefore;
+    }
+  }
+
   const anySuccess = results.some((r) => r.ok && r.status === 'success');
   const anyAlready = results.some((r) => r.status === 'already');
-  const allExpired = results.length > 0 && results.every((r) => r.status === 'expired');
-
-  let finalStatus = 'failed';
-  if (anySuccess) finalStatus = 'success';
-  else if (anyAlready) finalStatus = 'already';
-  else if (allExpired) finalStatus = 'expired';
+  // 统一聚合口径：以前「有任一成功就整体 success」会把另一个账号的 pending 吃掉，
+  // 现在部分成功一律是 partial，前端据此显示「还差几个号」。
+  const agg = aggregatePlatformStatus(results);
+  const finalStatus = agg.status;
 
   const summaryMsg = results.map((r) => `${r.label}: ${r.message}`).join('；');
+  // pendingReason 透出：前端要能区分「上游活动没开」「等积分到账」「等开窗」「额度冷却」
+  const pendingReason = agg.pendingReason;
 
   return {
     platform: 'codebuddy',
@@ -1182,6 +1745,8 @@ export async function checkinCodeBuddy(overrideToken = null) {
     message: summaryMsg,
     today,
     time,
+    pendingReason,
+    retryAt: agg.retryAt,
     accounts: results.map((r) => ({
       name: r.name,
       display: r.label || r.name,
@@ -1190,6 +1755,7 @@ export async function checkinCodeBuddy(overrideToken = null) {
       message: r.message,
       credits: r.credits || '',
       consecutiveDays: r.consecutiveDays || 0,
+      pendingReason: r.pendingReason || '',
       // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
       // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
       identity: r.identity || '',
@@ -1523,7 +2089,7 @@ export async function checkinCodeArts(overrideToken = null) {
 
 // ---------------------------------------------------------------- Qoder / Qoder CN 活动领取
 // 实现方式移植自 L0NE-6/Qoder-Daily（见 README 致谢）：
-//   1. 活动列表必须带 ?forceRefresh=true，否则吃到缓存、刚开的活动看不到；
+//   1. 活动列表**不能**带 ?forceRefresh=true（带上会被服务端过滤掉每日活动行，列表恒空）；
 //   2. 只认 actionType=CLAIM_BENEFIT 的活动，VIEW_DETAILS 这类常驻活动不参与领取；
 //   3. 请求必须带本机 UMID 组件生成的设备风控头，否则国际版每日活动整行不下发。
 
@@ -1569,9 +2135,21 @@ const qoderClaimStatus = (row) => String(row?.claimStatus || row?.claim_status |
 /** 活动是否在有效期内。开源项目 qoder-checkin 就是靠 startAt~endAt 判断「今日已领」，
  *  不加这个判断会把上一期 CLAIMED 的老活动当成今天已领（Qoder CN 报「已签到」但客户端还有领取按钮就是这个原因）。
  *  没有窗口字段时不做限制，避免把正常数据判死。 */
+export function qoderEpoch(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    // 兼容秒级和毫秒级时间戳；上游一旦换成 ISO 字符串，Number() 会得到 NaN，
+    // 旧代码会把它当 0 从而「永远在窗口内」，这里一并归一化。
+    return numeric > 1e12 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
+}
+
 export function qoderInWindow(row, nowSec = Math.floor(Date.now() / 1000)) {
-  const s = Number(row?.startAt ?? row?.start_at ?? 0) || 0;
-  const e = Number(row?.endAt ?? row?.end_at ?? 0) || 0;
+  const s = qoderEpoch(row?.startAt ?? row?.start_at);
+  const e = qoderEpoch(row?.endAt ?? row?.end_at);
   if (!e) return true;
   return s <= nowSec && nowSec < e;
 }
@@ -1586,7 +2164,7 @@ function qoderDayKey(sec) {
 }
 
 export function qoderWindowDay(row) {
-  const s = Number(row?.startAt ?? row?.start_at ?? 0) || 0;
+  const s = qoderEpoch(row?.startAt ?? row?.start_at);
   return s ? qoderDayKey(s) : '';
 }
 
@@ -1614,7 +2192,7 @@ export function qoderTodayWindowStart(nowSec = Math.floor(Date.now() / 1000)) {
 
 /** 当前窗口结束后下一期的开始时间；上游 endAt 是本期最后一分钟，+60s 就是下期 10:00 */
 export function qoderNextWindowStart(row) {
-  const e = Number(row?.endAt ?? row?.end_at ?? 0) || 0;
+  const e = qoderEpoch(row?.endAt ?? row?.end_at);
   return e ? e + 60 : 0;
 }
 
@@ -1628,6 +2206,51 @@ export function qoderPendingWindow(staleClaimed, nowSec = Math.floor(Date.now() 
   if (!nextStart || nowSec >= nextStart || nextStart - nowSec > 12 * 3600) return null;
   const hhmm = new Date((nextStart + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(11, 16);
   return { retryAt: nextStart, message: `上一期已领，今日 ${hhmm}（UTC+8）开新一期；到点会自动重试` };
+}
+
+/** 秒级时间戳 → UTC+8 的 HH:MM（活动窗口的一切时刻都按 UTC+8 表述） */
+export function qoderClock(sec) {
+  return new Date((Number(sec) + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(11, 16);
+}
+
+/** 秒级时间戳 → UTC+8 的 MM-DD HH:MM（窗口跨自然日，要带日期才说得清） */
+export function qoderClockDay(sec) {
+  return new Date((Number(sec) + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(5, 16).replace('T', ' ');
+}
+
+/**
+ * 当前**仍然开放**的活动窗口。
+ * 上游「每日 10:00（UTC+8）刷新」，一期 = [D 10:00, D+1 09:59]，跨自然日：
+ *   - 00:00–09:59 之间开放的是**上一期**（今天 09:59 关闭）
+ *   - 10:00 之后开放的是**本期**（明天 09:59 关闭）
+ * @returns {{start:number, end:number, nextStart:number}} 秒级时间戳
+ */
+export function qoderOpenWindow(nowSec = Math.floor(Date.now() / 1000)) {
+  const todayOpen = qoderTodayWindowStart(nowSec);
+  if (nowSec < todayOpen) {
+    // 上一期还开着：今天 09:59 关闭，下一期今天 10:00 开
+    return { start: qoderTodayWindowStart(nowSec - 86400), end: todayOpen - 60, nextStart: todayOpen };
+  }
+  return { start: todayOpen, end: todayOpen + 86400 - 60, nextStart: todayOpen + 86400 };
+}
+
+/**
+ * 窗口内的补拉节奏。
+ *   - 开窗后 1 小时内每 10 分钟一次（参考实现 v1.0.12：10 分钟 × 6 次补拉）
+ *   - 之后每小时一次，一直补到窗口关闭前 5 分钟
+ *   - 窗口即将关闭 → 等下一期开窗
+ *
+ * ⚠️ 关键：不能因为「这会儿没看到活动行」就把重试推到下一期开窗。
+ *   那是丢每日 100 Credits 的真根因：2026-11-01 10:09 活动行还没下发被判 already，
+ *   当天再没重试过（历史里 10:09 → 次日 00:57 整整 14.8 小时零重试），
+ *   整期 100 分作废；同一期在 11-02 00:57 再看就有了，+100 到账。
+ */
+export function qoderPollAt(nowSec, win = qoderOpenWindow(nowSec)) {
+  const fastUntil = win.start + 3600;          // 开窗后 1 小时内密集补拉
+  const step = nowSec < fastUntil ? 600 : 3600;
+  const lastChance = win.end - 300;            // 窗口关闭前 5 分钟是最后一次机会
+  if (nowSec >= lastChance) return win.nextStart;
+  return Math.min(nowSec + step, lastChance);
 }
 
 function qoderResponseMessage(res) {
@@ -1644,24 +2267,103 @@ function qoderBenefit(item) {
   return Number(benefit.amount ?? benefit.value ?? benefit.credits ?? 0) || 0;
 }
 
-/** 领取结果归一化：重放/同人已领都按「今日已领」处理，不重复计数 */
-function qoderClaimOutcome(res) {
+/**
+ * 额度类 403 分流（对齐参考实现 L0NE-6/Qoder-Daily v1.0.11）。
+ *
+ * 上游对「额度耗尽」和「每日计费次数上限」也回 403，与凭证被拒同码不同因：
+ * - 112 / 带 pricingUrl → 额度耗尽，冷却 30 分钟；
+ * - 110 / Billing daily count exceeded → 每日计费上限，冷却到本地零点（封顶 6 小时）。
+ * 这两种**不是**凭证失效：既不能触发续期，也不能报「登录态失效」让用户白登录。
+ */
+export function qoderQuotaCooldown(res) {
+  const raw = `${JSON.stringify(res?.json ?? '')} ${res?.text ?? ''}`.replace(/\\/g, '');
+  if (raw.includes('pricingUrl') || /"code"\s*:\s*"?112\b/.test(raw)) {
+    return { kind: 'exhausted', seconds: 30 * 60 };
+  }
+  if (raw.includes('Billing daily count exceeded') || /"code"\s*:\s*"?110\b/.test(raw)) {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const seconds = Math.max(60, Math.min(6 * 3600, Math.floor((midnight - now.getTime()) / 1000)));
+    return { kind: 'daily', seconds };
+  }
+  return { kind: '', seconds: 0 };
+}
+
+/**
+ * 会话失效判定（对齐参考实现 L0NE-6/Qoder-Daily 的 auth_dead_response）。
+ *
+ * 触发续期的只有两种：
+ * - 普通 401/403（**排除**额度类 112/110 —— 那是额度问题，不是凭证问题）；
+ * - 业务码 `105` / `10019901001`（上游的「会话失效」码）。
+ */
+export function qoderAuthDead(res) {
+  if (res?.status === 401 || res?.status === 403) return !qoderQuotaCooldown(res).kind;
+  const json = res?.json || {};
+  const data = json.data && typeof json.data === 'object' ? json.data : {};
+  const codes = [json.code, json.Code, data.code, data.Code, json.errorCode, data.errorCode]
+    .map((v) => String(v ?? '').trim());
+  return codes.some((c) => c === '105' || c === '10019901001');
+}
+
+/**
+ * 领取结果归一化。
+ *
+ * 判定口径（对齐参考实现 L0NE-6/Qoder-Daily v1.0.6）：
+ * - **只有** `409 + ALREADY_CLAIMED / REPLAYED` 算「今日已领」；
+ * - `BLOCKED` / `SAME_PERSON_ALREADY_CLAIMED` 是**没领到**（同设备别的号领过、风控拦截），
+ *   当成已领会报成功但其实没到账；
+ * - 额度类 403（112/pricingUrl、110）由 qoderQuotaCooldown 单独分流，不算登录失效。
+ */
+export function qoderClaimOutcome(res) {
   const json = res?.json || {};
   const data = json.data && typeof json.data === 'object' ? json.data : json;
   const status = String(data.status || json.status || '').toUpperCase();
   const code = String(data.code || json.code || data.errorCode || json.errorCode || '').toUpperCase();
   const message = qoderResponseMessage(res);
   const replayed = data.replayed === true || json.replayed === true
-    || ['REPLAYED', 'ALREADY_CLAIMED', 'SAME_PERSON_ALREADY_CLAIMED', 'BLOCKED'].includes(status)
-    || ['REPLAYED', 'ALREADY_CLAIMED', 'SAME_PERSON_ALREADY_CLAIMED', 'BLOCKED'].includes(code);
+    || ['REPLAYED', 'ALREADY_CLAIMED'].includes(status)
+    || ['REPLAYED', 'ALREADY_CLAIMED'].includes(code);
+  // BLOCKED / SAME_PERSON_ALREADY_CLAIMED 是「没领到」（同设备别的号领过、风控拦截），
+  // 不能当成「今日已领」——否则会报成功但其实没到账。对齐参考实现 v1.0.6 的判定。
+  const blocked = ['BLOCKED', 'SAME_PERSON_ALREADY_CLAIMED'].includes(status)
+    || ['BLOCKED', 'SAME_PERSON_ALREADY_CLAIMED'].includes(code)
+    || ['REDEMPTION_CODE_OUT_OF_STOCK', 'CAMPAIGN_NOT_ACTIVE', 'ACHIEVEMENT_NOT_COMPLETED',
+      'RISK_BLOCKED', 'RISK_DEPENDENCY_UNAVAILABLE'].includes(code);
   if (res?.status === 401 || res?.status === 403) {
+    // 额度类 403 先分流：它是额度问题，不是登录失效，判 expired 会让用户白登录一次
+    const quota = qoderQuotaCooldown(res);
+    if (quota.kind) {
+      return {
+        status: 'cooldown',
+        kind: quota.kind,
+        message: quota.kind === 'exhausted'
+          ? '额度已耗尽（HTTP 403 / code 112），账号冷却 30 分钟'
+          : '每日计费次数已达上限（HTTP 403 / code 110），账号冷却至零点（最长 6 小时）',
+        cooldownSeconds: quota.seconds,
+      };
+    }
     return { status: 'expired', message: message || '登录态已失效，请重新登录 Qoder CLI' };
   }
   if (res?.status === 404 || res?.status === 405) {
     return { status: 'unsupported', message: message || '该区域暂未开放活动领取接口' };
   }
-  if (replayed || res?.status === 409) {
+  // 只有 409 + ALREADY_CLAIMED/REPLAYED 才算「已领」（参考实现 v1.0.6）
+  if (res?.status === 409 && (replayed || code === 'ALREADY_CLAIMED')) {
     return { status: 'already', message: message || '今日已领取过' };
+  }
+  if (replayed) {
+    return { status: 'already', message: message || '今日已领取过' };
+  }
+  if (blocked) {
+    const map = {
+      SAME_PERSON_ALREADY_CLAIMED: '同一设备身份下的其他账号已领取',
+      REDEMPTION_CODE_OUT_OF_STOCK: '今日名额已发完，等待下一轮',
+      CAMPAIGN_NOT_ACTIVE: '活动尚未开放或已结束',
+      ACHIEVEMENT_NOT_COMPLETED: '活动条件尚未完成',
+      RISK_BLOCKED: '设备风控未通过',
+      RISK_DEPENDENCY_UNAVAILABLE: '设备风控依赖暂不可用',
+    };
+    return { status: 'failed', message: message || map[code] || '领取被阻塞' };
   }
   if (['CLAIMED', 'GRANTED', 'SUCCESS', 'OK'].includes(status) || data.success === true || data.claimed === true) {
     return { status: 'success', message: message || '领取成功' };
@@ -1687,17 +2389,43 @@ async function ensureQoderFresh(acct) {
   return { token: renewed.token, refreshed: true };
 }
 
-async function fetchQoderCampaigns(acct, device = null) {
+/**
+ * 拉一次活动列表，必要时先续期一次。
+ *
+ * 判定顺序（对齐参考实现的 fetch_campaigns / fetch_campaign_rows）：
+ *   1. 额度类 403（112/pricingUrl、110）→ 直接带回冷却，**不续期**；
+ *   2. 会话失效（普通 401/403 或业务码 105 / 10019901001）→ 续期一次并落盘，再取一次；
+ *   3. 其余照原样返回。
+ */
+async function fetchQoderCampaigns(acct, device = null, options = {}) {
   let fresh = await ensureQoderFresh(acct);
-  let res = await listQoderCampaigns(acct.worker, fresh.token, device);
-  if ((res.status === 401 || res.status === 403) && acct.refreshToken) {
+  let res = await listQoderCampaigns(acct.worker, fresh.token, device, options);
+  let token = fresh.token;
+  const quota = qoderQuotaCooldown(res);
+  if (quota.kind) return { res, token, quota };
+  if (qoderAuthDead(res) && acct.refreshToken) {
     const renewed = await refreshQoderToken(acct.worker, acct.refreshToken);
     if (renewed?.token) {
       fresh = { token: renewed.token, refreshed: true };
-      res = await listQoderCampaigns(acct.worker, fresh.token, device);
+      token = renewed.token;
+      // 续期后的新 refresh_token 必须落盘（参考实现 v1.0.x：长期无人值守的前提）
+      if (acct.file && acct.saltFile) {
+        const expiresAt = renewed.expiresIn ? Math.floor(Date.now() / 1000 + renewed.expiresIn) : 0;
+        await persistQoderToken({
+          credFile: acct.file,
+          saltFile: acct.saltFile,
+          identity: acct.identity,
+          token: renewed.token,
+          refreshToken: renewed.refreshToken,
+          expiresAt,
+        }).catch(() => false);
+      }
+      res = await listQoderCampaigns(acct.worker, token, device, options);
+      const q2 = qoderQuotaCooldown(res);
+      if (q2.kind) return { res, token, quota: q2 };
     }
   }
-  return { res, token: fresh.token };
+  return { res, token, quota: qoderQuotaCooldown(res) };
 }
 
 /** 单个 Qoder 账号：解析设备身份 → 拉活动列表 → 逐个领取 → 汇总积分 */
@@ -1705,6 +2433,11 @@ async function checkinQoderOne(acct) {
   const candidates = [acct, ...(Array.isArray(acct.alternates) ? acct.alternates : [])];
   const worker = acct.worker || 'qoder';
   const uid = String(acct.user?.id || acct.user?.uid || acct.uid || '').trim();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const win = qoderOpenWindow(nowSec);
+  // 当前窗口是不是「今天这一期」：00:00–09:59 仍属于昨天开的那一期。
+  // 在这一期里领到的分不能记成「今天已签」，否则 10:00 新一期不会触发补签。
+  const currentPeriod = qoderDayKey(win.start) === qoderDayKey(nowSec);
   // 设备身份按账号 uid 生成：桌面端组件会把指纹与账号绑在一起
   let device = null;
   try {
@@ -1719,10 +2452,31 @@ async function checkinQoderOne(acct) {
     const entry = { ...candidate, expiresAt: candidate.expiresAt || candidate.exp || 0 };
     fetched = await fetchQoderCampaigns(entry, device);
     winner = entry;
+    // 额度类 403 是账号级冷却，换一份同账号的旧 token 也只会再吃一次 403；
+    // 必须在候选回退前终止，否则最后一个普通 403 会把冷却误报成凭据失效。
+    if (fetched.quota?.kind) break;
     if (fetched.res.status !== 401 && fetched.res.status !== 403) break;
   }
   const { res } = fetched;
   let token = fetched.token;
+  // 额度类 403（112 / pricingUrl、110 / 每日计费上限）不是凭证失效：单独分流，
+  // 既不续期也不判 expired——否则会让用户白登录一次。
+  if (fetched.quota?.kind) {
+    const seconds = fetched.quota.seconds;
+    const until = new Date(Date.now() + seconds * 1000);
+    const hhmm = `${String(until.getHours()).padStart(2, '0')}:${String(until.getMinutes()).padStart(2, '0')}`;
+    return {
+      ok: false,
+      status: 'pending',
+      message: fetched.quota.kind === 'exhausted'
+        ? `额度已耗尽（HTTP ${res.status} / code 112），账号冷却 30 分钟；请充值或更换账号`
+        : `每日计费次数已达上限（HTTP ${res.status} / code 110），账号冷却至 ${hhmm}（最长 6 小时）；请稍后或更换账号`,
+      credits: 0,
+      consecutiveDays: 0,
+      pendingReason: 'quota_cooldown',
+      retryAt: Math.floor(Date.now() / 1000) + seconds,
+    };
+  }
   if (res.status === 401 || res.status === 403) {
     return { ok: false, status: 'expired', message: `签到活动查询失败（HTTP ${res.status}），请确认凭证有效且地区选择正确`, credits: 0, consecutiveDays: 0 };
   }
@@ -1740,121 +2494,163 @@ async function checkinQoderOne(acct) {
     return { ok: false, status: 'failed', message: `活动列表返回 [${bodyCode}]：${qoderResponseMessage(res) || '未知错误'}`, credits: 0, consecutiveDays: 0 };
   }
   let campaigns = extractQoderCampaigns(res.json);
-  let claimable = campaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
+  let claimable = campaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE' && qoderInWindow(item));
   let claimedBefore = campaigns.filter((item) => qoderClaimedToday(item));
   let staleClaimed = campaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
-  let useBase = '';
 
-  // Qoder CN：完整设备头下 200 但活动列表为空时，改用最小请求头（不带设备指纹）再取一次
-  // （移植 L0NE-6/Qoder-Daily v1.0.10：上游对带完整设备头的请求可能下发空活动列表，最小头才看得到）。
-  // 采纳条件是「最小头列表非空」——今日已领（CLAIMED）也要采纳，否则会把已领态误报成「上游未下发」；
-  // 领取仍走原设备头路径，与上游一致（复取只解决「看不见」，不改变领取请求）。
-  // 最小头仍为空 → 保留首次空结果照常走「无活动」分支；HTTP 401/403 走 fetchQoderCampaigns 内已有的续期重试。
-  if (worker === 'qoder-cn' && device && res.ok && !claimable.length && !claimedBefore.length) {
+  // Qoder CN：完整设备头下 200 但活动列表为空时，改用**最小鉴权四件套**
+  // （Authorization / cosy-clienttype / User-Agent / Content-Type，不带任何设备指纹）再取一次。
+  // 移植 L0NE-6/Qoder-Daily v1.0.10：上游对带完整设备头的请求可能下发空活动列表，最小头才看得到。
+  //   - 触发条件对齐参考的 campaign_response_is_empty：200 + 非会话失效 + 列表为空；
+  //   - 最小头拿到的 401 / 105 / 429 / 5xx **原样透传**（不吞），否则会把真实错误报成「上游未下发」；
+  //   - 最小头仍为空 → 保留首次空结果，照常走「无活动」分支。
+  // ⚠️ 这个降级**只对中国版启用**：国际版不做（参考实现 v1.0.10 明确）。
+  if (worker === 'qoder-cn' && device && res.ok && !claimable.length && !claimedBefore.length && !qoderAuthDead(res)) {
+    let minimal = null;
     try {
-      const minimal = await fetchQoderCampaigns({ ...winner, token }, null);
-      const minimalCampaigns = minimal.res.ok && minimal.res.json?.success !== false
-        ? extractQoderCampaigns(minimal.res.json)
-        : [];
-      if (minimalCampaigns.length) {
-        campaigns = minimalCampaigns;
-        claimable = minimalCampaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
-        claimedBefore = minimalCampaigns.filter((item) => qoderClaimedToday(item));
-        staleClaimed = minimalCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
-        token = minimal.token;
-      }
-    } catch { /* 最小头复取失败按原结果走 */ }
-  }
-
-  // 国际版活动列表为空时，换一套环境用同一个 token 再问一次。
-  // 开源项目 qoder-checkin 的 baseUrls 就是让在 openapi.qoder.sh / openapi.qoder.com.cn 之间切，
-  // 国际账号被下发到另一套环境时，只有换环境才看得到活动。
-  if (!claimable.length && !claimedBefore.length) {
-    const alt = altQoderBaseUrl(worker);
-    if (alt) {
-      try {
-        const altRes = await listQoderCampaigns(worker, token, device, alt);
-        if (altRes.ok) {
-          const altCampaigns = extractQoderCampaigns(altRes.json);
-          const altClaimable = altCampaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE');
-          if (altClaimable.length) {
-            campaigns = altCampaigns;
-            claimable = altClaimable;
-            claimedBefore = altCampaigns.filter((item) => qoderClaimedToday(item));
-            staleClaimed = altCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
-            useBase = alt;
-          }
-        }
-      } catch { /* 换环境失败就按原结果走 */ }
+      minimal = await fetchQoderCampaigns({ ...winner, token }, null, { minimal: true });
+    } catch (err) {
+      return { ok: false, status: 'failed', message: `最小请求头复取异常：${err.message}`, credits: 0, consecutiveDays: 0 };
+    }
+    if (minimal.quota?.kind) {
+      const seconds = minimal.quota.seconds;
+      const until = new Date(Date.now() + seconds * 1000);
+      const hhmm = `${String(until.getHours()).padStart(2, '0')}:${String(until.getMinutes()).padStart(2, '0')}`;
+      return {
+        ok: false,
+        status: 'pending',
+        message: minimal.quota.kind === 'exhausted'
+          ? '额度已耗尽（HTTP 403 / code 112），账号冷却 30 分钟；请充值或更换账号'
+          : `每日计费次数已达上限（HTTP 403 / code 110），账号冷却至 ${hhmm}（最长 6 小时）；请稍后或更换账号`,
+        credits: 0,
+        consecutiveDays: 0,
+        pendingReason: 'quota_cooldown',
+        retryAt: Math.floor(Date.now() / 1000) + seconds,
+      };
+    }
+    const mRes = minimal.res;
+    if (mRes.status === 401 || qoderAuthDead(mRes)) {
+      return { ok: false, status: 'expired', message: `签到活动查询失败（HTTP ${mRes.status}），请重新登录 Qoder CN`, credits: 0, consecutiveDays: 0 };
+    }
+    if (mRes.status === 429) {
+      return { ok: false, status: 'failed', message: '签到活动查询失败（HTTP 429），请稍后重试', credits: 0, consecutiveDays: 0, retryAt: Math.floor(Date.now() / 1000) + 600 };
+    }
+    if (!mRes.ok) {
+      return { ok: false, status: 'failed', message: `活动列表返回 [${mRes.status}]：${qoderResponseMessage(mRes) || '未知错误'}`, credits: 0, consecutiveDays: 0 };
+    }
+    const minimalBodyCode = Number(mRes.json?.code ?? mRes.json?.errorCode);
+    if (minimalBodyCode === 401 || minimalBodyCode === 403) {
+      return { ok: false, status: 'expired', message: qoderResponseMessage(mRes) || '登录态已失效，请在 Qoder CN 重新登录', credits: 0, consecutiveDays: 0 };
+    }
+    if (mRes.json?.success === false || (Number.isFinite(minimalBodyCode) && ![0, 200].includes(minimalBodyCode))) {
+      return { ok: false, status: 'failed', message: `活动列表返回 [${minimalBodyCode}]：${qoderResponseMessage(mRes) || '未知错误'}`, credits: 0, consecutiveDays: 0 };
+    }
+    const minimalCampaigns = extractQoderCampaigns(mRes.json);
+    if (minimalCampaigns.length) {
+      campaigns = minimalCampaigns;
+      claimable = minimalCampaigns.filter((item) => qoderClaimStatus(item) === 'CLAIMABLE' && qoderInWindow(item));
+      claimedBefore = minimalCampaigns.filter((item) => qoderClaimedToday(item));
+      staleClaimed = minimalCampaigns.filter((item) => ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(item)) && !qoderClaimedToday(item));
+      token = minimal.token;
     }
   }
 
+  // 注意：**不再**把国际版账号换到另一套 openapi 再问一次。
+  // 参考实现 v1.0.10 明确「空表复取只对中国版启用；国际版路径保持不变」——
+  // 跨地区请求拿不到活动，还会把账号送进风控看。
+
   if (!claimable.length) {
-    const nowSec = Math.floor(Date.now() / 1000);
     if (claimedBefore.length) {
       return { ok: true, status: 'already', message: claimedBefore.length > 1 ? `今日 ${claimedBefore.length} 个活动已领取` : '今日已领取', credits: 0, consecutiveDays: 0 };
     }
-    // 上一期已领、今天这一期还没开：0:00–10:00 之间就是这种状态。
-    // 这时不能报「已签到」（卡片会骗人），报 pending 让定时器到点重试一次。
-    const pend = qoderPendingWindow(staleClaimed, nowSec);
-    if (pend) {
+    // 「当前开放窗口这一期」的每日活动行是不是已经领过？
+    // 不能只看 claimedBefore：它按**自然日**比对窗口起始日，00:00 一翻篇就把还在窗口内的
+    // 本期行算成「上一期」（实测 11-02 00:57 领到的 act-20261101-825，00:00 之后就被算成上一期）。
+    const openRow = campaigns.find((item) => qoderInWindow(item, nowSec));
+    const openClaimed = !!openRow && ['CLAIMED', 'GRANTED'].includes(qoderClaimStatus(openRow));
+    if (openClaimed) {
+      // 本期已领 → 等下一期开窗（每天 10:00 UTC+8）。
+      // 上一期已领、今天这一期还没开：0:00–10:00 之间就是这种状态。
+      // 这时不能报「已签到」（卡片会骗人），报 pending 让定时器到点重试一次。
+      const pend = qoderPendingWindow(staleClaimed, nowSec)
+        || { retryAt: win.nextStart, message: `本期已领，下一期 ${qoderClock(win.nextStart)}（UTC+8）开新一期；到点会自动补领` };
       return {
-        ok: true,
+        ok: false,
         status: 'pending',
         message: pend.message,
         credits: 0,
         consecutiveDays: 0,
-        // 定时器不必在开窗之前反复试：到点再来，免得一天 8 次重试全耗在等窗口上
+        pendingReason: 'awaiting_window',
+        // 定时器不必在开窗之前反复试：到点再来，免得重试预算全耗在等窗口上
         retryAt: pend.retryAt
       };
     }
-    // 上游整个列表还没下发（国际版早上常见）也不能收工：约到今天 10:00 再看一次
-    const todayOpen = qoderTodayWindowStart(nowSec);
-    if (todayOpen && nowSec < todayOpen) {
-      const hhmm = new Date((todayOpen + QODER_TZ_OFFSET_SEC) * 1000).toISOString().slice(11, 16);
+
+    // ⚠️ 到这里 = 「当前开放窗口这一期的活动行还没下发」，上游开窗后延迟下发是常态。
+    // 这里**绝对不能判 already、也不能把重试推到下一期开窗**：
+    //   判 already 等于「今天已领」，而 platformNeedsRetry 只重试 failed/pending → 当天不再拉一次；
+    //   推到下一期开窗则直接跳过**本期还开着的窗口**（上一期 11-01 10:00 → 11-02 09:59）。
+    //   两者都会让每日 100 Credits 直接丢：
+    //   实测 2026-11-01 10:09 活动 0 个 → already → 当天零重试（历史里 10:09 → 次日 00:57 整整
+    //   14.8 小时没再拉过），同一期在 11-02 00:57 再看就有了，+100 到账。
+    // 正确口径：窗口还开着就继续补拉（开窗 1 小时内每 10 分钟，之后每小时，直到窗口关闭前 5 分钟）。
+    const retryAt = qoderPollAt(nowSec, win);
+    // 诊断补充：`campaigns` 只保留 CLAIM_BENEFIT 行，但上游常常同时下发「升级/展示类」
+    // （VIEW_DETAILS）活动。只报「活动 0 个：空」会让人误判成「上游什么都没下发」——
+    // 实测 Henry-Baker 这个账号今天就只有一条 VIEW_DETAILS/CLAIMED，从来没有每日 Credits 行。
+    const nonBenefitRows = (() => {
+      const payload = res?.json;
+      const all = Array.isArray(payload?.campaigns) ? payload.campaigns
+        : Array.isArray(payload?.data?.campaigns) ? payload.data.campaigns : [];
+      return all.filter((row) => row && typeof row === 'object'
+        && String(row.actionType || row.action_type || '').toUpperCase() !== QODER_BENEFIT_ACTION).length;
+    })();
+    const diag = `[活动 ${campaigns.length} 个：` + (campaigns.map((c) => `${qoderClaimStatus(c) || '?'}`).join('/') || '空') + ']'
+      + (nonBenefitRows ? `，另有 ${nonBenefitRows} 个非领取类活动（升级/展示类，不计入每日 Credits）` : '')
+      + (staleClaimed.length ? `，其中 ${staleClaimed.length} 个是过期的 CLAIMED` : '');
+    if (deviceNote) {
       return {
-        ok: true,
+        ok: false,
         status: 'pending',
-        message: `上游暂未下发今日活动，今日 ${hhmm}（UTC+8）开新一期；到点会自动重试`,
+        message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件（装好后会自动重试）`,
         credits: 0,
         consecutiveDays: 0,
-        retryAt: todayOpen
+        pendingReason: 'identity_missing',
+        retryAt,
       };
     }
-    // 国际版：定向活动没下发时把原因说清楚，别让人以为接口挂了
-    if (worker === 'qoder') {
-      if (deviceNote) {
-        return { ok: true, status: 'already', message: `未领取：${deviceNote}。国际版签到需要本机 Qoder 客户端或 qodercli 的 UMID 组件`, credits: 0, consecutiveDays: 0 };
-      }
-      const diag = `[活动 ${campaigns.length} 个：` + (campaigns.map((c) => `${qoderClaimStatus(c) || '?'}`).join('/') || '空') + (staleClaimed.length ? `，其中 ${staleClaimed.length} 个是过期的 CLAIMED` : '') + ']';
     return {
-        ok: true,
-        status: 'already',
-        message: diag + ' 上游暂未下发今日活动（已试 openapi.qoder.sh / openapi.qoder.com.cn 两套环境）。'
-          + '常见原因：① 官方窗口每天 10:00 开启，到点会自动重试；② 客户端今天已领过；'
-          + '③ 设备指纹（Cosy-MachineToken）过期——回 Windows 跑 qoder-checkin 的 01_extract.py 重新提取，或在 Qoder 客户端重新登录一次',
-        credits: 0,
-        consecutiveDays: 0
-      };
-    }
-    return { ok: true, status: 'already', message: '当前没有可领取的签到活动', credits: 0, consecutiveDays: 0 };
+      ok: false,
+      status: 'pending',
+      message: `${diag} 本期活动行尚未下发（本期窗口 ${qoderClockDay(win.start)} → ${qoderClockDay(win.end)} UTC+8），`
+        + `窗口内会自动补拉，最晚 ${qoderClockDay(win.end)} 前领到都算数`,
+      credits: 0,
+      consecutiveDays: 0,
+      pendingReason: 'awaiting_campaign',
+      retryAt,
+    };
   }
 
   let credits = 0;
   let successCount = 0;
   let alreadyCount = 0;
   const failures = [];
+  let cooldown = null;
   for (const item of claimable) {
     const campaignId = item.campaignId || item.campaign_id;
     const amount = qoderBenefit(item);
     try {
-      const claim = await claimQoderCampaign(worker, token, campaignId, device, useBase);
+      const claim = await claimQoderCampaign(worker, token, campaignId, device);
       const outcome = qoderClaimOutcome(claim);
       if (outcome.status === 'success') {
         successCount += 1;
         credits += amount;
       } else if (outcome.status === 'already') {
         alreadyCount += 1;
+      } else if (outcome.status === 'cooldown') {
+        // 额度类 403：中断该账号后续领取（再打也是 403），整号进冷却
+        cooldown = { kind: outcome.kind || '', message: outcome.message, seconds: outcome.cooldownSeconds || 1800 };
+        break;
       } else {
         failures.push(outcome.message);
       }
@@ -1864,8 +2660,40 @@ async function checkinQoderOne(acct) {
     if (claimable.length > 1) await new Promise((r) => setTimeout(r, 800));
   }
 
+  if (cooldown) {
+    const seconds = cooldown.seconds;
+    const until = new Date(Date.now() + seconds * 1000);
+    const hhmm = `${String(until.getHours()).padStart(2, '0')}:${String(until.getMinutes()).padStart(2, '0')}`;
+    return {
+      ok: false,
+      status: 'pending',
+      message: cooldown.kind === 'exhausted'
+        ? '额度已耗尽（HTTP 403 / code 112），账号冷却 30 分钟；请充值或更换账号'
+        : `每日计费次数已达上限（HTTP 403 / code 110），账号冷却至 ${hhmm}（最长 6 小时）；请稍后或更换账号`,
+      credits,
+      consecutiveDays: 0,
+      pendingReason: 'quota_cooldown',
+      retryAt: Math.floor(Date.now() / 1000) + seconds,
+    };
+  }
+
+  // 关键：在 00:00–09:59 领到的是**上一期**，不是今天的签到。
+  // 如果这里直接返回 success，平台状态会记成今天已签，10:00 新一期彻底不补。
+  // 上一期该领的分照领、credits 照报，但今天状态必须是 pending + 等 10:00 开窗。
+  if (!currentPeriod && !failures.length && (successCount || alreadyCount)) {
+    return {
+      ok: false,
+      status: 'pending',
+      message: `上一期已领取${credits ? ` +${credits} Credits` : ''}；今日 ${qoderClock(win.nextStart)}（UTC+8）开新一期，到点自动补领`,
+      credits,
+      consecutiveDays: 0,
+      pendingReason: 'awaiting_window',
+      retryAt: win.nextStart,
+    };
+  }
+
   const parts = [];
-  if (successCount) parts.push(`领取 ${successCount} 个活动${credits ? `，+${credits} Credits` : ''}${useBase ? `（已切到 ${useBase.replace('https://', '')}）` : ''}`);
+  if (successCount) parts.push(`领取 ${successCount} 个活动${credits ? `，+${credits} Credits` : ''}`);
   const alreadyTotal = alreadyCount + claimedBefore.length;
   if (alreadyTotal) parts.push(`${alreadyTotal} 个今日已领`);
   if (failures.length) parts.push(`失败 ${failures.length} 个：${failures[0]}`);
@@ -1918,8 +2746,12 @@ export async function checkinQoder(target = 'qoder') {
   // pending（等 10:00 开窗）不是失败：别因为一个账号在等窗口就把整个平台标红
   const badOnes = results.filter((r) => !['success', 'already', 'pending'].includes(r.status));
   const pendOnes = results.filter((r) => r.status === 'pending');
-  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : (pendOnes.length ? 'pending' : 'already'));
-  const retryAt = status === 'pending' ? (pendOnes.find((r) => r.retryAt)?.retryAt || 0) : 0;
+  const agg = aggregatePlatformStatus(results);
+  const status = agg.status;
+  const retryAt = agg.retryAt;
+  // pendingReason 要透出到平台级：前端据此区分「等开窗」「等额度冷却」「设备身份缺失」，
+  // 否则按钮只能显示笼统的「待签到」，用户点了也不知道在等什么。
+  const pendingReason = agg.pendingReason;
   return {
     platform,
     ok: badOnes.length === 0,
@@ -1929,6 +2761,7 @@ export async function checkinQoder(target = 'qoder') {
     credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
     consecutiveDays: 0,
     retryAt,
+    pendingReason,
     accounts: results.map((r) => ({
       name: r.name,
       display: r.label || r.name,
@@ -1937,6 +2770,7 @@ export async function checkinQoder(target = 'qoder') {
       message: r.message,
       credits: r.credits,
       consecutiveDays: r.consecutiveDays,
+      pendingReason: r.pendingReason || '',
       // identity 必须进快照：下次读概览时靠它把「今天的签到状态」精确贴回实时账号行，
       // 只按名字贴的话，改过名的账号（Qoder 改了昵称、MiniMax 换了档案名）会被当成新账号。
       identity: r.identity || '',
@@ -2299,25 +3133,38 @@ export async function getCheckinOverview() {
 
   // 整理每个平台的前端渲染数据
   const platforms = {};
-  for (const plat of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo']) {
+  for (const plat of CHECKIN_PLATFORMS) {
     const pState = state.platforms[plat] || {};
     const cInfo = creds[plat] || {};
     const isToday = pState.lastDate === today;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const futureRetry = Number(pState.retryAt) > nowSec;
+    const hasActiveState = isToday || futureRetry;
 
     // 账号行 = 实时账号集合（worker 档案 + CLI 凭据）∪ 今日快照状态。
     // 以前只要 isToday 就直接回放快照，导致「签完之后在 worker 里新加的账号」当天永远不出现。
     const accountRows = mergeAccountRows(
       await listCheckinAccounts(plat),
-      isToday ? pState.accounts : [],
+      hasActiveState ? pState.accounts : [],
       plat,
     );
     // 还有几个账号今天没签成：前端据此把「今日已签」按钮改成「补签新增账号」
-    // 平台处在「等下一期开窗」（Qoder 每天 0:00 / 10:00）时不算待补：那时候点也只会再拿到一次 pending，
-    // 白让按钮闪一下，用户还以为漏签了。
-    const waitingWindow = isToday && Number(pState.retryAt) > 0 && Math.floor(Date.now() / 1000) < Number(pState.retryAt);
+    // 平台处在「等下一期开窗」（Qoder 每天 0:00 / 10:00）或「等额度冷却」时不算待补：
+    // 那时点也只会再拿到一次 pending，白让按钮闪一下，用户还以为漏签了。
+    // （注意：等窗口归零的是**按钮文案**，不代表这些账号不用签——
+    //   partial 状态的补签个数由前端按「总数-已签数」自行推导，不依赖这个字段。）
+    const waitingWindow = futureRetry;
+    // stale 行只用于「历史不消失」的展示，不参与账号总数/待签/已签统计，
+    // 否则被切走的旧号会虚增「补签 N 个账号」并让按钮反复提示。
+    const activeRows = accountRows.filter((r) => !r.stale);
+    const pendingRows = activeRows.filter((r) => ['pending', 'failed', 'expired', 'restricted'].includes(String(r.status)));
+    // 等下一期时普通失败号不催（点了也只会再 pending）；但**新加的账号**必须保留计数，
+    // 否则前端会因 retryAt 未来而把「补签新增账号」按钮禁用，新号又得等到明天。
     const pendingAccounts = waitingWindow
-      ? 0
-      : accountRows.filter((r) => ['pending', 'failed', 'expired'].includes(String(r.status))).length;
+      ? pendingRows.filter((r) => r.fresh).length
+      : pendingRows.length;
+    // 已签账号数：前端据此显示「部分已签（2/3）」，不再只靠一个笼统状态
+    const signedAccounts = activeRows.filter((r) => ['success', 'already'].includes(String(r.status))).length;
 
     platforms[plat] = {
       available: cInfo.available,
@@ -2328,14 +3175,20 @@ export async function getCheckinOverview() {
       autoRefresh: ['workbuddy', 'codebuddy', 'qoder', 'qoder-cn', 'minimaxcode'].includes(plat) && cInfo.refreshable === true,
       lastDate: pState.lastDate || '无记录',
       lastTime: pState.lastTime || '',
-      status: isToday ? pState.status : (cInfo.available ? 'pending' : 'unconfigured'),
-      message: isToday ? pState.message : (cInfo.available ? '今日待打卡' : '未检测到有效凭据'),
+      status: hasActiveState ? pState.status : (cInfo.available ? 'pending' : 'unconfigured'),
+      message: hasActiveState ? pState.message : (cInfo.available ? '今日待打卡' : '未检测到有效凭据'),
+      // pending 的具体原因 + 平台约的重试时刻：前端据此如实显示「等开窗 / 等额度冷却」，
+      // 并在约好的时刻之前把按钮置灰（点了也只是再拿一次 pending，白闪一下）。
+      pendingReason: hasActiveState ? (pState.pendingReason || '') : '',
+      retryAt: hasActiveState ? (pState.retryAt || 0) : 0,
       credits: pState.credits || '',
       consecutiveDays: pState.consecutiveDays || 0,
       accounts: accountRows,
       // >0 表示「今天还有账号没签成」——可能是刚在 worker 里加的，也可能是某个号失败了
       pendingAccounts,
-      accountCount: accountRows.length,
+      // 已签成的账号数：前端据此显示「部分已签（2/3）」，不再只靠一个笼统状态
+      signedAccounts,
+      accountCount: activeRows.length,
     };
   }
 
@@ -2365,51 +3218,199 @@ export async function pendingAccountPlatforms(state = null) {
   const today = getTodayStr();
   const nowSec = Math.floor(Date.now() / 1000);
   const out = [];
-  for (const plat of ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo']) {
+  for (const plat of CHECKIN_PLATFORMS) {
     const p = st.platforms?.[plat] || {};
-    // 平台自己约了时间（Qoder 每天 10:00 开新一期）就别提前空转
-    if (p.retryAt && nowSec < Number(p.retryAt)) continue;
     const rows = mergeAccountRows(
       await listCheckinAccounts(plat),
       p.lastDate === today ? p.accounts : [],
       plat,
     );
-    if (rows.some((r) => r.fresh)) out.push(plat);
+    // 新账号不受平台 retryAt 限制：retryAt 是「老账号本期已领，等下一期」，
+    // 但新账号可能连本期都还没签，必须当天补上，不能一起被拖到下一期。
+    if (rows.some((r) => r.fresh)) {
+      out.push(plat);
+      continue;
+    }
+    // 没有新账号时，平台自己约了时间（Qoder 每天 10:00 开新一期）就别提前空转
+    if (p.retryAt && nowSec < Number(p.retryAt)) continue;
   }
   return out;
+}
+
+let checkinStateLock = Promise.resolve();
+
+function withCheckinStateLock(fn) {
+  const run = checkinStateLock.then(fn, fn);
+  checkinStateLock = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 /**
  * 一键清除签到日志。
  * 只清历史记录，不动各平台今日状态与凭据——这样「清日志」不会让卡片误以为今天没签。
  */
-export async function clearCheckinHistory() {
-  const state = await loadState();
-  const removed = Array.isArray(state.history) ? state.history.length : 0;
-  state.history = [];
-  await saveState(state);
-  return { ok: true, removed, overview: await getCheckinOverview() };
+export function clearCheckinHistory() {
+  return withCheckinStateLock(async () => {
+    const state = await loadState();
+    const removed = Array.isArray(state.history) ? state.history.length : 0;
+    state.history = [];
+    await saveState(state);
+    return { ok: true, removed, overview: await getCheckinOverview() };
+  });
+}
+
+/**
+ * 平台级状态聚合（纯函数，便于单测）。
+ *
+ * ⚠️ 为什么要统一：以前 codebuddy 是「有任一成功就整体 success」，
+ * qoder 是「有任一失败就整体 failed」——同一个平台里一个号签上、一个号没签成时，
+ * 两边的显示口径还不一样，用户看到的结论互相打架。
+ *
+ * 统一后的口径：
+ *   success  全部账号都签成
+ *   already  全部账号今日都领过（幂等命中）
+ *   partial  **部分**账号签成、其余没签成 → 必须告诉用户还差几个号，不能粉饰成成功
+ *   pending  全部账号都在等（等开窗 / 等额度冷却 / 等积分到账）
+ *   expired  全部账号凭据都失效
+ *   failed   其余（真失败）
+ */
+/**
+ * 平台级 pendingReason 的优先级（数字小的先报）。
+ * 排在前面的是「用户能动手解决」或「正在丢钱」的原因，
+ * 「等开窗」这种什么都不用做的排最后。
+ */
+export const PENDING_REASON_PRIORITY = [
+  'identity_missing',   // 缺设备身份：装上客户端就能领
+  'quota_cooldown',     // 额度用尽：充值或换号
+  'await_credits',      // 活跃链路已完成，积分异步到账中（CodeBuddy）
+  'awaiting_campaign',  // 上游活动行还没下发：正在窗口内补拉，错过就丢 100 分
+  'campaign_closed',    // 上游活动整段关闭
+  'awaiting_window',    // 下一期还没开窗：什么都不用做
+];
+
+export function aggregatePlatformStatus(results = []) {
+  const list = (results || []).filter((r) => r && r.status);
+  if (!list.length) return { status: 'failed', pendingReason: '', retryAt: 0 };
+  const n = (s) => list.filter((r) => r.status === s).length;
+  const signed = n('success') + n('already');
+  const pending = n('pending');
+  const restricted = n('restricted');
+  const bad = n('failed') + n('expired');
+  // pendingReason 取**优先级最高**的那个账号原因，而不是第一个：
+  // 「等上游下发活动行」（正在丢 100 Credits）必须排在「等开窗」（什么都不用做）前面，
+  // 否则卡片会显示「待活动开启」而用户以为没戏了，实际是我们还在窗口内补拉。
+  const pendingReason = (() => {
+    for (const reason of PENDING_REASON_PRIORITY) {
+      if (list.some((r) => r.pendingReason === reason)) return reason;
+    }
+    return list.find((r) => r.pendingReason)?.pendingReason || '';
+  })();
+  // retryAt 取最早的约定时刻：任何一个账号约好了，整平台就跟着那个点再试
+  const retryAt = list.reduce((min, r) => (r.retryAt && (!min || r.retryAt < min) ? r.retryAt : min), 0);
+
+  if (signed === list.length) {
+    return { status: n('success') === list.length ? 'success' : 'already', pendingReason: '', retryAt: 0 };
+  }
+  if (!signed && restricted && !bad && !pending) return { status: 'restricted', pendingReason: '', retryAt: 0 };
+  if (signed && (bad || pending || restricted)) return { status: 'partial', pendingReason, retryAt };
+  if (bad + restricted === list.length) {
+    return { status: n('expired') === list.length ? 'expired' : 'failed', pendingReason: '', retryAt };
+  }
+  if (pending === list.length) return { status: 'pending', pendingReason, retryAt };
+  return { status: bad ? 'failed' : 'pending', pendingReason, retryAt };
+}
+
+/**
+ * 这个平台现在还需不需要补签（纯函数，便于单测）。
+ *
+ * 口径统一成一句话：**今天没签成、且平台没约时间、且没把重试次数用完**。
+ * - 今天没签过 → 要（首次触发）
+ * - 平台自己约了时间（Qoder 每天 10:00 开窗）→ 先等，到点再来
+ * - failed / pending → 补（限流、网络抖动、排队错误都靠它重试，每天最多 8 次）
+ * - success / already / unconfigured → 不补
+ */
+/**
+ * Qoder 的跨期遗留状态：00:57 领的是上一期，却把平台记成 today+success。
+ * 10:00 新一期开窗后，普通 success 不会被 platformNeedsRetry 选中，
+ * 必须额外强制核对一次，否则当天新一期永远不补。
+ */
+export function qoderPeriodNeedsCheck(p = {}, today = getTodayStr(), nowSec = Math.floor(Date.now() / 1000)) {
+  if (!['success', 'already'].includes(p.status) || p.lastDate !== today) return false;
+  const win = qoderOpenWindow(nowSec);
+  if (qoderDayKey(win.start) !== qoderDayKey(nowSec)) return false;
+  const last = String(p.lastTime || '');
+  return !last || last.slice(0, 5) < qoderClock(win.start);
+}
+
+export function platformNeedsRetry(p = {}, today = getTodayStr(), nowSec = Math.floor(Date.now() / 1000), plat = '') {
+  if (p.retryAt && nowSec < Number(p.retryAt)) return false;
+  if (p.status === 'restricted') return false;
+  if (p.lastDate !== today) return true;
+  if (p.status === 'partial' && Array.isArray(p.accounts)) {
+    const remaining = p.accounts.filter((r) => !['success', 'already'].includes(r?.status));
+    if (remaining.length && remaining.every((r) => r.status === 'restricted')) return false;
+  }
+  // partial 也要补：部分账号签成了、部分没签成，那几个没成的还得再试
+  // 预算按平台走（Qoder 要横跨整个 24 小时窗口补拉，见 CHECKIN_RETRY_BUDGET）。
+  // plat 是兜底：老状态文件里还没有 retryBudget 字段，不能让 Qoder 被通用 8 次卡死。
+  const budget = Number(p.retryBudget) || retryBudgetFor(plat) || 8;
+  return ['failed', 'pending', 'partial'].includes(p.status) && (p.retryCount || 0) < budget;
+}
+
+/**
+ * 定时器这一轮要补签哪些平台（纯函数，便于单测）。
+ * extraPlatforms：账号补签带来的「今天还没签过的新账号」所属平台。
+ */
+export function selectAutoCheckinPlatforms(platforms = {}, today = getTodayStr(), nowSec = Math.floor(Date.now() / 1000), extraPlatforms = []) {
+  const out = [];
+  for (const plat of CHECKIN_PLATFORMS) {
+    if (platformNeedsRetry(platforms[plat] || {}, today, nowSec, plat)) out.push(plat);
+  }
+  // Qoder 跨期遗留：上一期成功不能替代今天这一期；10:00 开窗后强制核对一次。
+  for (const plat of ['qoder', 'qoder-cn']) {
+    if (!out.includes(plat) && qoderPeriodNeedsCheck(platforms[plat] || {}, today, nowSec)) out.push(plat);
+  }
+  for (const plat of extraPlatforms) {
+    if (CHECKIN_PLATFORMS.includes(plat) && !out.includes(plat)) out.push(plat);
+  }
+  return out;
+}
+
+// 同一平台的并发执行共享同一个 Promise：手动点击与定时 tick 撞车时，
+// 上游只请求一次，只有首个调用者负责落盘，后到者复用结果而不重复写历史。
+const checkinPlatformRuns = new Map();
+
+function runCheckinPlatformOnce(platform, fn) {
+  const running = checkinPlatformRuns.get(platform);
+  if (running) return running.then((value) => ({ shared: true, value }));
+  const task = (async () => fn())();
+  checkinPlatformRuns.set(platform, task);
+  return task.then(
+    (value) => ({ shared: false, value }),
+    (error) => {
+      throw error;
+    },
+  ).finally(() => {
+    if (checkinPlatformRuns.get(platform) === task) checkinPlatformRuns.delete(platform);
+  });
 }
 
 /**
  * 执行指定平台签到或一键全签
- * @param {'all'|'workbuddy'|'traecode'|'codearts'|'qoder'|'qoder-cn'} target
+ * @param {'all'|'due'|'workbuddy'|'codebuddy'|'traecode'|'codearts'|'qoder'|'qoder-cn'|'minimaxcode'|'meoo'} target
  */
 export async function runCheckin(target = 'all') {
   const state = await loadState();
   const results = {};
+  const stateResults = {};
 
   // due = 只补「今天还没签成」的平台（pending/failed），给「刷新状态」按钮用：
   // 以前刷新只重读一遍状态，昨天那期已领就一直显示已签，点多少次都不动。
   let only = null;
   if (target === 'due') {
     const today = getTodayStr();
-    only = ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'].filter((plat) => {
-      const p = state.platforms[plat] || {};
-      if (p.lastDate !== today) return true;
-      if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
-      return ['failed', 'pending'].includes(p.status) && (p.retryCount || 0) < 8;
-    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    only = CHECKIN_PLATFORMS.filter((plat) => platformNeedsRetry(state.platforms[plat] || {}, today, nowSec, plat));
     // 已经签成、但 worker 里又新加了账号的平台：也要在「刷新/补签」里带上，
     // 否则新账号当天永远签不到（旧逻辑只看平台级状态，账号级新增完全看不见）。
     const fresh = await pendingAccountPlatforms(state);
@@ -2417,133 +3418,164 @@ export async function runCheckin(target = 'all') {
     if (!only.length) return { ok: true, results: {}, due: [], overview: await getCheckinOverview() };
   }
   const want = (plat) => (only ? only.includes(plat) : (target === 'all' || target === plat));
+  const collect = async (plat, fn) => {
+    const { shared, value } = await runCheckinPlatformOnce(plat, fn);
+    results[plat] = value;
+    // 后到者只复用结果，不重复落盘，避免同一结果产生两条 history。
+    if (!shared) stateResults[plat] = value;
+  };
 
   if (want('workbuddy')) {
-    results.workbuddy = await checkinWorkBuddy();
+    await collect('workbuddy', () => checkinWorkBuddy());
   }
   if (want('codebuddy')) {
-    results.codebuddy = await checkinCodeBuddy();
+    await collect('codebuddy', () => checkinCodeBuddy());
   }
   if (want('traecode')) {
-    results.traecode = await checkinTrae();
+    await collect('traecode', () => checkinTrae());
   }
   if (want('codearts')) {
-    results.codearts = await checkinCodeArts();
+    await collect('codearts', () => checkinCodeArts());
   }
   if (want('qoder')) {
-    results.qoder = await checkinQoder('qoder');
+    await collect('qoder', () => checkinQoder('qoder'));
   }
   if (want('qoder-cn')) {
-    results['qoder-cn'] = await checkinQoder('qoder-cn');
+    await collect('qoder-cn', () => checkinQoder('qoder-cn'));
   }
   if (want('minimaxcode')) {
-    results.minimaxcode = await checkinMiniMaxPlatform('cn');
+    await collect('minimaxcode', () => checkinMiniMaxPlatform('cn'));
   }
   if (want('meoo')) {
-    results.meoo = await checkinMeoo();
+    await collect('meoo', () => checkinMeoo());
   }
 
-  // 记录状态与审计历史
-  for (const [plat, res] of Object.entries(results)) {
-    const prev = state.platforms[plat] || {};
-    const failed = !['success', 'already'].includes(res.status);
-    state.platforms[plat] = {
-      lastDate: res.today,
-      lastTime: res.time,
-      status: res.status,
-      message: res.message,
-      credits: res.credits || '',
-      consecutiveDays: res.consecutiveDays || (prev.consecutiveDays || 0),
-      accounts: res.accounts || [],
-      // 同一天内的失败重试计数：定时器据此决定要不要隔半小时再试一次。
-      // 旧逻辑只看 lastDate，失败一次就把今天标成「已处理」，9074 这类
-      // 服务端排队错误再也没机会重试。成功后清零。
-      retryCount: failed ? (prev.lastDate === res.today ? (prev.retryCount || 0) + 1 : 1) : 0,
-      // 平台自己给出「几点再来」（Qoder 每天 10:00 开新一期）：到点前定时器不空转
-      retryAt: res.retryAt || 0
-    };
-    state.history.unshift({
-      time: `${res.today} ${res.time}`,
-      platform: plat,
-      status: res.status,
-      message: res.message
-    });
-  }
+  await withCheckinStateLock(async () => {
+    const latest = await loadState();
+    for (const [plat, res] of Object.entries(stateResults)) {
+      const prev = latest.platforms[plat] || {};
+      const retryable = ['failed', 'pending', 'partial'].includes(res.status);
+      latest.platforms[plat] = {
+        lastDate: res.today,
+        lastTime: res.time,
+        status: res.status,
+        message: res.message,
+        credits: res.credits || '',
+        consecutiveDays: res.consecutiveDays || (prev.consecutiveDays || 0),
+        accounts: res.accounts || [],
+        // 同一天内的失败重试计数：定时器据此决定要不要隔半小时再试一次。
+        // 旧逻辑只看 lastDate，失败一次就把今天标成「已处理」，9074 这类
+        // 服务端排队错误再也没机会重试。成功后清零。
+        retryCount: retryable ? (prev.lastDate === res.today ? (prev.retryCount || 0) + 1 : 1) : 0,
+        // 该平台每天的重试预算（Qoder 要横跨整个 24 小时窗口补拉，通用 8 次不够用）
+        retryBudget: retryBudgetFor(plat),
+        // 平台自己给出「几点再来」（Qoder 每天 10:00 开新一期）：到点前定时器不空转
+        retryAt: res.retryAt || 0,
+        // pending 的具体原因：前端要据此把按钮改成「等开窗」「等额度冷却」这类如实文案
+        pendingReason: res.pendingReason || ''
+      };
+      latest.history.unshift({
+        time: `${res.today} ${res.time}`,
+        platform: plat,
+        status: res.status,
+        message: res.message
+      });
+    }
 
-  // 限制历史最多 50 条
-  if (state.history.length > 50) {
-    state.history = state.history.slice(0, 50);
-  }
-
-  await saveState(state);
+    if (latest.history.length > 50) {
+      latest.history = latest.history.slice(0, 50);
+    }
+    await saveState(latest);
+  });
   return { ok: true, results, overview: await getCheckinOverview() };
 }
 
 /**
  * 保存配置（自定义 Token、定时打卡设置等）
  */
-export async function updateCheckinConfig(config) {
-  const state = await loadState();
-  if (typeof config.autoCheckin === 'boolean') {
-    state.autoCheckin = config.autoCheckin;
-  }
-  if (typeof config.autoCheckinTime === 'string') {
-    state.autoCheckinTime = config.autoCheckinTime;
-  }
-  if (config.customTokens && typeof config.customTokens === 'object') {
-    state.customTokens = {
-      ...state.customTokens,
-      ...config.customTokens
-    };
-  }
-  await saveState(state);
-  return { ok: true, overview: await getCheckinOverview() };
+export function updateCheckinConfig(config) {
+  return withCheckinStateLock(async () => {
+    const state = await loadState();
+    if (typeof config.autoCheckin === 'boolean') {
+      state.autoCheckin = config.autoCheckin;
+    }
+    if (typeof config.autoCheckinTime === 'string') {
+      state.autoCheckinTime = config.autoCheckinTime;
+    }
+    if (config.customTokens && typeof config.customTokens === 'object') {
+      state.customTokens = {
+        ...state.customTokens,
+        ...config.customTokens
+      };
+    }
+    await saveState(state);
+    return { ok: true, overview: await getCheckinOverview() };
+  });
 }
 
 /**
  * 后台定时自动签到调度器
  */
+const AUTO_CHECKIN_INTERVAL_MS = 30 * 60 * 1000;
 let autoCheckinTimer = null;
-export function startAutoCheckinScheduler() {
-  if (autoCheckinTimer) return;
+let autoCheckinActive = false;
 
-  // 每 30 分钟检查一次是否到达签到时间或尚未今日打卡
-  autoCheckinTimer = setInterval(async () => {
+export async function runAutoCheckinTick() {
+  const state = await loadState();
+  if (!state.autoCheckin) return [];
+  const pending = selectAutoCheckinPlatforms(
+    state.platforms || {},
+    getTodayStr(),
+    Math.floor(Date.now() / 1000),
+    await pendingAccountPlatforms(state),
+  );
+  if (pending.length) {
+    console.log(`[Checkin] 触发定时签到（待处理: ${pending.join(', ')}）...`);
+    for (const plat of pending) await runCheckin(plat);
+  }
+  return pending;
+}
+
+export function nextAutoCheckinDelay(state, nowMs = Date.now()) {
+  if (state?.autoCheckin === false) return AUTO_CHECKIN_INTERVAL_MS;
+  const retryTimes = Object.entries(state?.platforms || {})
+    .filter(([plat, p]) => {
+      const budget = Number(p?.retryBudget) || retryBudgetFor(plat) || 8;
+      return ['failed', 'pending', 'partial'].includes(p?.status)
+        && (p.retryCount || 0) < budget && Number(p.retryAt) > 0;
+    })
+    .map(([, p]) => Number(p.retryAt) * 1000);
+  if (retryTimes.some((at) => at <= nowMs)) return 0;
+  if (!retryTimes.length) return AUTO_CHECKIN_INTERVAL_MS;
+  return Math.min(AUTO_CHECKIN_INTERVAL_MS, Math.max(0, Math.min(...retryTimes) - nowMs));
+}
+
+async function scheduleNextAutoCheckin() {
+  if (!autoCheckinActive) return;
+  const state = await loadState().catch(() => null);
+  if (!autoCheckinActive) return;
+  autoCheckinTimer = setTimeout(async () => {
+    autoCheckinTimer = null;
     try {
-      const state = await loadState();
-      if (!state.autoCheckin) return;
-
-      const today = getTodayStr();
-      // 只补「还没签」和「今天没签成」的平台：
-      // 前者是首次触发；后者给限流/网络抖动/等 10:00 开窗留重试机会（每天最多 8 次，约 4 小时）。
-      // pending 必须一起重试：Qoder 每天 10:00 才开新一期，08:30 那次只能标 pending。
-      // 旧实现只要有一个平台没签就 runCheckin('all')，会把已签成的平台又打一遍。
-      const pending = ['workbuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'].filter((plat) => {
-        const p = state.platforms[plat] || {};
-        if (p.lastDate !== today) return true;
-        // 平台自己约了时间（如 Qoder 10:00 开窗）就别提前空转
-        if (p.retryAt && Math.floor(Date.now() / 1000) < Number(p.retryAt)) return false;
-        return ['failed', 'pending'].includes(p.status) && (p.retryCount || 0) < 8;
-      });
-      // worker 侧新增的账号同样要当天补签（只补「从没签过」的，失败重试仍归 retryCount 管）
-      for (const plat of await pendingAccountPlatforms(state)) {
-        if (!pending.includes(plat)) pending.push(plat);
-      }
-      if (pending.length) {
-        console.log(`[Checkin] 触发定时签到（待处理: ${pending.join(', ')}）...`);
-        for (const plat of pending) await runCheckin(plat);
-      }
+      await runAutoCheckinTick();
     } catch (e) {
       console.error('[Checkin] 自动打卡定时器异常:', e.message);
     }
-  }, 30 * 60 * 1000);
-  // unref：调度器不参与事件循环保活，否则 dispose/测试结束后进程无法自然退出
+    await scheduleNextAutoCheckin();
+  }, nextAutoCheckinDelay(state));
   autoCheckinTimer.unref?.();
+}
+
+export function startAutoCheckinScheduler() {
+  if (autoCheckinActive) return;
+  autoCheckinActive = true;
+  void scheduleNextAutoCheckin();
 }
 
 /** 停止后台调度器（server.dispose 调用；停止后可重新 start） */
 export function stopAutoCheckinScheduler() {
+  autoCheckinActive = false;
   if (!autoCheckinTimer) return;
-  clearInterval(autoCheckinTimer);
+  clearTimeout(autoCheckinTimer);
   autoCheckinTimer = null;
 }

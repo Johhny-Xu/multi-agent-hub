@@ -8,7 +8,7 @@
 // 这里锁死新约定：账号集合永远以 worker 档案 + 线上凭据为准，今日快照只补状态。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,7 +46,7 @@ async function writeAuthProfile(worker, name, token) {
 }
 
 /** 写今日签到状态：模拟「这些账号今天已经签过了」 */
-async function writeState(platform, rows, extra = {}) {
+async function writeState(platform, rows, extra = {}, platformExtra = {}) {
   await writeFile(STATE_FILE, JSON.stringify({
     autoCheckin: true,
     autoCheckinTime: '08:30',
@@ -58,6 +58,7 @@ async function writeState(platform, rows, extra = {}) {
         message: '今日已签到',
         accounts: rows,
         retryCount: 0,
+        ...platformExtra,
       },
     },
     history: [],
@@ -106,6 +107,25 @@ test('新账号会被「补签 / 定时补签」带上，不用等第二天', as
   assert.ok(fresh.includes('workbuddy'), '有新增账号的平台必须进补签队列');
 });
 
+test('平台在等下一期时，新账号仍不受 retryAt 阻挡且按钮保留补签计数', async () => {
+  await resetFixtures();
+  await writeAuthProfile('codebuddy-cn', 'first', TOKEN_A);
+  await writeAuthProfile('codebuddy-cn', 'second', TOKEN_B);
+  const retryAt = Math.floor(Date.now() / 1000) + 3600;
+  await writeState('workbuddy', [{
+    name: 'first', display: '甲账号', identity: 'user-a', active: true,
+    status: 'success', message: '签到成功', source: '账号档案快照',
+  }], {}, {
+    retryAt,
+    pendingReason: 'awaiting_window',
+  });
+
+  const ov = await getCheckinOverview();
+  assert.equal(ov.platforms.workbuddy.pendingAccounts, 1, '等窗口不能把新账号计数清零');
+  assert.equal(ov.platforms.workbuddy.retryAt, retryAt, '平台自己的下一次重试时刻仍保留');
+  assert.ok((await pendingAccountPlatforms()).includes('workbuddy'), '新账号必须绕过平台 retryAt 进入补签队列');
+});
+
 test('没有新增账号时 pendingAccounts 归零，按钮回到「今日已签」', async () => {
   await resetFixtures();
   await writeAuthProfile('codebuddy-cn', 'second', TOKEN_B); // 覆盖写，仍只有 first/second
@@ -146,6 +166,8 @@ test('凭据今天被删/切走的账号仍保留一行，并标记 stale', asyn
   assert.equal(rows.length, 2, '历史不能因为凭据被移走就消失');
   const gone = rows.find((r) => r.name === 'gone');
   assert.equal(gone?.stale, true);
+  assert.equal(ov.platforms.workbuddy.accountCount, 1, '已切走的旧号不参与补签总数');
+  assert.equal(ov.platforms.workbuddy.signedAccounts, 1);
 });
 
 test('平台在等下一期开窗时不算「待补签」，按钮不闪', async () => {
@@ -157,7 +179,10 @@ test('平台在等下一期开窗时不算「待补签」，按钮不闪', async
     platforms: {
       workbuddy: {
         lastDate: localToday(), lastTime: '10:22:00', status: 'pending', message: '等下一期开窗',
-        accounts: [{ name: 'other', display: '另一个号', identity: 'user-z', status: 'pending', message: '等开窗' }],
+        accounts: [
+          { name: 'first', display: '甲账号', identity: 'user-a', status: 'pending', message: '等开窗' },
+          { name: 'other', display: '另一个号', identity: 'user-z', status: 'pending', message: '等开窗' },
+        ],
         retryCount: 1, retryAt: future,
       },
     },
@@ -241,6 +266,31 @@ function mockMiniMax(t, validTokens) {
   });
   return calls;
 }
+
+test('同一平台并发签到只请求一次，后到调用复用结果且不重复写历史', async (t) => {
+  await resetFixtures();
+  await writeMiniMax('current', 'concurrent-token', { active: true });
+  await writeState('minimaxcode', []);
+  let statusCalls = 0;
+  t.mock.method(globalThis, 'fetch', async (url, opts = {}) => {
+    if (String(url).includes('/oauth2/token')) return new Response('{}', { status: 401 });
+    assert.match(String(url), /\/signin\/status/);
+    statusCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(opts.headers?.Authorization, 'Bearer concurrent-token');
+    return Response.json({ data: { days: [{ day_no: 1, status: 3, is_today: true }] } });
+  });
+
+  const [first, second] = await Promise.all([
+    runCheckin('minimaxcode'),
+    runCheckin('minimaxcode'),
+  ]);
+  assert.equal(statusCalls, 1, '并发调用必须共享同一次底层签到');
+  assert.equal(first.results.minimaxcode.status, 'already');
+  assert.equal(second.results.minimaxcode.status, 'already');
+  const state = JSON.parse(await readFile(STATE_FILE, 'utf-8'));
+  assert.equal(state.history.filter((row) => row.platform === 'minimaxcode').length, 1, '只能写一条历史');
+});
 
 test('MiniMax Worker 新 OAuth 优先于签到手工旧 Token', async (t) => {
   await resetFixtures();
@@ -422,4 +472,11 @@ test('MiniMax 双区域续期同步原档案，不因 active 只指向国内账�
   assert.equal(profile.records['oauth-global'].accessToken, 'global-new');
   assert.equal((await checkinMiniMaxPlatform()).accounts.length, 2);
   assert.equal(refreshes, 1);
+});
+
+test('损坏的状态文件不会被当成空状态静默覆盖', async () => {
+  await writeFile(STATE_FILE, '{"platforms":', 'utf-8');
+  await assert.rejects(getCheckinOverview(), /状态文件损坏/);
+  const files = await readdir(root);
+  assert.ok(files.some((name) => name.startsWith('checkin-state.json.corrupt-')), '必须留下损坏现场备份');
 });

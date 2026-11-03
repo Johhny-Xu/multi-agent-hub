@@ -307,10 +307,23 @@ class LoginContractTests(unittest.TestCase):
 class MiniMaxMcodeLoginStateTests(unittest.TestCase):
     """mcode 没有 `auth status`：登录态看 auth-state.json 的 status 字段。"""
 
-    def _write_state(self, root, status, region="cn"):
+    def _write_state(self, root, status, region="cn", expires_in_ms=3600_000):
         target = Path(root) / "prod" / region / "mcode-public"
         target.mkdir(parents=True, exist_ok=True)
-        (target / "auth-state.json").write_text(json.dumps({"status": status, "region": region}), encoding="utf-8")
+        expires = int(time.time() * 1000) + expires_in_ms
+        (target / "auth-state.json").write_text(json.dumps({
+            "status": status, "region": region, "expiresAtMs": expires,
+        }), encoding="utf-8")
+        (target / "auth.json").write_text(json.dumps({
+            "records": {
+                "com.minimax.mcode.oauth.prod.cn\u0000fixture": {
+                    "accessToken": "fixture-token",
+                    "refreshToken": "fixture-refresh",
+                    "expiresAtMs": expires,
+                    "clientId": "mcode-public",
+                },
+            },
+        }), encoding="utf-8")
 
     def test_absent_auth_dir_is_not_logged_in(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
@@ -330,6 +343,12 @@ class MiniMaxMcodeLoginStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
             self._write_state(tmp, "authenticated", region="global")
             self.assertTrue(login.minimax_logged_in())
+
+    def test_expired_access_token_is_not_logged_in(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"MCODE_AUTH_DIR": tmp}, clear=False):
+            self._write_state(tmp, "authenticated", expires_in_ms=-60_000)
+            self.assertFalse(login.minimax_logged_in(), "status=authenticated 但 token 过期时 mcode 实际会要求登录")
+
 
 
 if __name__ == "__main__":

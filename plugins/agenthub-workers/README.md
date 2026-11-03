@@ -1,6 +1,6 @@
 # agenthub-workers
 
-将 `multi-agent-hub` 的 11 个外部 worker 桥接为宿主原生插件能力（Skill + 自包含 stdio MCP + 原生子代理）。宿主模型负责任务划分与结果验收，worker 的 CLI、模型与认证在 Hub 主机上执行。
+将 `multi-agent-hub` 的 13 个外部 worker 桥接为宿主原生插件能力（Skill + 自包含 stdio MCP + 原生子代理）。宿主模型负责任务划分与结果验收，worker 的 CLI、模型与认证在 Hub 主机上执行。
 
 本插件包采用多清单零冲突共存结构，**一个目录同时原生适配四大插件规范**：
 - **MiniMax Plugin V1（MiniMax Code 桌面端 / MiniMax Agent 云端）**：[`.minimax-plugin/plugin.json`](./.minimax-plugin/plugin.json) + [`hub-bridge.mcp.json`](./hub-bridge.mcp.json) + [`skills/dispatch-hub/SKILL.md`](./skills/dispatch-hub/SKILL.md)
@@ -8,7 +8,7 @@
 - **ZCode IDE / CLI**：[`.zcode-plugin/plugin.json`](./.zcode-plugin/plugin.json)
 - **Agent Plugins Specification v1.0.0 (`agent-plugins.org`)**：[`plugin.json`](./plugin.json)
 
-## 原生组件（11 大 Worker）
+## 原生组件（13 大 Worker）
 
 | Agent 类型 | worker |
 | --- | --- |
@@ -20,6 +20,8 @@
 | `agenthub-workers:minimaxcode` | `minimaxcode` |
 | `agenthub-workers:mimocode` | `mimocode` |
 | `agenthub-workers:traecode` | `traecode` |
+| `agenthub-workers:qoder` | `qoder`（国际版，`k31pro` = Kimi-K3.1-Pro） |
+| `agenthub-workers:qoder-cn` | `qoder-cn`（国内版，`k31pro` = Kimi-K3.1-Pro） |
 | `agenthub-workers:codearts` | `codearts` |
 | `agenthub-workers:opencode` | `opencode`（别名 `oc`） |
 | `agenthub-workers:cline` | `cline` |

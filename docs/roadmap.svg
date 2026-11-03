@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v1.0.19 主代理可查子代理存活状态、WebUI 定时器退出与移动端收口</title>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v1.0.20 主代理可查子代理存活状态、WebUI 定时器退出与移动端收口</title>
   <desc id="roadmap-desc">本版三点：长任务超时改为无进展预算加 6 小时硬上限、CodeArts CLI 升级到 26.10.9 并新增 7 个内置模型默认 DeepSeek-V4.1-Flash（v41f）、看板娘在下坠或挣扎时切到设置页立刻收起。</desc>
   <defs>
     <style>
@@ -22,13 +22,13 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-24　·　当前版本 v1.0.19　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
+  <text x="64" y="108" class="meta">更新：2026-10-24　·　当前版本 v1.0.20　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.19 · 当前重点</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.20 · 当前重点</text>
     <rect x="916" y="151" width="268" height="36" rx="18" fill="#dbeafe"/>
     <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">子代理存活可见</text>
     <text x="96" y="227" class="focus">主代理知道子代理是在算、在等，还是结果丢了</text>
@@ -85,7 +85,7 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.19</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.20</text>
     <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">子代理存活</text>
     <text x="1024" y="675" class="stage">状态可观测</text>
   </g>

@@ -9,10 +9,10 @@ const { WORKER_CRED_FILES } = await import('../console/accounts.mjs');
 const WORKERS = [
   'antigravity', 'codebuddy', 'codebuddy-cn', 'github-copilot', 'mimocode',
   'minimaxcode', 'traecode', 'zcode', 'codearts', 'opencode', 'cline',
-  'qoder', 'qoder-cn',
+  'qoder', 'qoder-cn', 'meoo',
 ];
 
-test('login table and credential archive cover exactly the same thirteen workers', () => {
+test('login table and credential archive cover exactly the same fourteen workers', () => {
   assert.deepEqual(Object.keys(LOGIN_COMMANDS).sort(), [...WORKERS].sort());
   assert.deepEqual(Object.keys(WORKER_CRED_FILES).sort(), [...WORKERS].sort());
 });

@@ -225,7 +225,9 @@ class CodeArtsDriver(unittest.TestCase):
             calls.append((command, kwargs))
             return ("provider/chosen\n", "", 0) if "models" in command else (success(), "", 0)
         task = 'do work & echo "credential"'
-        result = driver.run_task(task=task, cli=sys.executable, model="provider/chosen", capture=fake)
+        # 默认（未开 always_allow）：不传 --auto，也绝不 resume 别人的会话
+        with patch.dict(os.environ, {driver.AUTO_PERMISSION_ENV: "0"}):
+            result = driver.run_task(task=task, cli=sys.executable, model="provider/chosen", capture=fake)
         self.assertFalse(result["is_error"])
         command, kwargs = calls[-1]
         self.assertNotIn(task, command)
@@ -237,6 +239,89 @@ class CodeArtsDriver(unittest.TestCase):
         self.assertTrue(Path(kwargs["cwd"]).is_dir())
         self.assertEqual(kwargs["env"]["OPENCODE_DISABLE_SHARE"], "true")
         self.assertTrue(Path(kwargs["env"]["OPENCODE_DB"]).is_absolute())
+
+    def test_auto_permission_opt_in_adds_always_allow_only_when_enabled(self):
+        """headless 下没人能批权限：不放开就只能读不能写，放开的开关必须显式。"""
+        calls = []
+        def fake(command, **kwargs):
+            calls.append((command, kwargs))
+            return ("provider/chosen\n", "", 0) if "models" in command else (success(), "", 0)
+
+        with patch.dict(os.environ, {driver.AUTO_PERMISSION_ENV: "1"}):
+            result = driver.run_task(task="write a page", cli=sys.executable, model="provider/chosen", capture=fake)
+        self.assertFalse(result["is_error"])
+        command, kwargs = calls[-1]
+        self.assertIn("--auto", command)
+        self.assertIn("--pure", command)
+        # write/edit 在 headless 下必被拒：放开时补一句「落盘走 bash」的环境说明
+        self.assertTrue(kwargs["stdin"].startswith("write a page"))
+        self.assertIn("只有 bash 被放行", kwargs["stdin"])
+        # 放开审批 ≠ 可以 resume 别人的会话
+        for argument in ("--continue", "--session", "--share"):
+            self.assertNotIn(argument, command)
+
+    def test_default_timeout_covers_real_work(self):
+        """300s 会在真活上误杀：跑 npm install / 生成多文件页面时文件已写完却报 timeout。"""
+        self.assertGreaterEqual(driver.DEFAULT_TIMEOUT_SEC, 900)
+        calls = []
+        def fake(command, **kwargs):
+            calls.append((command, kwargs))
+            return ("provider/chosen\n", "", 0) if "models" in command else (success(), "", 0)
+        with patch.dict(os.environ, {driver.AUTO_PERMISSION_ENV: "0"}):
+            driver.run_task(task="x", cli=sys.executable, model="provider/chosen", capture=fake)
+        # capture 收到的是剩余时间（deadline - now），会比默认值略小
+        self.assertGreater(calls[-1][1]["timeout"], driver.DEFAULT_TIMEOUT_SEC - 60)
+
+    def test_auto_permission_resolution_prefers_env_then_auth_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            auth = Path(temp) / "codearts-auth.env"
+            auth.write_text("CODEARTS_CLI_AK=a\nCODEARTS_CLI_SK=b\n", encoding="utf-8")
+            base = {k: v for k, v in os.environ.items() if k != driver.AUTO_PERMISSION_ENV}
+            base["CODEARTS_AUTH_ENV"] = str(auth)
+            # 配置文件没写 → 安全默认（关）
+            self.assertFalse(driver.auto_permission(base))
+            # 配置文件显式打开 → 生效（不必改服务环境）
+            auth.write_text("AGENTHUB_CODEARTS_AUTO=1\n", encoding="utf-8")
+            self.assertTrue(driver.auto_permission(base))
+            # 环境变量优先，可覆盖文件里的 1
+            base[driver.AUTO_PERMISSION_ENV] = "0"
+            self.assertFalse(driver.auto_permission(base))
+            # 认不出的值一律保持关闭，不做模糊猜测
+            base[driver.AUTO_PERMISSION_ENV] = "maybe"
+            self.assertFalse(driver.auto_permission(base))
+
+    def test_permission_rejection_is_fatal_when_auto_is_off(self):
+        rejection = "! permission requested: edit (home/u/page.html); auto-rejecting"
+        result = driver.parse_events(success("无法创建：权限请求已被拒绝。"), rejection, 0)
+        self.assertEqual(result["status"], "blocked_permission")
+        self.assertEqual(result["error"]["code"], "CODEARTS_PERMISSION_REQUIRED")
+        self.assertEqual(result["result"], "", "默认模式不能把「被拒后只解释一句」当成功")
+
+    def test_recovered_permission_under_auto_is_success(self):
+        """--auto 下偶发一次 auto-rejecting 是可恢复的：CLI 自己重试后写完并收尾。"""
+        rejection = "! permission requested: edit (home/u/page.html); auto-rejecting"
+        result = driver.parse_events(success("DONE"), rejection, 0, permission_is_fatal=False)
+        self.assertFalse(result["is_error"])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["result"], "DONE")
+
+    def test_permission_without_answer_stays_blocked_under_auto(self):
+        rejection = "! permission requested: edit (home/u/page.html); auto-rejecting"
+        result = driver.parse_events("", rejection, 0, permission_is_fatal=False)
+        self.assertEqual(result["error"]["code"], "CODEARTS_PERMISSION_REQUIRED",
+                         "没正文时权限才是真因，不能报成空回复")
+
+    def test_tool_permission_error_does_not_kill_completed_run_under_auto(self):
+        denied = event("tool_use", {"type": "tool", "tool": "write",
+                                    "state": {"status": "error", "error": "The user rejected permission to use this specific tool call."}})
+        payload = "\n".join(map(json.dumps, [
+            event("step_start", {"type": "step-start"}), denied,
+            event("text", {"id": "p1", "type": "text", "text": "DONE"}),
+            event("step_finish", {"type": "step-finish", "reason": "stop"}),
+        ]))
+        self.assertFalse(driver.parse_events(payload, "", 0, permission_is_fatal=False)["is_error"])
+        # 关闭时仍然按权限拦截，避免「写失败还报成功」
+        self.assertEqual(driver.parse_events(payload, "", 0)["error"]["code"], "CODEARTS_PERMISSION_REQUIRED")
 
     def test_default_model_is_not_invented(self):
         calls = []

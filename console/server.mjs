@@ -23,7 +23,7 @@ import { QODER_MODELS } from './qoder.mjs';
 /** @typedef {import('./miniapp-api.js').MiniAppContext} MiniAppContext */
 /** @typedef {import('./miniapp-api.js').MiniAppLifecycle} MiniAppLifecycle */
 
-const VERSION = '1.0.19';
+const VERSION = '1.0.20';
 const BUILD_ID = `${VERSION}-${Date.now()}`;
 // 控制台自身身份与角色: 三级解析（优先级：环境变量 > config.json > 默认值）
 // 1. env: HUBCONSOLE_SELF_AGENT (默认 'console'), HUBCONSOLE_SELF_ROLE (默认 '子代理控制台')
@@ -614,6 +614,9 @@ function extractDispatchRef(text) {
   return quoted && validHubRef(quoted[1]) ? quoted[1] : null;
 }
 
+/** 终态：这些状态不再探活（verdict 恒等于 status） */
+const TERMINAL_RESULT_STATUS = new Set(['completed', 'failed', 'error', 'cancelled', 'timeout']);
+
 function extractResultStatus(text) {
   const statuses = new Set(['running', 'pending', 'completed', 'failed', 'error', 'unknown', 'cancelled', 'timeout']);
   try { const value = JSON.parse(text); if (statuses.has(value?.status)) return value.status; } catch { /* 文本合同 */ }
@@ -707,7 +710,7 @@ export async function start(context) {
     '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8',
   };
   const staticEntries = new Map();
-  for (const rel of ['styles.css', 'app-main.js', 'qa-grid.js', 'mascot.js',
+  for (const rel of ['styles.css', 'app-main.js', 'quota-view.js', 'task-verdict.js', 'checkin-card-state.js', 'qa-grid.js', 'mascot.js',
     'assets/mascot-loop.webm', 'assets/mascot-hang.webm', 'assets/mascot-fall.webm',
     'assets/mascot-wipe.webm', 'favicon.png', 'favicon.ico', 'logo.png']) {
     const full = join(clientDir, rel);
@@ -2358,8 +2361,13 @@ export async function start(context) {
         subPort = port;
         try { await writeFile(endpointFile, JSON.stringify({ port, url: `http://${ADVERTISE_HOST}:${port}`, mcp: `http://${ADVERTISE_HOST}:${port}/mcp`, version: VERSION, pid: process.pid, ts: tsNow() }, null, 2), 'utf-8'); } catch { /* noop */ }
         context.logger.info('miniapp.subagent.listening', { port, advertise: ADVERTISE_HOST });
-        // 把端点写进共享笔记, 让 hub 上其它代理也能发现子代理直通
-        try { await hub.callTool('hub_note_set', { key: 'subagent-endpoint', value: `http://${ADVERTISE_HOST}:${port} (mcp: /mcp, 摘要+本机产物路径, v${VERSION})`, agent: SELF_AGENT }); } catch { /* 枢纽离线时跳过 */ }
+        // 把端点写进共享笔记, 让 hub 上其它代理也能发现子代理直通。
+        // 只在端点**对外可达**时才写: 回环地址对别的机器不可用,
+        // 本机控制台(Mini App)若覆盖服务器的通告, LAN 上的代理会连到自己的 localhost。
+        const loopbackHosts = new Set(['127.0.0.1', 'localhost', '::1']);
+        if (!loopbackHosts.has(ADVERTISE_HOST)) {
+          try { await hub.callTool('hub_note_set', { key: 'subagent-endpoint', value: `http://${ADVERTISE_HOST}:${port} (mcp: /mcp, 摘要+本机产物路径, v${VERSION})`, agent: SELF_AGENT }); } catch { /* 枢纽离线时跳过 */ }
+        }
         return;
       } catch (e) {
         context.logger.debug('miniapp.subagent.port_busy', { port, error: String(e && e.message).slice(0, 80) });
@@ -2901,7 +2909,34 @@ export async function start(context) {
         if (p === '/api/result') {
           const ref = safeName(body.ref, 'ref');
           const text = await hub.callTool('hub_result', { ref });
-          send(200, { text, status: extractResultStatus(text) });
+          const status = extractResultStatus(text);
+          const payload = { text, status };
+          // 探针：非终态时带上 verdict，前端才能区分「还在思考」和「真的已经死了」。
+          // hub_task_status 只读、不改结果，可随时轮询；桥不支持时静默退化为纯 status。
+          if (!TERMINAL_RESULT_STATUS.has(status)) {
+            try {
+              const live = JSON.parse(await hub.callTool('hub_task_status', { ref, json: true }));
+              payload.verdict = live?.verdict || null;
+              payload.action = live?.action || null;
+              payload.guidance = live?.guidance || '';
+              // 注意：hub 侧的字段名是 process_alive / cpu_delta_seconds /
+              // output_delta_bytes / last_output_age_s / heartbeat_age_s，
+              // 这里统一折成前端用的短名，别直接对拷（对拷会全变 null）。
+              payload.liveness = {
+                pid: live?.pid ?? null,
+                cpu_seconds: live?.cpu_seconds ?? null,
+                cpu_delta: live?.cpu_delta_seconds ?? null,
+                output_bytes: live?.output_bytes ?? null,
+                output_delta: live?.output_delta_bytes ?? null,
+                process_count: live?.process_count ?? null,
+                alive: live?.process_alive ?? null,
+                output_age: live?.last_output_age_s ?? null,
+                heartbeat_age: live?.heartbeat_age_s ?? null,
+                progress: live?.progress ?? null,
+              };
+            } catch { /* 探针不可用不影响结果读取 */ }
+          }
+          send(200, payload);
           return;
         }
         if (p === '/api/chat/new-session') {

@@ -821,7 +821,16 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
+<!-- 子代理配额的归一化与摘要判定（浏览器与单测共用，必须在 app-main.js 之前） -->
+<script src="./quota-view.js"></script>
+
+<!-- 异步任务探针状态（hub_task_status 的 verdict → UI 文案，浏览器与单测共用） -->
+<script src="./task-verdict.js"></script>
+
 <script src="./app-main.js"></script>
+
+<!-- 签到卡片的「状态 → 徽章/按钮/可点性」判定（qa-grid.js 依赖它，必须先加载） -->
+<script src="./checkin-card-state.js"></script>
 
 <script src="./qa-grid.js"></script>
 

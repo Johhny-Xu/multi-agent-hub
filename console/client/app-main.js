@@ -535,34 +535,164 @@
     return accent;
   }
 
-  // 侧栏快速提炼额度摘要胶囊
-  function getAgentQuotaCapsule(name) {
-    var q = (quotasData && quotasData[name]) || (quotasData && quotasData.workers && quotasData.workers[name]) || null;
-    if (!q || !q.quotas) {
-      if (q && q.plan) {
-        var pName = q.plan.replace(/开发者|专属版|企业专享版|版授权/g, '').trim();
-        return { text: pName || 'Ready', cls: 'pill-quota' };
-      }
-      return null;
-    }
-    var keys = Object.keys(q.quotas);
-    if (!keys.length) return null;
-    var firstQ = q.quotas[keys[0]];
-    if (!firstQ) return null;
-    if (firstQ.unlimited) return { text: '无限制', cls: 'pill-quota' };
-    var pct = firstQ.remainingPercentage;
-    if (typeof pct === 'number') {
-      var cls = 'pill-quota';
-      if (pct < 15) cls += ' critical';
-      else if (pct < 40) cls += ' warn';
-      return { text: '余' + Math.round(pct) + '%', cls: cls };
-    }
-    if (firstQ.total && firstQ.used !== undefined) {
-      var rem = Math.max(0, firstQ.total - firstQ.used);
-      return { text: rem + '次', cls: 'pill-quota' };
-    }
-    return { text: '活跃', cls: 'pill-quota' };
+  // ---------------------------------------------------------------- 子代理配额
+  // 每个子代理（worker）背后是 9router / 官方 CLI 的一个账号，配额由服务端
+  // console/vendor-quota.mjs + console/quota-deep.mjs 直连上游读取：
+  //   qoder / qoder-cn  → /api/v2/quota/usage（计划额度 + 加油包 + 资源包）
+  //   codearts          → snap-manager /v1/statistics/plugin（积分包 + 到期日）
+  //   traecode          → pay/user_current_entitlement_list（账号积分 + 今日签到）
+  //   antigravity / codebuddy / minimaxcode / copilot / zcode / mimocode …
+  // 归一化与摘要逻辑在 client/quota-view.js（浏览器与单测共用），这里只做薄封装。
+  // 惰性取模块：脚本加载顺序无关（quota-view.js 缺失时优雅降级，不抛错）
+  function quotaView() {
+    return (typeof window !== 'undefined' && window.QuotaView) || null;
   }
+
+  function quotaPlatformOf(agent) {
+    var qv = quotaView();
+    return qv ? qv.quotaPlatformOf(agent) : null;
+  }
+
+  function fmtQuotaAmount(n) {
+    var qv = quotaView();
+    return qv ? qv.fmtQuotaAmount(n) : String(n);
+  }
+
+  function quotaItemsOf(info) {
+    var qv = quotaView();
+    return qv ? qv.quotaItemsOf(info) : [];
+  }
+
+  function quotaSummaryOf(agent) {
+    var qv = quotaView();
+    if (!qv) return { ok: false, agent: agent, reason: '配额模块未加载（quota-view.js）' };
+    return qv.quotaSummaryOf(agent, quotasData, quotasError);
+  }
+
+  function quotaCapsuleText(sum) {
+    var qv = quotaView();
+    return qv ? qv.quotaCapsuleText(sum) : '';
+  }
+
+  function quotaTooltip(sum) {
+    var qv = quotaView();
+    return qv ? qv.quotaTooltip(sum, formatResetTime) : '配额';
+  }
+
+  // 侧栏子代理卡片上的额度胶囊：账号剩余 + 严重度配色
+  function getAgentQuotaCapsule(name) {
+    var qv = quotaView();
+    if (!qv) return null;
+    return qv.capsuleFor(name, quotasData, quotasError, formatResetTime);
+  }
+
+  // ------- 配额详情浮层（点侧栏额度胶囊打开）
+  var quotaPopoverEl = null;
+  var quotaPopoverAgent = null;
+
+  function closeQuotaPopover() {
+    if (quotaPopoverEl && quotaPopoverEl.parentNode) quotaPopoverEl.parentNode.removeChild(quotaPopoverEl);
+    quotaPopoverEl = null;
+    quotaPopoverAgent = null;
+  }
+
+  function positionQuotaPopover(anchor) {
+    if (!quotaPopoverEl || !anchor) return;
+    var rect = anchor.getBoundingClientRect();
+    var box = quotaPopoverEl.getBoundingClientRect();
+    var left = rect.right + 10;
+    if (left + box.width > window.innerWidth - 8) left = Math.max(8, rect.left - box.width - 10);
+    var top = rect.top - 6;
+    if (top + box.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.height - 8);
+    quotaPopoverEl.style.left = Math.round(left) + 'px';
+    quotaPopoverEl.style.top = Math.round(top) + 'px';
+  }
+
+  function renderQuotaPopover(sum) {
+    var html = '<div class="qh-head">' +
+      '<span class="qh-title">' + esc(sum.agent || '配额') + '</span>' +
+      '<button type="button" class="qh-refresh" data-quota-refresh="1" title="重新向上游拉取">刷新</button>' +
+      '<button type="button" class="qh-close" data-quota-close="1" title="关闭">×</button>' +
+      '</div>';
+    if (sum.account || sum.plan) {
+      html += '<div class="qh-meta">' +
+        (sum.account ? '<span title="' + esc(sum.account) + '">账号 ' + esc(sum.account) + '</span>' : '') +
+        (sum.plan ? '<span title="' + esc(sum.plan) + '">' + esc(sum.plan) + '</span>' : '') +
+        '</div>';
+    }
+    if (!sum.ok) {
+      html += '<div class="qh-empty">' + esc(sum.reason || '配额暂不可用') + '</div>';
+    } else {
+      html += '<div class="qh-list">' + sum.items.map(function (q) {
+        var color = q.unlimited ? 'var(--mcode-accent, #38bdf8)'
+          : (q.pct > 30 ? 'var(--mcode-accent, #38bdf8)' : (q.pct > 10 ? '#f59e0b' : '#ef4444'));
+        var reset = q.resetAt ? formatResetTime(q.resetAt) : '';
+        var stat = q.unlimited
+          ? '不限额'
+          : ('剩 <b>' + fmtQuotaAmount(q.remaining) + '</b>/' + fmtQuotaAmount(q.total) + ' <small>(' + Math.round(q.pct) + '%)</small>');
+        return '<div class="cb-quota-item">' +
+          '<div class="cb-quota-item-top">' +
+            '<span class="cb-quota-item-name">' + esc(q.displayName) + '</span>' +
+            '<span class="cb-quota-item-stat">' + stat + '</span>' +
+          '</div>' +
+          '<div class="cb-quota-bar-wrap"><div class="cb-quota-bar-fill" style="width:' + (q.unlimited ? 100 : Math.max(0, Math.min(100, q.pct))) + '%;background:' + color + '"></div></div>' +
+          (reset ? '<div class="cb-quota-reset">' + esc(reset) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div>';
+    }
+    if (sum.message && sum.ok) html += '<div class="qh-foot">' + esc(sum.message) + '</div>';
+    if (sum.fetchedAt) {
+      var t = new Date(sum.fetchedAt);
+      if (!isNaN(t.getTime())) html += '<div class="qh-foot">更新于 ' + esc(t.toLocaleTimeString()) + ' · 缓存 60s</div>';
+    }
+    return html;
+  }
+
+  function openQuotaPopover(agent, anchor) {
+    // 同一个 agent 再点一次 = 收起
+    if (quotaPopoverEl && quotaPopoverAgent === agent) { closeQuotaPopover(); return; }
+    closeQuotaPopover();
+    quotaPopoverAgent = agent;
+    quotaPopoverEl = el('div', 'quota-popover');
+    quotaPopoverEl.setAttribute('role', 'dialog');
+    quotaPopoverEl.innerHTML = renderQuotaPopover(quotaSummaryOf(agent));
+    document.body.appendChild(quotaPopoverEl);
+    positionQuotaPopover(anchor);
+    quotaPopoverEl.addEventListener('click', function (e) {
+      var target = e.target;
+      if (!target || !target.getAttribute) return;
+      if (target.getAttribute('data-quota-close')) { closeQuotaPopover(); return; }
+      if (target.getAttribute('data-quota-refresh')) {
+        target.disabled = true;
+        target.textContent = '刷新中…';
+        loadQuotas(true).then(function () {
+          if (quotaPopoverEl && quotaPopoverAgent === agent) {
+            quotaPopoverEl.innerHTML = renderQuotaPopover(quotaSummaryOf(agent));
+            positionQuotaPopover(anchor);
+          }
+          renderPlatformList();
+        });
+      }
+    });
+    if (!quotasData) {
+      loadQuotas().then(function () {
+        if (quotaPopoverEl && quotaPopoverAgent === agent) {
+          quotaPopoverEl.innerHTML = renderQuotaPopover(quotaSummaryOf(agent));
+          positionQuotaPopover(anchor);
+        }
+      });
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!quotaPopoverEl) return;
+    if (quotaPopoverEl.contains(e.target)) return;
+    if (e.target && e.target.getAttribute && e.target.getAttribute('data-quota-agent')) return;
+    closeQuotaPopover();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeQuotaPopover();
+  });
 
   // 侧栏 Cache 缓存或最后交互时间胶囊
   function getAgentCacheCapsule(name, updatedTs) {
@@ -888,8 +1018,20 @@
       var topRow = el('div', 'platform-capsule-top');
       var badges = el('div', 'platform-capsule-badges');
 
-      // 注：额度胶囊与缓存时效胶囊已按用户要求移除（getAgentQuotaCapsule / getAgentCacheCapsule 定义保留备用）
-      // 会话数胶囊：徽标区现有唯一元素，空间充足，不会再被 overflow 裁切
+      // 额度胶囊：子代理 → 账号 → 剩余额度，点击打开配额详情面板
+      var quotaCapsule = getAgentQuotaCapsule(name);
+      if (quotaCapsule && quotaCapsule.text) {
+        var qPill = el('span', quotaCapsule.cls, quotaCapsule.text);
+        qPill.title = quotaCapsule.title || '配额';
+        qPill.setAttribute('data-quota-agent', name);
+        qPill.addEventListener('click', function (e) {
+          e.stopPropagation();
+          e.preventDefault();
+          openQuotaPopover(name, qPill);
+        });
+        badges.appendChild(qPill);
+      }
+      // 会话数胶囊：徽标区空间充足后不会再被 overflow 裁切
       var sessions = (t && Array.isArray(t.sessions) && t.sessions.length) ? t.sessions : (isActive && chat.sessions && chat.sessions.length ? chat.sessions : []);
       if (sessions.length > 1) {
         var sPill = el('span', 'pill-sess-count', sessions.length + '会话');
@@ -1474,9 +1616,25 @@
     }
 
     if (pendingCount) {
-      var tp = el('div', 'typing');
+      // 探针：把「执行中」换成真实 verdict（思考中 / 工作中 / worker 已退出）
+      var liveForPending = null;
+      var tvP = (typeof window !== 'undefined' && window.TaskVerdict) || null;
+      for (var pi = 0; pi < pendingItems.length && !liveForPending; pi++) {
+        var pref = pendingItems[pi] && pendingItems[pi].ref;
+        if (!pref) continue;
+        liveForPending = (state.inflight || []).filter(function (x) { return x && x.ref === pref; })[0] || null;
+      }
+      var typingCls = 'typing';
+      var typingText = agentName + ' 执行中';
+      if (liveForPending && tvP) {
+        var pUi = tvP.verdictUi(liveForPending);
+        typingText = agentName + ' ' + pUi.text;
+        if (pUi.cls === 'err') typingCls = 'typing typing-bad';
+        else if (pUi.cls === 'warn') typingCls = 'typing typing-warn';
+      }
+      var tp = el('div', typingCls);
       tp.appendChild(el('span', 'd')); tp.appendChild(el('span', 'd')); tp.appendChild(el('span', 'd'));
-      tp.appendChild(el('span', null, ' ' + agentName + ' 执行中，结果会自动回到本对话…'));
+      tp.appendChild(el('span', null, ' ' + typingText + '，结果会自动回到本对话…'));
       host.appendChild(tp);
     }
     if (wasNearBottom) {
@@ -3014,14 +3172,14 @@
     return String(v);
   }
 
-  function loadQuotas() {
+  function loadQuotas(force) {
     var now = Date.now();
-    if (quotasData && (now - quotasLastFetch < 60000)) {
+    if (!force && quotasData && (now - quotasLastFetch < 60000)) {
       return Promise.resolve(quotasData);
     }
     if (quotasLoading) return Promise.resolve(quotasData);
     quotasLoading = true;
-    return api('/api/quotas').then(function (res) {
+    return api('/api/quotas' + (force ? '?force=1' : '')).then(function (res) {
       quotasData = res;
       quotasLastFetch = Date.now();
       quotasLoading = false;
@@ -3029,6 +3187,8 @@
       var qBox = $('#cb-pop-quotas-box');
       if (qBox) qBox.innerHTML = renderQuotasContent(quotasData, null);
       updateStatusBar();
+      // 额度胶囊随数据一起刷新（侧栏卡片文案要跟着变）
+      try { renderPlatformList(); } catch (e) { /* 侧栏未就绪时忽略 */ }
       return res;
     }).catch(function (err) {
       quotasLoading = false;
@@ -3062,13 +3222,7 @@
 
   function renderQuotasContent(data, err, agent) {
     if (!agent) agent = chat.activeAgent || 'antigravity';
-    var untrackedPlats = ['zcode', 'mimocode'];
-    var plat = null;
-    if (agent === 'antigravity') plat = 'antigravity';
-    else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
-    else if (agent === 'traecode') plat = 'traecode';
-    else if (agent === 'github-copilot') plat = 'github-copilot';
-    else if (agent === 'minimaxcode') plat = 'minimaxcode';
+    var plat = quotaPlatformOf(agent);
 
     if (!plat) {
       return '<div class="cb-pop-quotas-list">' +
@@ -3309,109 +3463,26 @@
     },
     quota: function () {
       var agent = chat.activeAgent || 'antigravity';
-      var plat = null;
-      if (agent === 'antigravity') plat = 'antigravity';
-      else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
-      else if (agent === 'traecode') plat = 'traecode';
-      else if (agent === 'github-copilot') plat = 'github-copilot';
-      else if (agent === 'minimaxcode') plat = 'minimaxcode';
-
+      var sum = quotaSummaryOf(agent);
       var header = '平台配额（' + agent + '）';
-      if (!plat) {
-        return header + '\n当前平台未接入配额跟踪';
+      if (!sum.ok) {
+        var why = [header];
+        if (sum.account) why.push('账号: ' + sum.account);
+        if (sum.plan) why.push('套餐: ' + sum.plan);
+        why.push(sum.reason || '当前平台未接入配额跟踪');
+        return why.join('\n');
       }
-      if (!quotasData || !quotasData[plat] || quotasData[plat].error) {
-        return header + '\n当前平台未接入配额跟踪';
-      }
-
-      if (plat === 'codebuddy') {
-        var cbData = quotasData.codebuddy;
-        var groups = Array.isArray(cbData && cbData.groups) ? cbData.groups : [];
-        var targetSource = (agent === 'codebuddy-cn') ? '国内' : '国际';
-        var group = groups.filter(function (g) { return g.source === targetSource; })[0];
-        if (!group && groups.length) group = groups[0];
-        if (!group) {
-          return header + '\n当前平台未接入配额跟踪';
-        }
-        var planStr = group.plan ? '（' + group.plan + '）' : '';
-        var lines = [(group.source || '') + planStr + '总剩余 ' + (group.totalRemaining != null ? group.totalRemaining : 0) + ' 积分 · ' + (group.packageCount || 0) + ' 个有效包'];
-        var topList = Array.isArray(group.top) ? group.top : [];
-        topList.forEach(function (pkg) {
-          var rTime = formatResetTime(pkg.resetAt);
-          lines.push((pkg.displayName || pkg.name) + ' 剩' + pkg.remaining + '/' + pkg.total + (rTime ? ' · ' + rTime : ''));
-        });
-        return lines.join('\n');
-      } else if (plat === 'antigravity') {
-        var agyData = quotasData.antigravity;
-        var qList = Array.isArray(agyData && agyData.quotas) ? agyData.quotas : [];
-        if (!qList.length) {
-          return '平台配额（antigravity）\n当前平台未接入配额跟踪';
-        }
-        var majorNames = ['gemini_session', 'gemini_weekly', 'claude_gpt_weekly'];
-        var majorQuotas = qList.filter(function (q) {
-          return majorNames.indexOf(q.name) >= 0;
-        });
-        if (!majorQuotas.length) {
-          majorQuotas = qList.slice(0, 3);
-        }
-        if (!majorQuotas.length) {
-          var minQ = qList.reduce(function (min, cur) {
-            var minPct = typeof min.remainingPercentage === 'number' ? min.remainingPercentage : 100;
-            var curPct = typeof cur.remainingPercentage === 'number' ? cur.remainingPercentage : 100;
-            return curPct < minPct ? cur : min;
-          }, qList[0]);
-          if (minQ) majorQuotas = [minQ];
-        }
-        var lines = ['平台配额（antigravity）'];
-        majorQuotas.forEach(function (q) {
-          var pct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 0;
-          var rTime = formatResetTime(q.resetAt);
-          lines.push((q.displayName || q.name) + ' ' + q.used + '/' + q.total + ' · 剩' + pct + '%' + (rTime ? ' · ' + rTime : ''));
-        });
-        return lines.join('\n');
-      } else if (plat === 'traecode') {
-        var traeData = quotasData.traecode;
-        var qListTrae = Array.isArray(traeData.quotas) ? traeData.quotas : [];
-        if (!qListTrae.length) {
-          return header + '\n当前平台未接入配额跟踪';
-        }
-        var q0 = qListTrae[0];
-        var rTime = formatResetTime(q0.resetAt);
-        return header + '\n剩 ' + (q0.remaining != null ? q0.remaining : 0) + '/' + (q0.total != null ? q0.total : 0) + (rTime ? ' · ' + rTime : '');
-      } else if (plat === 'github-copilot') {
-        var cpData = quotasData['github-copilot'];
-        var cpQuotas = Array.isArray(cpData && cpData.quotas) ? cpData.quotas : [];
-        var pi = cpQuotas.filter(function (q) { return q.name === 'premium_interactions'; })[0];
-        var lines = ['平台配额（github-copilot · individual）'];
-        if (pi) {
-          var rTime = formatResetTime(pi.resetAt);
-          lines.push('premium_interactions ' + pi.used + '/' + pi.total + ' · 剩' + pi.remaining + (rTime ? ' · ' + rTime : ''));
-        }
-        lines.push('chat / completions 不限量');
-        return lines.join('\n');
-      } else if (plat === 'minimaxcode') {
-        var mmData = quotasData.minimaxcode;
-        var mmQuotas = Array.isArray(mmData && mmData.quotas) ? mmData.quotas : [];
-        var cred = mmQuotas.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
-        if (cred) {
-          var userStr = mmData.user ? ' (' + mmData.user + ')' : '';
-          var planStr = mmData.plan ? ' · ' + mmData.plan : '';
-          var lines = ['平台配额（minimaxcode' + userStr + planStr + '）'];
-          var rem = cred.remaining != null ? cred.remaining : cred.total;
-          var remStr = typeof rem === 'number' ? rem.toFixed(2) : rem;
-          lines.push('剩余积分：' + remStr + ' 积分');
-          if (cred.used) lines.push('已用积分：' + cred.used);
-          return lines.join('\n');
-        }
-        var lines = ['平台配额（minimaxcode · MiniMax Token Plan）'];
-        mmQuotas.forEach(function (q) {
-          var remPct = typeof q.remainingPercentage === 'number' ? q.remainingPercentage : 0;
-          var wkPct = typeof q.weeklyPercentage === 'number' ? q.weeklyPercentage : 0;
-          lines.push((q.displayName || q.name) + ' 本窗口剩' + remPct + '% · 本周剩' + wkPct + '%');
-        });
-        return lines.join('\n');
-      }
-      return header + '\n当前平台未接入配额跟踪';
+      var lines = [header];
+      if (sum.account) lines.push('账号: ' + sum.account);
+      if (sum.plan) lines.push('套餐: ' + sum.plan);
+      sum.items.forEach(function (q) {
+        if (q.unlimited) { lines.push('· ' + q.displayName + ' 不限额'); return; }
+        var reset = q.resetAt ? ' · ' + formatResetTime(q.resetAt) : '';
+        lines.push('· ' + q.displayName + ' ' + fmtQuotaAmount(q.used) + '/' + fmtQuotaAmount(q.total) + ' · 剩' + Math.round(q.pct) + '%' + reset);
+      });
+      if (sum.items.length === 0 && sum.message) lines.push(sum.message);
+      lines.push('点击额度胶囊查看详情');
+      return lines.join('\n');
     },
     gear: function () {
       return '自定义状态栏显示项\n点击自由勾选/取消显示各项指标';
@@ -3680,79 +3751,13 @@
     var sbQuotaWrap = $('#sb-quota-wrap');
     var quotaShow = false;
     if (sbQuota && sbQuotaWrap) {
-      var plat = null;
-      if (agent === 'antigravity') plat = 'antigravity';
-      else if (agent === 'codebuddy' || agent === 'codebuddy-cn') plat = 'codebuddy';
-      else if (agent === 'traecode') plat = 'traecode';
-      else if (agent === 'github-copilot') plat = 'github-copilot';
-      else if (agent === 'minimaxcode') plat = 'minimaxcode';
-
-      var quotaText = '';
-      if (plat && quotasData && quotasData[plat] && !quotasData[plat].error) {
-        if (plat === 'codebuddy') {
-          var cbData = quotasData.codebuddy;
-          var groups = Array.isArray(cbData && cbData.groups) ? cbData.groups : [];
-          var targetSource = (agent === 'codebuddy-cn') ? '国内' : '国际';
-          var group = groups.filter(function (g) { return g.source === targetSource; })[0];
-          if (!group && groups.length) group = groups[0];
-          if (group) {
-            quotaText = '配额 ' + (group.source || '') + ' ' + fmtTok(group.totalRemaining || 0) + ' 积分';
-            quotaShow = true;
-          }
-        } else if (plat === 'antigravity') {
-          var agyData = quotasData.antigravity;
-          var qList = Array.isArray(agyData.quotas) ? agyData.quotas : [];
-          if (qList.length) {
-            var minQ = qList.reduce(function (min, cur) {
-              var minPct = typeof min.remainingPercentage === 'number' ? min.remainingPercentage : 100;
-              var curPct = typeof cur.remainingPercentage === 'number' ? cur.remainingPercentage : 100;
-              return curPct < minPct ? cur : min;
-            }, qList[0]);
-            var pct = typeof minQ.remainingPercentage === 'number' ? minQ.remainingPercentage : 0;
-            quotaText = '配额 剩' + pct + '%';
-            quotaShow = true;
-          }
-        } else if (plat === 'traecode') {
-          var traeData = quotasData.traecode;
-          var qListTrae = Array.isArray(traeData.quotas) ? traeData.quotas : [];
-          if (qListTrae.length) {
-            var q0 = qListTrae[0];
-            quotaText = '配额 ' + fmtTok(q0.remaining || 0) + ' 积分';
-            quotaShow = true;
-          }
-        } else if (plat === 'github-copilot') {
-          var cpData = quotasData['github-copilot'];
-          var cpQuotas = Array.isArray(cpData && cpData.quotas) ? cpData.quotas : [];
-          var pi = cpQuotas.filter(function (q) { return q.name === 'premium_interactions'; })[0];
-          if (pi && !pi.unlimited) {
-            var pct = typeof pi.remainingPercentage === 'number' ? pi.remainingPercentage : 0;
-            quotaText = '配额 ' + pct + '%';
-          } else {
-            quotaText = '配额 不限';
-          }
-          quotaShow = true;
-        } else if (plat === 'minimaxcode') {
-          var mmData = quotasData.minimaxcode;
-          var mmQuotas = Array.isArray(mmData && mmData.quotas) ? mmData.quotas : [];
-          var cred = mmQuotas.filter(function (q) { return q.isCreditBalance || q.name === 'Credits'; })[0];
-          if (cred) {
-            var rem = cred.remaining != null ? cred.remaining : cred.total;
-            quotaText = '配额 ' + fmtTok(Math.round(rem || 0)) + ' 积分';
-            quotaShow = true;
-          } else {
-            var gen = mmQuotas.filter(function (q) { return q.name === 'general'; })[0] || mmQuotas[0];
-            if (gen) {
-              var pct = typeof gen.remainingPercentage === 'number' ? gen.remainingPercentage : 0;
-              quotaText = '配额 通用 ' + pct + '%';
-              quotaShow = true;
-            }
-          }
-        }
+      // 状态栏与侧栏胶囊同源：quotaSummaryOf 一个口径，避免两处算法漂移
+      var sum = quotaSummaryOf(agent);
+      if (sum.ok && sum.primary) {
+        sbQuota.textContent = '配额 ' + quotaCapsuleText(sum);
+        quotaShow = true;
       }
-      if (quotaShow) {
-        sbQuota.textContent = quotaText;
-      }
-      if (plat) loadQuotas();
+      if (sum.plat) loadQuotas();
     }
 
     applyStatusBarVisibility(quotaShow);
@@ -3816,7 +3821,39 @@
   function persistInflight() {
     try { sessionStorage.setItem('ahc.inflight', JSON.stringify(state.inflight)); } catch (e) { /* 满则忽略 */ }
   }
+  /**
+   * 把聊天线程里 pending 的 ref 同步进异步任务列表。
+   * 之前 addInflight 只在「派活给子代理」弹窗里调用，聊天里派发的任务（比如给
+   * codearts 派活）从来不会出现在列表里，等于没有地方看实时探针状态。
+   */
+  function syncInflightFromThreads() {
+    if (!state.inflight) state.inflight = [];
+    var seen = {};
+    state.inflight.forEach(function (x) { if (x && x.ref) seen[x.ref] = true; });
+    var added = false;
+    (chat.threads || []).forEach(function (t) {
+      var list = (t && Array.isArray(t.pending)) ? t.pending : [];
+      list.forEach(function (p) {
+        if (!p || !p.ref || p.kind === 'task' || seen[p.ref]) return;
+        seen[p.ref] = true;
+        var lastText = (t.last && t.last.text) ? String(t.last.text) : '';
+        state.inflight.unshift({
+          ref: p.ref,
+          agent: t.agent || p.tag || '-',
+          task: lastText.slice(0, 120) || '聊天派发',
+          status: 'running', text: '', polls: 0, ts: Date.now(),
+        });
+        added = true;
+      });
+    });
+    if (added) {
+      state.inflight = state.inflight.slice(0, 20);
+      persistInflight();
+    }
+    return added;
+  }
   function pollInflight() {
+    syncInflightFromThreads();
     var pending = state.inflight.filter(function (x) { return (x.status === 'running' || x.status === 'pending' || x.status === 'unknown') && x.polls < 140; });
     if (!pending.length) return Promise.resolve();
     return Promise.all(pending.map(function (x) {
@@ -3824,6 +3861,11 @@
       return api('/api/result', { ref: x.ref }).then(function (r) {
         x.status = r.status;
         x.text = r.text;
+        // 探针（hub_task_status）：服务端非终态时才带回来，用来区分「思考中」和「已死」
+        if (r.verdict) x.verdict = r.verdict;
+        if (r.guidance) x.guidance = r.guidance;
+        if (r.liveness) x.liveness = r.liveness;
+        x.probedAt = Date.now();
       }).catch(function () { x.status = x.status || 'pending'; });
     })).then(function () {
       persistInflight();
@@ -3834,21 +3876,28 @@
     var host = $('#inflight-list');
     host.textContent = '';
     if (!state.inflight.length) {
-      host.appendChild(el('div', 'empty', '暂无异步任务。给配置了 CLI 或 Trae 通道的子代理派活后会出现在这里，每 5 秒自动查询结果。'));
+      host.appendChild(el('div', 'empty', '暂无异步任务。给配置了 CLI 或 Trae 通道的子代理派活后会出现在这里，每 5 秒自动探活（思考中 / 工作中 / 已退出）。'));
       updateStatusBar();
       return;
     }
+    var tv = (typeof window !== 'undefined' && window.TaskVerdict) || null;
     state.inflight.forEach(function (x) {
       var card = el('div', 'card');
       var head = el('div', 'card-head');
       head.appendChild(el('h3', 'mono', x.ref));
-      head.appendChild(statusPill(x.status));
+      head.appendChild(statusPill(x));
       head.appendChild(el('span', 'meta', x.agent + ' · ' + x.task));
       card.appendChild(head);
+      // 存活证据（PID / CPU 增量 / 输出增量），一行字说清「它到底动没动」
+      var liveText = tv ? tv.livenessLine(x) : '';
+      if (liveText) card.appendChild(el('div', 'meta mono inflight-live', liveText));
+      // 探针给的建议原文（比前端自己猜准）
+      var hint = tv ? tv.hintOf(x) : '';
+      if (hint && !tv.isTerminal(x.status)) card.appendChild(el('div', 'meta inflight-hint', '探针：' + hint));
       var out = el('pre', 'out mono', x.text || '（等待结果落盘…）');
       card.appendChild(out);
       var acts = el('div', 'card-actions');
-      acts.appendChild(btn('刷新一次', '', function () { pollInflight(); }));
+      acts.appendChild(btn('探针刷新', '', function () { pollInflight(); }));
       acts.appendChild(btn('移除', 'text', function () {
         state.inflight = state.inflight.filter(function (y) { return y.ref !== x.ref; });
         persistInflight(); renderInflight();
@@ -3858,7 +3907,14 @@
     });
     updateStatusBar();
   }
-  function statusPill(s) {
+  /** 状态徽章：优先用探针 verdict（思考中/工作中/已退出），终态直接按 status */
+  function statusPill(x) {
+    var tv = (typeof window !== 'undefined' && window.TaskVerdict) || null;
+    if (tv) {
+      var ui = tv.verdictUi(x);
+      return el('span', 'pill ' + (ui.cls || ''), ui.text + (ui.terminal ? '' : ' ·'));
+    }
+    var s = typeof x === 'string' ? x : (x && x.status);
     if (s === 'completed') return el('span', 'pill ok', 'completed');
     if (s === 'error' || s === 'failed') return el('span', 'pill err', s);
     if (s === 'running') return el('span', 'pill acc', 'running');

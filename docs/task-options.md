@@ -14,7 +14,7 @@
 }
 ```
 
-`files` 是 **MCP 桥接进程所在机器** 上的文件路径。Windows 原生插件控制 Linux Hub 时，桥接读取文件字节，经鉴权的 HTTP 请求上传；Hub 创建仅供该任务使用的 Linux 临时文件，执行结束后清理。不会把 Windows 盘符路径交给 Linux CLI。每次最多 8 个附件，合计 1 MiB；附件内容只存运行目录，不应写入源码仓库。
+`files` 是 **MCP 桥接进程所在机器** 上的文件路径。Windows 原生插件控制 Linux Hub 时，桥接读取文件字节，经鉴权的 HTTP 请求上传；Hub 创建仅供该任务使用的 Linux 临时文件，执行结束后清理。不会把 Windows 盘符路径交给 Linux CLI。默认每次最多 8 个附件，合计 1 MiB；worker 可声明更低的 `attachments.*.max_count`（Qoder 国际版/国内版为 5），Hub 会在暂存和启动进程前拒绝超限请求。附件内容只存运行目录，不应写入源码仓库。
 
 `cwd` 是 **worker 所在机器** 的目录，与 `files` 所在机器可能不同。不要向 Linux worker 传 Windows `cwd`。worker 仍须具备官方工具权限，例如 CodeBuddy 非交互任务需要明确允许 Read 才能读取附件；有可写输出要求时还需 Write。插件不自动提升这些权限。
 

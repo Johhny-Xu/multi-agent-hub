@@ -102,6 +102,9 @@ test("bridge task and transport regressions", async (t) => {
         assert.equal(bridge.resolveWorker(" CBCN "), "codebuddy-cn");
         assert.equal(bridge.resolveWorker(" CA "), "codearts");
         assert.equal(bridge.resolveWorker("huawei-codearts"), "codearts");
+        assert.equal(bridge.resolveWorker(" QD "), "qoder");
+        assert.equal(bridge.resolveWorker("qodercn"), "qoder-cn");
+        assert.equal(bridge.resolveWorker("qdcn"), "qoder-cn");
       });
       await t.test("workers cannot recursively dispatch through any bridge copy, including aliases", async () => {
         const previous = process.env.AGENTHUB_WORKER_ID;

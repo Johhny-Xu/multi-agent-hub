@@ -115,6 +115,13 @@ class DistributionTests(unittest.TestCase):
                     names = archive.namelist()
                     self.assertTrue(any(name.endswith('/console/client/assets/mascot-loop.webm') for name in names),
                                     'WebUI mascot .webm assets must ship with the console payload')
+                    # 白名单漏项已经咬过两次（先漏 assets/*.webm，后漏 quota-deep.mjs——
+                    # 后者会让安装后的控制台 import 失败）。改成按目录全量比对，不再靠人肉记清单。
+                    shipped = {Path(name).name for name in names if '/console/' in name}
+                    runtime_modules = sorted(p.name for p in (ROOT / 'console').glob('*.mjs'))
+                    runtime_modules += sorted(p.name for p in (ROOT / 'console').glob('*.py'))
+                    missing = [name for name in runtime_modules if name not in shipped]
+                    self.assertEqual(missing, [], 'console 运行时模块必须全部进包')
             for relative in manifest['files']:
                 self.assertNotIn(Path(relative).name, build.DENIED)
                 self.assertNotIn('node_modules', Path(relative).parts)

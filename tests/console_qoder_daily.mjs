@@ -1,15 +1,16 @@
 // @ts-check
 // Qoder 签到实现（移植 L0NE-6/Qoder-Daily）的回归测试：
 //   1. 只认 actionType=CLAIM_BENEFIT 的活动（VIEW_DETAILS 等常驻活动不参与领取）
-//   2. 活动列表必须带 ?forceRefresh=true
+//   2. 活动列表**不能**带 ?forceRefresh=true（带上会被服务端过滤掉每日活动行）
 //   3. 请求要带 UMID 组件给出的设备风控头
 //   4. 组件定位 / 官方包提取（tar + base64 ELF）可用
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 
 const { extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow, qoderTodayWindowStart } = await import('../console/checkin.mjs');
 const { qoderHeaders, listQoderCampaigns, claimQoderCampaign } = await import('../console/qoder.mjs');
@@ -72,10 +73,10 @@ test('设备头来自 UMID 组件，缺组件时不编造', () => {
 
   const bare = qoderHeaders('qoder', 'dt-token');
   assert.equal(bare['Cosy-MachineToken'], undefined);
-  assert.equal(bare['cosy-version'], '0.4.3');
+  assert.equal(bare['cosy-version'], '1.1.69');
 });
 
-test('拉活动列表带 forceRefresh，领取带设备头', async () => {
+test('拉活动列表不带 forceRefresh（带上会被服务端过滤掉每日活动行），领取带设备头', async () => {
   const seen = [];
   const original = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
@@ -89,7 +90,8 @@ test('拉活动列表带 forceRefresh，领取带设备头', async () => {
     globalThis.fetch = original;
   }
   assert.match(seen[0].url, /openapi\.qoder\.com\.cn/);
-  assert.match(seen[0].url, /\/sash\/api\/v1\/me\/campaigns\?forceRefresh=true/);
+  assert.match(seen[0].url, /\/sash\/api\/v1\/me\/campaigns$/);
+  assert.ok(!seen[0].url.includes('forceRefresh'), '活动列表不能带 forceRefresh=true');
   assert.equal(seen[0].headers['Cosy-MachineToken'], 'tok-abc');
   assert.match(seen[1].url, /\/campaigns\/camp%201\/claim$/);
   assert.equal(seen[1].headers['Cosy-MachineToken'], 'tok-abc');
@@ -147,6 +149,61 @@ test('从 bundle 里按 ELF e_machine 挑出本机架构组件', () => {
   assert.equal(device.extractUmidElf(bundle, 183), null, '架构不匹配时不能返回别的架构');
 });
 
+test('UMID 缓存按地区目录读取，与国际版隔离', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'agenthub-qoder-cache-'));
+  const prev = { ...process.env };
+  try {
+    delete process.env.QODERCN_RUNTIME_INFO;
+    delete process.env.QODER_UMID_PATH;
+    const dir = join(home, '.agenthub', 'qoder-umid', 'qoder-cn');
+    await mkdir(dir, { recursive: true });
+    const cached = join(dir, process.platform === 'win32' ? 'runtime-info.exe' : 'runtime-info');
+    await writeFile(cached, 'test');
+    const found = await device.findQoderUmidComponent(home, 'qoder-cn');
+    assert.equal(found.path, cached);
+    assert.equal(found.source, 'cache');
+    assert.equal(found.env, 0);
+  } finally {
+    process.env = prev;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('CN 官方包安装使用本机架构并写入地区缓存（npm 全部 mock）', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'agenthub-qoder-cn-install-'));
+  const machine = process.arch === 'x64' ? 62 : process.arch === 'arm64' ? 183 : 0;
+  if (!machine) return;
+  const elf = Buffer.alloc(64);
+  Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]).copy(elf, 0);
+  elf.writeUInt16LE(machine, 18);
+  const content = Buffer.from(`var x = "${elf.toString('base64')}";`);
+  const tar = Buffer.alloc(512 * 4);
+  tar.write('package/bundle/qoder-worker-runtime.mjs', 0, 'utf-8');
+  tar.write(content.length.toString(8).padStart(11, '0'), 124, 'ascii');
+  tar.write('0', 156, 'ascii');
+  content.copy(tar, 512);
+  const body = gzipSync(tar);
+  const integrity = `sha512-${createHash('sha512').update(body).digest('base64')}`;
+  const seen = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    if (String(url).endsWith('/pkg.tgz')) return new Response(body);
+    return new Response(JSON.stringify({
+      version: '1.2.3', dist: { tarball: 'https://packages.test/pkg.tgz', integrity },
+    }), { status: 200 });
+  };
+  try {
+    const installed = await device.installQoderUmidComponent(home, 'qoder-cn');
+    assert.ok(installed.path.includes(join('qoder-umid', 'qoder-cn')));
+    assert.deepEqual(await readFile(installed.path), elf);
+    assert.ok(seen.some((url) => url.includes('@qodercn-ai%2fqoderclicn')));
+  } finally {
+    globalThis.fetch = original;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test('设备风控环境变量不完整时明确报错，不拿半套身份硬上', async () => {
   const home = await mkdtemp(join(tmpdir(), 'agenthub-qoder-env-'));
   const prev = { ...process.env };
@@ -182,9 +239,15 @@ test('本机 CLI 的 runtime-info 能被识别（执行部分仅 Unix）', async
     await chmod(script, 0o755);
   }
   try {
+    // 直接测 CLI 布局的识别：客户端安装目录是机器全局的（不随 home 走），
+    // 装了 Qoder 客户端的机器上 findQoderUmidComponent 会先命中 app 源。
+    const cli = await device.findCliUmid(home, 'qoder');
+    assert.ok(cli, '应找到 .bin 下的 runtime-info');
+    assert.equal(cli.source, 'qodercli');
+    assert.equal(cli.env, 3, '国际版运行环境码固定为 3');
     const found = await device.findQoderUmidComponent(home, 'qoder');
-    assert.ok(found, '应找到 .bin 下的 runtime-info');
-    assert.equal(found.source, 'qodercli');
+    assert.ok(found, '应找到 UMID 组件');
+    assert.equal(found.env, 3, '国际版运行环境码固定为 3，与组件来源无关');
     if (process.platform === 'win32') {
       t.diagnostic('Windows 下 .cmd 无法直接 execFile，执行链路由 n5095 实测覆盖');
       return;
@@ -192,6 +255,24 @@ test('本机 CLI 的 runtime-info 能被识别（执行部分仅 Unix）', async
     const risk = await device.runQoderUmidComponent(found.path, found.env, 'u1');
     assert.equal(risk.machineToken, 'tok-x');
     assert.equal(risk.machineType, 'type-x');
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('国内版 CLI 的运行环境码是 0（与国际版严格隔离）', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'agenthub-qoder-cli-cn-'));
+  const bin = join(home, '.qoder-cn', '.bin');
+  await mkdir(bin, { recursive: true });
+  const payload = JSON.stringify({ machineToken: 'tok-cn', machineCode: 'code-cn', machineType: 'type-cn' });
+  const script = join(bin, 'runtime-info-x86_64-test');
+  await writeFile(script, `#!/bin/sh\nprintf '%s\\n' '${payload}'\n`, { mode: 0o755 });
+  await chmod(script, 0o755);
+  try {
+    const cli = await device.findCliUmid(home, 'qoder-cn');
+    assert.ok(cli, '应找到 .qoder-cn/.bin 下的 runtime-info');
+    assert.equal(cli.source, 'qodercli');
+    assert.equal(cli.env, 0, '国内版运行环境码固定为 0');
   } finally {
     await rm(home, { recursive: true, force: true });
   }

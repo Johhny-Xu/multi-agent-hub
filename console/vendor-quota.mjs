@@ -32,7 +32,40 @@ export function debugFetchAttempts() { return fetchAttempts; }
 const PROXY_URL = process.env.AGENTHUB_QUOTA_PROXY || 'http://127.0.0.1:7890';
 
 /** 支持原生配额读取的 worker 清单（github-copilot 令牌在系统 keyring，暂不直读） */
-export const QUOTA_WORKERS = ['codebuddy', 'codebuddy-cn', 'github-copilot', 'minimaxcode', 'mimocode', 'antigravity', 'traecode', 'zcode', 'codearts'];
+export const QUOTA_WORKERS = ['codebuddy', 'codebuddy-cn', 'github-copilot', 'minimaxcode', 'mimocode', 'antigravity', 'traecode', 'zcode', 'codearts', 'qoder', 'qoder-cn'];
+
+/**
+ * 需要跨模块协作的 worker（凭据解密与设备指纹在 qoder.mjs / qoder-device.mjs
+ * / trae-checkin.mjs 里，而这些模块反过来 import 本模块取 fetchJsonSmart）。
+ * 静态 import 会形成 ESM 初始化期循环依赖，此处一律在**调用期**动态装载。
+ */
+const DEEP_QUOTA_WORKERS = new Set(['qoder', 'qoder-cn', 'traecode']);
+let deepQuotaModule = null;
+async function loadDeepQuota() {
+  if (!deepQuotaModule) deepQuotaModule = import('./quota-deep.mjs');
+  return deepQuotaModule;
+}
+
+/**
+ * quotas 统一归一化为**数组**：前端（popup 与侧栏胶囊）只认
+ * `[{name, displayName, used, total, remaining, remainingPercentage, resetAt, unlimited}]`。
+ * 历史 fetcher 里有对象 map 形态，这里做一次兼容转换，避免各家各写一套渲染。
+ */
+export function normalizeQuotas(quotas) {
+  if (!quotas) return quotas;
+  if (Array.isArray(quotas)) {
+    return quotas.map((q, i) => {
+      if (!q || typeof q !== 'object') return q;
+      const name = q.name || q.displayName || `q${i + 1}`;
+      return { ...q, name, displayName: q.displayName || name };
+    });
+  }
+  if (typeof quotas !== 'object') return quotas;
+  return Object.entries(quotas).map(([name, q]) => {
+    const item = q && typeof q === 'object' ? q : {};
+    return { ...item, name: item.name || name, displayName: item.displayName || name };
+  });
+}
 
 // ---------------------------------------------------------------- utils
 /** @returns {Promise<object|null>} */
@@ -672,9 +705,28 @@ async function fetchMiniMaxCodeQuota() {
     const total = (Number(points) || 0) + (Number(bonusPoints) || 0);
     const plan = dayNo ? `连续签到第 ${dayNo} 天` : 'MiniMax Code';
     const detail = `今日${dayText}${total ? ` · ${points} 基础 + ${bonusPoints} 奖励 = ${total} 积分` : ''}`;
+    // 签到积分是 Code 产品线唯一可量化的「余额」，按积分口径展示（30 天有效）
+    const quotas = [];
+    if (total > 0) {
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+      quotas.push({
+        name: '签到积分',
+        displayName: '今日签到积分',
+        used: 0,
+        total: Number(total),
+        remaining: Number(total),
+        remainingPercentage: 100,
+        resetAt: nextMidnight.toISOString(),
+        unlimited: false,
+        isCreditBalance: true,
+        unit: 'points',
+      });
+    }
     return {
       account: 'MiniMax Code · 国内版',
       plan,
+      ...(quotas.length ? { quotas } : {}),
       message: `${detail}（签到积分 30 天内有效，仅限 MiniMax Code 使用）`,
     };
   } catch {
@@ -896,24 +948,9 @@ async function fetchCopilotQuota(token) {
 }
 
 // ---------------------------------------------------------------- traecode
-function jwtPayload(token) {
-  try {
-    return JSON.parse(Buffer.from(String(token).split('.')[1], 'base64').toString('utf-8'));
-  } catch { return null; }
-}
-
-async function fetchTraeQuota(token) {
-  if (!token) return { message: 'Trae 凭据不可用（~/.trae-cn/trae-jwt-token 缺失）。' };
-  const pl = jwtPayload(token);
-  const exp = pl?.exp ? Number(pl.exp) : null;
-  const uid = pl?.data?.user_id || pl?.data?.id || pl?.user_id || pl?.sub || null;
-  const account = uid ? `UID:${uid}` : null;
-  const plan = uid ? `Trae CN (${String(uid).slice(-6)})` : 'Trae CN';
-  if (!exp) return { account, plan, message: '凭据在线（JWT 无法解析有效期）。' };
-  const days = (exp * 1000 - Date.now()) / 86400000;
-  if (days <= 0) return { account, plan, message: 'JWT 已过期，请重新点击下方 OAuth 登录。' };
-  return { account, plan, message: `凭据在线${uid ? `（账号 UID: ${uid}）` : ''}，有效期约 ${days < 1 ? Math.max(1, Math.round(days * 24)) + ' 小时' : Math.round(days) + ' 天'}（官方未公开分模型配额端点）。` };
-}
+// 真实积分读取在 quota-deep.mjs（需要 trae-checkin.mjs 的令牌续期与设备号派生，
+// 而那两者反过来 import 本模块，故不能在初始化期静态引用）。旧实现只解析 JWT
+// 有效期、不查积分，已下线。
 
 // ---------------------------------------------------------------- zcode
 async function fetchZcodeQuota(tokenObj) {
@@ -971,16 +1008,104 @@ async function fetchMimoQuota(tokenObj) {
 }
 
 // ---------------------------------------------------------------- codearts
+/**
+ * 华为云码道（CodeArts Doer）真实配额。
+ *
+ * 数据源：snap-manager `/v1/statistics/plugin`（AK/SK 签名，SDK-HMAC-SHA256），
+ * 也就是 CodeArts 客户端「资源用量」面板背后的同一支接口。返回的关键字段：
+ *  - `package.package_name_cn` 套餐名（高级版/专业版…），`end_date` 本周期到期日
+ *  - `metrics[]` 里 `usageTotalPackageCredit` 是**积分总包**（amount/used/remain），
+ *    `usageBasicPackageCredit` 基础包、`usageBonusPackageCredit` 赠送包是其拆分，
+ *    `usageOnDemandPackageCredit` 按需包通常为 0（不展示）。
+ * ⚠️ `usageTokenChatMessages.package_token_amount` 只有一个「1」，没有可用的
+ * 月度 tokens 上限，别拿它编一个总量出来——只展示积分口径。
+ */
+const CODEARTS_REGIONS = ['cn-north-4', 'cn-east-3', 'cn-south-1'];
+
 async function fetchCodeArtsQuota(tokenObj) {
   if (!tokenObj || !tokenObj.ak) return { message: 'CodeArts 凭据不可用（未登录或 ~/.config/agenthub-codearts/codearts-auth.env 缺失）。' };
   const akMask = tokenObj.ak.length > 8
     ? `${tokenObj.ak.slice(0, 4)}…${tokenObj.ak.slice(-4)}`
     : `${tokenObj.ak.slice(0, 3)}…`;
-  return {
-    account: akMask,
-    plan: `CodeArts Doer (${akMask})`,
-    message: `AK/SK 凭据已就绪（${akMask}）；计费倍率见模型目录。`,
+  const account = akMask;
+
+  let payload = null;
+  let lastError = '';
+  for (const region of CODEARTS_REGIONS) {
+    const url = `https://snap-access.${region}.myhuaweicloud.com/snap-manager/v1/statistics/plugin`;
+    let headers;
+    try {
+      headers = hwsSdkSignedHeaders(tokenObj.ak, tokenObj.sk, 'GET', url, '', {
+        'Content-Type': 'application/json',
+        'Agent-Type': 'PromptCenter',
+        'X-Language': 'zh-cn',
+      });
+    } catch (e) {
+      lastError = e.message;
+      continue;
+    }
+    let res;
+    try {
+      res = await fetchJson(url, { headers }, 15_000);
+    } catch (e) {
+      lastError = e.message;
+      continue;
+    }
+    if (res.ok && res.json && typeof res.json === 'object') {
+      if (Array.isArray(res.json.metrics) && res.json.metrics.length) { payload = res.json; break; }
+      lastError = '接口未返回 metrics';
+      continue;
+    }
+    lastError = `HTTP ${res.status}`;
+  }
+
+  if (!payload) {
+    return { account, plan: `CodeArts Doer (${akMask})`, message: `凭据在线（${akMask}），配额接口暂不可用${lastError ? `：${lastError}` : ''}。` };
+  }
+
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  const byName = (name) => metrics.find((m) => m && m.name === name) || null;
+  const resetAt = parseResetTime(payload.end_date);
+  const planName = payload?.package?.package_name_cn ? `CodeArts Doer (${payload.package.package_name_cn})` : `CodeArts Doer (${akMask})`;
+
+  const quotas = [];
+  const pushCredit = (label, metric, primary) => {
+    if (!metric) return;
+    const total = toFiniteNumber(metric.package_credit_amount, 0);
+    const used = toFiniteNumber(metric.package_credit_used, 0);
+    const remainRaw = metric.package_credit_remain;
+    const remaining = remainRaw === undefined || remainRaw === null
+      ? Math.max(0, total - used)
+      : toFiniteNumber(remainRaw, 0);
+    if (total <= 0 && remaining <= 0 && used <= 0) return;
+    quotas.push({
+      name: label,
+      displayName: label,
+      used: Math.round(used * 100) / 100,
+      total: Math.round(total * 100) / 100,
+      remaining: Math.round(remaining * 100) / 100,
+      remainingPercentage: total > 0 ? Math.round((remaining / total) * 10000) / 100 : 0,
+      resetAt,
+      unlimited: false,
+      isCreditBalance: true,
+      primary: primary === true,
+      unit: 'credits',
+    });
   };
+
+  pushCredit('积分总额', byName('usageTotalPackageCredit'), true);
+  pushCredit('基础包', byName('usageBasicPackageCredit'), false);
+  const bonus = byName('usageBonusPackageCredit');
+  if (bonus && toFiniteNumber(bonus.package_credit_remain, 0) > 0) pushCredit('赠送包', bonus, false);
+  const onDemand = byName('usageOnDemandPackageCredit');
+  if (onDemand && (toFiniteNumber(onDemand.package_credit_remain, 0) > 0 || toFiniteNumber(onDemand.package_credit_used, 0) > 0)) {
+    pushCredit('按需包', onDemand, false);
+  }
+
+  if (!quotas.length) {
+    return { account, plan: planName, message: `凭据在线（${akMask}），本期无可用积分包。` };
+  }
+  return { account, plan: planName, quotas };
 }
 
 // ---------------------------------------------------------------- public API
@@ -991,7 +1116,6 @@ const FETCHERS = {
   'minimaxcode': fetchMiniMaxQuota,
   'mimocode': fetchMimoQuota,
   'antigravity': fetchAntigravityQuota,
-  'traecode': fetchTraeQuota,
   'zcode': fetchZcodeQuota,
   'codearts': fetchCodeArtsQuota,
 };
@@ -1007,16 +1131,27 @@ export async function getQuota(worker, { force = false } = {}) {
   if (inFlight) return inFlight;
   const p = (async () => {
     fetchAttempts++;
-    const token = await readToken(worker);
-    const fetcher = FETCHERS[worker];
     let data;
-    if (!fetcher) data = { message: `未知的配额 worker: ${worker}` };
-    else if (worker !== 'github-copilot' && !token) data = await fetcher(null);
-    else {
-      try { data = await fetcher(token); }
-      catch (e) { data = { message: `配额查询异常: ${e.message}` }; }
+    if (DEEP_QUOTA_WORKERS.has(worker)) {
+      // 走 quota-deep.mjs：自行解密凭据 + 解析设备身份，不需要本地 TOKEN_READERS
+      try {
+        const mod = await loadDeepQuota();
+        data = await mod.getDeepQuota(worker);
+      } catch (e) {
+        data = { message: `配额查询异常: ${e.message}` };
+      }
+    } else {
+      const token = await readToken(worker);
+      const fetcher = FETCHERS[worker];
+      if (!fetcher) data = { message: `未知的配额 worker: ${worker}` };
+      else if (worker !== 'github-copilot' && !token) data = await fetcher(null);
+      else {
+        try { data = await fetcher(token); }
+        catch (e) { data = { message: `配额查询异常: ${e.message}` }; }
+      }
     }
-    const payload = { worker, fetchedAt: new Date().toISOString(), ...data };
+    const payload = { worker, fetchedAt: new Date().toISOString(), ...(data || {}) };
+    if (payload.quotas) payload.quotas = normalizeQuotas(payload.quotas);
     cache.set(worker, { ts: Date.now(), data: payload });
     return payload;
   })();

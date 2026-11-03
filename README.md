@@ -6,7 +6,7 @@
 
 ![multi-agent-hub 结构图：任意 MCP 客户端接入、6 款原生深度宿主与零客户端 WebUI 独立管理，14 种 Worker 统一调度](docs/architecture.svg)
 
-**当前版本：v1.0.19** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
+**当前版本：v1.0.20** · 协议：[Apache-2.0](LICENSE) · 更新日志：[CHANGELOG.md](CHANGELOG.md)
 
 | 接入形态 | 适用场景 | 你需要做的操作 |
 | --- | --- | --- |
@@ -74,7 +74,7 @@ cd multi-agent-hub
 **安装成功后你能看到什么**
 
 - 浏览器打开 `http://localhost:8890`，即可看到三栏式 Web 控制台（左侧活动栏与会话树、中间对话区、右侧工作台与 14 张 Worker 状态卡片）。
-- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.19-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
+- 也可以从 [Releases](https://github.com/Johhny-Xu/multi-agent-hub/releases) 下载 `agenthub-1.0.20-both.zip` 解压后执行同一条安装命令；在源码目录直接运行时，安装器会先在临时目录打包再安装，无需手动构建。
 - 日常启停：`sh start.sh` / `sh stop.sh`（Windows：`start.bat` / `stop.bat`）。
 - 只想先看界面：直接用浏览器打开仓库里的 `demo.html`。
 
@@ -112,7 +112,7 @@ cd multi-agent-hub
 
 - **Google Antigravity**
   ```text
-  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd（Linux 用 sh install.sh）并指定 --native-hosts antigravity，把 Multi-Agent Hub 原生插件与 11 个 hub-* 子代理安装到 ~/.gemini/config/plugins/multi-agent-hub 并启动 Hub 服务。
+  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd（Linux 用 sh install.sh）并指定 --native-hosts antigravity，把 Multi-Agent Hub 原生插件与 13 个 hub-* 子代理安装到 ~/.gemini/config/plugins/multi-agent-hub 并启动 Hub 服务。
   ```
 - **华为 CodeArts（IDE / CLI）**
   ```text
@@ -124,7 +124,7 @@ cd multi-agent-hub
   ```
 - **ZCode（IDE / CLI）**
   ```text
-  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd --native-hosts zcode（Linux 用 sh install.sh），将 plugins/agenthub-workers 原生插件（含 11 个外部 Worker 子代理与 MCP 桥）注册到我的 ZCode 环境中并启动 Hub。
+  请帮我克隆 https://github.com/Johhny-Xu/multi-agent-hub.git，运行 install.cmd --native-hosts zcode（Linux 用 sh install.sh），将 plugins/agenthub-workers 原生插件（含 13 个外部 Worker 子代理与 MCP 桥）注册到我的 ZCode 环境中并启动 Hub。
   ```
 - **OpenAI Codex**
   ```text
@@ -202,8 +202,8 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 
 | 原生宿主 | 安装方式 | 详细文档 |
 | --- | --- | --- |
-| **华为 CodeArts / VS Code** | 在 IDE 扩展面板选择「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.19.carts` / `.vsix` / `.cloudide`；或执行 `.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
-| **MiniMax Code / Claude Code** | 桌面端或云端导入 `agenthub-workers-1.0.19-minimax-plugin.zip`；CLI 启动：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
+| **华为 CodeArts / VS Code** | 在 IDE 扩展面板选择「从 VSIX/CARTS 安装」导入 `multi-agent-hub-1.0.20.carts` / `.vsix` / `.cloudide`；或执行 `.\install.cmd --component plugins --native-hosts codearts --project <工作区路径>` | [codearts](integrations/codearts/README.md) · [vscode](integrations/vscode/README.md) |
+| **MiniMax Code / Claude Code** | 桌面端或云端导入 `agenthub-workers-1.0.20-minimax-plugin.zip`；CLI 启动：`mcode --plugin-dir ./plugins/agenthub-workers` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **ZCode IDE / CLI** | 执行 `.\install.cmd --component plugins --native-hosts zcode`；或在 `zcode.json` 中配置 `{"plugins":{"enabled":true,"dirs":[".../plugins/agenthub-workers"]}}` | [agenthub-workers](plugins/agenthub-workers/README.md) |
 | **OpenAI Codex** | 执行 `.\install.cmd --component plugins --native-hosts codex --project <工作区路径>`，自动注册本地插件市场并将 11 个子代理写入 `.codex/agents/` | [codex](integrations/codex/README.md) |
 | **DeepSeek Harness (DSH)** | 执行 `.\install.cmd --component plugins --native-hosts dsh --profile agenthub-client`；或运行 `dsh plugin --profile <PROFILE> add file:./integrations/dsh --ignore-scripts` | [dsh](integrations/dsh/README.md) |
@@ -212,7 +212,7 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 <details>
 <summary><b>Antigravity 原生插件与可选 SDK 说明</b></summary>
 
-- 原生插件包含 `plugin.json`、11 个子代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）以及内置 9 个桥接工具的 `mcp_config.json`。
+- 原生插件包含 `plugin.json`、13 个子代理（`agents/*.md`）、4 个技能（`skills/*/SKILL.md`）以及内置 9 个桥接工具的 `mcp_config.json`。
 - 可选 Python SDK 锁定版本 `google-antigravity==0.1.21`，提供强类型 `SubagentConfig` 与串并行编排能力。注意：当前已发布的官方 wheel 包不含 `beta.run_workflow`，且 SDK 的 API 鉴权与 IDE/CLI 登录态相互独立。
 
 </details>
@@ -220,7 +220,7 @@ sh install.sh --component hub --bind 0.0.0.0 --port 8765 --with-console
 <details>
 <summary><b>CodeArts 双向集成与换工作区说明</b></summary>
 
-CodeArts 原生包内含 11 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 9 个 MCP 工具。它既能作为宿主调度其他 AI，也能作为 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
+CodeArts 原生包内含 13 个子代理、3 个斜杠命令、1 个调度技能、1 个 Hooks 插件和 9 个 MCP 工具。它既能作为宿主调度其他 AI，也能作为 Worker 被调度（`worker="codearts"`，别名 `ca`、`huawei-codearts`）。
 
 - **单一调用路径**：严格按 `tool_search → tool_describe → tool_call` 执行；禁止在正文中直接输出 XML 标签，防止双重派发；每个任务只派发一次，后续通过轮询获取结果。
 - **权限拦截与终态判定**：遇到宿主权限拒绝时立即返回 `blocked_permission` 与原始 `ref`，不会换工具名盲目重试；仅将非空的真实 Worker 回复判定为 `completed`。
@@ -321,7 +321,7 @@ Hub 统一管理以下 14 种 Worker；表中所列为**全新安装**时的默�
 - 顶栏 `z-index: 100`、会话头 `z-index: 50` 独立层叠上下文，下拉菜单不会被代码块或右侧工作台截断。
 - 毛玻璃模式：`body.has-custom-bg` 下启用 `backdrop-filter: blur(20px~24px) saturate(180%~190%)`；中性灰面统一收敛为 `--gem-bg-card`，`--gem-surface-high` 仅用于悬浮交互态与进度条轨道。
 - Worker 主题色 `--agent-accent` 贯通发送按钮、上下文进度条与 `#panel-chat` 二级菜单；模型名称保持正文色 `--gem-text`。
-- 底部状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉内置思考档位与流式输出开关；页脚右侧显示版本号 `v1.0.19`（可被后端 `snap.version` 动态覆盖）。
+- 底部状态栏整条可点击，弹出显示项配置（模型、延时、TPS、Token、额度）；模型抽屉内置思考档位与流式输出开关；页脚右侧显示版本号 `v1.0.20`（可被后端 `snap.version` 动态覆盖）。
 - 离线 Demo 构建：运行 `scripts/build_demo.py`（配合 `scripts/demo_engine.js`）可同步生成 `demo.html` 与 `demo/index.html`。
 
 </details>
@@ -378,11 +378,11 @@ Hub 仅在本地或你的私有服务器内做协议转换与进程调度，所�
 
 | 文件名 | 适用场景 |
 | --- | --- |
-| `agenthub-1.0.19-both.zip` | 客户端与 Hub 装在同一台电脑（最常用） |
-| `agenthub-1.0.19-plugins.zip` | 仅在个人电脑上安装各宿主客户端插件 |
-| `agenthub-1.0.19-hub.zip` | 仅在服务器上部署 Hub 与 Worker 调度端 |
-| `agenthub-workers-1.0.19-minimax-plugin.zip` | 导入 MiniMax Code 桌面端或云端（符合 Plugin V1 规范） |
-| `multi-agent-hub-1.0.19.vsix` / `.carts` / `.cloudide` | 导入华为 CodeArts IDE、VS Code 及兼容云端 / 桌面编辑器 |
+| `agenthub-1.0.20-both.zip` | 客户端与 Hub 装在同一台电脑（最常用） |
+| `agenthub-1.0.20-plugins.zip` | 仅在个人电脑上安装各宿主客户端插件 |
+| `agenthub-1.0.20-hub.zip` | 仅在服务器上部署 Hub 与 Worker 调度端 |
+| `agenthub-workers-1.0.20-minimax-plugin.zip` | 导入 MiniMax Code 桌面端或云端（符合 Plugin V1 规范） |
+| `multi-agent-hub-1.0.20.vsix` / `.carts` / `.cloudide` | 导入华为 CodeArts IDE、VS Code 及兼容云端 / 桌面编辑器 |
 
 ### 常用开发与测试命令
 
@@ -422,7 +422,7 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 | 版本 | 核心变更 |
 | --- | --- |
-| **1.0.19** | 新增 `hub_task_status` 子代理存活判定：主代理派发后可探查 PID、整棵进程树 CPU、输出增量与心跳，输出 `working` / `alive_waiting` / `worker_exited_result_missing` 等 verdict；CPU 增长重置 idle 预算，避免静默长任务被误判超时 |
+| **1.0.20** | 新增 `hub_task_status` 子代理存活判定：主代理派发后可探查 PID、整棵进程树 CPU、输出增量与心跳，输出 `working` / `alive_waiting` / `worker_exited_result_missing` 等 verdict；CPU 增长重置 idle 预算，避免静默长任务被误判超时 |
 | **1.0.18** | 长任务超时改为无进展预算 + 6 小时硬上限，不再 600s 一刀切断，超时保留最后输出（partial_text）；看板娘下坠/挣扎时切到设置页立刻收起；CodeArts CLI 升级到 26.10.9，补齐 7 个内置模型，默认改为 DeepSeek-V4.1-Flash（v41f） |
 | **1.0.17** | Qoder 的「今日已领」改为按 UTC+8 窗口日判定（上游每天 10:00 开新一期，0:00–10:00 不再把昨天那期谎报成已签，未开窗显示待打卡并到点自动补签）；WebUI 收起 GUI 通道的模型选择（traecode 改由客户端决定，不再报 UNSUPPORTED）；Meoo 回答不再重复；控制台重启从 90s 降到 9s |
 | **1.0.16** | CodeArts 签到恢复（福利 Token 通道下线时降级为积分签到）、Qoder 国际版换环境重试、签到日志空白修复、看板娘可拖拽；Meoo（秒悟）作为第 14 种 Worker 接入 |
@@ -450,7 +450,7 @@ npm i -g @openai/codex && export CODEX_TEST_BINARY=$(command -v codex)
 
 - [LobeHub / Lobe Icons](https://github.com/lobehub/lobe-icons)：提供控制台与 Worker 头像使用的品牌 SVG 图标。
 - [TraeClaw](https://github.com/firerlAGI/TraeClaw)：提供 `trae_delegate` 通道依赖的本地桥接与 CDP/DOM 自动化方案。
-- [L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily)：Qoder / Qoder CN 每日签到的实现参考。`forceRefresh` 实时活动列表、`CLAIM_BENEFIT` 定向活动筛选与领取语义、token 续期链路，以及用本机 UMID 组件（`runtime-info`）生成 `Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType` 设备风控头的方案，均移植自该项目——国际版的每日积分活动只对带这些头的请求下发。感谢作者的无私分享。
+- [L0NE-6/Qoder-Daily](https://github.com/L0NE-6/Qoder-Daily)：Qoder / Qoder CN 每日签到的实现参考。`CLAIM_BENEFIT` 定向活动筛选与领取语义、地区隔离的设备身份（国际版运行环境码 3 / 国内版 0）、token 续期链路，以及用本机 UMID 组件（`runtime-info`）生成 `Cosy-MachineToken / Cosy-MachineCode / Cosy-MachineType` 设备风控头的方案，均移植自该项目——国际版的每日积分活动只对带这些头的请求下发。感谢作者的无私分享。
 - [L0NE-6/Trae-AutoCheckin](https://github.com/L0NE-6/Trae-AutoCheckin)：Trae 每日签到的实现参考。`req_source` 请求体、必须使用客户端真实注册设备号（`iCubeAuthInfo://icube-dc:`）、状态 → 领取 → 同设备号回查确认的判定链、9095/9074/1001 的语义、以及用 refreshToken + 设备证明（ECDSA P-256）走新版 `ExchangeToken` 续期的方案，均移植自该项目。感谢作者的无私分享。
 - [@user_3a370331/totorosir-minimax-checkin](https://skillhub.cn/skills/user_3a370331/totorosir-minimax-checkin)（作者 龙猫科技说 longmaoit）：MiniMax Code（海螺 AI）每日签到的实现参考。`signin/status` → `signin/claim` 的两步链路、`x-signature` / `yy` 两套签名与固定参数键序、日状态与 `claim_result` 的语义、以及用 refresh_token 续期并把新凭证回写客户端登录态的做法，均移植自该技能。感谢作者的无私分享。
 - Huawei CodeArts、Google Antigravity、Tencent CodeBuddy、GitHub Copilot、Xiaomi MiMo、MiniMax、ByteDance Trae、Z.ai、opencode、Cline 等官方 CLI 与开放生态，以及所有提交反馈的开发者。

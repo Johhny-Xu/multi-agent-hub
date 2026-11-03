@@ -145,11 +145,13 @@ def public_model_capabilities(agent, profile, model):
     if not stream_supported:
         stream["reason"] = (on or {}).get("reason", "该通道未验证实时回答流；只能查询终态")
     attachments = {}
+    max_count = (caps.get("attachments") or {}).get("max_count", MAX_ATTACHMENTS)
     for kind in ("file", "image"):
         config, reason = attachment_config(caps, kind, profile)
         attachments[kind] = {"supported": config is not None, "platforms": [platform_name()]}
         if config:
             attachments[kind]["mode"] = config.get("mode")
+            attachments[kind]["max_count"] = max_count
             if kind == "image" and (config.get("mode") in {"stdin_json", "messages_file"} or config.get("requires_read_authorization")):
                 attachments[kind]["content_types"] = ["image/png", "image/jpeg", "image/gif", "image/webp"]
             if config.get("mode") in {"stdin_json", "inline_text", "messages_file"} and kind == "file":
@@ -238,8 +240,11 @@ def prepare_task(agent, profile, args, directory):
         if not isinstance(remove_args, list) or any(flag not in {"--stream", "--include-partial-messages"} for flag in remove_args):
             raise ValueError("Invalid removable CLI boolean flags")
     raw = args.get("attachments", [])
-    if not isinstance(raw, list) or len(raw) > MAX_ATTACHMENTS:
-        raise ValueError("attachments must be an array with at most 8 files")
+    limit = (caps.get("attachments") or {}).get("max_count", MAX_ATTACHMENTS)
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0 or limit > MAX_ATTACHMENTS:
+        raise ValueError("invalid worker attachment limit")
+    if not isinstance(raw, list) or len(raw) > limit:
+        raise ValueError(f"attachments must be an array with at most {limit} files")
     decoded, total = [], 0
     for item in raw:
         if not isinstance(item, dict) or set(item) != {"name", "mime_type", "data_base64"}:

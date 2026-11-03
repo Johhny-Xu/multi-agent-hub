@@ -103,3 +103,11 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 - **防误杀**：`run_cmd_mode` 的 idle 预算把进程树 CPU 增长也算作进展，静默但真在计算的任务不会被 stdout 空闲阈值切断；`_reap_result` 遇到仍存活的 PID 不再按 `updated_at` 判 timeout。`hub_result_json` 透传 `verdict`/`liveness`，`hub_wait_result` 预算耗尽时显示存活结论，异步受理回执直接提示先查 `hub_task_status`。
 - **WebUI**：自动签到定时器改为可停止并 `unref`，`dispose` 真正退出，`node --test console_smoke.mjs` 不再挂死；移动端状态栏 4px 占位、浅色用户气泡对比与移动端按钮热区收口；看板娘按用户观感保持原停靠位置。发行包补齐 `console/client/assets/*.webm`，不再漏看板娘或重复旧 `mascot/` 目录。
 - **验证**：新增 12 例存活回归；`task_contract` 23 项、`hub_core` + `runtime` 52 项全绿；Windows 派发 smoke 12/13（仅自带 zcode bridge fixture 连接失败，与本次改动无关）。线上 `mimocode` 实跑观察到 `starting → alive_waiting → working（CPU 0→10.18s）→ completed`。
+
+`v1.0.20`（2026-11-03）：子代理账号实时配额 + CodeArts 写权限 + 存活探针上界面。
+
+- **实时配额**：新增 `console/quota-deep.mjs` 与 `console/client/quota-view.js`，子代理卡片恢复额度胶囊并支持点击查看详情。Qoder / Qoder CN 走 `api/v2/quota/usage`（需完整设备指纹），Trae CN 走 `pay/user_current_entitlement_list`，CodeArts 走 `snap-manager/v1/statistics/plugin`（SDK-HMAC-SHA256），MiniMax Code 用签到积分兜底。`quotas` 统一归一化为数组，修掉 `codebuddy-cn` 串读国际版 worker 的问题。
+- **Qoder 国际版签到**：设备身份改为**按地区隔离**（`QODER_INTL_MACHINE_*` / `QODER_CN_MACHINE_*`）。此前全局 `QODER_MACHINE_*` 里放的是中国版三件套，国际版账号因此拿到错误指纹、活动列表恒空（「活动 0 个 / 未派发」）。
+- **CodeArts 写权限**：反编译确认 `codearts run` 把任何 `permission.asked` 硬编码成 `reply: "reject"`，`--auto` 只放行 bash。新增 `AGENTHUB_CODEARTS_AUTO` 显式开关（加 `--auto` + 任务尾部提示「落盘走 bash」），默认仍拒绝；默认超时 300s → 900s。
+- **探针上界面**：`/api/result` 非终态时附 `hub_task_status` 的 `verdict`/`guidance`/`liveness`，新增 `console/client/task-verdict.js`，异步任务与聊天「执行中」按 `思考中 / 工作中 / 已退出·无结果` 显示并附存活证据；聊天派发的 ref 自动并入异步任务列表。新增 `AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S`（默认 60，范围 [5,600]），线上设为 20 秒。
+- **验证**：`console_vendor_quota` 19 项、`console_task_verdict` 12 项、`codearts_driver_regressions` 35 项、`task_liveness_regressions` 16 项全绿；线上实测 Qoder 国际版「花凄」领取 +100 Credits、CodeArts 跑通建站任务、探针 `working → worker_exited_result_missing` 分类正确。

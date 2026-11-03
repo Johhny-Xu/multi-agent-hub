@@ -31,8 +31,8 @@ export const QODER_REGIONS = {
   },
 };
 
-/** 与 cosy 活动平台对齐的桌面端版本；官方升级后可用环境变量覆盖 */
-export const QODER_DESKTOP_VERSION = (process.env.AGENTHUB_QODER_DESKTOP_VERSION || '0.4.3').trim() || '0.4.3';
+/** 与 cosy 活动平台对齐的桌面端版本；官方升级后可用环境变量覆盖（兜底对齐参考实现 v1.0.8 的 1.1.69） */
+export const QODER_DESKTOP_VERSION = (process.env.AGENTHUB_QODER_DESKTOP_VERSION || '1.1.69').trim() || '1.1.69';
 
 export const QODER_MODELS = [
   { id: 'dfmodel', name: 'DeepSeek-Flash', credits: '0.1x', tag: '限时免费', default: true },
@@ -331,29 +331,51 @@ export function qoderHeaders(worker, token, device = null) {
 
 async function qoderRequest(worker, token, path, options = {}) {
   const region = qoderRegion(worker);
-  // baseUrlOverride：国际版活动没下发时，用同一个 token 再打一次另一套环境
-  // （开源项目 qoder-checkin 的 baseUrls 就是让在 openapi.qoder.sh / openapi.qoder.com.cn 之间切）
   const base = options.baseUrl || region.openapi;
+  const headers = options.minimal
+    ? qoderMinimalHeaders(token)
+    : { ...qoderHeaders(worker, token, options.device), ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
   const res = await fetchJsonSmart(`${base}${path}`, {
     method: options.method || 'GET',
-    headers: { ...qoderHeaders(worker, token, options.device), ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   return res;
 }
 
-/** forceRefresh=true 是上游要求：不带它会吃到活动缓存，刚开启的活动看不到 */
-export async function listQoderCampaigns(worker, token, device = null, baseUrl = '') {
-  return qoderRequest(worker, token, '/sash/api/v1/me/campaigns?forceRefresh=true', { device, baseUrl });
+/**
+ * 最小鉴权四件套（对齐参考实现 L0NE-6/Qoder-Daily v1.0.10 的 minimal_sash_headers）。
+ *
+ * 上游对「带完整设备头」的请求偶尔会下发**空活动列表**，中国版改用这四件套
+ * （不带任何设备指纹）再取一次就能看到每日活动行。
+ * ⚠️ 这个降级**只对中国版启用**——国际版不做（参考实现 v1.0.10）。
+ */
+export function qoderMinimalHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    'cosy-clienttype': '10',
+    'User-Agent': 'Qoder',
+    'Content-Type': 'application/json',
+  };
 }
 
-/** 另一套环境的 openapi（国际 ⇄ 国内），用于活动列表为空时换环境重试 */
-export function altQoderBaseUrl(worker) {
-  return worker === 'qoder' ? 'https://openapi.qoder.com.cn' : 'https://openapi.qoder.sh';
+/**
+ * 拉活动列表。
+ * ⚠️ **不要带 `?forceRefresh=true`**：参考实现 L0NE-6/Qoder-Daily v1.0.6 明确，
+ * 该参数只是本地缓存标记，官方客户端从不发送；带上它服务端会**过滤掉每日活动行**
+ * （表现就是活动列表恒空、永远签不上）。旧注释「不带它会吃到活动缓存」是反的。
+ *
+ * @param {'qoder'|'qoder-cn'} worker
+ * @param {string} token
+ * @param {object|null} device 设备身份；null = 不带设备头
+ * @param {{ minimal?: boolean }} [options] minimal=true 时只用最小鉴权四件套
+ */
+export async function listQoderCampaigns(worker, token, device = null, options = {}) {
+  return qoderRequest(worker, token, '/sash/api/v1/me/campaigns', { device, minimal: options.minimal === true });
 }
 
-export async function claimQoderCampaign(worker, token, campaignId, device = null, baseUrl = '') {
-  return qoderRequest(worker, token, `/sash/api/v1/me/campaigns/${encodeURIComponent(campaignId)}/claim`, { method: 'POST', body: {}, device, baseUrl });
+export async function claimQoderCampaign(worker, token, campaignId, device = null) {
+  return qoderRequest(worker, token, `/sash/api/v1/me/campaigns/${encodeURIComponent(campaignId)}/claim`, { method: 'POST', body: {}, device });
 }
 
 /** 刷新 dt-/jt- 配套 refresh token；返回新 token 或 null */
