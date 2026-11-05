@@ -111,3 +111,11 @@ Git 发布日期：2026-10-09。0.5–0.8 按下表顺序独立提交、打标�
 - **CodeArts 写权限**：反编译确认 `codearts run` 把任何 `permission.asked` 硬编码成 `reply: "reject"`，`--auto` 只放行 bash。新增 `AGENTHUB_CODEARTS_AUTO` 显式开关（加 `--auto` + 任务尾部提示「落盘走 bash」），默认仍拒绝；默认超时 300s → 900s。
 - **探针上界面**：`/api/result` 非终态时附 `hub_task_status` 的 `verdict`/`guidance`/`liveness`，新增 `console/client/task-verdict.js`，异步任务与聊天「执行中」按 `思考中 / 工作中 / 已退出·无结果` 显示并附存活证据；聊天派发的 ref 自动并入异步任务列表。新增 `AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S`（默认 60，范围 [5,600]），线上设为 20 秒。
 - **验证**：`console_vendor_quota` 19 项、`console_task_verdict` 12 项、`codearts_driver_regressions` 35 项、`task_liveness_regressions` 16 项全绿；线上实测 Qoder 国际版「花凄」领取 +100 Credits、CodeArts 跑通建站任务、探针 `working → worker_exited_result_missing` 分类正确。
+
+`v1.0.21`（2026-11-05）：移动端滑轨常驻克隆 + 零刷新原位更新 + MiniMaxCode 附件直传 + 对话流去卡片。
+
+- **滑轨常驻克隆（路线 Y）**：移动端平台滑轨改为首尾各挂一张常驻克隆卡，全程保持 `scroll-snap-type: x mandatory`，静止后只做一次 `warp()` 等价瞬移。`touchstart` 阶段不再阻塞 145ms，滑到首尾也不再出现死区回跳。
+- **零刷新原位更新**：`renderAgents` 与 `qa-grid` 先比数据签名，签名相同直接短路；不同则按 key 原位复用 DOM，不再每 30 秒全量重建，也不再重播 433ms 的 `cardStaggerIn` 入场动画。`__railLastScrollAt` 的时间戳混用已修正，静默窗扩到 800ms；`syncOne` 增加 `__srcHtmlSnapshot`，避免克隆卡 `innerHTML` 恒不等而每次重写；首尾卡片的「已启用」开关改用 `defaultChecked` 序列化，并对克隆伪元素屏蔽 `*::before/*::after` 过渡，跨界时旋钮不再滑动。
+- **MiniMaxCode 附件直传**：`hub/capabilities.json` 与 `hub/task_contract.py` 把 `minimaxcode` 的文本/图片附件绑定改为 `mcode exec` 实装支持的 `--file <path>` 可重复参数，同时保留 `{task}` 位置参数；新增 `hub/dispatch_audit.py` 做离线与实时派发审计。
+- **Mobile Shell v2 与对话流去卡片**：子代理回复去掉卡片背景框与左边框，与用户气泡区分开，对齐流式正文阅读体验（实现与权重推导见 `docs/bubble-flat.md`）；未锁定侧栏首次点击平台行保持展开。
+- **验证**：第九轮无头验证通过（iPhone 390×844 视口，滑轨跨界、轮询稳定性、开关状态、对话流 computedStyle 断言）；`task_contract` / `hub_core` / `packaging_smoke` 与 node 侧 bridge、语法、签到卡状态、任务判定用例全绿；`extension_packaging_regressions` 校验 8 个发行附件。

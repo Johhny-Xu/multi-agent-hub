@@ -1,7 +1,8 @@
 // Agent Hub 桥接引擎：把"派发 → 阻塞回收"包成一次调用（ask）。
 // 供 server.mjs（stdio MCP）与 ask.mjs（CLI 一次性）共用。
 // 发布时同步 root mcp 与 integrations/dsh/mcp；tests/mcp_bridge.test.mjs 防止独立安装包漂移。
-import { open } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { loadConnection } from "./config.mjs";
 
@@ -89,48 +90,120 @@ function message(error) {
   return text.slice(0, 500);
 }
 
+const MAX_FILES = 8;
+const MAX_FILE_BYTES = 1024 * 1024;
+
+function contractError(code, stage, text, details = {}, kind = "rejected") {
+  const error = hubError(kind, text);
+  error.code = code;
+  error.stage = stage;
+  error.details = details;
+  error.dispatch_count = 0;
+  return error;
+}
+
+function fileError(error, name) {
+  const code = error && error.code;
+  if (code === "EACCES" || code === "EPERM") {
+    return contractError("blocked_permission", "validation", "附件读取被本地权限策略拒绝：" + name,
+      { file_id: name }, "permission");
+  }
+  return contractError("ATTACHMENT_UNREADABLE", "validation", "附件无法完整读取：" + name,
+    { file_id: name, worker_reason: String(code || "read_error") });
+}
+
+/** `files` is the explicit authorization list for this call only. */
+async function readAuthorizedAttachments(files) {
+  if (!Array.isArray(files) || files.length > MAX_FILES || files.some((item) => typeof item !== "string" || !item)) {
+    throw contractError("ATTACHMENT_LIMIT_EXCEEDED", "validation", "files must contain at most 8 local file paths",
+      { actual_count: Array.isArray(files) ? files.length : 0, allowed_count: MAX_FILES });
+  }
+  const attachments = [];
+  const mimeTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf", ".json": "application/json" };
+  let size = 0;
+  for (const source of files) {
+    const name = basename(source);
+    if (/^(?:\.env(?:\..*)?|\.?auth\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))$/i.test(name) || /\.(?:key|pem)$/i.test(name)) {
+      throw contractError("ATTACHMENT_ACCESS_DENIED", "validation", "Credential files cannot be sent as task attachments",
+        { file_id: name, worker_reason: "credential_filename" });
+    }
+    let before;
+    try { before = await lstat(source); }
+    catch (error) { throw fileError(error, name); }
+    if (before.isSymbolicLink()) {
+      throw contractError("ATTACHMENT_ACCESS_DENIED", "validation", "Symbolic links are not authorized attachments",
+        { file_id: name, worker_reason: "symlink" });
+    }
+    if (!before.isFile()) {
+      throw contractError("ATTACHMENT_UNREADABLE", "validation", "Attachment is not a regular file",
+        { file_id: name, worker_reason: before.isDirectory() ? "directory" : "not_regular_file" });
+    }
+    let file;
+    try {
+      // O_NOFOLLOW closes the lstat/open race: a swapped symlink is refused
+      // instead of being followed to an unauthorized target.
+      const flags = constants.O_RDONLY | (process.platform === "win32" ? 0 : (constants.O_NOFOLLOW || 0));
+      file = await open(source, flags);
+    }
+    catch (error) { throw fileError(error, name); }
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile()) {
+        throw contractError("ATTACHMENT_UNREADABLE", "validation", "Attachment is not a regular file",
+          { file_id: name, worker_reason: "not_regular_file" });
+      }
+      if (stat.size !== before.size || stat.mtimeMs !== before.mtimeMs) {
+        throw contractError("ATTACHMENT_UNREADABLE", "validation", "Attachment changed before it was read",
+          { file_id: name, worker_reason: "changed_before_read" });
+      }
+      if (size + stat.size > MAX_FILE_BYTES) {
+        throw contractError("ATTACHMENT_LIMIT_EXCEEDED", "validation", "Attachments exceed the 1 MiB combined limit",
+          { file_id: name, actual_bytes: size + stat.size, allowed_bytes: MAX_FILE_BYTES });
+      }
+      const data = await file.readFile();
+      if (data.length !== stat.size) {
+        throw contractError("ATTACHMENT_UNREADABLE", "validation", "Attachment read was incomplete",
+          { file_id: name, actual_bytes: data.length, worker_reason: "short_read" });
+      }
+      const after = await file.stat();
+      if (after.size !== stat.size || after.mtimeMs !== stat.mtimeMs) {
+        throw contractError("ATTACHMENT_UNREADABLE", "validation", "Attachment changed while it was being read",
+          { file_id: name, worker_reason: "changed_while_reading" });
+      }
+      size += data.length;
+      if (size > MAX_FILE_BYTES) {
+        throw contractError("ATTACHMENT_LIMIT_EXCEEDED", "validation", "Attachments exceed the 1 MiB combined limit",
+          { file_id: name, actual_bytes: size, allowed_bytes: MAX_FILE_BYTES });
+      }
+      attachments.push({ name, mime_type: mimeTypes[extname(name).toLowerCase()] || "text/plain", data_base64: data.toString("base64") });
+    } catch (error) {
+      if (error && error.code && error.stage) throw error;
+      throw fileError(error, name);
+    } finally { await file.close(); }
+  }
+  return attachments;
+}
+
 async function taskOptions(options = {}) {
-  if (!options || typeof options !== "object" || Array.isArray(options)) throw hubError("rejected", "options must be an object");
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw contractError("TASK_OPTION_INVALID", "validation", "options must be an object");
   const known = new Set(["model", "cwd", "thinking", "stream", "files", "onProgress"]);
-  for (const key of Object.keys(options)) if (!known.has(key)) throw hubError("rejected", "Unknown task option: " + key);
+  for (const key of Object.keys(options)) if (!known.has(key)) throw contractError("TASK_OPTION_INVALID", "validation", "Unknown task option: " + key);
   const result = {};
   for (const key of ["model", "cwd"]) {
     if (options[key] !== undefined) {
-      if (typeof options[key] !== "string" || !options[key].trim()) throw hubError("rejected", key + " must be a nonempty string");
+      if (typeof options[key] !== "string" || !options[key].trim()) throw contractError("TASK_OPTION_INVALID", "validation", key + " must be a nonempty string");
       result[key] = options[key];
     }
   }
   if (options.thinking !== undefined) {
-    if (!["default", "on", "off"].includes(options.thinking)) throw hubError("rejected", "thinking must be default/on/off");
+    if (!["default", "on", "off"].includes(options.thinking)) throw contractError("TASK_OPTION_INVALID", "validation", "thinking must be default/on/off");
     result.thinking = options.thinking;
   }
   if (options.stream !== undefined) {
-    if (typeof options.stream !== "boolean") throw hubError("rejected", "stream must be a boolean");
+    if (typeof options.stream !== "boolean") throw contractError("TASK_OPTION_INVALID", "validation", "stream must be a boolean");
     result.stream = options.stream;
   }
-  if (options.files !== undefined) {
-    if (!Array.isArray(options.files) || options.files.length > 8 || options.files.some((f) => typeof f !== "string" || !f)) {
-      throw hubError("rejected", "files must contain at most 8 local file paths");
-    }
-    result.attachments = [];
-    let size = 0;
-    const mimeTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf", ".json": "application/json" };
-    for (const source of options.files) {
-      const name = basename(source);
-      if (/^(?:\.env(?:\..*)?|\.?auth\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))$/i.test(name) || /\.(?:key|pem)$/i.test(name)) {
-        throw hubError("rejected", "Credential files cannot be sent as task attachments");
-      }
-      const file = await open(source, "r");
-      try {
-        const stat = await file.stat();
-        if (!stat.isFile() || size + stat.size > 1024 * 1024) throw hubError("rejected", "Attachments exceed the 1 MiB combined limit or are not regular files");
-        const data = await file.readFile();
-        size += data.length;
-        if (size > 1024 * 1024) throw hubError("rejected", "Attachments exceed the 1 MiB combined limit");
-        result.attachments.push({ name, mime_type: mimeTypes[extname(name).toLowerCase()] || "text/plain", data_base64: data.toString("base64") });
-      } finally { await file.close(); }
-    }
-  }
+  if (options.files !== undefined) result.attachments = await readAuthorizedAttachments(options.files);
   return result;
 }
 
@@ -153,7 +226,15 @@ async function callTool(name, args, timeoutMs, allowToolError = false) {
     body: payload,
     signal: AbortSignal.timeout(Math.max(1, Math.ceil(timeoutMs))),
   });
-  if (!resp.ok) throw hubError("rejected", "HTTP " + resp.status + "：枢纽请求失败");
+  if (!resp.ok) {
+    // 403 is a policy refusal; 401 is authentication, not permission policy.
+    const kind = resp.status === 403 ? "permission" : "rejected";
+    const error = hubError(kind, "HTTP " + resp.status + "：枢纽请求失败");
+    error.http_status = resp.status;
+    if (resp.status === 403) { error.code = "blocked_permission"; error.stage = "dispatch_acceptance"; }
+    if (resp.status === 401) { error.code = "AUTH_FAILED"; error.stage = "dispatch_acceptance"; }
+    throw error;
+  }
   let body;
   try { body = await resp.json(); }
   catch (error) {
@@ -169,7 +250,20 @@ async function callTool(name, args, timeoutMs, allowToolError = false) {
   const blocks = body.result.content.filter((block) => block?.type === "text" && typeof block.text === "string");
   if (!blocks.length) throw hubError("protocol", "PROTOCOL-ERROR：工具没有返回文本内容");
   const text = blocks.map((block) => block.text).join("\n");
-  if (body.result.isError && !allowToolError) throw hubError("rejected", "TOOL-ERROR " + text);
+  if (body.result.isError && !allowToolError) {
+    let structured = null;
+    try { structured = JSON.parse(text); } catch { structured = null; }
+    if (structured && typeof structured === "object" && typeof structured.error_code === "string") {
+      const error = hubError(structured.error_code === "blocked_permission" ? "permission" : "rejected",
+        structured.message || "TOOL-ERROR");
+      error.code = structured.error_code;
+      error.stage = structured.failure_stage;
+      error.details = structured.error_details;
+      error.dispatch_count = structured.dispatch_count;
+      throw error;
+    }
+    throw hubError("rejected", "TOOL-ERROR " + text);
+  }
   return text;
 }
 
@@ -186,7 +280,7 @@ async function dispatchWorker(worker, task, timeoutS, deadline, options) {
 }
 
 /** 状态来自首行回执；退出码使用枢纽的尾行格式，不扫描正文中的 ref/status。 */
-function receipt(text, worker, expectedRef = null) {
+function parseReceipt(text, worker, expectedRef = null) {
   const cleaned = cleanText(text);
   const header = /^\[([^\]\r\n]+)\]([^\r\n]*)(?:\r?\n|$)/.exec(cleaned);
   if (!header) return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
@@ -194,48 +288,122 @@ function receipt(text, worker, expectedRef = null) {
   const ref = tag.split("/").at(-1);
   const validRef = expectedRef ? ref === expectedRef : (refRegex(worker).test(ref) || /^[a-z0-9_-]+-[0-9a-f]{6,32}$/i.test(ref));
   const status = /(?:^|\s)status=([a-z]+)\b/i.exec(header[2])?.[1]?.toLowerCase();
+  const workerStatus = /(?:^|\s)worker_status=([a-z]+)\b/i.exec(header[2])?.[1]?.toLowerCase();
+  const errorCode = /(?:^|\s)error_code=([A-Za-z0-9_]+)\b/.exec(header[2])?.[1];
+  const failureStage = /(?:^|\s)failure_stage=([a-z_]+)\b/i.exec(header[2])?.[1];
+  const headerDispatchCount = /(?:^|\s)dispatch_count=(\d+)\b/.exec(header[2])?.[1];
+  const auditDegraded = /(?:^|\s)audit_degraded=true\b/i.test(header[2]);
+  const extra = { ...(workerStatus ? { worker_status: workerStatus } : {}),
+    ...(errorCode ? { error_code: errorCode } : {}),
+    ...(failureStage ? { failure_stage: failureStage } : {}),
+    ...(headerDispatchCount !== undefined ? { dispatch_count: Number(headerDispatchCount) } : {}),
+    ...(auditDegraded ? { audit_degraded: true } : {}) };
   const headerExit = /(?:^|\s)exit=(-?\d+)\b/.exec(header[2]);
   const footerExit = /\n\(exit=(-?\d+)\)\s*$/.exec(cleaned);
   if (validRef) {
     if ((headerExit && Number(headerExit[1]) !== 0) || (footerExit && Number(footerExit[1]) !== 0) || ["failed", "error", "timeout", "cancelled"].includes(status)) {
-      return { status: "failed", ref, answer: cleaned.slice(0, 500) };
+      return { status: "failed", ref, answer: cleaned.slice(0, 500), ...extra };
     }
     if (status === "completed") {
       const ans = extractAnswer(cleaned);
       if (/排队提醒|当前模型请求量较高|升级权益等待中|体验套餐可用额度已用完|套餐查询失败|额度已用完|可用额度已用完|积分不足|无可用额度/.test(ans)) {
-        return { status: "failed", ref, answer: ans.slice(0, 500) };
+        return { status: "failed", ref, answer: ans.slice(0, 500), ...extra };
       }
-      return { status, ref, answer: ans };
+      return { status, ref, answer: ans, ...extra };
     }
-    if (!expectedRef || status === "running") return { status: "running", ref, answer: "" };
+    if (!expectedRef || status === "running") return { status: "running", ref, answer: "", ...extra };
   } else if (!expectedRef && headerExit && (tag === worker || tag.startsWith(worker + "/"))) {
     const isOk = Number(headerExit[1]) === 0;
     const ans = isOk ? extractAnswer(cleaned) : cleaned.slice(0, 500);
     if (isOk && /排队提醒|当前模型请求量较高|升级权益等待中|体验套餐可用额度已用完|套餐查询失败|额度已用完|可用额度已用完|积分不足|无可用额度/.test(ans)) {
-      return { status: "failed", ref: "", answer: ans.slice(0, 500) };
+      return { status: "failed", ref: "", answer: ans.slice(0, 500), ...extra };
     }
-    return { status: isOk ? "completed" : "failed", ref: "", answer: ans };
+    return { status: isOk ? "completed" : "failed", ref: "", answer: ans, ...extra };
   }
   if (status === "running" && ref && /^[a-z0-9_-]+-[0-9a-f]{6,32}$/i.test(ref)) {
-    return { status: "running", ref, answer: "" };
+    return { status: "running", ref, answer: "", ...extra };
   }
-  return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500) };
+  return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500), ...extra };
+}
+
+const PLACEHOLDER_ANSWERS = new Set(["(无输出)", "(尚无文本)", "(no output)", "(empty)", "task received", "已收到任务", "任务已收到"]);
+
+function unusableAnswer(text) {
+  const value = cleanText(text).replace(/\s+/g, "").toLowerCase();
+  if (!value) return true;
+  if (PLACEHOLDER_ANSWERS.has(value)) return true;
+  return value.length <= 24 && ["思考中", "生成中", "thinking", "receivedthetask"].some((marker) => value.includes(marker));
+}
+
+/** Normalize one receipt while keeping the raw worker status and input ref. */
+function receipt(text, worker, expectedRef = null) {
+  const value = parseReceipt(text, worker, expectedRef);
+  const workerStatus = value.worker_status || value.status;
+  let status = value.status;
+  let errorCode = value.error_code;
+  let failureStage = value.failure_stage;
+  if (status === "completed" && unusableAnswer(value.answer)) {
+    status = "failed";
+    errorCode = "WORKER_ANSWER_EMPTY";
+    failureStage = "verification";
+  } else if (status === "failed" && !errorCode) {
+    errorCode = "WORKER_EXECUTION_FAILED";
+    failureStage = "worker_execution";
+  }
+  return { ...value, status, worker_status: workerStatus, ...(errorCode ? { error_code: errorCode } : {}),
+    ...(failureStage ? { failure_stage: failureStage } : {}) };
+}
+
+function createDispatchGuard() {
+  let count = 0;
+  return {
+    begin() {
+      if (count !== 0) {
+        const error = hubError("rejected", "DUPLICATE_DISPATCH_DENIED: this logical task already dispatched");
+        error.code = "DUPLICATE_DISPATCH_DENIED";
+        error.dispatch_count = count;
+        throw error;
+      }
+      count = 1;
+    },
+    get count() { return count; },
+  };
 }
 
 async function startTask(worker, task, timeoutS, deadline, options = {}) {
+  const guard = createDispatchGuard();
   let prepared;
   try {
     prepared = await taskOptions(options);
-    if (performance.now() >= deadline) throw new Error("派发前等待预算已用尽");
+    if (performance.now() >= deadline) {
+      return { status: "unknown", ref: "", answer: "派发前等待预算已用尽，未调用 worker。",
+        error_code: "DISPATCH_TIMEOUT", failure_stage: "dispatch_acceptance", dispatch_count: 0 };
+    }
   } catch (error) {
-    return { status: "failed", ref: "", answer: "任务未派发：" + message(error) };
+    return { status: "failed", ref: "", answer: "任务未派发：" + message(error),
+      ...(error.code ? { error_code: error.code } : {}),
+      failure_stage: error.stage || "validation",
+      ...(error.details ? { error_details: error.details } : {}),
+      dispatch_count: 0 };
   }
   try {
-    return receipt(await dispatchWorker(worker, task, timeoutS, deadline, prepared), worker);
+    guard.begin();
+    const normalized = receipt(await dispatchWorker(worker, task, timeoutS, deadline, prepared), worker);
+    return { ...normalized, dispatch_count: guard.count };
   } catch (error) {
-    const status = error.kind === "rejected" ? "failed" : "unknown";
-    const prefix = status === "unknown" ? "未能确认派发是否受理，请先检查枢纽，避免重复执行：" : "枢纽拒绝派发：";
-    return { status, ref: "", answer: prefix + message(error) };
+    const permission = error.kind === "permission" || error.code === "blocked_permission" ||
+      /\b(?:EACCES|EPERM|blocked_permission)\b/.test(String(error && error.message || ""));
+    const rejected = error.kind === "rejected" || permission;
+    const timedOut = error.name === "TimeoutError" || error.name === "AbortError";
+    const status = permission || rejected ? "failed" : "unknown";
+    const errorCode = (typeof error.code === "string" ? error.code : null) ||
+      (timedOut ? "DISPATCH_TIMEOUT" : "TASK_STATE_UNKNOWN");
+    const prefix = permission ? "权限策略拒绝派发：" : status === "unknown" ? "未能确认派发是否受理，请先检查枢纽，避免重复执行：" : "枢纽拒绝派发：";
+    const stage = error.stage || "dispatch_acceptance";
+    const preDispatch = ["validation", "capability_validation", "command_binding", "audit"].includes(stage);
+    return { status, ref: "", answer: prefix + message(error), error_code: errorCode,
+      failure_stage: stage, dispatch_count: preDispatch ? 0 : guard.count,
+      ...(error.details ? { error_details: error.details } : {}) };
   }
 }
 
@@ -244,6 +412,7 @@ async function dispatchAndCollect(worker, task, timeoutS, options) {
   const started = await startTask(worker, task, timeoutS, deadline, options);
   if (started.status !== "running") return { ok: started.status === "completed", worker, ...started };
   const { ref } = started;
+  const dispatchCount = started.dispatch_count ?? 1;
   let previousProgress = "";
   while (performance.now() < deadline) {
     const remainingMs = deadline - performance.now();
@@ -259,10 +428,27 @@ async function dispatchAndCollect(worker, task, timeoutS, options) {
           previousProgress = progress;
           if (typeof options.onProgress === "function") await options.onProgress({ ref, status: value.status, text: progress });
         }
-        const status = ["error", "timeout", "cancelled"].includes(value.status) ? "failed" : value.status;
-        result = { ok: status === "completed", worker, ref, status, answer: typeof value.text === "string" ? value.text : "" };
+        let status = ["error", "timeout", "cancelled"].includes(value.status) ? "failed" : value.status;
+        const text = typeof value.text === "string" ? value.text : "";
+        let errorCode = value.error_code;
+        let stage = value.failure_stage;
+        if (status === "completed" && unusableAnswer(text)) {
+          status = "failed";
+          errorCode = "WORKER_ANSWER_EMPTY";
+          stage = "verification";
+        } else if (status === "failed" && !errorCode) {
+          errorCode = "WORKER_EXECUTION_FAILED";
+          stage = stage || "worker_execution";
+        } else if (status === "unknown") {
+          errorCode = errorCode || "TASK_STATE_UNKNOWN";
+          stage = stage || "result_query";
+        }
+        result = { ok: status === "completed", worker, ref, status,
+          worker_status: value.worker_status || value.status, dispatch_count: dispatchCount,
+          ...(errorCode ? { error_code: errorCode } : {}), ...(stage ? { failure_stage: stage } : {}),
+          answer: text };
       } catch (error) {
-        return { ok: false, worker, ref, status: "unknown", answer: "查询失败，保留原 ref：" + message(error) };
+        return { ok: false, worker, ref, status: "unknown", dispatch_count: dispatchCount, error_code: "TASK_STATE_UNKNOWN", failure_stage: "result_query", answer: "查询失败，保留原 ref：" + message(error) };
       }
       if (result.status !== "running") return result;
       await new Promise((resolve) => setTimeout(resolve, Math.min(150, Math.max(0, deadline - performance.now()))));
@@ -273,15 +459,15 @@ async function dispatchAndCollect(worker, task, timeoutS, options) {
     } catch (error) {
       if (performance.now() >= deadline) break;
       if (error.name === "TimeoutError" || error.name === "AbortError") continue;
-      return { ok: false, status: "unknown", worker, ref, answer: "查询失败，任务可能仍在执行，请用同一 ref 续查：" + message(error) };
+      return { ok: false, status: "unknown", worker, ref, dispatch_count: dispatchCount, error_code: "TASK_STATE_UNKNOWN", failure_stage: "result_query", answer: "查询失败，任务可能仍在执行，请用同一 ref 续查：" + message(error) };
     }
     const result = receipt(t, worker, ref);
-    if (result.status !== "running") return { ok: result.status === "completed", worker, ...result };
+    if (result.status !== "running") return { ok: result.status === "completed", worker, ...result, dispatch_count: dispatchCount };
     // 即时 running 回执也要退避，避免本地 HTTP 枢纽被紧密轮询淹没。
     const pauseMs = Math.min(100, Math.max(0, deadline - performance.now()));
     if (pauseMs) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
-  return { ok: false, status: "running", worker, ref, answer: `在 ${timeoutS}s 内未完成，任务仍可能执行；使用 ref=${ref} 续查，避免重复派发。` };
+  return { ok: false, status: "running", worker, ref, error_code: "WAIT_BUDGET_EXHAUSTED", failure_stage: "result_collection", dispatch_count: 1, answer: `在 ${timeoutS}s 内未完成，任务仍可能执行；使用 ref=${ref} 续查，避免重复派发。` };
 }
 
 function taskError(task, timeoutS) {
@@ -301,14 +487,14 @@ function recursiveDispatchError(worker) {
 export async function ask(workerRaw, task, timeoutS = 300, options = {}) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
-    return { ok: false, status: "failed", worker: String(workerRaw || ""), ref: "", answer: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
+    return { ok: false, status: "failed", worker: String(workerRaw || ""), ref: "", dispatch_count: 0, error_code: "INVALID_WORKER", failure_stage: "validation", answer: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
   const recursive = recursiveDispatchError(worker);
   if (recursive) {
-    return { ok: false, status: "failed", worker, ref: "", answer: recursive };
+    return { ok: false, status: "failed", worker, ref: "", dispatch_count: 0, error_code: "RECURSIVE_DISPATCH_DENIED", failure_stage: "validation", answer: recursive };
   }
   const error = taskError(task, timeoutS);
-  if (error) return { ok: false, status: "failed", worker, ref: "", answer: error };
+  if (error) return { ok: false, status: "failed", worker, ref: "", dispatch_count: 0, error_code: "TASK_OPTION_INVALID", failure_stage: "validation", answer: error };
   return dispatchAndCollect(worker, task, timeoutS, options);
 }
 
@@ -403,16 +589,16 @@ export async function hubLogin(workerRaw, action = "status") {
 export async function dispatchOnly(workerRaw, task, timeoutS = 900, options = {}) {
   const worker = resolveWorker(workerRaw);
   if (!worker) {
-    return { ok: false, worker: String(workerRaw || ""), ref: "", error: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
+    return { ok: false, worker: String(workerRaw || ""), ref: "", dispatch_count: 0, error_code: "INVALID_WORKER", failure_stage: "validation", error: `未知 worker「${workerRaw}」，可选：${CANONICAL.join(" / ")}` };
   }
   const recursive = recursiveDispatchError(worker);
   if (recursive) {
-    return { ok: false, status: "failed", worker, ref: "", error: recursive };
+    return { ok: false, status: "failed", worker, ref: "", dispatch_count: 0, error_code: "RECURSIVE_DISPATCH_DENIED", failure_stage: "validation", error: recursive };
   }
   const error = taskError(task, timeoutS);
-  if (error) return { ok: false, worker, ref: "", error };
+  if (error) return { ok: false, worker, ref: "", dispatch_count: 0, error_code: "TASK_OPTION_INVALID", failure_stage: "validation", error };
   const result = await startTask(worker, task, timeoutS, performance.now() + DISPATCH_HTTP_MS, options);
-  if (result.status === "running") return { ok: true, worker, status: "running", ref: result.ref };
+  if (result.status === "running") return { ok: true, worker, ...result };
   if (result.status === "completed") return { ok: true, worker, ...result };
   return { ok: false, worker, ...result, error: result.answer };
 }
@@ -422,18 +608,28 @@ export async function dispatchOnly(workerRaw, task, timeoutS = 900, options = {}
  * status: completed / failed / timeout / running / unknown。
  */
 export async function fetchRef(ref) {
+  const echoed = typeof ref === "string" ? ref : "";
   if (typeof ref !== "string" || !/^[\w.-]+-[0-9a-f]+$/i.test(ref)) {
-    return { status: "unknown", answer: "ref 格式无效" };
+    return { status: "unknown", ref: echoed, error_code: "TASK_STATE_UNKNOWN", answer: "ref 格式无效" };
   }
   let t;
   try {
     t = await callTool("hub_result", { ref }, 30_000);
   } catch (e) {
-    return { status: "unknown", answer: "查询失败：" + String(e && e.message || e).slice(0, 200) };
+    const permission = e && (e.kind === "permission" || e.code === "blocked_permission");
+    return { status: permission ? "failed" : "unknown", ref, worker_status: "unknown",
+      error_code: permission ? "blocked_permission" : "TASK_STATE_UNKNOWN",
+      failure_stage: "result_query",
+      answer: "查询失败：" + String(e && e.message || e).slice(0, 200) };
   }
   const result = receipt(t, null, ref);
   const progress = result.status === "running" ? extractAnswer(t).replace(/^\[执行中·受控端界面快照\]\s*/, "").replace(/\n?\(尚无文本\)$/, "") : undefined;
-  return { status: result.status, answer: result.answer, ...(progress ? { progress } : {}) };
+  return { status: result.status, ref, worker_status: result.worker_status || result.status,
+    ...(result.error_code ? { error_code: result.error_code } : result.status === "unknown" ? { error_code: "TASK_STATE_UNKNOWN" } : {}),
+    ...(result.failure_stage ? { failure_stage: result.failure_stage } : result.status === "unknown" ? { failure_stage: "result_query" } : {}),
+    ...(result.dispatch_count !== undefined ? { dispatch_count: result.dispatch_count } : {}),
+    ...(result.audit_degraded ? { audit_degraded: true } : {}),
+    answer: result.answer, ...(progress ? { progress } : {}) };
 }
 
 /**

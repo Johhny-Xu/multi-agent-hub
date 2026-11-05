@@ -426,11 +426,17 @@
   },
   "minimaxcode": {
     "attachments": {
+      "max_count": 8,
+      "max_total_bytes": 1048576,
       "file": {
-        "mode": "messages_file"
+        "mode": "cli",
+        "flag": "--file",
+        "content_types": ["text/plain; charset=utf-8"]
       },
       "image": {
-        "mode": "messages_file"
+        "mode": "cli",
+        "flag": "--file",
+        "content_types": ["image/png", "image/jpeg", "image/gif", "image/webp"]
       }
     },
     "permission": {
@@ -448,7 +454,7 @@
         }
       }
     },
-    "notes": "mcode exec 无头模式（--output-format text）：与 MiniMax Code 桌面端同一账号，登录态缺失时 exec 会直接报 Sign in to MiniMax。模型引用是 provider/model，国内区与国际区都是 minimax/*（实测 minimax/MiniMax-M3.1-Flash 与 minimax/MiniMax-M3 均可用；minimax-cn/* 会报 not available for the configured_provider route）。agent 模式由 --prompt-mode work 开启。注意：mcode 的 --permission off 是「关闭权限询问」= 全放开，**不是只读**（实测 off 与 smart 都能落盘），所以不声明 readonly 档，只给 edit(smart) / full(full)。"
+    "notes": "mcode exec 无头模式（--output-format text）：与 MiniMax Code 桌面端同一账号，登录态缺失时 exec 会直接报 Sign in to MiniMax。模型引用是 provider/model，国内区与国际区都是 minimax/*（实测 minimax/MiniMax-M3.1-Flash 与 minimax/MiniMax-M3 均可用；minimax-cn/* 会报 not available for the configured_provider route）。agent 模式由 --prompt-mode work 开启。附件走 `--file <path>`（可重复），**没有** `--messages-file`；提示词仍由 `--message {task}` 传入。注意：mcode 的 --permission off 是「关闭权限询问」= 全放开，**不是只读**（实测 off 与 smart 都能落盘），所以不声明 readonly 档，只给 edit(smart) / full(full)。"
   },
   "zcode": {
     "attachments": {

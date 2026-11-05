@@ -66,14 +66,31 @@
         // （等窗口时 pendingAccounts 会被服务端归零，但 partial 仍要告诉用户还差几个号）
         const missing = Math.max(0, (total || signed) - signed);
         const badge = `部分成功（${signed}/${total || signed}）`;
+        // partial 也要尊重 pendingReason：剩下那几个号可能正在额度冷却 / 等开窗 / 缺设备身份，
+        // 这时候按钮必须置灰，否则用户点下去只会再拿一次同样的 pending。
         if (reason === 'quota_cooldown') {
-          return { badge, btn: '冷却中', clickable: false, tip: data.message || '额度用尽，冷却期内不会重复请求' };
+          return {
+            badge: `${badge} · 冷却中${clock ? '（至 ' + clock + '）' : ''}`,
+            btn: '冷却中',
+            clickable: false,
+            tip: data.message || '剩余账号在额度冷却期，冷却结束会自动补签',
+          };
         }
         if (reason === 'awaiting_window') {
-          return { badge, btn: '待开启', clickable: false, tip: data.message || `活动窗口未到${clock ? '，' + clock + ' 开启' : ''}` };
+          return {
+            badge: `${badge} · 待开启${clock ? '（' + clock + '）' : ''}`,
+            btn: '待开启',
+            clickable: false,
+            tip: data.message || '剩余账号在等下一期活动窗口，到点会自动补领',
+          };
         }
         if (reason === 'identity_missing') {
-          return { badge, btn: '无法签到', clickable: false, tip: data.message || '缺少设备身份组件' };
+          return {
+            badge: `${badge} · 缺设备身份`,
+            btn: '无法签到',
+            clickable: false,
+            tip: data.message || '本机缺少该地区的 Qoder 设备身份组件',
+          };
         }
         return {
           badge,
@@ -177,32 +194,64 @@
     }[status] || status || '已完成';
   };
 
-  const parseRunResponse = async (res) => {
-    const text = await res.text();
-    let json = null;
-    if (text.trim()) {
+  /**
+   * 解析 /api/checkin/run 的响应。单卡和全签共用：
+   * - 非 2xx → 明确报 HTTP 错误；
+   * - 2xx 但正文不是 JSON → 报「非 JSON」而不是把按钮卡在「签到中...」；
+   * - 2xx + {ok:false} → 透传服务端 error。
+   * 既接受 fetch 的 Response（qa-grid 的调用方式），也接受 (status, text)，
+   * 返回值把服务端 JSON 摊平，调用方可直接读 overview / results。
+   * @param {Response|number} httpStatusOrResponse
+   * @param {string} [text]
+   */
+  const parseRunResponse = async (httpStatusOrResponse, text) => {
+    let httpStatus = httpStatusOrResponse;
+    let body = text;
+    if (httpStatusOrResponse && typeof httpStatusOrResponse.text === 'function') {
+      httpStatus = httpStatusOrResponse.status;
       try {
-        json = JSON.parse(text);
+        body = await httpStatusOrResponse.text();
       } catch {
-        throw new Error(`服务返回非 JSON（HTTP ${res.status}）`);
+        body = '';
       }
     }
-    if (!res.ok) throw new Error(json?.error || json?.message || `HTTP ${res.status}`);
-    if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('服务返回空响应或无效 JSON');
-    if (json.ok !== true) throw new Error(json.error || json.message || '签到请求失败');
-    return json;
+    let json = null;
+    try {
+      json = body ? JSON.parse(body) : null;
+    } catch {
+      return { ok: false, error: `签到接口返回非 JSON（HTTP ${httpStatus}）`, json: null };
+    }
+    if (!httpStatus || httpStatus < 200 || httpStatus >= 300) {
+      return { ok: false, error: json?.error || `签到接口 HTTP ${httpStatus}`, json };
+    }
+    if (!json || typeof json !== 'object') {
+      return { ok: false, error: '签到接口返回空响应', json };
+    }
+    return { ...json, ok: json.ok !== false, error: json.ok === false ? (json.error || '签到失败') : '' };
   };
 
+  /** 全签汇总只看真正的签到平台（meoo 只同步登录态，不计入） */
+  const SUMMARY_PLATFORMS = ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode'];
+  const SUMMARY_STILL = ['pending', 'failed', 'partial', 'expired', 'restricted', 'unconfigured'];
+
+  /**
+   * 一键全签后的汇总。unconfigured 必须算进「待补」：
+   * 没配置凭据的平台不能在全签结果里被静默忽略，否则用户以为全部完成。
+   * @param {{platforms?:Record<string,{status?:string}>}|null} overview
+   */
   const allCheckinSummary = (overview) => {
-    const entries = Object.entries(overview?.platforms || {}).filter(([, info]) => info);
-    if (!entries.length) return { ok: false, text: '未取得平台状态', title: '无法确认签到结果', still: [] };
-    const done = entries.filter(([, info]) => ['success', 'already'].includes(info.status)).length;
-    const still = entries.filter(([, info]) => !['success', 'already'].includes(info.status)).map(([key]) => key);
+    const platforms = overview?.platforms || {};
+    const total = SUMMARY_PLATFORMS.filter((k) => platforms[k]).length;
+    if (!total) return { ok: false, total: 0, done: 0, text: '未取得平台状态', title: '无法确认签到结果', still: [] };
+    const done = SUMMARY_PLATFORMS.filter((k) => platforms[k] && ['success', 'already'].includes(String(platforms[k].status))).length;
+    const still = SUMMARY_PLATFORMS.filter((k) => platforms[k] && SUMMARY_STILL.includes(String(platforms[k].status)));
     return {
       ok: still.length === 0,
-      text: `全签完成 ${done}/${entries.length}${still.length ? ` · ${still.length} 个待补` : ''}`,
-      title: still.length ? `仍在等：${still.join('、')}` : '全部平台今日已完成',
+      total,
+      done,
       still,
+      text: still.length ? `全签完成 ${done}/${total} · ${still.length} 个待补` : `全签完成 ${done}/${total}`,
+      title: still.length ? `仍在等：${still.join('、')}` : '全部平台今日已完成',
     };
   };
 

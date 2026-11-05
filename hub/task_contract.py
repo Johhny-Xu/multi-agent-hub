@@ -1,6 +1,7 @@
 """Validated task options and portable attachments, independent of a vendor CLI."""
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
@@ -8,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-MAX_ATTACHMENT_BYTES = 1024 * 1024
+MAX_ATTACHMENT_BYTES = 1024 * 1024  # 1 MiB hard cap
 MAX_ATTACHMENTS = 8
 OPTIONS_SCHEMA = {
     "thinking": {"type": "string", "enum": ["default", "on", "off"], "default": "default"},
@@ -22,8 +23,205 @@ OPTIONS_SCHEMA = {
 }
 
 
-class UnsupportedCapability(ValueError):
-    pass
+HARD_MAX_ATTACHMENTS = 8
+HARD_MAX_ATTACHMENT_BYTES = 1024 * 1024
+SUPPORTED_IMAGE_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
+SUPPORTED_MODES = ("cli", "prompt_path", "inline_text", "messages_file", "stdin_json")
+ERROR_LIMIT = "ATTACHMENT_LIMIT_EXCEEDED"
+ERROR_TYPE = "ATTACHMENT_UNSUPPORTED_TYPE"
+ERROR_ACCESS = "ATTACHMENT_ACCESS_DENIED"
+ERROR_UNREADABLE = "ATTACHMENT_UNREADABLE"
+ERROR_UNDECLARED = "ATTACHMENT_CAPABILITY_UNDECLARED"
+ERROR_CONFIG = "ATTACHMENT_CONFIG_MISMATCH"
+ERROR_WORKER = "WORKER_EXECUTION_FAILED"
+ERROR_ANSWER_EMPTY = "WORKER_ANSWER_EMPTY"
+ERROR_EVIDENCE = "VERIFICATION_EVIDENCE_INSUFFICIENT"
+ERROR_DISPATCH_TIMEOUT = "DISPATCH_TIMEOUT"
+ERROR_UNKNOWN = "TASK_STATE_UNKNOWN"
+ERROR_BUDGET = "WAIT_BUDGET_EXHAUSTED"
+ERROR_PERMISSION = "blocked_permission"
+ERROR_AUDIT = "AUDIT_WRITE_FAILED"
+
+
+class TaskContractError(ValueError):
+    """Stable redacted task failure shared by the Hub and the bridges.
+
+    Subclasses ValueError so existing call sites keep working. Details are
+    built from a fixed allowlist and never carry attachment bodies, base64,
+    tokens or absolute local paths.
+    """
+
+    _DETAIL_KEYS = ("file_id", "actual_count", "allowed_count", "actual_bytes",
+                    "allowed_bytes", "actual_type", "allowed_types", "worker_reason")
+
+    def __init__(self, message, *, code="TASK_CONTRACT_ERROR", stage="validation", **details):
+        super().__init__(message)
+        self.code = str(code)
+        self.stage = str(stage)
+        for key, value in details.items():
+            if key not in self._DETAIL_KEYS:
+                raise ValueError("Unsupported task error detail: " + key)
+            setattr(self, key, value)
+
+    def details(self):
+        return {key: getattr(self, key) for key in self._DETAIL_KEYS if getattr(self, key, None) is not None}
+
+    def to_dict(self):
+        value = {"code": self.code, "stage": self.stage}
+        details = self.details()
+        if details:
+            value["details"] = details
+        return value
+
+    def to_public(self):
+        """Stable JSON payload for the Hub text protocol and the MCP bridge."""
+        value = {"error_code": self.code, "failure_stage": self.stage,
+                 "message": str(ValueError.__str__(self))}
+        details = self.details()
+        if details:
+            value["error_details"] = details
+        return value
+
+    def __str__(self):
+        details = self.details()
+        text = super().__str__()
+        return text + (" | details=" + json.dumps(details, ensure_ascii=False, sort_keys=True) if details else "")
+
+
+class UnsupportedCapability(TaskContractError):
+    """Backwards-compatible capability rejection (still a ValueError)."""
+
+    def __init__(self, message, *, code=ERROR_UNDECLARED, stage="capability_validation", **details):
+        super().__init__(message, code=code, stage=stage, **details)
+
+
+class AttachmentPolicyResolver:
+    """Resolve one worker/model/platform attachment contract.
+
+    Declared limits can only tighten the global hard limits. The same
+    snapshot feeds hub_capabilities and prepare_task, so a query and a
+    dispatch cannot disagree about limits or content types.
+    """
+
+    def __init__(self, agent, profile, model=None, platform=None):
+        self.agent = agent
+        self.profile = profile or {}
+        self.model = model or resolve_model(self.profile)
+        self.platform = platform or platform_name()
+        self.caps = capabilities(agent, self.profile, self.model, self.platform)
+
+    @staticmethod
+    def _limit(value, hard, label):
+        if value is None:
+            return hard
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError("invalid worker " + label)
+        return min(value, hard)
+
+    def policy(self, kind):
+        config, reason = attachment_config(self.caps, kind, self.profile)
+        if config is None:
+            return {"supported": False, "reason": reason, "platform": self.platform}
+        mode = config.get("mode")
+        if mode not in SUPPORTED_MODES:
+            return {"supported": False, "mode": mode, "platform": self.platform,
+                    "reason": "unrecognized attachment input binding", "config_mismatch": True}
+        declared_types = config.get("content_types")
+        if not isinstance(declared_types, list) or not declared_types:
+            if kind == "image" and (mode in {"messages_file", "stdin_json"} or config.get("requires_read_authorization")):
+                content_types = list(SUPPORTED_IMAGE_TYPES)
+            elif kind == "file" and mode in {"messages_file", "stdin_json", "inline_text"}:
+                content_types = ["text/plain; charset=utf-8"]
+            else:
+                content_types = []
+        else:
+            content_types = [str(item).lower() for item in declared_types]
+        return {
+            "supported": True,
+            "platform": self.platform,
+            "mode": mode,
+            "flag": config.get("flag"),
+            "max_count": self._limit(config.get("max_count", self.caps.get("attachments", {}).get("max_count")),
+                                     HARD_MAX_ATTACHMENTS, "attachment limit"),
+            "max_total_bytes": self._limit(config.get("max_total_bytes", self.caps.get("attachments", {}).get("max_total_bytes")),
+                                           HARD_MAX_ATTACHMENT_BYTES, "attachment total limit"),
+            "content_types": content_types,
+        }
+
+    def snapshot(self):
+        file_policy = self.policy("file")
+        image_policy = self.policy("image")
+        limits = [policy["max_count"] for policy in (file_policy, image_policy) if policy.get("supported")]
+        totals = [policy["max_total_bytes"] for policy in (file_policy, image_policy) if policy.get("supported")]
+        return {
+            "worker": self.agent,
+            "model": self.model,
+            "platform": self.platform,
+            "file": file_policy,
+            "image": image_policy,
+            "max_count": min(limits) if limits else HARD_MAX_ATTACHMENTS,
+            "max_total_bytes": min(totals) if totals else HARD_MAX_ATTACHMENT_BYTES,
+        }
+
+
+def normalize_mime(value):
+    parts = [part.strip() for part in str(value or "").lower().split(";")]
+    base = parts[0]
+    params = {}
+    for part in parts[1:]:
+        if "=" in part:
+            key, _, item = part.partition("=")
+            params[key.strip()] = item.strip().strip('"')
+    return base, params
+
+
+def logical_task_summary(agent, task, attachments):
+    """Stable, non-reversible identifier for one logical dispatch.
+
+    Only worker, task text and attachment content hashes are mixed in; the
+    result is used to correlate audit events and never for global dedupe.
+    """
+    digest = hashlib.sha256()
+    digest.update(str(agent).encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(str(task).encode("utf-8"))
+    for name, data, _policy, _text, _kind, _mime in attachments:
+        digest.update(b"\0")
+        digest.update(str(name).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(data).digest())
+    return "sha256:" + digest.hexdigest()[:32]
+
+
+def validate_workspace_path(cwd, platform=None):
+    """Reject a client path masquerading as the target Hub's workdir."""
+    if cwd in (None, ""):
+        return None
+    if not isinstance(cwd, str):
+        raise TaskContractError("cwd must be a string", code="WORKSPACE_PATH_MISMATCH", stage="validation")
+    platform = platform or platform_name()
+    expanded = os.path.expandvars(os.path.expanduser(cwd))
+    windows_style = bool(re.match(r"^[A-Za-z]:[\\/]", expanded) or expanded.startswith("\\\\"))
+    posix_style = expanded.startswith("/")
+    if platform == "windows" and posix_style and not windows_style:
+        raise TaskContractError("cwd uses a non-Windows path on a Windows Hub",
+                                code="WORKSPACE_PATH_MISMATCH", stage="validation", worker_reason="platform_path")
+    if platform != "windows" and windows_style:
+        raise TaskContractError("cwd uses a Windows path on a " + platform + " Hub",
+                                code="WORKSPACE_PATH_MISMATCH", stage="validation", worker_reason="platform_path")
+    return expanded
+
+
+def image_signature_matches(data, mime):
+    if mime == "image/png":
+        return data.startswith(bytes([137, 80, 78, 71, 13, 10, 26, 10]))
+    if mime == "image/jpeg":
+        return data.startswith(bytes([255, 216, 255]))
+    if mime == "image/gif":
+        return data[:6] in (b"GIF87a", b"GIF89a")
+    if mime == "image/webp":
+        return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    return False
 
 
 def merge_cli_arguments(command, additions):
@@ -145,19 +343,18 @@ def public_model_capabilities(agent, profile, model):
     if not stream_supported:
         stream["reason"] = (on or {}).get("reason", "该通道未验证实时回答流；只能查询终态")
     attachments = {}
-    max_count = (caps.get("attachments") or {}).get("max_count", MAX_ATTACHMENTS)
+    resolver = AttachmentPolicyResolver(agent, profile, model)
     for kind in ("file", "image"):
-        config, reason = attachment_config(caps, kind, profile)
-        attachments[kind] = {"supported": config is not None, "platforms": [platform_name()]}
-        if config:
-            attachments[kind]["mode"] = config.get("mode")
-            attachments[kind]["max_count"] = max_count
-            if kind == "image" and (config.get("mode") in {"stdin_json", "messages_file"} or config.get("requires_read_authorization")):
-                attachments[kind]["content_types"] = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-            if config.get("mode") in {"stdin_json", "inline_text", "messages_file"} and kind == "file":
-                attachments[kind]["content_types"] = ["text/plain; charset=utf-8"]
+        policy = resolver.policy(kind)
+        attachments[kind] = {"supported": bool(policy.get("supported")), "platforms": [resolver.platform]}
+        if policy.get("supported"):
+            attachments[kind]["mode"] = policy["mode"]
+            attachments[kind]["max_count"] = policy["max_count"]
+            attachments[kind]["max_total_bytes"] = policy["max_total_bytes"]
+            if policy.get("content_types"):
+                attachments[kind]["content_types"] = policy["content_types"]
         else:
-            attachments[kind]["reason"] = reason
+            attachments[kind]["reason"] = policy.get("reason", "该模型/平台未声明此附件能力")
     perm_modes = (caps.get("permission") or {}).get("modes") or {}
     permission = {
         "allowed": ["default"] + [k for k in ("readonly", "edit", "full") if isinstance(perm_modes.get(k), dict)],
@@ -182,6 +379,9 @@ def _mode_config(value, label):
 
 def prepare_task(agent, profile, args, directory):
     """Reject unsupported requests before creating files or launching a process."""
+    requested_task = args.get("task")
+    if not isinstance(requested_task, str) or not requested_task.strip():
+        raise TaskContractError("task must be a non-empty string", code="INVALID_TASK", stage="validation")
     model = resolve_model(profile, args.get("model"))
     caps = capabilities(agent, profile, model)
     declared = set((profile.get("models") or {}).values())
@@ -239,51 +439,109 @@ def prepare_task(agent, profile, args, directory):
         remove_args = output_mode.get("remove_args", [])
         if not isinstance(remove_args, list) or any(flag not in {"--stream", "--include-partial-messages"} for flag in remove_args):
             raise ValueError("Invalid removable CLI boolean flags")
+    resolver = AttachmentPolicyResolver(agent, profile, model)
     raw = args.get("attachments", [])
-    limit = (caps.get("attachments") or {}).get("max_count", MAX_ATTACHMENTS)
-    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0 or limit > MAX_ATTACHMENTS:
-        raise ValueError("invalid worker attachment limit")
-    if not isinstance(raw, list) or len(raw) > limit:
-        raise ValueError(f"attachments must be an array with at most {limit} files")
+    file_policy, image_policy = resolver.policy("file"), resolver.policy("image")
+    if not isinstance(raw, list):
+        raise ValueError("attachments must be an array")
+    if len(raw) > HARD_MAX_ATTACHMENTS:
+        raise TaskContractError("attachments must be an array with at most 8 files", code=ERROR_LIMIT,
+                                 stage="validation", actual_count=len(raw), allowed_count=HARD_MAX_ATTACHMENTS)
+    declared_kinds = ["image" if normalize_mime(item.get("mime_type") or "")[0].startswith("image/")
+                      else "file" for item in raw if isinstance(item, dict)]
+    for kind, policy in (("file", file_policy), ("image", image_policy)):
+        count = declared_kinds.count(kind)
+        if not count:
+            continue
+        if not policy.get("supported"):
+            if policy.get("config_mismatch"):
+                raise UnsupportedCapability("Attachment input binding is not recognized", code=ERROR_CONFIG,
+                                            stage="command_binding", actual_type=kind)
+            raise UnsupportedCapability(agent + " " + kind + " attachment: " + str(policy.get("reason") or "not declared"),
+                                        code=ERROR_UNDECLARED, stage="capability_validation")
+        if count > policy["max_count"]:
+            raise TaskContractError("attachments must be an array with at most %d files" % policy["max_count"],
+                                    code=ERROR_LIMIT, stage="validation", actual_count=count,
+                                    allowed_count=policy["max_count"])
+    hard_total = min([policy["max_total_bytes"] for policy in (file_policy, image_policy)
+                      if policy.get("supported")] or [HARD_MAX_ATTACHMENT_BYTES])
     decoded, total = [], 0
     for item in raw:
         if not isinstance(item, dict) or set(item) != {"name", "mime_type", "data_base64"}:
-            raise ValueError("Invalid attachment fields")
+            raise TaskContractError("Invalid attachment fields", code=ERROR_TYPE, stage="validation")
         name, mime, encoded = item["name"], item["mime_type"], item["data_base64"]
         if not isinstance(name, str) or not name or len(name) > 160 or any(c in name for c in '/\\\0\r\n') or name in {".", ".."}:
-            raise ValueError("Invalid attachment name")
+            raise TaskContractError("Invalid attachment name", code=ERROR_ACCESS, stage="validation",
+                                    file_id=str(name)[:64] if isinstance(name, str) else None)
         if re.fullmatch(r"(?:\.env(?:\..*)?|\.?auth\.json|\.?credentials(?:\.json|\.ya?ml)?|id_(?:rsa|ed25519))", name, re.I) or name.lower().endswith((".key", ".pem")):
-            raise ValueError("Credential files cannot be sent as attachments")
-        if not isinstance(mime, str) or not mime or not isinstance(encoded, str) or len(encoded) > (MAX_ATTACHMENT_BYTES * 4 // 3 + 8):
-            raise ValueError("Invalid attachment type or size")
+            raise TaskContractError("Credential files cannot be sent as attachments", code=ERROR_ACCESS,
+                                    stage="validation", file_id=name, worker_reason="credential_filename")
+        if not isinstance(mime, str) or not mime or not isinstance(encoded, str) or len(encoded) > (HARD_MAX_ATTACHMENT_BYTES * 4 // 3 + 8):
+            raise TaskContractError("Invalid attachment type or size", code=ERROR_TYPE, stage="validation", file_id=name)
         try:
             data = base64.b64decode(encoded, validate=True)
         except (binascii.Error, ValueError) as exc:
-            raise ValueError("Invalid attachment base64") from exc
+            raise TaskContractError("Invalid attachment base64", code=ERROR_TYPE, stage="validation", file_id=name) from exc
         total += len(data)
-        if total > MAX_ATTACHMENT_BYTES:
-            raise ValueError("Attachments exceed the 1 MiB combined limit")
-        kind = "image" if mime.startswith("image/") else "file"
-        config, reason = attachment_config(caps, kind, profile)
-        if not isinstance(config, dict) or config.get("mode") not in {"cli", "prompt_path", "inline_text", "messages_file", "stdin_json"}:
-            raise UnsupportedCapability("UNSUPPORTED: " + agent + " " + kind + " attachment: " + str(reason or "未声明"))
+        if total > hard_total:
+            raise TaskContractError("Attachments exceed the declared combined limit", code=ERROR_LIMIT,
+                                    stage="validation", file_id=name, actual_bytes=total,
+                                    allowed_bytes=hard_total)
+        base_mime, mime_params = normalize_mime(mime)
+        kind = "image" if base_mime.startswith("image/") else "file"
+        policy = image_policy if kind == "image" else file_policy
+        if kind == "image" and policy.get("mode") == "inline_text":
+            raise UnsupportedCapability("UNSUPPORTED: image cannot be treated as text", code=ERROR_TYPE,
+                                        stage="capability_validation", file_id=name, actual_type=str(mime))
+        if not policy.get("supported"):
+            if policy.get("config_mismatch"):
+                raise UnsupportedCapability("Attachment input binding is not recognized", code=ERROR_CONFIG,
+                                            stage="command_binding", file_id=name, actual_type=base_mime,
+                                            allowed_types=policy.get("content_types") or [])
+            raise UnsupportedCapability(agent + " " + kind + " attachment: " + str(policy.get("reason") or "not declared"),
+                                        code=ERROR_UNDECLARED, stage="capability_validation", file_id=name,
+                                        actual_type=base_mime)
+        mode = policy["mode"]
         text = None
-        if config["mode"] == "inline_text" or config["mode"] in {"messages_file", "stdin_json"} and kind == "file":
-            if kind == "image":
-                raise UnsupportedCapability("UNSUPPORTED: image cannot be treated as text")
+        message_api = mode in {"messages_file", "stdin_json"} or (mode == "inline_text" and kind == "file")
+        # 声明了 content_types 的 cli 直传通道（如 mcode 的 `--file <path>`）同样按声明校验：
+        # 文本仍要求 UTF-8 text/plain，图片仍校验魔数，避免把未声明的类型直接落盘丢给 CLI。
+        declared_cli = mode == "cli" and bool(policy.get("content_types"))
+        if kind == "file" and (message_api or declared_cli):
+            charset = mime_params.get("charset")
+            if base_mime != "text/plain" or (charset is not None and charset.lower() not in {"utf-8", "utf8"}):
+                raise TaskContractError("Text attachments must be UTF-8 text/plain", code=ERROR_TYPE,
+                                        stage="validation", file_id=name, actual_type=str(mime),
+                                        allowed_types=["text/plain; charset=utf-8"])
             try:
                 text = data.decode("utf-8-sig")
             except UnicodeError as exc:
-                raise UnsupportedCapability("UNSUPPORTED: this worker accepts UTF-8 text attachments only") from exc
+                raise TaskContractError("Text attachment is not valid UTF-8", code=ERROR_TYPE,
+                                        stage="validation", file_id=name, actual_type=str(mime),
+                                        allowed_types=["text/plain; charset=utf-8"]) from exc
             if "\0" in text:
-                raise UnsupportedCapability("UNSUPPORTED: binary attachment")
-            if config["mode"] == "inline_text" and len(args["task"]) + sum(len(entry[3] or "") for entry in decoded) + len(text) > 24000:
-                raise UnsupportedCapability("UNSUPPORTED: inline text exceeds the portable 24000-character command limit")
-        if kind == "image" and (config["mode"] in {"messages_file", "stdin_json"} or config.get("requires_read_authorization")) and mime not in {"image/png", "image/jpeg", "image/gif", "image/webp"}:
-            raise UnsupportedCapability("UNSUPPORTED: this message API accepts PNG/JPEG/GIF/WebP images only")
-        if config["mode"] == "cli" and (not isinstance(config.get("flag"), str) or not config["flag"]):
-            raise ValueError("Attachment CLI flag is missing")
-        decoded.append((name, data, config, text, kind, mime))
+                raise TaskContractError("Binary attachment cannot be treated as text", code=ERROR_TYPE,
+                                        stage="validation", file_id=name, actual_type=str(mime),
+                                        allowed_types=["text/plain; charset=utf-8"])
+            if mode == "inline_text" and len(args["task"]) + sum(len(entry[3] or "") for entry in decoded) + len(text) > 24000:
+                raise UnsupportedCapability("UNSUPPORTED: inline text exceeds the portable 24000-character command limit",
+                                            code=ERROR_LIMIT, stage="validation", file_id=name,
+                                            actual_bytes=len(text), allowed_bytes=24000)
+        if kind == "image" and (message_api or declared_cli):
+            if base_mime not in SUPPORTED_IMAGE_TYPES:
+                raise TaskContractError("This message API accepts PNG/JPEG/GIF/WebP images only", code=ERROR_TYPE,
+                                        stage="validation", file_id=name, actual_type=str(mime),
+                                        allowed_types=list(SUPPORTED_IMAGE_TYPES))
+            if not image_signature_matches(data, base_mime):
+                raise TaskContractError("Image signature does not match its declared type", code=ERROR_TYPE,
+                                        stage="validation", file_id=name, actual_type=base_mime,
+                                        allowed_types=[base_mime], worker_reason="signature_mismatch")
+        if kind == "image" and mode not in {"messages_file", "stdin_json"} and policy.get("content_types") and base_mime not in SUPPORTED_IMAGE_TYPES:
+            raise TaskContractError("Image type is not declared by this worker", code=ERROR_TYPE, stage="validation",
+                                    file_id=name, actual_type=str(mime), allowed_types=list(SUPPORTED_IMAGE_TYPES))
+        if mode == "cli" and (not isinstance(policy.get("flag"), str) or not policy["flag"]):
+            raise TaskContractError("Attachment CLI flag is missing", code=ERROR_CONFIG, stage="command_binding", file_id=name)
+        decoded.append((name, data, policy, text, kind, base_mime))
     task = args["task"]
     attachments = []
     staging = None
@@ -323,7 +581,7 @@ def prepare_task(agent, profile, args, directory):
                         stdin_content.append({"type": "text", "text": "[Attached file: " + name + "]\n" + text})
                 else:
                     task += "\n\n[Attached file: " + name + "]\n" + text + "\n[End attachment]"
-                attachments.append({"name": name, "kind": kind, "bytes": len(data), "mode": mode})
+                attachments.append({"name": name, "kind": kind, "bytes": len(data), "mode": mode, "mime": mime})
             if stdin_content:
                 input_file = staging / "input.jsonl"
                 input_file.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": task}, *stdin_content]}}, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -337,8 +595,16 @@ def prepare_task(agent, profile, args, directory):
     except BaseException:
         cleanup_attachments(str(staging) if staging else None, directory)
         raise
+    summary = {"count": len(attachments), "total_bytes": sum(item["bytes"] for item in attachments),
+               "content_types": sorted({item["mime"] for item in attachments}),
+               "validation_result": "passed" if attachments else "not_applicable"}
+    binding = ({"mode": "messages_file", "flag": "--messages-file", "path": str(message_file)}
+               if message_file else None)
     return {"task": task, "extra_args": extra, "remove_args": remove_args, "env": env, "staging": str(staging) if staging else None, "message_file": bool(message_file), "input_file": str(input_file) if input_file else None,
-            "metadata": {"thinking": thinking, "stream": stream, "attachments": attachments}}
+            "binding": binding, "attachment_summary": summary,
+            "logical_task_summary": logical_task_summary(agent, task, decoded),
+            "metadata": {"thinking": thinking, "stream": stream, "attachments": attachments,
+                         "attachment_summary": summary}}
 
 
 def apply_environment(base, updates):

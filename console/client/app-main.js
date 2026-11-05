@@ -1013,6 +1013,10 @@
 
       // 2. 右侧高价值信息胶囊区
       var capsuleBody = el('div', 'platform-capsule-body');
+
+      // 平台名：桌面端显示在头像底下（.platform-app-label），移动端挪到正文首行当标题。
+      // 手机上一行的高度比「头像下面塞两行小字」值钱得多，所以两处共用同一个名字源。
+      capsuleBody.appendChild(el('div', 'platform-capsule-name', theme.label || name));
       
       // 顶行：左侧彩色微胶囊（额度、Cache、会话数），右侧时间戳
       var topRow = el('div', 'platform-capsule-top');
@@ -1175,7 +1179,9 @@
         }
         if (doSelect) {
           if (chat.activeAgent !== name) {
-            selectPlatform(name);
+            // 点击平台行只展开会话树，不能把「未锁定」侧栏当成“进入会话”自动收起；
+            // 真正进入会话由下面的具体会话行负责。
+            selectPlatform(name, null, { keepSidebar: true });
           } else {
             updatePlatformListActiveState(name, chat.activeSessionId);
           }
@@ -1276,7 +1282,7 @@
     return true;
   }
 
-  function selectPlatform(name, targetSessionId) {
+  function selectPlatform(name, targetSessionId, options) {
     if (!name) return Promise.resolve();
     chat.activeAgent = name;
     // 切换子代理时立即刷新主题色贯通（发送按钮 / 模型胶囊 / 状态栏模型名 / 上下文进度条）
@@ -1288,7 +1294,9 @@
     } else {
       populateChatModels();
     }
-    if (window.innerWidth < 860 || chatAutoCollapse) {
+    // keepSidebar：从平台行进入时只要求展开会话树，侧栏保持可见。
+    // 点具体会话 / 新建会话 / 发送消息等真正的“进入会话”动作仍按自动收起规则执行。
+    if (!(options && options.keepSidebar) && (window.innerWidth < 860 || chatAutoCollapse)) {
       var sb = $('#chat-threads');
       if (sb) sb.classList.add('collapsed');
     }
@@ -1964,6 +1972,13 @@
         setTimeout(function () { copyIconBtn.innerHTML = copyIconSvg; }, 1500);
       });
       bfoot.appendChild(copyIconBtn);
+      // 参考 CodeBuddy Web：回话底部跟一行小号灰字（时间 / 消耗），不装在卡片里。
+      if (role === 'agent') {
+        var metaBits = [];
+        if (metaTime) metaBits.push(metaTime);
+        if (m.tok) metaBits.push('≈' + m.tok + ' tok');
+        if (metaBits.length) bfoot.appendChild(el('span', 'bfoot-meta', metaBits.join(' · ')));
+      }
       b.appendChild(bfoot);
     }
 
@@ -4005,19 +4020,23 @@
   // 两处复用：打卡卡片区（script 2）与子代理卡片区（这里）。挂在 window 上跨 script 共享。
   window.HubRail = window.HubRail || (function () {
     /** 用 easeOutCubic 自己跑动画，比原生 smooth 更可控、更像「丝滑滑过去」 */
-    function animate(el, target, duration) {
+    function animate(el, target, duration, onDone) {
       if (!el) return;
       var start = el.scrollLeft;
       var delta = target - start;
-      if (Math.abs(delta) < 1) return;
+      if (el.__railRaf) { cancelAnimationFrame(el.__railRaf); el.__railRaf = 0; }
+      // 目标已到位也必须回调：否则调用方的复位/摘克隆永远不会发生
+      if (Math.abs(delta) < 1) { if (onDone) onDone(); return; }
       var dur = Math.max(200, Math.min(duration || 480, 760));
       var t0 = performance.now();
       var ease = function (t) { return 1 - Math.pow(1 - t, 3); };
-      if (el.__railRaf) cancelAnimationFrame(el.__railRaf);
-      var step = function (now) {
-        var p = Math.min(1, (now - t0) / dur);
+      var step = function () {
+        // 与 t0 同源取时（rAF 的帧起点时间戳可能早于 t0），并把进度夹到 [0,1]：
+        // 夹下限后首帧位移为 0，不再出现反向抽搐
+        var p = Math.max(0, Math.min(1, (performance.now() - t0) / dur));
         el.scrollLeft = start + delta * ease(p);
-        el.__railRaf = p < 1 ? requestAnimationFrame(step) : 0;
+        if (p < 1) { el.__railRaf = requestAnimationFrame(step); }
+        else { el.__railRaf = 0; if (onDone) onDone(); }
       };
       el.__railRaf = requestAnimationFrame(step);
     }
@@ -4061,6 +4080,336 @@
         }
       }
       animate(el, Math.max(0, want()), o.duration);
+    }
+    /**
+     * 手机端边界循环（路线 Y：首尾常驻克隆 + 静止后单次等价瞬移）。
+     *
+     * 轨道结构恒为 [frontClone(末卡副本), 真实1 … 真实N, backClone(首卡副本)]，
+     * scroll-snap-type 全程保持 x mandatory，绝不在手势/惯性期切换 snap。
+     * 手势期与惯性期对 scrollLeft 的 JS 写入次数严格为 0：
+     *   touchstart 只置 touching=true 并取消待执行换算；
+     *   touchmove 不写；touchend/touchcancel 只置 touching=false 并启动静止检测。
+     * 只有滚动完全静止（scrollend 或连续 3 帧 rAF 位移 <= 0.5 且距最后一次
+     * scroll >= 40ms）后，才做一次等价瞬移，把克隆位映射回真实卡位。
+     */
+    function bindMobileWrap(el, opts) {
+      if (!el || el.__mobileWrapBound) return;
+      el.__mobileWrapBound = true;
+      var o = opts || {};
+      var frontClone = null, backClone = null;
+      var touching = false;
+      var warping = false;
+      var lastScrollAt = 0;
+      var rafId = 0, stillFrames = 0, prevSl = -1;
+      var stepPx = 0, firstSnap = 0;
+      var positioned = false;
+      var loopEnabled = !/[?&]loop=0(?:[&#]|$)/.test(window.location.search);
+      var mobile = function () { return document.documentElement.getAttribute('data-ui') === 'mobile'; };
+      var gapOf = function () {
+        var cs = getComputedStyle(el);
+        return parseFloat(cs.columnGap || cs.gap || '0') || 0;
+      };
+      // 真实卡列表：常驻克隆永远不参与计数、不被选为活动卡。
+      var realCards = function () {
+        return Array.prototype.filter.call(el.children, function (n) {
+          return !n.classList.contains('mobile-loop-clone');
+        });
+      };
+      var cloneCard = function (card, tag) {
+        var c = card.cloneNode(true);
+        // 克隆根节点必须摘掉 id（防重复 id），但高亮同步要靠它认出「我是哪张卡的副本」，
+        // 因此先把原 id 记到 data-clone-of 上（签到卡 data-plat 映射依赖它）。
+        c.setAttribute('data-clone-of', card.id || card.getAttribute('data-worker') || '');
+        c.removeAttribute('id');
+        Array.prototype.forEach.call(c.querySelectorAll('[id]'), function (n) { n.removeAttribute('id'); });
+        c.classList.add('mobile-loop-clone');
+        c.setAttribute('data-loop-clone', tag);
+        c.setAttribute('aria-hidden', 'true');
+        c.setAttribute('inert', '');
+        try { c.inert = true; } catch (e) { /* ignore */ }
+        c.tabIndex = -1;
+        Array.prototype.forEach.call(
+          c.querySelectorAll('a[href],button,input,select,textarea,[tabindex]'),
+          function (n) { n.setAttribute('tabindex', '-1'); }
+        );
+        // 克隆上不允许残留任何进行中的动画（入场动画绝不重播）
+        try {
+          c.getAnimations().forEach(function (a) { try { a.cancel(); } catch (e2) { /* ignore */ } });
+        } catch (e3) { /* ignore */ }
+        return c;
+      };
+      // 用 auto 行为瞬时写入，避免被 scroll-behavior:smooth 拖成动画
+      var setLeft = function (v) {
+        var prev = el.style.scrollBehavior;
+        el.style.scrollBehavior = 'auto';
+        el.scrollLeft = v;
+        el.style.scrollBehavior = prev;
+      };
+      // 轨道在隐藏面板里时 offsetWidth=0，此时不能把 0 当成 step 缓存下来，
+      // 由 ResizeObserver 在真正可见后补测一次。
+      var measure = function () {
+        var cards = realCards();
+        if (!cards.length) { stepPx = 0; firstSnap = 0; return false; }
+        var firstReal = cards[0];
+        if (firstReal.offsetWidth <= 0) return false;
+        stepPx = firstReal.offsetWidth + gapOf();
+        firstSnap = firstReal.offsetLeft - (parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0);
+        // 供 O(1) 高亮推算使用（只在重建/resize 时更新一次）
+        el.__railStep = stepPx;
+        el.__railFirstSnap = firstSnap;
+        el.__railRealCount = cards.length;
+        return true;
+      };
+      var syncOne = function (clone, src, tag) {
+        if (!clone || !src) return;
+        var srcCls = String(src.className || '').replace(/\bmobile-loop-clone\b/g, '').replace(/\s+/g, ' ').trim();
+        var wantCls = (srcCls ? srcCls + ' ' : '') + 'mobile-loop-clone';
+        if (clone.className !== wantCls) clone.className = wantCls;
+        var acc = src.style.getPropertyValue('--card-accent');
+        if (acc) clone.style.setProperty('--card-accent', acc);
+        else clone.style.removeProperty('--card-accent');
+        // 关键：克隆子树里的 [id] 会被抹掉，所以「clone.innerHTML !== src.innerHTML」
+        // 必然恒为真，每次 syncClones 都会整块重写（实测 70s 内 84 次）。
+        // 用 __srcHtmlSnapshot 记录上一次拷贝的「原文」做比对，数据没变时零 DOM 写入。
+        var rawHtml = src.innerHTML;
+        if (clone.__srcHtmlSnapshot !== rawHtml) {
+          clone.__srcHtmlSnapshot = rawHtml;
+          clone.innerHTML = rawHtml;
+          // 子树里的 id 必须重新抹掉，否则克隆会与真实卡产生重复 id，
+          // #card-checkin-xxx 之类的查询会命中假节点。
+          Array.prototype.forEach.call(clone.querySelectorAll('[id]'), function (n) { n.removeAttribute('id'); });
+          Array.prototype.forEach.call(
+            clone.querySelectorAll('a,button,input,select,textarea,[tabindex]'),
+            function (n) { n.setAttribute('tabindex', '-1'); }
+          );
+        }
+        // checked 是属性不是特性，innerHTML 重写后克隆里的控件会退回默认态；
+        // 每次 syncOne 都显式镜像实时勾选态（含 defaultChecked），
+        // 避免克隆卡渲染成未勾选再被勾上，导致旋钮从关闭滑向开启。
+        var srcInputs = src.querySelectorAll('input.agent-toggle-input, input[type="checkbox"]');
+        var cloneInputs = clone.querySelectorAll('input.agent-toggle-input, input[type="checkbox"]');
+        Array.prototype.forEach.call(srcInputs, function (si, idx) {
+          var ci = cloneInputs[idx];
+          if (!ci) return;
+          if (ci.checked !== si.checked) ci.checked = si.checked;
+          if (ci.defaultChecked !== si.checked) ci.defaultChecked = si.checked;
+        });
+        clone.setAttribute('data-loop-clone', tag);
+        clone.setAttribute('aria-hidden', 'true');
+        clone.setAttribute('inert', '');
+        try { clone.inert = true; } catch (e) { /* ignore */ }
+        clone.tabIndex = -1;
+      };
+      var syncClones = function () {
+        var cards = realCards();
+        if (cards.length < 2) return;
+        syncOne(frontClone, cards[cards.length - 1], 'front');
+        syncOne(backClone, cards[0], 'back');
+      };
+      var removeClones = function () {
+        if (frontClone) { if (frontClone.parentNode) frontClone.parentNode.removeChild(frontClone); frontClone = null; }
+        if (backClone) { if (backClone.parentNode) backClone.parentNode.removeChild(backClone); backClone = null; }
+        el.__railClonesMounted = false;
+      };
+      // 原子挂载：真实卡顺序不动，只在首尾补两张常驻克隆
+      var mountClones = function (restoreLeft) {
+        if (!mobile() || !loopEnabled) { removeClones(); return false; }
+        var cards = realCards();
+        if (cards.length < 2) { removeClones(); return false; }
+        if (!frontClone || !frontClone.isConnected) {
+          frontClone = cloneCard(cards[cards.length - 1], 'front');
+          el.insertBefore(frontClone, el.firstElementChild);
+        }
+        if (!backClone || !backClone.isConnected) {
+          backClone = cloneCard(cards[0], 'back');
+          el.appendChild(backClone);
+        }
+        syncClones();
+        var ok = measure();
+        el.__railClonesMounted = true;
+        if (typeof restoreLeft === 'number') {
+          setLeft(restoreLeft);
+          positioned = true;
+        } else if (ok && !positioned && el.scrollLeft <= 1) {
+          // 初始定位：真实首卡在第 2 个子节点，吸附位 = 1 * step。
+          // 只在「还在起点、且从未定位过」时执行，避免覆盖用户已恢复的滚动位置。
+          setLeft(firstSnap);
+          positioned = true;
+        }
+        return true;
+      };
+      el.__mountResidentClones = mountClones;
+      el.__syncResidentClones = syncClones;
+
+      // —— 静止检测：scrollend + rAF 连续静止兜底 ——
+      var cancelStillCheck = function () {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+        stillFrames = 0;
+      };
+      var warp = function () {
+        if (!mobile() || !loopEnabled || touching || warping) return;
+        if (!frontClone || !backClone || !frontClone.isConnected || !backClone.isConnected) return;
+        var cards = realCards();
+        if (cards.length < 2) return;
+        var firstReal = cards[0], lastReal = cards[cards.length - 1];
+        if (stepPx <= 0 && !measure()) return;
+        var pad = parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0;
+        var step = stepPx || (lastReal.offsetWidth + gapOf());
+        if (step <= 0) return;
+        var sl = el.scrollLeft;
+        var target = null;
+        // 停在首克隆区：等价平移到真实末卡（画面几何完全相同）
+        if (sl <= firstReal.offsetLeft - pad - step * 0.5) {
+          target = sl + (lastReal.offsetLeft - frontClone.offsetLeft);
+        } else if (sl >= lastReal.offsetLeft - pad + step * 0.5) {
+          // 停在尾克隆区：等价平移到真实首卡
+          target = sl + (firstReal.offsetLeft - backClone.offsetLeft);
+        }
+        if (target === null) return;
+        var max = Math.max(0, el.scrollWidth - el.clientWidth);
+        target = Math.max(0, Math.min(max, target));
+        if (Math.abs(target - sl) < 0.5) return;
+        warping = true;
+        el.__warping = true;
+        setLeft(target);
+        requestAnimationFrame(function () {
+          el.__warping = false;
+          warping = false;
+        });
+      };
+      var runStillCheck = function () {
+        cancelStillCheck();
+        prevSl = el.scrollLeft;
+        var tick = function () {
+          rafId = 0;
+          if (touching || warping) return;
+          var sl = el.scrollLeft;
+          if (Math.abs(sl - prevSl) > 0.5) { prevSl = sl; stillFrames = 0; }
+          else { stillFrames += 1; }
+          if (stillFrames >= 3 && (performance.now() - lastScrollAt) >= 40) {
+            stillFrames = 0;
+            if (frontClone && backClone) syncClones();
+            warp();
+            flushPendingRender();
+            return;
+          }
+          rafId = requestAnimationFrame(tick);
+        };
+        rafId = requestAnimationFrame(tick);
+      };
+      el.__railStillCheck = runStillCheck;
+
+      // 手势期间被推迟的重建：等轨道真正静止（>=800ms 无滚动）后再补跑
+      var flushPendingRender = function () {
+        if (touching || warping) return;
+        var args = el.__pendingRenderAgents;
+        if (!args) return;
+        // 加严静默窗口：200ms/3 帧太短，惯性尾巴里重建会整轨闪一下。
+        var quiet = Date.now() - (el.__railLastScrollAt || 0);
+        if (quiet < 800) {
+          clearTimeout(el.__pendingRenderTimer);
+          el.__pendingRenderTimer = setTimeout(function () {
+            el.__pendingRenderTimer = 0;
+            flushPendingRender();
+          }, Math.min(800 - quiet + 40, 320));
+          return;
+        }
+        el.__pendingRenderAgents = null;
+        el.__pendingSince = 0;
+        clearTimeout(el.__pendingRenderTimer);
+        el.__pendingRenderTimer = 0;
+        if (typeof renderAgents === 'function') renderAgents.apply(null, args);
+      };
+      el.__flushPendingRenderAgents = flushPendingRender;
+
+      el.addEventListener('scroll', function () {
+        lastScrollAt = performance.now();
+        // 注意单位：busyNow / flushPendingRender 用 Date.now() 比对，这里必须存 epoch ms，
+        // 存 performance.now() 会让「< 800ms」永远为假（原 200ms 门槛实际上从未生效）。
+        el.__railLastScrollAt = Date.now();
+        if (el.__warping || warping) return;
+        runStillCheck();
+      }, { passive: true });
+      el.addEventListener('scrollend', function () {
+        lastScrollAt = performance.now();
+        el.__railLastScrollAt = Date.now();
+        if (el.__warping || warping || touching) return;
+        runStillCheck();
+      }, { passive: true });
+
+      // —— 手势：全程零写入、零 snap 切换 ——
+      el.addEventListener('touchstart', function (ev) {
+        touching = true;
+        el.__railTouching = true;
+        cancelStillCheck();
+        if (stepPx <= 0) { if (measure() && !positioned && el.scrollLeft <= 1) { setLeft(firstSnap); positioned = true; } }
+        // 上一轮若异常残留（例如外部把克隆摘掉），这里自愈补回，不做位置换算
+        if (mobile() && loopEnabled && (!frontClone || !backClone ||
+            !frontClone.isConnected || !backClone.isConnected)) {
+          mountClones(el.scrollLeft);
+        } else if (frontClone && backClone) {
+          // 手势开始前把克隆内容/状态同步到最新（真实卡内容可能刚被轮询更新过），
+          // 用户滑到克隆卡时看到的就是真实卡当前的样子。
+          syncClones();
+        }
+      }, { passive: true });
+      // touchmove 不写 scrollLeft，交给原生滚动 + mandatory snap
+      el.addEventListener('touchend', function () {
+        touching = false;
+        el.__railTouching = false;
+        el.__railLastScrollAt = Date.now();
+        runStillCheck();
+      }, { passive: true });
+      el.addEventListener('touchcancel', function () {
+        touching = false;
+        el.__railTouching = false;
+        el.__railLastScrollAt = Date.now();
+        runStillCheck();
+      }, { passive: true });
+
+      // 外部把 children 整体换掉时，克隆会跟着消失；这里补挂回去（不写 scrollLeft）
+      if (window.MutationObserver) {
+        try {
+          new MutationObserver(function () {
+            if (!mobile() || !loopEnabled) return;
+            if (el.__warping) return;
+            if (!frontClone || !backClone || !frontClone.isConnected || !backClone.isConnected) {
+              mountClones(el.scrollLeft);
+            }
+          }).observe(el, { childList: true });
+        } catch (e) { /* ignore */ }
+      }
+
+      // 视口/字号变化后重算缓存几何，并重新同步克隆内容
+      window.addEventListener('resize', function () {
+        if (!mobile()) return;
+        mountClones(el.scrollLeft);
+      }, { passive: true });
+
+      // 轨道可见性/尺寸变化后补测几何（初始定位在 mountClones 里完成）
+      if (window.ResizeObserver) {
+        try {
+          var lastW = -1;
+          new ResizeObserver(function (entries) {
+            if (!mobile()) return;
+            var w = entries[0] && entries[0].contentRect ? entries[0].contentRect.width : 0;
+            if (Math.abs(w - lastW) < 0.5) return;
+            lastW = w;
+            if (!measure()) return;
+            if (!positioned && el.scrollLeft <= 1) { setLeft(firstSnap); positioned = true; }
+          }).observe(el);
+        } catch (e) { /* ignore */ }
+      }
+
+      mountClones();
+    }
+    /** 把当前高亮的平台胶囊滚到条带中间；只看按钮和条带的相对位置，不滚动整页 */
+    function centerTab(bar, btn) {
+      if (!bar || !btn) return;
+      var max = bar.scrollWidth - bar.clientWidth;
+      if (max <= 2) return;
+      var target = btn.offsetLeft - (bar.clientWidth - btn.offsetWidth) / 2;
+      animate(bar, Math.max(0, Math.min(max, target)), 300);
     }
     /** 给容器挂上「按住拖动 + 惯性」；点击按钮不会被吃掉 */
     function attach(el, opts) {
@@ -4116,6 +4465,18 @@
       el.addEventListener('pointerup', end);
       el.addEventListener('pointercancel', end);
       el.addEventListener('pointerleave', function () { if (dragging && !captured) end(); });
+      // 触摸端补一份 .dragging 闸门（原来只有鼠标 pointer 事件会挂）：
+      // qa-grid 的「补吸附」会检查 .dragging，手势期间必须让位给原生滚动，
+      // 否则会在手指还没抬起时抢写 scrollLeft。收尾两路都要摘掉，避免残留。
+      el.addEventListener('touchstart', function () {
+        el.classList.add('dragging');
+      }, { passive: true });
+      el.addEventListener('touchend', function () {
+        el.classList.remove('dragging');
+      }, { passive: true });
+      el.addEventListener('touchcancel', function () {
+        el.classList.remove('dragging');
+      }, { passive: true });
       // 拖动结束后吞掉紧随的 click，避免「想滑动却点到了卡片里的按钮」
       el.addEventListener('click', function (ev) {
         if (!moved) return;
@@ -4124,23 +4485,124 @@
         ev.preventDefault();
       }, true);
     }
-    return { attach: attach, animate: animate, alignToSlot: alignToSlot };
+    return { attach: attach, animate: animate, alignToSlot: alignToSlot, bindMobileWrap: bindMobileWrap, centerTab: centerTab };
   })();
 
   function renderAgents(snap) {
     var host = $('#agents');
-    host.textContent = '';
-    if (!snap.agents.length) {
+    if (!host) return;
+    if (!snap || !snap.agents) return;
+    var list = snap.agents;
+    var mobileNow = isMobileRail();
+    // —— 根因 A1：数据签名短路 ——
+    // 30s loadSnapshot 在数据没变时不得销毁重建整轨（也不挂 pending）。
+    // 签名覆盖所有参与卡片 DOM 生成的字段 + 头像，缺一项都会漏刷新。
+    var sigParts = [];
+    for (var si = 0; si < list.length; si += 1) {
+      var a0 = list[si];
+      var mine0 = 0;
+      var tasks0 = snap.tasks || [];
+      for (var ti = 0; ti < tasks0.length; ti += 1) {
+        var t0 = tasks0[ti];
+        if ((t0.to === a0.name || t0.claimedBy === a0.name) && (t0.status === 'open' || t0.status === 'in_progress')) mine0 += 1;
+      }
+      sigParts.push([
+        a0.name, a0.role || '', a0.disabled ? 1 : 0, a0.activation || '',
+        a0.status || '', a0.busy ? 1 : 0, a0.model || '', a0.error || '',
+        a0.running === undefined ? '' : a0.running,
+        a0.queued === undefined ? '' : a0.queued,
+        mine0, a0.name === SELF ? 1 : 0,
+        JSON.stringify((chat && chat.avatars && chat.avatars[a0.name]) || null)
+      ].join('|'));
+    }
+    var sig = list.length + '::' + sigParts.join('||');
+    var realCountNow = host.querySelectorAll('.card.uh-card:not(.mobile-loop-clone)').length;
+    if (host.__lastRenderAgentsSig === sig && realCountNow === list.length) {
+      // 数据、卡片集合都没变：一个节点都不碰，直接返回。
+      if (!host.__lastActiveAgent && lastMobileActiveAgentTab) {
+        setActiveAgentTab(lastMobileActiveAgentTab, { scrollCard: false });
+      }
+      return;
+    }
+    // 路线 Y：首尾常驻克隆不再是「重建阻塞条件」——它一直在轨道上。
+    // 只挡住手势期与惯性未静止的窗口（距最近一次 scroll < 800ms），
+    // 绝不在惯性期用 setTimeout(0) 全量重建。
+    var busyNow = function () {
+      return host.classList.contains('dragging') || host.__railTouching ||
+        (Date.now() - (host.__railLastScrollAt || 0) < 800);
+    };
+    if (mobileNow && busyNow()) {
+      host.__pendingRenderAgents = Array.prototype.slice.call(arguments);
+      if (!host.__pendingSince) host.__pendingSince = Date.now();
+      if (!host.__pendingRenderTimer) {
+        host.__pendingRenderTimer = setTimeout(function retry() {
+          host.__pendingRenderTimer = 0;
+          var args = host.__pendingRenderAgents;
+          if (!args) return;
+          if (busyNow()) {
+            // 还没静止：继续等，静止后由 bindMobileWrap 的静止检测补跑
+            host.__pendingRenderTimer = setTimeout(retry, 120);
+            return;
+          }
+          host.__pendingRenderAgents = null;
+          host.__pendingSince = 0;
+          renderAgents.apply(null, args);
+        }, 120);
+      }
+      return;
+    }
+    host.__pendingSince = 0;
+    // 重建前记录高亮与滚动位置：重建后同一同步任务里还原，绝不留高亮空窗
+    var prevActive = host.__lastActiveAgent || lastMobileActiveAgentTab || '';
+    var prevScrollLeft = host.scrollLeft;
+    // 卡片顺序一致 → 走「原位复用」，不清空整轨
+    var sameOrder = realCountNow === list.length && realCountNow > 0;
+    if (sameOrder) {
+      var liveProbe = Array.prototype.filter.call(host.children, function (n) {
+        return n.classList.contains('uh-card') && !n.classList.contains('mobile-loop-clone');
+      });
+      for (var qi = 0; qi < liveProbe.length; qi += 1) {
+        if (liveProbe[qi].getAttribute('data-worker') !== list[qi].name) { sameOrder = false; break; }
+      }
+    }
+    // 重建前记录「逻辑卡片索引 + 卡内偏移」，重建后在同一同步任务里原地还原
+    var prevIndex = -1, offsetInCard = 0;
+    if (mobileNow) {
+      var oldCards = Array.prototype.filter.call(host.children, function (n) {
+        return !n.classList.contains('mobile-loop-clone');
+      });
+      if (oldCards.length) {
+        var oldStep = host.__railStep || 0;
+        var oldFirstSnap = host.__railFirstSnap || 0;
+        var idx = oldStep > 0 ? Math.round((host.scrollLeft - oldFirstSnap) / oldStep) : 0;
+        if (idx < 0) idx = oldCards.length - 1;
+        else if (idx > oldCards.length - 1) idx = 0;
+        prevIndex = idx;
+        offsetInCard = host.scrollLeft - oldCards[idx].offsetLeft;
+      }
+    }
+    if (!list.length) {
+      host.textContent = '';
+      host.__railClonesMounted = false;
+      host.__lastActiveAgent = '';
+      host.__lastRenderAgentsSig = sig;
       host.appendChild(el('div', 'empty', '枢纽还没有注册代理。各端调用 hub_heartbeat 后，会以子代理卡片出现在这里。'));
       return;
     }
+    // 只有卡片增删 / 顺序变化才真正销毁整轨；顺序一致走原位复用（见下方 sameOrder 分支）
+    if (!sameOrder) {
+      host.textContent = '';
+      host.__railClonesMounted = false;
+      host.__lastActiveAgent = '';
+    }
+    var out = document.createDocumentFragment();
     var summaryBadge = $('#qaSummaryBadge');
     if (summaryBadge) {
-      var onlineCount = snap.agents.filter(function (x) { return !x.disabled && (x.activation === 'online' || (!x.activation && x.online)); }).length;
-      var readyCount = snap.agents.filter(function (x) { return !x.disabled && (x.dispatchable || x.activation === 'standby' || x.ready); }).length;
-      summaryBadge.textContent = onlineCount + ' 在线 · ' + readyCount + ' 可派发 · 共 ' + snap.agents.length + ' Workers';
+      var onlineCount = list.filter(function (x) { return !x.disabled && (x.activation === 'online' || (!x.activation && x.online)); }).length;
+      var readyCount = list.filter(function (x) { return !x.disabled && (x.dispatchable || x.activation === 'standby' || x.ready); }).length;
+      summaryBadge.textContent = onlineCount + ' 在线 · ' + readyCount + ' 可派发 · 共 ' + list.length + ' Workers';
     }
-    snap.agents.forEach(function (a) {
+    list.forEach(function (a) {
       var card = el('div', 'card uh-card');
       card.setAttribute('data-worker', a.name);
       var head = el('div', 'card-head');
@@ -4208,20 +4670,36 @@
         toggleInput.type = 'checkbox';
         toggleInput.className = 'agent-toggle-input';
         toggleInput.checked = isEnabled;
+        // checked 只是「属性」，cloneNode/innerHTML 拷贝的是「特性」：
+        // 不同步 defaultChecked + checked 特性，常驻克隆会先被解析成未勾选，
+        // 再被 JS 勾上，旋钮就出现「从关闭滑向开启」的 0.2s 过渡。
+        toggleInput.defaultChecked = isEnabled;
+        if (isEnabled) toggleInput.setAttribute('checked', '');
+        else toggleInput.removeAttribute('checked');
         var toggleSlider = el('span', 'agent-toggle-slider');
         var toggleText = el('span', 'agent-toggle-text mono', isEnabled ? '已启用' : '已停用');
+        // 真实卡勾选态变化后必须立刻把特性与克隆同步，否则首尾克隆会滞后一帧。
+        var syncToggleState = function () {
+          toggleInput.defaultChecked = toggleInput.checked;
+          if (toggleInput.checked) toggleInput.setAttribute('checked', '');
+          else toggleInput.removeAttribute('checked');
+          if (typeof host.__syncResidentClones === 'function') host.__syncResidentClones();
+        };
         toggleInput.addEventListener('change', function () {
           var targetEnabled = toggleInput.checked;
           toggleText.textContent = '切换中...';
           toggleInput.disabled = true;
+          syncToggleState();
           api('/api/agents/toggle', { agent: a.name, enabled: targetEnabled }).then(function (res) {
             toast(res.message || ('子代理 ' + a.name + (targetEnabled ? ' 已激活' : ' 已停用')));
+            syncToggleState();
             pollUpdates();
           }).catch(function (e) {
             toast((e && e.message) || '切换状态失败', true);
             toggleInput.checked = !targetEnabled;
             toggleText.textContent = !targetEnabled ? '已启用' : '已停用';
             toggleInput.disabled = false;
+            syncToggleState();
           });
         });
         toggleWrap.appendChild(toggleInput);
@@ -4251,30 +4729,121 @@
 
       var mine = snap.tasks.filter(function (t) { return (t.to === a.name || t.claimedBy === a.name) && (t.status === 'open' || t.status === 'in_progress'); }).length;
       if (mine) card.appendChild(el('div', 'meta', '进行中 / 指派中任务: ' + mine));
-      host.appendChild(card);
+      out.appendChild(card);
     });
+
+    // —— 根因 A1 原位复用：顺序没变时绝不清空整轨 ——
+    // 只把「除去动态 SVG id + 三个动态槽位」后内容真正变化的卡原地换掉，
+    // 保留原卡片 DOM 引用与轨道 scrollLeft，轮询不再产生 cardRemoved / cardAdded。
+    if (sameOrder) {
+      var stripDynamic = function (root) {
+        var copy = root.cloneNode(true);
+        Array.prototype.forEach.call(copy.querySelectorAll('[data-quota-slot],[data-model-slot],[data-auth-slot]'), function (n) { n.textContent = ''; });
+        return String(copy.innerHTML)
+          .replace(/\sid="[^"]*"/g, '')
+          .replace(/\s(?:xlink:)?href="#[^"]*"/g, '');
+      };
+      var liveCards = Array.prototype.filter.call(host.children, function (n) {
+        return n.classList.contains('uh-card') && !n.classList.contains('mobile-loop-clone');
+      });
+      var freshCards = Array.prototype.slice.call(out.children);
+      var replaced = 0;
+      for (var ci = 0; ci < liveCards.length; ci += 1) {
+        var live = liveCards[ci];
+        var fresh = freshCards[ci];
+        if (!fresh) continue;
+        if (stripDynamic(live) !== stripDynamic(fresh)) {
+          while (live.firstChild) live.removeChild(live.firstChild);
+          while (fresh.firstChild) live.appendChild(fresh.firstChild);
+          replaced += 1;
+        }
+        var nextCls = fresh.className;
+        if (live.classList.contains('is-selected') && nextCls.indexOf('is-selected') < 0) nextCls += ' is-selected';
+        if (live.className !== nextCls) live.className = nextCls;
+      }
+      host.__lastRenderAgentsSig = sig;
+      if (replaced && typeof window.__ahHydrateUnifiedCards === 'function') window.__ahHydrateUnifiedCards();
+      // 原位复用不会重建整卡，勾选态的 checked 特性必须补写，否则常驻克隆
+      // 复制到的 innerHTML 里没有 checked，旋钮会先渲染成关闭再滑向开启。
+      Array.prototype.forEach.call(
+        host.querySelectorAll('.card.uh-card:not(.mobile-loop-clone) input.agent-toggle-input'),
+        function (inp) {
+          if (inp.defaultChecked !== inp.checked) inp.defaultChecked = inp.checked;
+          if (inp.checked) {
+            if (!inp.hasAttribute('checked')) inp.setAttribute('checked', '');
+          } else if (inp.hasAttribute('checked')) {
+            inp.removeAttribute('checked');
+          }
+        }
+      );
+      if (typeof host.__syncResidentClones === 'function') host.__syncResidentClones();
+      if (prevActive) setActiveAgentTab(prevActive, { scrollCard: false });
+      return;
+    }
+
+    host.appendChild(out);
     if (typeof window.__ahHydrateUnifiedCards === 'function') {
       window.__ahHydrateUnifiedCards();
     }
+    // 原子补齐首尾常驻克隆，并在同一个同步任务里恢复滚动位置：
+    // 重建前后零闪烁、零位移（克隆不计入数量，也不参与活动卡选择）。
+    if (mobileNow && typeof host.__mountResidentClones === 'function') {
+      host.__mountResidentClones();
+      var newCards = Array.prototype.filter.call(host.children, function (n) {
+        return !n.classList.contains('mobile-loop-clone');
+      });
+      if (newCards.length) {
+        var keepIdx = prevIndex < 0 ? 0 : Math.min(prevIndex, newCards.length - 1);
+        var restore = prevIndex < 0 ? prevScrollLeft : Math.max(0, newCards[keepIdx].offsetLeft + offsetInCard);
+        // 位置没变就一次也不写：后台轮询触发的重建不该在滚动/惯性期动 scrollLeft
+        if (Math.abs(restore - host.scrollLeft) > 0.5) {
+          var prevBehavior = host.style.scrollBehavior;
+          host.style.scrollBehavior = 'auto';
+          host.scrollLeft = restore;
+          host.style.scrollBehavior = prevBehavior;
+        }
+      }
+    }
+    host.__lastRenderAgentsSig = sig;
     renderAgentTabs(snap.agents);
     applyAgentCardFilter();
+    // 重建后同一同步任务内立刻恢复高亮：绝不留「重建后 238~685ms 无 .is-selected」的空窗。
+    host.__lastActiveAgent = prevActive || '';
+    if (prevActive) setActiveAgentTab(prevActive, { scrollCard: false });
+    else if (typeof syncActiveFromCenterRef === 'function') syncActiveFromCenterRef();
   }
 
   // ---- 子代理快速跳转胶囊：一行可滑，点哪个滑轨就滑到那张卡 ----
   function agentCardOf(name) {
     var list = document.querySelectorAll('#agents .card.uh-card');
     for (var i = 0; i < list.length; i += 1) {
+      if (list[i].classList.contains('mobile-loop-clone')) continue;
       if (list[i].getAttribute('data-worker') === name) return list[i];
     }
     return null;
   }
-  function setActiveAgentTab(name) {
+  var lastMobileActiveAgentTab = '';
+  // renderAgentTabs 里定义的居中高亮推算函数，供 renderAgents 重建后同帧回调
+  var syncActiveFromCenterRef = null;
+  function setActiveAgentTab(name, opts) {
+    var o = opts || {};
     document.querySelectorAll('#qa-agent-tabs .qa-agent-tab').forEach(function (b) {
       var on = b.getAttribute('data-worker') === name;
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
-    // 选中卡片的顶部配色条：取该子代理的主题色
+    if (isMobileRail() && name && name !== lastMobileActiveAgentTab) {
+      lastMobileActiveAgentTab = name;
+      if (o.scrollCard !== false) {
+        var activeBtn = document.querySelector('#qa-agent-tabs .qa-agent-tab.active');
+        if (activeBtn && window.HubRail.centerTab) {
+          window.HubRail.centerTab(activeBtn.parentElement, activeBtn);
+        }
+      }
+    }
+    // 选中卡片的顶部配色条：取该子代理的主题色。
+    // 根因 D：这里必须包含常驻克隆卡（不排除 .mobile-loop-clone），
+    // 否则滑到首/尾克隆时克隆卡当帧没有高亮与主题色，warp 前后会视觉跳变。
     var themes = window.AGENT_THEMES || {};
     document.querySelectorAll('#agents .card.uh-card').forEach(function (card) {
       var worker = card.getAttribute('data-worker');
@@ -4283,18 +4852,23 @@
       if (on) {
         var theme = themes[worker];
         if (theme && theme.color) card.style.setProperty('--card-accent', theme.color);
+      } else {
+        card.style.removeProperty('--card-accent');
       }
     });
   }
   var agentRailBusyUntil = 0;
+  function isMobileRail() {
+    return document.documentElement.getAttribute('data-ui') === 'mobile';
+  }
   function jumpToAgent(name) {
     var rail = $('#agents');
     var card = agentCardOf(name);
     if (!rail || !card || card.style.display === 'none') return;
     AGENT_TOUR.pause();
     agentRailBusyUntil = Date.now() + 900; // 程序化滚动期间不搬家
-    // 和打卡滑轨同一套手感：目标卡居中，越界时靠搬家补位，所以能一直循环
-    window.HubRail.alignToSlot(rail, card, { center: true, loop: true, duration: 520 });
+    // 手机端靠 CSS snap 整卡吸附，不做首尾搬家；桌面端保留无限循环。
+    window.HubRail.alignToSlot(rail, card, { center: true, loop: !isMobileRail(), duration: isMobileRail() ? 420 : 520 });
     setActiveAgentTab(name);
   }
 
@@ -4316,6 +4890,8 @@
 
     function canRun() {
       if (reduced || !rail) return false;
+      // 手机端不做自动巡览：横向滑轨交给用户手势 + snap，避免卡片自己慢慢移动。
+      if (isMobileRail()) return false;
       var panel = $('#panel-agents');
       if (!panel || panel.hidden) return false;   // 设置页子代理选项卡不在前台不巡览
       if (document.hidden) return false;
@@ -4411,6 +4987,8 @@
       var raf = 0;
       // 循环：两端各留半张卡的余量，搬家时补偿 scrollLeft，视觉不跳
       var rebalance = function () {
+        // 手机端禁用 JS 搬卡：和 CSS scroll-snap 同时生效会重排首尾，滑动时闪平台。
+        if (isMobileRail()) return;
         if (rail.scrollWidth <= rail.clientWidth + 8) return;
         if (rail.classList.contains('dragging')) return;
         if (Date.now() < agentRailBusyUntil) return;
@@ -4429,18 +5007,45 @@
           rail.scrollLeft -= step;
         }
       };
-      // 高亮 = 最靠近视口中心的那张卡（与 jumpToAgent 的居中落点一致）
+      // 高亮 = 最靠近视口中心的那张卡。O(1) 推算：用缓存的 step / firstSnap
+      // 直接算逻辑索引，绝不每帧遍历所有卡读 offsetLeft/offsetWidth。
+      // 只有活动卡真正变化时才切 class 与顶部胶囊。
       var syncActiveFromCenter = function () {
-        var center = rail.scrollLeft + rail.clientWidth / 2;
-        var best = null, bestDist = Infinity;
-        document.querySelectorAll('#agents .card.uh-card').forEach(function (card) {
-          if (card.style.display === 'none') return;
-          var mid = card.offsetLeft + card.offsetWidth / 2;
-          var d = Math.abs(mid - center);
-          if (d < bestDist) { bestDist = d; best = card; }
+        var cards = Array.prototype.filter.call(rail.children, function (n) {
+          return !n.classList.contains('mobile-loop-clone');
         });
-        if (best) setActiveAgentTab(best.getAttribute('data-worker'));
+        if (!cards.length) return;
+        var best = null;
+        if (isMobileRail()) {
+          var step = rail.__railStep || 0;
+          var firstSnap = rail.__railFirstSnap || 0;
+          if (step > 0) {
+            var idx = Math.round((rail.scrollLeft - firstSnap) / step);
+            // 停在首克隆 → 映射真实末卡；停在尾克隆 → 映射真实首卡
+            if (idx < 0) idx = cards.length - 1;
+            else if (idx > cards.length - 1) idx = 0;
+            best = cards[idx];
+            // 搜索过滤把卡 display:none 后偏移全塌了，退回一次就近扫描
+            if (best && best.style.display === 'none') best = null;
+          }
+        }
+        if (!best) {
+          var center = rail.scrollLeft + rail.clientWidth / 2;
+          var bestDist = Infinity;
+          cards.forEach(function (card) {
+            if (card.style.display === 'none') return;
+            var mid = card.offsetLeft + card.offsetWidth / 2;
+            var d = Math.abs(mid - center);
+            if (d < bestDist) { bestDist = d; best = card; }
+          });
+        }
+        if (!best) return;
+        var name = best.getAttribute('data-worker');
+        if (name === rail.__lastActiveAgent) return;
+        rail.__lastActiveAgent = name;
+        setActiveAgentTab(name);
       };
+      syncActiveFromCenterRef = syncActiveFromCenter;
       rail.addEventListener('scroll', function () {
         if (raf) return;
         raf = requestAnimationFrame(function () {
@@ -4450,6 +5055,12 @@
         });
       }, { passive: true });
       rail.addEventListener('pointerup', function () { setTimeout(rebalance, 0); });
+      if (window.HubRail.bindMobileWrap) {
+        window.HubRail.bindMobileWrap(rail, {
+          onStart: function () { agentRailBusyUntil = Date.now() + 700; },
+          onDone: function () { syncActiveFromCenter(); }
+        });
+      }
       syncActiveFromCenter();
     }
   }
@@ -5024,6 +5635,629 @@
       else setTimeout(positionPillDock, 0);
     }
   }
+
+  // ===== 手机端抽屉（Mobile Shell v2，2026-11-03）=====
+  // 只在 html[data-ui="mobile"] 下生效。侧栏本身仍由 .collapsed 类控制开关（和桌面同一套状态），
+  // 这里只补上手机端需要的交互：
+  //   1. App Bar 加一个「新建对话」按钮（转发给更多菜单里原有的 #btn-new-chat）；设置页顶栏加「返回对话」按钮
+  //   2. 点遮罩收起抽屉
+  //   3. 跟手拖拽：从屏幕左边缘右滑拉出，在抽屉或遮罩上左滑收回（按距离和速度判定）
+  //   4. 安卓返回键 / 浏览器后退先收起抽屉，不直接离开页面
+  (function setupMobileDrawer() {
+    var root = document.documentElement;
+    function isMobileUI() { return root.getAttribute('data-ui') === 'mobile'; }
+    if (!isMobileUI()) return;
+    var sb = $('#chat-threads');
+    var chatMain = $('#chat-main');
+    var panelChat = $('#panel-chat');
+    if (!sb || !chatMain || !panelChat) return;
+
+    function chatActive() { return panelChat.classList.contains('active'); }
+    function drawerOpen() { return !sb.classList.contains('collapsed'); }
+    function drawerWidth() { return Math.min(window.innerWidth * 0.86, 340); }
+
+    // 1. 新建对话按钮
+    var headRight = $('#chat-head-btns');
+    var moreWrap = $('#head-more-wrap');
+    if (headRight && !$('#btn-m-new-chat')) {
+      var nb = document.createElement('button');
+      nb.id = 'btn-m-new-chat';
+      nb.type = 'button';
+      nb.className = 'btn-head-action';
+      nb.title = '新建对话';
+      nb.setAttribute('aria-label', '新建对话');
+      nb.innerHTML = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h8"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+      nb.addEventListener('click', function () {
+        var real = $('#btn-new-chat');
+        if (real) real.click();
+      });
+      headRight.insertBefore(nb, moreWrap || headRight.firstChild);
+    }
+
+    // 1b. 设置等页面没有底部导航了（「对话 / 设置」收进抽屉左侧图标栏），顶栏左侧补一个返回对话的按钮
+    var topBar = document.querySelector('header.top');
+    if (topBar && !$('#btn-m-back')) {
+      var bb = document.createElement('button');
+      bb.id = 'btn-m-back';
+      bb.type = 'button';
+      bb.title = '返回对话';
+      bb.setAttribute('aria-label', '返回对话');
+      bb.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+      bb.addEventListener('click', function () {
+        var t = $('#tab-chat');
+        if (t) t.click();
+      });
+      topBar.insertBefore(bb, topBar.firstChild);
+    }
+
+    // 1c. 输入框占位文字：原文是桌面键盘提示，手机上一行放不下会被截断，换成短句
+    var ci = $('#chat-input');
+    if (ci && /Enter/.test(ci.getAttribute('placeholder') || '')) ci.setAttribute('placeholder', '给子代理派发任务…');
+    var ps = $('#platform-search');
+    if (ps) ps.setAttribute('placeholder', '搜索…');
+
+    // 1d. 工作台改成右侧抽屉：头部补一个关闭键；点抽屉外面收起
+    var wb = $('#workbench');
+    var wbToggle = $('#btn-workbench-toggle');
+    function wbOpen() { return !!(wb && wb.classList.contains('open')); }
+    function closeWb() { if (wbOpen() && wbToggle) wbToggle.click(); }
+    if (wb && wbToggle) {
+      var wbRight = wb.querySelector('.wb-head-right');
+      if (wbRight && !$('#btn-m-wb-close')) {
+        var xb = document.createElement('button');
+        xb.id = 'btn-m-wb-close';
+        xb.type = 'button';
+        xb.title = '收起工作台';
+        xb.setAttribute('aria-label', '收起工作台');
+        xb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+        xb.addEventListener('click', function (e) { e.stopPropagation(); closeWb(); });
+        wbRight.appendChild(xb);
+      }
+      document.addEventListener('click', function (e) {
+        if (!wbOpen()) return;
+        var t = e.target;
+        if (!t || !t.closest) return;
+        if (t.closest('#workbench') || t.closest('#btn-workbench-toggle')) return;
+        // 工作台里点开的预览、弹窗等挂在 body 上的层，不算「外面」
+        if (t.closest('.modal, .dialog, [role="dialog"], .wb-preview, .lightbox')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        closeWb();
+      }, true);
+    }
+
+    // 1e. 新对话空状态：列表渲染后会自动滚到底，窄屏上头像和问候语被切掉；空状态时回到顶部
+    var msgsEl = $('#chat-msgs');
+    if (msgsEl && window.MutationObserver) {
+      try {
+        new MutationObserver(function () {
+          if (msgsEl.querySelector(':scope > .chat-empty-state')) {
+            msgsEl.scrollTop = 0;
+            setTimeout(function () { if (msgsEl.querySelector(':scope > .chat-empty-state')) msgsEl.scrollTop = 0; }, 60);
+          }
+        }).observe(msgsEl, { childList: true });
+      } catch (e) { /* 忽略 */ }
+    }
+
+    // 1f. 贴底阅读时输入框长高（多行输入），消息区可视高度变小但 scrollTop 不变，最新回答的结尾会被挤出视口：
+    //     输入前记下是否贴底，长高后（下一帧）把消息区滚回底部
+    if (ci && msgsEl) {
+      var wasBottom = false;
+      ci.addEventListener('beforeinput', function () {
+        try { wasBottom = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 24; } catch (e) { wasBottom = false; }
+      }, true);
+      ci.addEventListener('input', function () {
+        if (!wasBottom) return;
+        requestAnimationFrame(function () { try { msgsEl.scrollTop = msgsEl.scrollHeight; } catch (e) { /* 忽略 */ } });
+      });
+    }
+
+    function setDrawer(open) {
+      if (open === drawerOpen()) return;
+      togglePlatformsSidebar(open);
+    }
+
+    // 2. 点遮罩收起（遮罩是 #chat-main::before，点它时 target 就是 #chat-main 本身）
+    chatMain.addEventListener('click', function (e) {
+      if (e.target !== chatMain || !chatActive() || !drawerOpen()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDrawer(false);
+    }, true);
+
+    // 3. 跟手拖拽
+    var drag = null;
+    var EDGE = 28;
+    function setDragPx(px) { root.style.setProperty('--m-drag', Math.round(px) + 'px'); }
+    function clearDrag() {
+      root.classList.remove('m-dragging');
+      root.classList.remove('m-drawer-peek');
+      root.style.setProperty('--m-drag', '0px');
+    }
+    function inDrawerZone(target) {
+      if (!target || !target.closest) return false;
+      return !!target.closest('#chat-threads, header.top, nav.tabs.cb-activity-bar') || target === chatMain;
+    }
+    document.addEventListener('touchstart', function (e) {
+      if (!chatActive() || e.touches.length !== 1) { drag = null; return; }
+      var t = e.touches[0];
+      var open = drawerOpen();
+      if (!open && t.clientX > EDGE) { drag = null; return; }
+      if (open && !inDrawerZone(e.target)) { drag = null; return; }
+      drag = { x0: t.clientX, y0: t.clientY, t0: Date.now(), open: open, active: false, dx: 0, w: drawerWidth() };
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!drag) return;
+      var t = e.touches[0];
+      var dx = t.clientX - drag.x0;
+      var dy = t.clientY - drag.y0;
+      if (!drag.active) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        // 竖向为主就放行给列表滚动；方向不对（抽屉开着却往右拉）也放行
+        if (Math.abs(dy) > Math.abs(dx) || (drag.open && dx > 0) || (!drag.open && dx < 0)) { drag = null; return; }
+        drag.active = true;
+        root.classList.add('m-dragging');
+        if (!drag.open) root.classList.add('m-drawer-peek');
+      }
+      if (e.cancelable) e.preventDefault();
+      drag.dx = dx;
+      if (drag.open) setDragPx(Math.max(-drag.w, Math.min(0, dx)));
+      else setDragPx(Math.max(0, Math.min(drag.w, dx)));
+    }, { passive: false });
+    function endDrag() {
+      if (!drag) return;
+      var d = drag;
+      drag = null;
+      if (!d.active) return;
+      var dt = Math.max(1, Date.now() - d.t0);
+      var v = d.dx / dt;   // px/ms
+      var shouldOpen;
+      if (d.open) shouldOpen = !(d.dx < -d.w * 0.3 || v < -0.45);
+      else shouldOpen = d.dx > d.w * 0.35 || v > 0.45;
+      // 先切换状态再撤掉拖拽偏移：两者落在同一帧，抽屉从手指松开的位置继续滑完，不会闪
+      if (shouldOpen !== d.open) setDrawer(shouldOpen);
+      clearDrag();
+    }
+    document.addEventListener('touchend', endDrag, { passive: true });
+    document.addEventListener('touchcancel', endDrag, { passive: true });
+
+    // 4. 返回键：抽屉打开时压一条历史记录，后退时先收抽屉
+    var ownState = false;
+    function syncHistory() {
+      if (!chatActive()) return;
+      if (drawerOpen() && !ownState) {
+        try { history.pushState({ mDrawer: 1 }, ''); ownState = true; } catch (e) { /* 忽略 */ }
+      } else if (!drawerOpen() && ownState) {
+        ownState = false;
+        try { if (history.state && history.state.mDrawer) history.back(); } catch (e) { /* 忽略 */ }
+      }
+    }
+    window.addEventListener('popstate', function () {
+      if (ownState) {
+        ownState = false;
+        if (drawerOpen() && chatActive()) togglePlatformsSidebar(false);
+      }
+    });
+    if (window.MutationObserver) {
+      try {
+        new MutationObserver(function () { syncHistory(); })
+          .observe(sb, { attributes: true, attributeFilter: ['class'] });
+      } catch (e) { /* 忽略 */ }
+    }
+    // 工作台抽屉同理：打开时压一条历史，返回键先收工作台
+    var ownWb = false;
+    if (wb && window.MutationObserver) {
+      try {
+        new MutationObserver(function () {
+          if (wbOpen() && !ownWb) {
+            try { history.pushState({ mWb: 1 }, ''); ownWb = true; } catch (e) { /* 忽略 */ }
+          } else if (!wbOpen() && ownWb) {
+            ownWb = false;
+            try { if (history.state && history.state.mWb) history.back(); } catch (e) { /* 忽略 */ }
+          }
+        }).observe(wb, { attributes: true, attributeFilter: ['class'] });
+      } catch (e) { /* 忽略 */ }
+      window.addEventListener('popstate', function () {
+        if (ownWb) { ownWb = false; closeWb(); }
+      });
+    }
+  })();
+
+  // ===== 桌面端补丁（Desktop Shell，r23 起）=====
+  // 只在桌面端（html 没有 data-ui="mobile"）生效；只追加监听，不改任何原有函数，全部 try/catch 防御。
+  //   1. 子代理滑轨：
+  //      a. 滑轨进入视口（以及宽度变化）时，把当前高亮的卡居中——走的就是「点子代理胶囊」的原路径（jumpToAgent），
+  //         所以自动巡览按它自己的规则暂停 20 秒再继续，不会和巡览抢 scrollLeft。
+  //      b. 每 30 秒快照重绘会清空滑轨重建（卡片回到快照顺序，scrollLeft 保留）→ 画面整体跳一张卡。
+  //         重建后按「左起第一张可见卡」的 data-worker 把位置还原。
+  //   2. 空会话 + 看板娘趴在输入卡上时，若她压住快捷指令卡，逐级让位直到不压：
+  //      欢迎区整体上提（html.d-es-lift + --d-es-lift）→ 快捷卡只留标题（d-es-1）→ 收欢迎区头部（d-es-2）
+  //      → 把她临时缩到刚好放得下（d-es-fit + --d-es-mascot-w，下限 120px）。差得不多时直接缩她，不动内容。
+  //      不改用户的大小档位（data-mascot-size / 本地偏好都不动）。
+  (function setupDesktopShell() {
+    var root = document.documentElement;
+    if (root.getAttribute('data-ui') === 'mobile') return;
+    function q(s) { try { return document.querySelector(s); } catch (e) { return null; } }
+
+    // ---------- 1. 子代理滑轨 ----------
+    (function agentRail() {
+      var rail = q('#agents');
+      var tabs = q('#qa-agent-tabs');
+      var panel = q('#panel-agents');
+      if (!rail || !tabs || !panel) return;
+      var anchor = null;   // { worker, offset }：左起第一张可见卡相对滑轨视口左缘的位置
+      var inView = false;
+      var lastW = 0;
+      function cards() { return Array.prototype.slice.call(rail.children); }
+      function overflowing() { return rail.clientWidth > 0 && rail.scrollWidth > rail.clientWidth + 8; }
+      function record() {
+        try {
+          if (!rail.clientWidth || rail.classList.contains('dragging')) return;
+          var sl = rail.scrollLeft;
+          var list = cards();
+          for (var i = 0; i < list.length; i++) {
+            var c = list[i];
+            if (c.style.display === 'none' || !c.getAttribute('data-worker')) continue;
+            if (c.offsetLeft + c.offsetWidth > sl + 1) { anchor = { worker: c.getAttribute('data-worker'), offset: c.offsetLeft - sl }; return; }
+          }
+        } catch (e) { /* 忽略 */ }
+      }
+      function cardOf(name) {
+        var list = cards();
+        for (var i = 0; i < list.length; i++) if (list[i].getAttribute('data-worker') === name) return list[i];
+        return null;
+      }
+      // 重建后还原：与 HubRail.alignToSlot 的 loop 同一做法（首尾搬卡补位），只是不做动画
+      function restore() {
+        try {
+          if (!anchor || !overflowing()) return false;
+          var card = cardOf(anchor.worker);
+          if (!card || card.style.display === 'none') return false;
+          var want = function () { return card.offsetLeft - anchor.offset; };
+          var guard = 0;
+          while (want() < 0 && guard++ < 40) {
+            var last = rail.lastElementChild;
+            if (!last || last === card) break;
+            rail.insertBefore(last, rail.firstElementChild);
+          }
+          var max = rail.scrollWidth - rail.clientWidth;
+          while (want() > max && guard++ < 80) {
+            var first = rail.firstElementChild;
+            if (!first || first === card) break;
+            rail.appendChild(first);
+            max = rail.scrollWidth - rail.clientWidth;
+          }
+          rail.scrollLeft = Math.max(0, Math.min(max, want()));
+          return true;
+        } catch (e) { return false; }
+      }
+      // 把高亮卡居中：模拟点它的胶囊（jumpToAgent：暂停巡览 + 居中 + 高亮），与用户手动点击完全同一路径
+      function center() {
+        try {
+          if (panel.hidden || !inView || !overflowing()) return;
+          if (rail.classList.contains('dragging')) return;
+          var pill = tabs.querySelector('.qa-agent-tab.active');
+          if (!pill || pill.style.display === 'none') {
+            // 还没有高亮：取最靠近视口中心的卡
+            var mid = rail.scrollLeft + rail.clientWidth / 2, best = null, bd = Infinity;
+            cards().forEach(function (c) {
+              if (c.style.display === 'none') return;
+              var d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid);
+              if (d < bd) { bd = d; best = c; }
+            });
+            if (!best) return;
+            pill = tabs.querySelector('.qa-agent-tab[data-worker="' + String(best.getAttribute('data-worker')).replace(/"/g, '') + '"]');
+          }
+          if (pill && pill.style.display !== 'none') pill.click();
+        } catch (e) { /* 忽略 */ }
+      }
+      rail.addEventListener('scroll', record, { passive: true });
+      if (window.MutationObserver) {
+        new MutationObserver(function (recs) {
+          try {
+            // 只处理「整轨重建」：被移除的卡不在文档里了（巡览 / 循环搬家只是挪位置，节点仍在）
+            var rebuilt = recs.some(function (r) {
+              return Array.prototype.some.call(r.removedNodes, function (n) { return n.nodeType === 1 && !n.isConnected; });
+            });
+            if (!rebuilt || !rail.children.length) return;
+            if (!restore() && inView) setTimeout(center, 60);
+          } catch (e) { /* 忽略 */ }
+        }).observe(rail, { childList: true });
+      }
+      if (window.IntersectionObserver) {
+        new IntersectionObserver(function (entries) {
+          try {
+            var en = entries[entries.length - 1];
+            var vis = en.isIntersecting && en.intersectionRatio >= 0.35;
+            if (vis && !inView) { inView = true; setTimeout(center, 60); }
+            else if (!en.isIntersecting) inView = false;
+          } catch (e) { /* 忽略 */ }
+        }, { threshold: [0, 0.35] }).observe(rail);
+      }
+      if (window.ResizeObserver) {
+        var rt = 0;
+        new ResizeObserver(function () {
+          try {
+            var w = rail.clientWidth;
+            if (!w || w === lastW) { lastW = w || lastW; return; }
+            var first = !lastW;
+            lastW = w;
+            if (first) return; // 首次回调交给 IntersectionObserver
+            clearTimeout(rt);
+            rt = setTimeout(center, 120);
+          } catch (e) { /* 忽略 */ }
+        }).observe(rail);
+      }
+    })();
+
+    // ---------- 2. 空会话时给看板娘让位 ----------
+    (function emptyStateMascot() {
+      var msgs = q('#chat-msgs');
+      var panelChat = q('#panel-chat');
+      var dock = q('.mascot-dock');
+      if (!msgs || !panelChat || !dock) return;
+      var GAP = 8;        // 卡片下缘与她头顶至少留 8px
+      var MIN_W = 120;    // 缩小下限
+      var TOP_CLEAR = 56; // 头像离消息区顶部至少 56px（让开 toast：12 + 36 + 8）
+      var busy = false;
+      function overlapPx(grid) {
+        var d = dock.getBoundingClientRect();
+        var g = grid.getBoundingClientRect();
+        if (!d.width || !g.width) return 0;
+        if (d.left >= g.right || d.right <= g.left) return 0;
+        var v = g.bottom + GAP - d.top;
+        return v > 0 ? v : 0;
+      }
+      function clear() {
+        root.classList.remove('d-es-lift', 'd-es-1', 'd-es-2', 'd-es-fit');
+        root.style.removeProperty('--d-es-lift');
+        root.style.removeProperty('--d-es-mascot-w');
+      }
+      // 欢迎区在消息区里是 margin:auto 垂直居中的：先把它整体往上提（相对定位，不改布局、不产生滚动），
+      // 最多提到头像离消息区顶部 56px——新建对话时「已开启新对话」toast 落在对话头下方 12px、高 36px，
+      // 头像再往上会被它盖住（r24）。返回提完后仍压住的像素
+      function lift(es, grid) {
+        root.classList.remove('d-es-lift');
+        root.style.removeProperty('--d-es-lift');
+        var need = overlapPx(grid);
+        if (need <= 0) return 0;
+        var m = msgs.getBoundingClientRect();
+        var ecs = getComputedStyle(es);
+        var slack = es.getBoundingClientRect().top + (parseFloat(ecs.paddingTop) || 0) - (m.top + TOP_CLEAR);
+        var up = Math.max(0, Math.min(need, Math.floor(slack)));
+        if (up > 0) {
+          root.style.setProperty('--d-es-lift', up + 'px');
+          root.classList.add('d-es-lift');
+        }
+        return overlapPx(grid);
+      }
+      function evaluate() {
+        if (busy) return;
+        busy = true;
+        try {
+          var had = root.classList.contains('d-es-lift') || root.classList.contains('d-es-fit');
+          clear();
+          var es = msgs.querySelector(':scope > .chat-empty-state');
+          var grid = es && es.querySelector('.empty-starter-grid');
+          if (!grid || !panelChat.classList.contains('active') || dock.hidden || dock.classList.contains('is-gone')) {
+            if (had) nudgeMascot();
+            return;
+          }
+          // 她的自然尺寸（类都清掉后同步量；不经过绘制，不会闪）
+          var d0 = dock.getBoundingClientRect();
+          if (!d0.width || overlapPx(grid) <= 0) { if (had) nudgeMascot(); return; }
+          // 宽度每少 1px 头顶下移 0.8587px（原版 bottom = composer-h − 0.105w 随宽度变小而上移，height = 0.9637w）
+          var fitW = function (r) { return Math.floor(d0.width - r / 0.8587); };
+          // ① 整体上提；差得不多（她缩到 85% 以内就够）直接 ④
+          // ② 快捷卡只留标题 → 再上提；③ 她要缩到 80% 以下时先收欢迎区头部 → 再上提；④ 她缩到刚好放得下（下限 120px）
+          var rest = lift(es, grid);
+          if (rest > 0 && fitW(rest) < d0.width * 0.85) {
+            root.classList.add('d-es-1');
+            Array.prototype.forEach.call(grid.querySelectorAll('.empty-starter-card'), function (c) {
+              if (c.title) return;
+              var dsc = c.querySelector('.empty-starter-desc');
+              if (dsc && dsc.textContent) c.title = dsc.textContent;   // 说明收起后悬停仍可见
+            });
+            rest = lift(es, grid);
+            if (rest > 0 && fitW(rest) < d0.width * 0.8) {
+              root.classList.add('d-es-2');
+              rest = lift(es, grid);
+            }
+          }
+          if (rest > 0) {
+            var w = Math.max(MIN_W, fitW(rest));
+            if (w < d0.width - 1) {
+              root.style.setProperty('--d-es-mascot-w', w + 'px');
+              root.classList.add('d-es-fit');
+            }
+          }
+          nudgeMascot();
+        } catch (e) {
+          try { clear(); } catch (e2) { /* 忽略 */ }
+        } finally {
+          busy = false;
+        }
+      }
+      // 让看板娘自己重算「是否被消息压住」（她监听 #chat-msgs 的 scroll）
+      function nudgeMascot() {
+        try { msgs.dispatchEvent(new Event('scroll')); } catch (e) { /* 忽略 */ }
+      }
+      var queued = 0;
+      function queue() {
+        if (queued) return;
+        queued = requestAnimationFrame(function () { queued = 0; evaluate(); });
+      }
+      if (window.MutationObserver) {
+        // 空状态出现 / 消失：同步处理（在看板娘的 rAF 重叠检测之前）
+        // 欢迎区有 .28s 进场动画（translateY 8px），动画结束后再量一次
+        new MutationObserver(function () { evaluate(); setTimeout(queue, 340); }).observe(msgs, { childList: true });
+        // 大小档位、显隐、侧栏开合、页签切换
+        new MutationObserver(queue).observe(root, { attributes: true, attributeFilter: ['data-mascot-size'] });
+        new MutationObserver(queue).observe(dock, { attributes: true, attributeFilter: ['hidden', 'class'] });
+        var side = q('#chat-threads');
+        if (side) new MutationObserver(queue).observe(side, { attributes: true, attributeFilter: ['class'] });
+        new MutationObserver(queue).observe(panelChat, { attributes: true, attributeFilter: ['class'] });
+      }
+      window.addEventListener('resize', queue);
+      if (window.ResizeObserver) {
+        var comp = q('#chat-composer');
+        if (comp) new ResizeObserver(queue).observe(comp);
+      }
+      setTimeout(queue, 300);
+      setTimeout(queue, 1200);
+    })();
+
+    // ---------- 3. ≤1100px 打开工作台时侧栏让位（r26）----------
+    // 三栏（图标栏 56 + 侧栏 272 + 工作台 340）在 ≤1100 宽放不下，对话列会被挤到 116px（768）/ 372px（1024）。
+    // 工作台打开（#panel-chat.wb-open）且宽度 ≤1100、侧栏开着 → 走原版 togglePlatformsSidebar(false) 收起；
+    // 工作台关上（或宽度回到 >1100）→ 只在「是我们收的、且侧栏此后没被别人动过」时 togglePlatformsSidebar(true) 还原。
+    // 期间用户自己点开 / 收起侧栏，就以用户为准，不再自动还原。
+    // r27（终审 2 J1）：只在工作台刚打开 / 设置页切回 / 窗口从宽跨进 ≤1100 时让位；窄屏内缩放不动侧栏；
+    //   用户输入 600ms 内的侧栏变化才算用户操作（原版悬停收展的定时器不算）。CSS 兜底规则（§22.1）只在本模块没启动时生效（html 无 .d-wb-js）。
+    (function workbenchMakeRoom() {
+      var panelChat = q('#panel-chat');
+      var side = q('#chat-threads');
+      if (!panelChat || !side || typeof togglePlatformsSidebar !== 'function') return;
+      var NARROW = 1100;
+      var USER_WINDOW = 600;   // ms：这段时间内有过指针 / 键盘输入，侧栏变化才算「用户改的」
+      var auto = false;        // 侧栏是本模块收起的，关工作台 / 回到宽屏时要还原
+      var userKeep = false;    // 工作台打开期间用户亲手改过侧栏 → 本次工作台会话内不再自动收
+      var expect = null;       // 本模块刚设的 collapsed 值（区分自己的改动）
+      var lastInput = 0;
+      var lastWb = panelChat.classList.contains('wb-open');
+      var lastAct = panelChat.classList.contains('active');
+      var lastNarrow = window.innerWidth <= NARROW;
+      function narrow() { return window.innerWidth <= NARROW; }
+      function wbOpen() { return panelChat.classList.contains('wb-open'); }
+      function sideOpen() { return !side.classList.contains('collapsed'); }
+      function setSide(open) {
+        expect = !open;
+        try { togglePlatformsSidebar(open); } catch (e) { expect = null; }
+      }
+      // reason: 'wb'（工作台开 / 关）| 'back'（设置 → 对话）| 'resize' | 'init'
+      function sync(reason) {
+        try {
+          var n = narrow();
+          var entered = n && !lastNarrow;
+          lastNarrow = n;
+          if (wbOpen() && n) {
+            if (reason === 'resize' && !entered) return;        // 窄屏内部缩放：不动侧栏
+            if (userKeep) return;                               // 用户在本次工作台会话里明确要过侧栏
+            if (sideOpen()) { auto = true; setSide(false); }    // 含「设置 → 对话」时原版强制展开后的再让位
+          } else if (auto) {
+            auto = false;
+            if (!sideOpen()) setSide(true);
+          }
+        } catch (e) { /* 忽略 */ }
+      }
+      root.classList.add('d-wb-js');
+      // 用户输入时间戳（捕获阶段，任何地方的点击 / 按键都算；悬停定时器触发的收展没有输入）
+      // r29：只有点在侧栏 / 图标栏 / 侧栏开关上的输入才算「用户要侧栏」；点输入卡、模型胶囊时原版悬停展开恰好触发，不算
+      var SIDE_CTRL = '#chat-threads, .cb-activity-bar, #btn-chat-back, #btn-toggle-sidebar-collapse, [data-action*="sidebar"], .brand-logo-pin';
+      document.addEventListener('pointerdown', function (e) {
+        try { if (e.target && e.target.closest && e.target.closest(SIDE_CTRL)) lastInput = Date.now(); } catch (x) { /* 忽略 */ }
+      }, true);
+      document.addEventListener('keydown', function (e) {
+        try { var a = document.activeElement; if (a && a.closest && a.closest(SIDE_CTRL)) lastInput = Date.now(); } catch (x) { /* 忽略 */ }
+      }, true);
+      new MutationObserver(function () {
+        try {
+          var c = side.classList.contains('collapsed');
+          if (expect !== null && c === expect) { expect = null; return; }
+          expect = null;
+          if (Date.now() - lastInput > USER_WINDOW) return;    // 原版悬停收展（定时器）：不算用户
+          var act = panelChat.classList.contains('active');
+          if (!act) return;                                     // 不在对话页：与工作台让位无关
+          if (!lastAct) return;                                 // 同一批变更里对话页刚激活 = 原版「切回对话页强制展开」，不是用户要侧栏
+          // 用户亲手改了侧栏：以用户为准
+          auto = false;
+          if (wbOpen() && narrow()) userKeep = true;
+        } catch (e) { /* 忽略 */ }
+      }).observe(side, { attributes: true, attributeFilter: ['class'] });
+      new MutationObserver(function () {
+        var now = wbOpen(), act = panelChat.classList.contains('active');
+        var back = act && !lastAct;
+        lastAct = act;
+        if (now !== lastWb) {
+          lastWb = now;
+          if (now) userKeep = false;                            // 新的一次工作台会话
+          sync('wb');
+          if (!now) userKeep = false;
+          return;
+        }
+        if (back) sync('back');
+      }).observe(panelChat, { attributes: true, attributeFilter: ['class'] });
+      var rz = 0;
+      window.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { sync('resize'); }, 120); });
+      setTimeout(function () { sync('init'); }, 0);
+    })();
+
+    // ---------- 4. 平台列表重绘后恢复悬停（r26）----------
+    // 平台列表会被定时 / 数据到达时整段重绘（host.textContent = '' 再重建），鼠标不动时浏览器不会重新命中，
+    // 悬停底色约 0.5s 后消失。记录指针位置，重绘后用 elementFromPoint 给指针下的行补 .d-hover（CSS 与 :hover 同样式，§23）；
+    // 指针一动（浏览器重新命中 :hover）或离开列表就清掉。
+    (function keepListHover() {
+      var host = q('#thread-list');
+      if (!host || !document.elementFromPoint) return;
+      var ROWS = '.platform-item, .session-tree-item, .session-tree-new-btn';
+      var pt = null;   // 指针在列表内时的最后位置
+      function clearMark() {
+        try {
+          Array.prototype.forEach.call(host.querySelectorAll('.d-hover'), function (n) { n.classList.remove('d-hover'); });
+        } catch (e) { /* 忽略 */ }
+      }
+      host.addEventListener('pointermove', function (e) {
+        if (e.pointerType && e.pointerType !== 'mouse') { pt = null; return; }
+        pt = { x: e.clientX, y: e.clientY };
+        if (host.querySelector('.d-hover')) clearMark();
+      }, { passive: true });
+      host.addEventListener('pointerleave', function () { pt = null; clearMark(); }, { passive: true });
+      new MutationObserver(function () {
+        try {
+          if (!pt) return;
+          var r = host.getBoundingClientRect();
+          if (pt.x < r.left || pt.x >= r.right || pt.y < r.top || pt.y >= r.bottom) return;
+          var t = document.elementFromPoint(pt.x, pt.y);
+          if (!t || !host.contains(t) || !t.closest) return;
+          if (t.matches && t.matches(':hover')) return;   // 浏览器已经重新命中，不用补
+          var row = t.closest(ROWS);
+          if (row && !row.classList.contains('d-hover')) row.classList.add('d-hover');
+          // 平台行悬停时整个组（行内箭头等）都算悬停：行本身就是 .platform-item，无需再标祖先
+        } catch (e) { /* 忽略 */ }
+      }).observe(host, { childList: true });
+    })();
+
+    // ---------- 5. 归档弹窗焦点、子代理菜单选中项可见（r28，终审 2 的 J3 / J4）----------
+    // 归档弹窗 showModal() 后焦点默认落在第一个可聚焦的「一键删除」上（回车即进入删除确认）：改给搜索框。
+    // 子代理菜单打开时当前选中项常在可视区之外：滚到可见。只读 DOM、只改焦点和滚动位置。
+    (function focusAndScrollFixes() {
+      try {
+        var modal = q('#modal');
+        if (modal && window.MutationObserver) {
+          new MutationObserver(function () {
+            try {
+              if (!modal.hasAttribute('open')) return;
+              requestAnimationFrame(function () {
+                var s = modal.querySelector('.archive-toolbar input');
+                var a = document.activeElement;
+                if (s && (!a || a === document.body || modal.contains(a) && a.tagName === 'BUTTON')) s.focus({ preventScroll: true });
+              });
+            } catch (e) { /* 忽略 */ }
+          }).observe(modal, { attributes: true, attributeFilter: ['open'] });
+        }
+        var menu = q('#agent-picker-menu');
+        if (menu && window.MutationObserver) {
+          new MutationObserver(function () {
+            try {
+              if (menu.hidden || getComputedStyle(menu).display === 'none') return;
+              var cur = menu.querySelector('.export-menu-item.active, .export-menu-item[aria-checked="true"], .export-menu-item.is-current, .export-menu-item:has(svg polyline)');
+              if (cur) cur.scrollIntoView({ block: 'nearest' });
+            } catch (e) { /* 忽略 */ }
+          }).observe(menu, { attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
+        }
+      } catch (e) { /* 忽略 */ }
+    })();
+  })();
 
   // 跨区域光标进出检测 (涵盖最左侧任务栏与展开后的侧栏)
   function setupSidebarHoverEngine() {
@@ -6209,4 +7443,56 @@
   loadAgentSummaries();
   window.__ahToast = toast;
   window.__ahLoadSnapshot = loadSnapshot;
+})();
+
+/* ==== 临时诊断：仅当 URL 带 ?raildiag=1 时生效，不改动任何既有逻辑 ==== */
+(function () {
+  try {
+    if (!/[?&]raildiag=1(?:[&#]|$)/.test(window.location.search)) return;
+    var rails = [document.getElementById('agents'), document.querySelector('.checkin-cards-grid')];
+    var frames = [], running = false, ttl = 0;
+    function visOf(el) {
+      var sl = el.scrollLeft, best = null, bd = 1e9;
+      for (var i = 0; i < el.children.length; i++) {
+        var c = el.children[i], l = c.offsetLeft - sl;
+        if (l <= 8 && l + c.offsetWidth > 8) {
+          return { l: Math.round(l), t: (c.textContent || '').trim().slice(0, 6), cl: c.classList.contains('mobile-loop-clone') ? 1 : 0 };
+        }
+        var d = Math.abs(l);
+        if (d < bd) { bd = d; best = c; }
+      }
+      return best ? { l: Math.round(best.offsetLeft - sl), t: (best.textContent || '').trim().slice(0, 6), cl: best.classList.contains('mobile-loop-clone') ? 1 : 0 } : null;
+    }
+    function tick() {
+      if (ttl <= 0) { running = false; return; }
+      ttl--;
+      var rec = { t: Math.round(performance.now()), g: [] };
+      for (var i = 0; i < rails.length; i++) {
+        var el = rails[i];
+        rec.g.push(el ? { sl: Math.round(el.scrollLeft), k: el.children.length, cl: el.querySelectorAll('.mobile-loop-clone').length, v: visOf(el) } : null);
+      }
+      if (frames.length < 400) frames.push(rec);
+      requestAnimationFrame(tick);
+    }
+    function kick() { ttl = 150; if (!running) { running = true; requestAnimationFrame(tick); } }
+    function flush() {
+      setTimeout(function () {
+        try {
+          var info = rails.map(function (el) { return el ? { cw: el.clientWidth, max: el.scrollWidth - el.clientWidth, n: el.children.length } : null; });
+          fetch('/api/rail-diag', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dpr: window.devicePixelRatio, ua: navigator.userAgent.slice(0, 60), rails: info, frames: frames.slice() })
+          });
+        } catch (e) { /* ignore */ }
+        frames.length = 0;
+      }, 1400);
+    }
+    for (var i = 0; i < rails.length; i++) {
+      (function (el) {
+        if (!el) return;
+        el.addEventListener('touchstart', kick, { passive: true });
+        el.addEventListener('touchend', function () { kick(); flush(); }, { passive: true });
+      })(rails[i]);
+    }
+  } catch (e) { /* ignore */ }
 })();

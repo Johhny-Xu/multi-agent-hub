@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, symlink, writeFile, rm } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import { join, resolve } from 'node:path';
@@ -109,6 +109,76 @@ test('native stdio MCP stream uses the client progress token and validates file 
     await new Promise((r) => child.once('exit', r));
     lines.close();
   }
+});
+
+test('explicit file list is the only authorization boundary and dispatch happens once', async () => {
+  const files = [];
+  for (let index = 0; index < 8; index += 1) {
+    const file = join(temp, `part-${index}.txt`);
+    await writeFile(file, 'a'.repeat(131072));
+    files.push(file);
+  }
+  calls.length = 0;
+  const accepted = await bridge.ask('mimo', 'Read all authorized parts', 3, { files });
+  assert.equal(accepted.status, 'completed');
+  assert.equal(accepted.dispatch_count, 1);
+  const dispatches = calls.filter((call) => call.name === 'hub_dispatch_cli');
+  assert.equal(dispatches.length, 1);
+  assert.equal(dispatches[0].args.attachments.length, 8);
+  assert.ok(!JSON.stringify(dispatches[0].args).includes(temp));
+});
+
+test('attachment limit, type, symlink, directory and unreadable failures never dispatch', async () => {
+  const small = join(temp, 'small.txt');
+  await writeFile(small, 'x');
+  const tooMany = Array.from({ length: 9 }, (_, index) => join(temp, `many-${index}.txt`));
+  for (const file of tooMany) await writeFile(file, 'x');
+  const oversized = join(temp, 'oversized.txt');
+  await writeFile(oversized, 'y'.repeat(1024 * 1024 + 1));
+  const link = join(temp, 'link.txt');
+  await symlink(small, link);
+  const directory = join(temp, 'directory');
+  await mkdir(directory);
+  const unreadable = join(temp, 'unreadable.txt');
+  await writeFile(unreadable, 'secret');
+  await chmod(unreadable, 0o000);
+  const fakeImage = join(temp, 'fake.png');
+  await writeFile(fakeImage, 'NOT_A_PNG');
+  const cases = [
+    { files: tooMany, code: 'ATTACHMENT_LIMIT_EXCEEDED', stage: 'validation' },
+    { files: [oversized], code: 'ATTACHMENT_LIMIT_EXCEEDED', stage: 'validation' },
+    { files: [link], code: 'ATTACHMENT_ACCESS_DENIED', stage: 'validation' },
+    { files: [directory], code: 'ATTACHMENT_UNREADABLE', stage: 'validation' },
+    { files: [unreadable], code: 'blocked_permission', stage: 'validation' },
+  ];
+  try {
+    for (const item of cases) {
+      calls.length = 0;
+      const result = await bridge.dispatchOnly('mimo', 'Must never dispatch', 3, { files: item.files });
+      assert.equal(result.ok, false);
+      assert.equal(result.ref, '');
+      assert.equal(result.status, 'failed');
+      assert.equal(result.error_code, item.code);
+      assert.equal(result.failure_stage, item.stage);
+      assert.equal(result.dispatch_count, 0);
+      assert.equal(calls.length, 0);
+    }
+  } finally {
+    await chmod(unreadable, 0o600);
+  }
+  // The image signature itself is a Hub-side check; this only proves the
+  // client did not silently downgrade a declared image to a text attachment.
+  assert.equal((await bridge.dispatchOnly('mimo', 'Image fixture', 3, { files: [fakeImage] })).ok, true);
+});
+
+test('fetch and budget results always echo the original ref and never add a dispatch', async () => {
+  calls.length = 0;
+  const fetch = await bridge.fetchRef(ref);
+  assert.equal(fetch.ref, ref);
+  assert.equal(calls.filter((call) => call.name === 'hub_dispatch_cli').length, 0);
+  const unknown = await bridge.fetchRef('mimocode-ffffffff');
+  assert.equal(unknown.ref, 'mimocode-ffffffff');
+  assert.equal(unknown.status, 'unknown');
 });
 
 test.after(async () => {

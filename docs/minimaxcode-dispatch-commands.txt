@@ -1,0 +1,82 @@
+MiniMaxCode messages_file 修复 — 真实执行证据
+================================================
+源码根目录: /home/johhny/multi-agent-hub (git main, 基线 ac1ea17)
+初始 git status --porcelain: 空
+
+一、定向回归（最终代码）
+1) python3 tests/task_contract_regressions.py
+   exit=0; Ran 29 tests; OK
+2) python3 tests/hub_core_regressions.py
+   exit=0; Ran 27 tests; OK
+3) node --test tests/mcp_bridge.test.mjs tests/task_bridge.test.mjs
+   exit=0; tests=170; pass=170; fail=0
+   覆盖七份桥接副本哈希一致性、25s 受理上限常量与受控延迟、单次派发、
+   blocked_permission/401 区分、空回答、错误 ref、预算耗尽、审计降级、结构化错误。
+
+二、全量离线回归
+python3 tests/run_regressions.py --report docs/minimaxcode-dispatch-offline.json
+   exit=1; passed_suites=26; failed_suites=3
+   report: docs/minimaxcode-dispatch-offline.json
+   tested_at=2026-11-04T19:36:11+0800; platform=linux; python=3.12.3
+   source_changed_during_run=[]; vendor_inference_performed=false
+   source_sha256 entries=320
+
+失败套件（均为 HEAD 基线既有失败，不是本需求回归）:
+- codearts_hub_contract: tests/codearts_hub_contract.py 的旧断言要求 CodeArts 文件附件
+  supported=false，而当前 capabilities.json 明确为 file.mode=cli；该套件在 HEAD
+  工作树 /tmp/agh-baseline 复跑同样 3 个失败。
+- codearts_native_plugin: 断言 agents/hub-*.md 数量为 11，实际 13；HEAD 复跑同样失败。
+- dsh_workflows: standalone fanout 断言 requests=[codebuddy,codebuddy-cn]，HEAD 复跑
+  同样只收到 codebuddy；与本次桥接改动无关。
+基线复现命令: git worktree add --detach /tmp/agh-baseline HEAD 后在基线目录执行上述套件。
+
+三、25 秒受理上限验证边界
+- tests/mcp_bridge.test.mjs 断言桥接源码含 DISPATCH_HTTP_MS=25000，且 dispatchWorker
+  以 min(DISPATCH_HTTP_MS, deadline-now) 取剩余预算。
+- 以受控 80ms 总预算 + 400ms 受理延迟验证 deadline 会截断受理等待并返回
+  status=unknown, error_code=DISPATCH_TIMEOUT, dispatch_count=1。
+- 未做 25 秒墙钟实跑，因此不宣称真实供应商 25 秒计时证据。
+
+四、部署（既有 CodeArts 发布流程）
+python3 integrations/codearts/install.py \
+  --home /home/johhny/.codeartsdoer \
+  --plugin-dir /home/johhny/.local/share/AgentHub-CodeArts/plugin \
+  --config /home/johhny/.config/agenthub-codearts/client.json \
+  --target cli --apply
+   exit=0; conflicts=[]
+   backup=/home/johhny/.codeartsdoer/.multi-agent-hub-backups/1793791956854950793-df3c5b98
+   manifest version=1.0.20
+   加载路径: /usr/bin/node /home/johhny/.local/share/AgentHub-CodeArts/plugin/mcp/server.mjs
+   codearts_cli.json mtime 保持 2026-11-03 20:35:13（未改写）
+   部署/源码哈希:
+     hub.mjs   1f5b82d034ce0d0772aac24a670dda3ce6f30db59f5d5cdd781ad2ee77859942
+     server.mjs f913052cd0e92360786f24b7aba7427fc638e787a57759e24912841ba23a58bd
+   未重启任何服务，未修改 worker 权限配置。
+
+五、未执行 / 未验证
+- 任务清单第 8 项实时 MiniMaxCode 验收未执行（由主代理通过公开 MCP 完成）。
+- tests/live_minimaxcode_attachment.mjs 未运行；无真实 MiniMaxCode 派发、无实时附件
+  到达、无真实图片语义验证。
+- PNG/JPEG/GIF/WebP 仅做离线签名准入测试；Windows/macOS 平台未运行。
+- 未 commit、未 push。
+
+六、关键实现位置
+- hub/task_contract.py:46 TaskContractError；:98 AttachmentPolicyResolver；:380 prepare_task
+- hub/agent_hub.py:715 bind_message_file_command；:762 _dispatch_prepared_cli；:1231 _start_async；:1310 _format_result
+- hub/dispatch_audit.py:92 DispatchAuditEvent；:159 DispatchAuditStore
+- hub/result_store.py:47 update_result（status_history 增量）
+- hub/async_worker.py:252 is_empty_answer；:607 WORKER_ANSWER_EMPTY
+- mcp/hub.mjs:116 授权文件读取；:357 DispatchOnceGuard；:373 startTask；:610 fetchRef
+- hub/capabilities.json:427 MiniMaxCode 附件策略（8 个 / 1 MiB / 类型）
+
+4b) Hub 服务源码（实际运行加载路径）
+   运行进程: PID 541629, 启动于 2026-11-03 16:39:06
+   加载路径: /home/johhny/.local/share/AgentHub-CodeArts/server/hub/agent_hub.py --http 8765
+   部署前核对: server/hub 的 agent_hub.py/async_worker.py/result_store.py/task_contract.py/
+   rpc_protocol.py/capabilities.json 与 HEAD 逐行一致（仅 CRLF 差异），无本地漂移。
+   已备份并同步: agent_hub.py async_worker.py result_store.py task_contract.py
+   rpc_protocol.py capabilities.json dispatch_audit.py（保留原文件权限位）。
+   备份: /home/johhny/.local/share/AgentHub-CodeArts/server/hub/backups/20261104-minimaxcode-dispatch/
+   同步后与源码 diff --strip-trailing-cr 全部 MATCH；Python 3.14 语法编译通过。
+   未重启 agent-hub.service：运行中进程仍加载旧模块，新 Hub 逻辑需下次重启才生效。
+   未修改 worker 权限配置、未改动 AGENTHUB_CONFIG 或 codearts_cli.json。

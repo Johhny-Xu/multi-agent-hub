@@ -1,4 +1,5 @@
 """Hub state, task ownership and real HTTP regressions; no vendor calls."""
+import base64
 import contextlib
 import http.client
 import io
@@ -296,6 +297,163 @@ class HubCoreRegressions(unittest.TestCase):
                 self.assertEqual((response.status, response.read()), (413, b""))
             finally:
                 conn.close(); server.shutdown(); server.server_close(); thread.join(timeout=2)
+
+
+class ResultAuditRegressions(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="agenthub-result-audit-")
+        self.base = Path(self.temp.name)
+        self.results = self.base / "results"
+        self.state = self.base / "state"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_status_history_appends_only_on_change_and_old_records_read_cleanly(self):
+        update_result(self.results, "fixture-a123456789", {"status": "running", "task": "fixture"})
+        update_result(self.results, "fixture-a123456789", {"status": "running", "progress": "x"})
+        current = update_result(self.results, "fixture-a123456789",
+                                {"status": "failed", "error_code": "WORKER_ANSWER_EMPTY",
+                                 "failure_stage": "verification"})
+        self.assertEqual(len(current["status_history"]), 2)
+        self.assertEqual(current["status_history"][-1]["from"], "running")
+        self.assertEqual(current["status_history"][-1]["to"], "failed")
+        self.assertEqual(current["last_confirmed_status"], "failed")
+        update_result(self.results, "fixture-a123456789", {"status": "failed", "progress": "y"})
+        self.assertEqual(len(read_result(self.results, "fixture-a123456789")["status_history"]), 2)
+
+        legacy = self.results / "fixture-b123456789.json"
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_text(json.dumps({"ref": "fixture-b123456789", "status": "completed", "text": "old"}), encoding="utf-8")
+        value = read_result(self.results, "fixture-b123456789")
+        self.assertNotIn("status_history", value)
+        self.assertEqual(value["ref"], "fixture-b123456789")
+
+    def test_audit_store_whitelists_fields_and_filters_by_ref(self):
+        from dispatch_audit import DispatchAuditEvent, DispatchAuditStore, AuditWriteError
+        store = DispatchAuditStore(self.state / "audit")
+        store.append(DispatchAuditEvent.rejected(worker="minimaxcode", logical_task_summary="sha256:abc",
+                                                 stage="validation", failure_code="ATTACHMENT_LIMIT_EXCEEDED",
+                                                 attachment_summary={"count": 0, "total_bytes": 0,
+                                                                     "content_types": [], "validation_result": "failed"}))
+        store.append(DispatchAuditEvent.accepted(worker="minimaxcode", logical_task_summary="sha256:abc",
+                                                 ref="minimaxcode-a123456789", attachment_summary={"count": 1,
+                                                 "total_bytes": 12, "content_types": ["text/plain"],
+                                                 "validation_result": "passed"}))
+        events = store.events(ref="minimaxcode-a123456789")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["dispatch_count"], 1)
+        self.assertEqual(events[0]["ref_status"], "present")
+        rejected = store.events(logical_task_summary="sha256:abc")
+        self.assertEqual(rejected[0]["dispatch_count"], 0)
+        self.assertEqual(rejected[0]["ref_status"], "absent")
+        text = store.path.read_text(encoding="utf-8")
+        for secret in ("SENSITIVE_BODY", "base64", "Bearer ", str(self.base)):
+            self.assertNotIn(secret, text)
+        (self.base / "file").write_text("not a directory", encoding="utf-8")
+        with self.assertRaises(AuditWriteError):
+            DispatchAuditStore(self.base / "file").append(DispatchAuditEvent.rejected(
+                worker="minimaxcode", logical_task_summary="sha256:abc"))
+
+    def test_audit_intent_failure_blocks_worker_and_post_audit_failure_is_degraded(self):
+        from task_contract import TaskContractError
+        profile = {"cli": [sys.executable, "-c", "pass", "{task}"], "async_default": True,
+                   "models": {"default": "fixture"}}
+        plan = {"task": "fixture", "extra_args": [], "env": {}, "metadata": {"stream": False, "attachments": []},
+                "staging": None, "message_file": False}
+        with patch.object(hub, "STATE", self.state), patch.object(hub, "_start_async") as launch, \
+                patch.object(hub, "_audit", side_effect=OSError("audit down")):
+            with self.assertRaises(TaskContractError) as error:
+                hub._dispatch_prepared_cli({}, "fixture", profile, plan)
+            self.assertEqual(error.exception.code, "AUDIT_WRITE_FAILED")
+            launch.assert_not_called()
+
+        plan = {"task": "fixture", "extra_args": [], "env": {}, "metadata": {"stream": False, "attachments": []},
+                "staging": None, "message_file": False}
+        with patch.object(hub, "STATE", self.state), \
+                patch.object(hub, "_start_async", return_value="fixture-a123456789") as launch, \
+                patch.object(hub, "_save_result") as saved, \
+                patch.object(hub, "_audit", side_effect=[{"ok": True}, OSError("post audit down")]):
+            receipt = hub._dispatch_prepared_cli({}, "fixture", profile, plan)
+        self.assertIn("fixture-a123456789", receipt)
+        self.assertIn("audit_degraded=true", receipt)
+        self.assertEqual(launch.call_count, 1)
+        self.assertTrue(any(call.kwargs.get("audit_degraded") is True for call in saved.call_args_list))
+
+    def test_rpc_returns_structured_task_contract_errors_without_attachment_body(self):
+        import rpc_protocol
+        from task_contract import TaskContractError
+
+        def handler(arguments):
+            raise TaskContractError("too many attachments", code="ATTACHMENT_LIMIT_EXCEEDED",
+                                    stage="validation", actual_count=9, allowed_count=8)
+
+        reply = rpc_protocol.handle_request(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "fixture", "arguments": {}}},
+            tools=[], handlers={"fixture": handler}, name="fixture", version="1")
+        self.assertTrue(reply["result"]["isError"])
+        payload = json.loads(reply["result"]["content"][0]["text"])
+        self.assertEqual(payload["error_code"], "ATTACHMENT_LIMIT_EXCEEDED")
+        self.assertEqual(payload["failure_stage"], "validation")
+        self.assertEqual(payload["error_details"], {"actual_count": 9, "allowed_count": 8})
+        self.assertNotIn("data_base64", reply["result"]["content"][0]["text"])
+
+    def test_result_exposes_worker_status_and_error_code_and_reads_legacy_records(self):
+        update_result(hub.RESULTS_DIR, "fixture-c123456789", {
+            "agent": "minimaxcode", "status": "failed", "worker_status": "completed",
+            "error_code": "WORKER_ANSWER_EMPTY", "failure_stage": "verification",
+            "dispatch_count": 1, "text": "(无输出)",
+        })
+        text = hub.tool_hub_result({"ref": "fixture-c123456789"})
+        self.assertIn("status=failed", text)
+        self.assertIn("worker_status=completed", text)
+        self.assertIn("error_code=WORKER_ANSWER_EMPTY", text)
+        self.assertIn("dispatch_count=1", text)
+        payload = json.loads(hub.tool_hub_result_json({"ref": "fixture-c123456789"}))
+        self.assertEqual(payload["worker_status"], "completed")
+        self.assertEqual(payload["failure_stage"], "verification")
+        self.assertEqual(payload["dispatch_count"], 1)
+        self.assertEqual(payload["status_history"][-1]["to"], "failed")
+
+        legacy = Path(hub.RESULTS_DIR) / "fixture-d123456789.json"
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_text(json.dumps({"ref": "fixture-d123456789", "agent": "minimaxcode",
+                                      "status": "completed", "text": "legacy answer"}), encoding="utf-8")
+        plain = hub.tool_hub_result({"ref": "fixture-d123456789"})
+        self.assertIn("legacy answer", plain)
+        self.assertNotIn("worker_status", plain)
+        old = json.loads(hub.tool_hub_result_json({"ref": "fixture-d123456789"}))
+        self.assertEqual(old["status"], "completed")
+        self.assertNotIn("status_history", old)
+
+    def test_rejected_dispatch_is_audited_without_a_ref_and_without_attachment_body(self):
+        from dispatch_audit import DispatchAuditStore
+        profile = {"cli": [sys.executable, "-c", "pass", "{task}"], "models": {"default": "fixture"}}
+        config = self.base / "agents.json"
+        config.write_text(json.dumps({"agents": {"minimaxcode": profile}}), encoding="utf-8")
+        body = base64.b64encode(b"SENSITIVE_ATTACHMENT_BODY").decode("ascii")
+        with patch.object(hub, "STATE", self.state), patch.object(hub, "AGENTS_JSON", config), \
+                patch.object(hub, "RESULTS_DIR", str(self.results)), \
+                patch.object(hub, "local_availability", return_value={"enabled": True, "code": "ok", "reason": ""}):
+            with self.assertRaises(ValueError):
+                hub.tool_hub_dispatch_cli({"agent": "minimaxcode", "task": "fixture",
+                                           "attachments": [{"name": "a.txt", "mime_type": "text/plain",
+                                                             "data_base64": body}, {"name": "b.txt",
+                                                             "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "c.txt", "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "d.txt", "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "e.txt", "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "f.txt", "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "g.txt", "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "h.txt", "mime_type": "text/plain", "data_base64": body},
+                                                            {"name": "i.txt", "mime_type": "text/plain", "data_base64": body}]})
+        events = DispatchAuditStore(self.state / "audit").events()
+        self.assertEqual(events[-1]["event"], "dispatch_rejected")
+        self.assertEqual(events[-1]["dispatch_count"], 0)
+        self.assertEqual(events[-1]["ref_status"], "absent")
+        self.assertEqual(events[-1]["failure_code"], "ATTACHMENT_LIMIT_EXCEEDED")
+        self.assertNotIn("SENSITIVE_ATTACHMENT_BODY", json.dumps(events))
 
 
 if __name__ == "__main__":

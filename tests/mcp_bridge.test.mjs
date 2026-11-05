@@ -40,6 +40,14 @@ test("Hub tokens are sent in Authorization and explicit URL credentials take pre
   }
 });
 
+test("dispatch acceptance wait is capped at 25 seconds by the shared deadline", async () => {
+  for (const root of roots) {
+    const source = await readFile(new URL(root + "hub.mjs", import.meta.url), "utf8");
+    assert.match(source, /const DISPATCH_HTTP_MS = 25000;/);
+    assert.match(source, /Math\.min\(DISPATCH_HTTP_MS, deadline - performance\.now\(\)\)/);
+  }
+});
+
 test("bridge copies stay independently installable and identical", async () => {
   for (const file of ["hub.mjs", "server.mjs", "ask.mjs", "login.mjs", "config.mjs", "discovery.mjs"]) {
     const copies = await Promise.all(roots.map((root) => readFile(new URL(root + file, import.meta.url), "utf8")));
@@ -63,14 +71,23 @@ test("bridge task and transport regressions", async (t) => {
     let output = `[${worker}/${ref}] accepted`;
     let isError = false;
     if (mode === "http") response.statusCode = 503;
+    if (mode === "forbidden") { response.statusCode = 403; response.end("policy denied"); return; }
+    if (mode === "unauthorized") { response.statusCode = 401; response.end("auth expired"); return; }
     if (mode === "tool") { isError = true; output = `[${worker}/${ref}] rejected`; }
+    if (mode === "structuredLimit" && name === "hub_dispatch_cli") {
+      isError = true;
+      output = JSON.stringify({ error_code: "ATTACHMENT_LIMIT_EXCEEDED", failure_stage: "validation",
+        message: "too many attachments", error_details: { actual_count: 9, allowed_count: 8 } });
+    }
     if (mode === "sync") output = `[${worker}/model] exit=0\nDONE`;
+    if (mode === "degraded") output = `[${worker}/${ref}] accepted audit_degraded=true`;
     if (mode === "syncFailure") output = `[${worker}/model] exit=7\nfailed; quoted ${ref}`;
     if (mode === "zcodeBody") output += "\nzcode 未配置 CLI is quoted by the user";
     if (mode === "zcodeUnavailable" && name === "hub_dispatch_cli") output = "zcode 未配置 CLI";
     if (name === "hub_wait_result" || name === "hub_result") {
       output = `[codebuddy-abc123] agent=codebuddy status=completed\nDONE\n(继续对话 session_id: s)\n(exit=0)`;
       if (mode === "empty") output = `[codebuddy-abc123] status=completed\n(无输出)\n(exit=0)`;
+      if (mode === "placeholder") output = `[codebuddy-abc123] status=completed\n已收到任务\n(exit=0)`;
       if (mode === "workerError") output = `[codebuddy-abc123] status=error\nAuthentication failed`;
       if (mode === "queueNotice") output = `[codebuddy-abc123] status=completed\n排队提醒当前模型请求量较高，你目前排在 51 位。\n(exit=0)`;
       if (mode === "bodyStatus") output = `[codebuddy-abc123] status=running\nThe task says status=completed`;
@@ -254,7 +271,81 @@ test("bridge task and transport regressions", async (t) => {
         const dispatchStart = performance.now();
         const uncertain = await bridge.ask("cb", "Reply DONE", 0.08);
         assert.equal(uncertain.status, "unknown");
+        assert.equal(uncertain.error_code, "DISPATCH_TIMEOUT");
+        assert.equal(uncertain.dispatch_count, 1);
         assert.ok(performance.now() - dispatchStart < 300);
+      });
+      await t.test("permission refusal stops without a retry and keeps the input ref", async () => {
+        mode = "forbidden"; requests = [];
+        const denied = await bridge.dispatchOnly("cb", "Reply DONE");
+        assert.equal(denied.ok, false);
+        assert.equal(denied.status, "failed");
+        assert.equal(denied.error_code, "blocked_permission");
+        assert.equal(denied.dispatch_count, 1);
+        assert.equal(requests.length, 1);
+        mode = "unauthorized"; requests = [];
+        const auth = await bridge.dispatchOnly("cb", "Reply DONE");
+        assert.equal(auth.status, "failed");
+        assert.equal(auth.error_code, "AUTH_FAILED");
+        assert.notEqual(auth.error_code, "blocked_permission");
+        assert.equal(requests.length, 1);
+      });
+      await t.test("empty and placeholder completed answers fail verification while keeping worker_status", async () => {
+        for (const fixture of ["empty", "placeholder"]) {
+          mode = fixture;
+          const result = await bridge.fetchRef("codebuddy-abc123");
+          assert.equal(result.status, "failed");
+          assert.equal(result.worker_status, "completed");
+          assert.equal(result.error_code, "WORKER_ANSWER_EMPTY");
+          assert.equal(result.failure_stage, "verification");
+          assert.equal(result.ref, "codebuddy-abc123");
+        }
+      });
+      await t.test("every query echoes its input ref and never dispatches again", async () => {
+        mode = "completed"; requests = [];
+        for (const ref of ["codebuddy-abc123", "codebuddy-fff999"]) {
+          const result = await bridge.fetchRef(ref);
+          assert.equal(result.ref, ref);
+        }
+        assert.equal(requests.filter((request) => request.name === "hub_dispatch_cli").length, 0);
+        mode = "wrongRef";
+        const mismatched = await bridge.fetchRef("codebuddy-abc123");
+        assert.equal(mismatched.status, "unknown");
+        assert.equal(mismatched.ref, "codebuddy-abc123");
+      });
+      await t.test("budget exhaustion reports the remaining ref and one dispatch", async () => {
+        mode = "waitDelay"; requests = [];
+        const result = await bridge.ask("cb", "Reply DONE", 0.08);
+        assert.equal(result.error_code, "WAIT_BUDGET_EXHAUSTED");
+        assert.equal(result.dispatch_count, 1);
+        assert.equal(result.ref, "codebuddy-abc123");
+        assert.equal(requests.filter((request) => request.name === "hub_dispatch_cli").length, 1);
+      });
+      await t.test("structured Hub validation errors keep dispatch_count at zero", async () => {
+        mode = "structuredLimit"; requests = [];
+        const result = await bridge.dispatchOnly("cb", "Reply DONE");
+        assert.equal(result.ok, false);
+        assert.equal(result.status, "failed");
+        assert.equal(result.error_code, "ATTACHMENT_LIMIT_EXCEEDED");
+        assert.equal(result.failure_stage, "validation");
+        assert.equal(result.dispatch_count, 0);
+        assert.deepEqual(result.error_details, { actual_count: 9, allowed_count: 8 });
+        assert.equal(requests.filter((request) => request.name === "hub_dispatch_cli").length, 1);
+      });
+      await t.test("accepted dispatch reports one dispatch, raw worker status and audit degradation", async () => {
+        mode = "completed"; requests = [];
+        const accepted = await bridge.dispatchOnly("cb", "Reply DONE");
+        assert.equal(accepted.status, "running");
+        assert.equal(accepted.ref, "codebuddy-abc123");
+        assert.equal(accepted.dispatch_count, 1);
+        assert.equal(accepted.worker_status, "running");
+        assert.equal(requests.filter((request) => request.name === "hub_dispatch_cli").length, 1);
+        mode = "degraded"; requests = [];
+        const degraded = await bridge.dispatchOnly("cb", "Reply DONE");
+        assert.equal(degraded.status, "running");
+        assert.equal(degraded.audit_degraded, true);
+        assert.equal(degraded.dispatch_count, 1);
+        assert.equal(requests.filter((request) => request.name === "hub_dispatch_cli").length, 1);
       });
     });
   }

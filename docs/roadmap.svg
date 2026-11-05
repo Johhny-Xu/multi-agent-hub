@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1040" viewBox="0 0 1280 1040" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="Microsoft YaHei, Noto Sans CJK SC, Segoe UI, sans-serif">
-  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v1.0.20 主代理可查子代理存活状态、WebUI 定时器退出与移动端收口</title>
+  <title id="roadmap-title">multi-agent-hub 发展进度：当前 v1.0.21 移动端滑轨常驻克隆、零刷新原位更新与对话流去卡片</title>
   <desc id="roadmap-desc">本版三点：长任务超时改为无进展预算加 6 小时硬上限、CodeArts CLI 升级到 26.10.9 并新增 7 个内置模型默认 DeepSeek-V4.1-Flash（v41f）、看板娘在下坠或挣扎时切到设置页立刻收起。</desc>
   <defs>
     <style>
@@ -22,17 +22,17 @@
   <rect width="1280" height="1040" fill="#ffffff"/>
   <rect x="32" y="24" width="1216" height="992" rx="24" fill="#f8fafc" stroke="#e2e8f0"/>
   <text x="64" y="76" class="title">multi-agent-hub 发展进度</text>
-  <text x="64" y="108" class="meta">更新：2026-10-24　·　当前版本 v1.0.20　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
+  <text x="64" y="108" class="meta">更新：2026-11-05　·　当前版本 v1.0.21　·　6 款原生宿主 + 任意 MCP 直连　·　Apache-2.0 协议</text>
 
   <!-- The current source checkpoint is deliberately separate from published tags. -->
   <g id="current-focus">
     <rect x="64" y="130" width="1152" height="364" rx="20" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
     <rect x="64" y="130" width="8" height="364" rx="4" fill="#2563eb"/>
-    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.20 · 当前重点</text>
+    <text x="96" y="172" font-size="24" font-weight="700" fill="#2563eb">v1.0.21 · 当前重点</text>
     <rect x="916" y="151" width="268" height="36" rx="18" fill="#dbeafe"/>
-    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">子代理存活可见</text>
-    <text x="96" y="227" class="focus">主代理知道子代理是在算、在等，还是结果丢了</text>
-    <text x="96" y="262" class="lead">PID · 进程树 CPU · 输出增量 · 心跳 · verdict 判定，不再按墙钟猜</text>
+    <text x="1050" y="176" text-anchor="middle" font-size="20" font-weight="700" fill="#1d4ed8">移动端滑轨常驻</text>
+    <text x="96" y="227" class="focus">滑轨首尾常驻克隆，静止后单次 warp 等价瞬移</text>
+    <text x="96" y="262" class="lead">零 touchstart 阻塞 · 零死区回跳 · 30s 轮询原位复用 DOM，不再重播入场动画</text>
 
     <line x1="656" y1="294" x2="656" y2="465" stroke="#e2e8f0" stroke-width="2"/>
     <text x="96" y="311" font-size="24" font-weight="700" fill="#0f766e">已具备的体验基础</text>
@@ -47,13 +47,13 @@
 
     <text x="692" y="311" font-size="24" font-weight="700" fill="#2563eb">本版发布成果</text>
     <circle cx="698" cy="343" r="5" fill="#2563eb"/>
-    <text x="716" y="351" class="body">新增 hub_task_status 存活查询</text>
+    <text x="716" y="351" class="body">滑轨首尾常驻克隆 + 全程 scroll-snap</text>
     <circle cx="698" cy="376" r="5" fill="#2563eb"/>
-    <text x="716" y="384" class="body">CPU 增长即续期，不按静默截断</text>
+    <text x="716" y="384" class="body">数据签名短路，原位复用 DOM 不重建</text>
     <circle cx="698" cy="409" r="5" fill="#2563eb"/>
-    <text x="716" y="417" class="body">进程退出但结果 running 判回传丢失</text>
+    <text x="716" y="417" class="body">MiniMaxCode 附件 --file 直传激活</text>
     <circle cx="698" cy="442" r="5" fill="#2563eb"/>
-    <text x="716" y="450" class="body">WebUI 定时器退出与移动端收口</text>
+    <text x="716" y="450" class="body">子代理回复去卡片，正文流阅读</text>
     <text x="692" y="476" class="note">审计保持 0 命中 · 14 种 Worker 契约继续有效。</text>
   </g>
 
@@ -85,9 +85,9 @@
 
     <line x1="986" y1="634" x2="996" y2="634" stroke="#94a3b8" stroke-width="2" marker-end="url(#timeline-arrow)"/>
     <rect x="1000" y="560" width="216" height="146" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.20</text>
-    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">子代理存活</text>
-    <text x="1024" y="675" class="stage">状态可观测</text>
+    <text x="1024" y="602" font-size="25" font-weight="700" fill="#2563eb">v1.0.21</text>
+    <text x="1024" y="646" font-size="20" font-weight="700" fill="#1d4ed8">移动端滑轨</text>
+    <text x="1024" y="675" class="stage">零刷新更新</text>
   </g>
 
   <!-- These are validation scopes, not a success rate for every model or option. -->

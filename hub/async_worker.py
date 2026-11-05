@@ -34,6 +34,7 @@ from pathlib import Path
 from command_runtime import CLI_HARD_TIMEOUT_SEC, CLI_IDLE_TIMEOUT_SEC, positive_timeout, spawn_owned, terminate_owned
 from result_store import read_result as stored_result, update_result
 from task_contract import cleanup_attachments
+from dispatch_audit import DispatchAuditEvent, DispatchAuditStore, logical_task_summary
 from output_parser import parse_output, parse_usage
 from availability_store import record_outcome
 from process_liveness import probe_process_tree
@@ -243,6 +244,18 @@ def _is_placeholder_reply(text):
     if len(condensed) > 24:
         return False
     return ("思考中" in condensed) or ("thinking" in condensed.lower()) or ("生成中" in condensed)
+
+
+PLACEHOLDER_ANSWERS = {"(无输出)", "(尚无文本)", "(no output)", "(empty)", "task received", "已收到任务", "任务已收到"}
+
+
+def is_empty_answer(text):
+    value = re.sub(r"\s+", "", str(text or "")).lower()
+    if not value:
+        return True
+    if value in {re.sub(r"\s+", "", item).lower() for item in PLACEHOLDER_ANSWERS}:
+        return True
+    return len(value) <= 24 and any(marker in value for marker in ("思考中", "生成中", "thinking", "receivedthetask"))
 
 
 def trae_run(task, session_id, ref, new_chat=False, timeout=TRAE_TIMEOUT, *, gateway=None, dom_read=None, node=None):
@@ -582,8 +595,18 @@ def main():
                                       timeout_s=meta.get("timeout_s"), env=meta.get("env"),
                                       input_file=meta.get("input_file"), watch_result=True,
                                       hard_timeout_s=meta.get("hard_timeout_s"))
-            save(ref, only_if_running=True, status="completed" if code == 0 else "error", text=text or "(无输出)",
-                 exit_code=code, progress=None, heartbeat=time.time())
+            answer = text or "(无输出)"
+            fields = {"status": "completed" if code == 0 else "error", "text": answer,
+                      "exit_code": code, "progress": None, "heartbeat": time.time(),
+                      "worker_status": "completed" if code == 0 else "error"}
+            if code != 0:
+                fields.update(error_code="WORKER_EXECUTION_FAILED", failure_stage="worker_execution")
+            elif is_empty_answer(answer):
+                # Worker completed but produced no verifiable answer: keep the
+                # raw worker status and fail verification instead of faking success.
+                fields.update(status="failed", error_code="WORKER_ANSWER_EMPTY",
+                              failure_stage="verification")
+            save(ref, only_if_running=True, **fields)
             outcome = 0 if code == 0 else 1
         else:
             text = zcode_run(task, session_id, ref, timeout=positive_timeout(meta.get("timeout_s"), ZCODE_TIMEOUT))
@@ -624,6 +647,27 @@ def main():
                 cleanup_attachments(meta["attachment_dir"], meta["attachment_parent"])
             except (OSError, ValueError):
                 pass
+        try:
+            current = read_result(ref) or {}
+            options = meta.get("public_options") or {}
+            summary = options.get("attachment_summary") or {}
+            DispatchAuditStore(Path(meta["availability_state"]) / "audit").append(DispatchAuditEvent(
+                event="status_terminal", stage=current.get("failure_stage") or "worker_execution",
+                status=str(current.get("status") or "unknown"),
+                dispatch_count=int(current.get("dispatch_count") or 1),
+                logical_task_summary=(current.get("logical_task_summary")
+                                      or logical_task_summary(current.get("agent") or mode, current.get("task") or "")),
+                worker=str(current.get("agent") or mode), ref=ref,
+                failure_code=current.get("error_code"),
+                attachment_summary={"count": summary.get("count") or 0,
+                                    "total_bytes": summary.get("total_bytes") or 0,
+                                    "content_types": summary.get("content_types") or [],
+                                    "validation_result": "passed"},
+            ))
+        except Exception:
+            # Post-dispatch audit failure must never erase an accepted ref or
+            # trigger another dispatch.
+            pass
         cleanup_taskfile(taskfile)
     return outcome
 

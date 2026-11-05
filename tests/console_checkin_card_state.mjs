@@ -115,13 +115,30 @@ test('点击反馈文案说清「在等什么」', () => {
 });
 
 test('签到响应拒绝 HTTP 错误、非 JSON、空响应和业务失败', async () => {
-  await assert.rejects(parseRunResponse(new Response('{"error":"boom"}', { status: 500 })), /boom/);
-  await assert.rejects(parseRunResponse(new Response('<html>bad</html>', { status: 500 })), /非 JSON/);
-  await assert.rejects(parseRunResponse(new Response('', { status: 200 })), /空响应/);
-  await assert.rejects(parseRunResponse(new Response('null', { status: 200 })), /无效 JSON/);
-  await assert.rejects(parseRunResponse(new Response('{"ok":false,"error":"denied"}', { status: 200 })), /denied/);
-  const valid = await parseRunResponse(new Response('{"ok":true,"overview":{"platforms":{}}}', { status: 200 }));
+  const httpError = await parseRunResponse(500, '{"error":"boom"}');
+  assert.equal(httpError.ok, false);
+  assert.match(httpError.error, /boom/);
+  const notJson = await parseRunResponse(500, '<html>bad</html>');
+  assert.equal(notJson.ok, false);
+  assert.match(notJson.error, /非 JSON/);
+  const empty = await parseRunResponse(200, '');
+  assert.equal(empty.ok, false);
+  assert.match(empty.error, /空响应/);
+  const nullBody = await parseRunResponse(200, 'null');
+  assert.equal(nullBody.ok, false);
+  assert.match(nullBody.error, /空响应/);
+  const business = await parseRunResponse(200, '{"ok":false,"error":"denied"}');
+  assert.equal(business.ok, false);
+  assert.match(business.error, /denied/);
+  const valid = await parseRunResponse(200, '{"ok":true,"overview":{"platforms":{}}}');
   assert.equal(valid.ok, true);
+  // qa-grid 传的是 fetch 的 Response：必须同样解析并把 payload 摊平
+  const viaResponse = await parseRunResponse(new Response('{"ok":true,"results":{"qoder":{"status":"success"}}}', { status: 200 }));
+  assert.equal(viaResponse.ok, true);
+  assert.equal(viaResponse.results.qoder.status, 'success');
+  const viaErrorResponse = await parseRunResponse(new Response('{"error":"boom"}', { status: 500 }));
+  assert.equal(viaErrorResponse.ok, false);
+  assert.match(viaErrorResponse.error, /boom/);
 });
 
 test('全签汇总包含 unconfigured，空平台状态不能谎报全部完成', () => {

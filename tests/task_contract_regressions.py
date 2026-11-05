@@ -13,7 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "hub"))
 import agent_hub as hub
 import async_worker as worker
-from task_contract import UnsupportedCapability, apply_environment, cleanup_attachments, merge_cli_arguments, prepare_task, public_model_capabilities, resolve_model
+from task_contract import (AttachmentPolicyResolver, TaskContractError, UnsupportedCapability,
+                           apply_environment, cleanup_attachments, merge_cli_arguments,
+                           prepare_task, public_model_capabilities, resolve_model)
+
+# Minimal real signatures: format admission only, not image decoding.
+REAL_PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+REAL_JPEG = bytes([255, 216, 255, 224, 0, 16]) + b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+REAL_GIF = b"GIF89a\x01\x00\x01\x00\x00\x00\x00;"
+REAL_WEBP = b"RIFF" + (20).to_bytes(4, "little") + b"WEBPVP8 " + (8).to_bytes(4, "little") + b"\x00" * 8
 
 
 def attachment(name, value, mime="text/plain"):
@@ -199,15 +207,22 @@ class TaskContractTests(unittest.TestCase):
                 self.prepare(profile=profile, attachments=[attachment(name, b'SYNTHETIC_FIXTURE')])
         self.assertFalse(self.attachments.exists())
 
-    def test_message_file_contains_utf8_input_and_image_pixels(self):
+    def test_cli_file_attachment_stages_paths_and_keeps_prompt(self):
         plan = self.prepare(worker="minimaxcode", attachments=[attachment("input.txt", b"VALUE=37")])
-        self.assertTrue(plan['message_file'])
-        messages = json.loads(Path(plan['extra_args'][-1]).read_text(encoding='utf-8'))
-        self.assertIn('VALUE=37', messages[0]['content'][1]['text'])
+        self.assertFalse(plan['message_file'])
+        self.assertEqual(plan['extra_args'].count('--file'), 1)
+        path = Path(plan['extra_args'][plan['extra_args'].index('--file') + 1])
+        self.assertEqual(path.read_text(encoding='utf-8'), 'VALUE=37')
         cleanup_attachments(plan["staging"], self.attachments)
-        plan = self.prepare(worker='minimaxcode', attachments=[attachment('pixels.png', b'SYNTHETIC_PIXELS', 'image/png')])
-        messages = json.loads(Path(plan['extra_args'][-1]).read_text(encoding='utf-8'))
-        self.assertEqual(base64.b64decode(messages[0]['content'][1]['source']['data']), b'SYNTHETIC_PIXELS')
+        plan = self.prepare(worker='minimaxcode', attachments=[attachment('a.txt', b'A'), attachment('b.txt', b'B')])
+        self.assertEqual(plan['extra_args'].count('--file'), 2)
+        staged = [Path(plan['extra_args'][index + 1]) for index, item in enumerate(plan['extra_args']) if item == '--file']
+        self.assertEqual([item.read_text(encoding='utf-8') for item in staged], ['A', 'B'])
+        cleanup_attachments(plan['staging'], self.attachments)
+        plan = self.prepare(worker='minimaxcode', attachments=[attachment('pixels.png', REAL_PNG, 'image/png')])
+        self.assertFalse(plan['message_file'])
+        path = Path(plan['extra_args'][plan['extra_args'].index('--file') + 1])
+        self.assertEqual(path.read_bytes(), REAL_PNG)
         cleanup_attachments(plan['staging'], self.attachments)
 
     def test_image_cannot_silently_become_text(self):
@@ -326,6 +341,122 @@ class TaskContractTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(result['usage'], {'input_tokens': 10, 'output_tokens': 7, 'reasoning_tokens': 0})
         self.assertNotIn('SYNTHETIC_NEVER_PUBLIC', json.dumps(result))
+
+    def test_attachment_policy_boundaries_and_declared_tightening(self):
+        chunk = b"a" * 131072
+        files = [attachment("part-%d.txt" % index, chunk) for index in range(8)]
+        plan = self.prepare(worker="minimaxcode", attachments=files)
+        self.assertEqual(plan["attachment_summary"]["count"], 8)
+        self.assertEqual(plan["attachment_summary"]["total_bytes"], 1048576)
+        cleanup_attachments(plan["staging"], self.attachments)
+
+        with self.assertRaises(TaskContractError) as nine:
+            self.prepare(worker="minimaxcode", attachments=files + [attachment("extra.txt", b"x")])
+        self.assertEqual(nine.exception.code, "ATTACHMENT_LIMIT_EXCEEDED")
+        self.assertEqual(nine.exception.details()["actual_count"], 9)
+        self.assertEqual(nine.exception.details()["allowed_count"], 8)
+        self.assertEqual(list(self.attachments.glob("task-*")), [])
+
+        over = [attachment("part-%d.txt" % index, chunk) for index in range(7)] + [attachment("last.txt", b"b" * (131072 + 1))]
+        with self.assertRaises(TaskContractError) as too_big:
+            self.prepare(worker="minimaxcode", attachments=over)
+        self.assertEqual(too_big.exception.code, "ATTACHMENT_LIMIT_EXCEEDED")
+        self.assertEqual(too_big.exception.details()["actual_bytes"], 1048577)
+        self.assertEqual(too_big.exception.details()["allowed_bytes"], 1048576)
+
+        tightened = {"capabilities": {"attachments": {"file": {"mode": "messages_file"},
+                                                       "max_count": 2, "max_total_bytes": 10}}}
+        with self.assertRaises(TaskContractError) as count:
+            self.prepare(worker="minimaxcode", profile=tightened,
+                         attachments=[attachment("a.txt", b"x") for _ in range(3)])
+        self.assertEqual(count.exception.details()["allowed_count"], 2)
+        with self.assertRaises(TaskContractError) as total:
+            self.prepare(worker="minimaxcode", profile=tightened,
+                         attachments=[attachment("a.txt", b"12345678901")])
+        self.assertEqual(total.exception.details()["allowed_bytes"], 10)
+
+        unknown = {"capabilities": {"attachments": {"file": {"mode": "message_file"}}}}
+        with self.assertRaises(UnsupportedCapability) as binding:
+            self.prepare(worker="minimaxcode", profile=unknown, attachments=[attachment("a.txt", b"x")])
+        self.assertEqual(binding.exception.code, "ATTACHMENT_CONFIG_MISMATCH")
+
+        snapshot = AttachmentPolicyResolver("minimaxcode", {}, "minimax/MiniMax-M3.1-Flash").snapshot()
+        public = public_model_capabilities("minimaxcode", {}, "minimax/MiniMax-M3.1-Flash")
+        self.assertEqual(snapshot["max_count"], public["attachments"]["file"]["max_count"])
+        self.assertEqual(public["attachments"]["file"]["max_count"], 8)
+        self.assertEqual(public["attachments"]["file"]["content_types"], ["text/plain; charset=utf-8"])
+        self.assertEqual(set(public["attachments"]["image"]["content_types"]),
+                         {"image/png", "image/jpeg", "image/gif", "image/webp"})
+
+    def test_text_type_encoding_and_image_signature_validation(self):
+        plan = self.prepare(worker="minimaxcode", attachments=[attachment("中文.txt", "标记 AGH-中文-42".encode("utf-8"))])
+        staged = Path(plan["extra_args"][plan["extra_args"].index("--file") + 1])
+        self.assertIn("AGH-中文-42", staged.read_text(encoding="utf-8"))
+        cleanup_attachments(plan["staging"], self.attachments)
+
+        for mime, data, label in (("text/plain", b"\xff\xfe", "invalid utf8"),
+                                  ("text/plain; charset=iso-8859-1", b"plain", "charset"),
+                                  ("application/json", b"{}", "non text")):
+            with self.subTest(label=label), self.assertRaises(TaskContractError) as error:
+                self.prepare(worker="minimaxcode", attachments=[attachment("file.txt", data, mime)])
+            self.assertEqual(error.exception.code, "ATTACHMENT_UNSUPPORTED_TYPE")
+            self.assertEqual(list(self.attachments.glob("task-*")), [])
+
+        for mime, data in (("image/png", REAL_PNG), ("image/jpeg", REAL_JPEG),
+                           ("image/gif", REAL_GIF), ("image/webp", REAL_WEBP)):
+            plan = self.prepare(worker="minimaxcode", attachments=[attachment("image", data, mime)])
+            self.assertFalse(plan["message_file"])
+            self.assertEqual(plan["extra_args"].count("--file"), 1)
+            cleanup_attachments(plan["staging"], self.attachments)
+        with self.assertRaises(TaskContractError) as fake:
+            self.prepare(worker="minimaxcode", attachments=[attachment("fake.png", b"NOT_A_PNG", "image/png")])
+        self.assertEqual(fake.exception.code, "ATTACHMENT_UNSUPPORTED_TYPE")
+        self.assertEqual(fake.exception.details()["worker_reason"], "signature_mismatch")
+        self.assertEqual(list(self.attachments.glob("task-*")), [])
+
+    def test_message_file_binding_removes_only_redundant_task_input(self):
+        binding_path = self.root / "messages.json"
+        binding_path.write_text("[]", encoding="utf-8")
+        binding = hub.MessageInputBinding("messages_file", "--messages-file", str(binding_path))
+        command = [sys.executable, "-c", "pass", "--prompt-mode", "work", "--permission", "smart", "--output-format", "text", "{task}"]
+        result = hub.bind_message_file_command(command, binding)
+        self.assertNotIn("{task}", result)
+        self.assertEqual(result, command[:-1])
+        legacy = [sys.executable, "-c", "pass", "--message", "{task}", "--output-format", "text"]
+        self.assertEqual(hub.bind_message_file_command(legacy, binding),
+                         [sys.executable, "-c", "pass", "--output-format", "text"])
+        for unsafe in ([sys.executable, "-c", "pass", "explain {task}"],
+                       [sys.executable, "-c", "pass", "--message", "Summarize this"]):
+            with self.assertRaises(TaskContractError) as error:
+                hub.bind_message_file_command(unsafe, binding)
+            self.assertEqual(error.exception.code, "ATTACHMENT_CONFIG_MISMATCH")
+
+        plan = self.prepare(worker="minimaxcode", attachments=[attachment("brief.txt", "完整任务附件".encode("utf-8"))])
+        profile = {"cli": [sys.executable, "-c", "pass", "--output-format", "text", "{task}"],
+                   "async_default": True, "models": {"default": "minimax/MiniMax-M3.1-Flash"}}
+        with patch.object(hub, "STATE", self.root / "state"), patch.object(hub, "_start_async", return_value="minimaxcode-a123456789") as launch:
+            hub._dispatch_prepared_cli({}, "minimaxcode", profile, plan)
+        command = launch.call_args.args[3]["cmd"]
+        self.assertIn(plan["task"], command)
+        self.assertIn("--file", command)
+        self.assertNotIn("--messages-file", command)
+        self.assertEqual(command[command.index("--output-format") + 1], "text")
+
+        fixed = {"cli": [sys.executable, "-c", "pass", "--message", "Summarize this"],
+                 "async_default": True, "models": {"default": "minimax/MiniMax-M3.1-Flash"}}
+        with patch.object(hub, "_start_async") as blocked, self.assertRaisesRegex(ValueError, "固定提示词"):
+            hub._dispatch_prepared_cli({}, "minimaxcode", fixed, plan)
+        blocked.assert_not_called()
+
+    def test_no_attachment_command_is_unchanged(self):
+        profile = {"cli": [sys.executable, "-c", "pass", "--output-format", "text", "{task}"],
+                   "async_default": True, "models": {"default": "fixture"}}
+        plan = {"task": "plain task", "extra_args": [], "env": {}, "metadata": {"stream": False},
+                "staging": None, "message_file": False}
+        with patch.object(hub, "STATE", self.root / "state"), patch.object(hub, "_start_async", return_value="fixture-a123456789") as launch:
+            hub._dispatch_prepared_cli({}, "fixture", profile, plan)
+        command = launch.call_args.args[3]["cmd"]
+        self.assertEqual(command, [sys.executable, "-c", "pass", "--output-format", "text", "plain task"])
 
 
 if __name__ == "__main__":

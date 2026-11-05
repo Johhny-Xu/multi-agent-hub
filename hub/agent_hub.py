@@ -22,18 +22,24 @@ import sys
 import threading
 import time
 import urllib.parse
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from command_runtime import CLI_HARD_TIMEOUT_SEC, CLI_IDLE_TIMEOUT_SEC, atomic_write_json, positive_timeout, prepare_command, spawn_owned, terminate_owned
 from state_store import StateFileLock, safe_component
 from result_store import read_result, update_result
 from process_liveness import probe_process_tree
-from task_contract import OPTIONS_SCHEMA, apply_environment, capabilities, cleanup_attachments, merge_cli_arguments, prepare_task, platform_name, public_model_capabilities, resolve_model
+from task_contract import (ERROR_AUDIT, ERROR_CONFIG, OPTIONS_SCHEMA, AttachmentPolicyResolver,
+                           TaskContractError, UnsupportedCapability, apply_environment,
+                           capabilities, cleanup_attachments,
+                           merge_cli_arguments, prepare_task, platform_name,
+                           public_model_capabilities, resolve_model, validate_workspace_path)
+from dispatch_audit import DispatchAuditEvent, DispatchAuditStore, logical_task_summary, public_attachment_summary
 from availability_store import local_availability, recorded as recorded_failures, record_outcome, refresh as refresh_availability, signature as profile_signature
 from output_parser import parse_output
 
 SERVER_NAME = "agent-hub"
-SERVER_VERSION = "1.0.20"
+SERVER_VERSION = "1.0.21"
 PROTOCOL_VERSION_DEFAULT = "2024-11-05"
 ONLINE_WINDOW_SEC = 600
 MAX_OUTPUT_CHARS = 20000
@@ -641,7 +647,15 @@ def tool_hub_dispatch_cli(args):
     available = local_availability(agent, prof, model, STATE)
     if not available["enabled"]:
         raise ValueError("UNAVAILABLE: " + available["code"] + ": " + available["reason"])
-    plan = prepare_task(agent, prof, dict(args, task=task), STATE / "attachments")
+    try:
+        plan = prepare_task(agent, prof, dict(args, task=task), STATE / "attachments")
+    except TaskContractError as exc:
+        _audit_quarantine({"event": "dispatch_rejected", "stage": exc.stage, "worker": agent,
+                           "logical_task_summary": logical_task_summary(agent, task),
+                           "ref_status": "absent", "dispatch_count": 0,
+                           "status": "failed", "error_code": exc.code,
+                           "failure_stage": exc.stage})
+        raise
     try:
         return _dispatch_prepared_cli(args, agent, prof, plan)
     finally:
@@ -658,6 +672,93 @@ def _record_cli_outcome(agent, profile, model, status, text=""):
         pass
 
 
+def _audit_store():
+    return DispatchAuditStore(STATE / "audit")
+
+
+def _audit(event):
+    summary = event.get("attachment_summary")
+    if summary is None and any(key in event for key in ("count", "total_bytes", "content_types")):
+        summary = {"count": event.get("count", 0), "total_bytes": event.get("total_bytes", 0),
+                   "content_types": event.get("content_types") or [],
+                   "validation_result": event.get("validation") or "passed"}
+    record = DispatchAuditEvent(
+        event=str(event.get("event") or "event"),
+        stage=str(event.get("stage") or event.get("failure_stage") or "dispatch_acceptance"),
+        status=str(event.get("status") or "unknown"),
+        dispatch_count=int(event.get("dispatch_count") if event.get("dispatch_count") is not None else 0),
+        logical_task_summary=str(event.get("logical_task_summary") or ""),
+        worker=str(event.get("worker") or ""),
+        ref=event.get("ref"),
+        failure_code=event.get("error_code"),
+        attachment_summary=summary,
+        host_id=event.get("host_id"),
+    )
+    return _audit_store().append(record)
+
+
+def _audit_quarantine(event):
+    try:
+        _audit(event)
+        return False
+    except Exception:
+        return True
+
+
+@dataclass(frozen=True)
+class MessageInputBinding:
+    mode: str
+    flag: str
+    path: str
+
+
+def bind_message_file_command(command, binding):
+    """Bind an already self-contained messages.json to a worker command.
+
+    The message file carries the full task text and every attachment, so a
+    redundant bare `{task}` or `--message {task}` must be removed instead
+    of being required. Options unrelated to the task input stay in place.
+    """
+    if not isinstance(binding, MessageInputBinding) or binding.mode != "messages_file":
+        raise TaskContractError("messages_file binding is required", code=ERROR_CONFIG, stage="command_binding")
+    flag = binding.flag
+    if not isinstance(flag, str) or not flag.startswith("-"):
+        raise TaskContractError("Attachment binding flag is invalid", code=ERROR_CONFIG, stage="command_binding")
+    if not isinstance(command, (list, tuple)) or any(not isinstance(item, str) for item in command):
+        raise TaskContractError("CLI command must be a string array", code=ERROR_CONFIG, stage="command_binding")
+    path = Path(str(binding.path or ""))
+    if not binding.path or not path.is_file():
+        raise TaskContractError("messages.json was not created; refusing to dispatch without it",
+                                code=ERROR_CONFIG, stage="command_binding")
+    source = [str(item) for item in command]
+    for item in source:
+        if item == flag or item.startswith(flag + "="):
+            raise TaskContractError("CLI already contains a messages-file binding",
+                                    code=ERROR_CONFIG, stage="command_binding")
+    result, index = [], 0
+    while index < len(source):
+        item = source[index]
+        if item == "{task}":
+            index += 1
+            continue
+        if item == "--message":
+            value = source[index + 1] if index + 1 < len(source) else None
+            if value != "{task}":
+                raise TaskContractError("CLI has a fixed --message prompt that messages_file cannot replace safely",
+                                        code=ERROR_CONFIG, stage="command_binding", worker_reason="fixed_prompt")
+            index += 2
+            continue
+        if item.startswith("--message="):
+            raise TaskContractError("CLI has a fixed --message prompt that messages_file cannot replace safely",
+                                    code=ERROR_CONFIG, stage="command_binding", worker_reason="fixed_prompt")
+        if "{task}" in item:
+            raise TaskContractError("CLI embeds {task} inside another argument; the position is ambiguous",
+                                    code=ERROR_CONFIG, stage="command_binding", worker_reason="ambiguous_task_placeholder")
+        result.append(item)
+        index += 1
+    return result
+
+
 def _dispatch_prepared_cli(args, agent, prof, plan):
     cli, task = prof["cli"], plan["task"]
     aliases = prof.get("models") or {}
@@ -667,7 +768,7 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
     model = aliases.get(requested, requested)
     if agent == "zcode" and model and not prof.get("model_arg"):
         raise ValueError("UNSUPPORTED: ZCode 旧通道不能验证配置模型；请使用 drivers/zcode_rpc.mjs 与 --model，避免静默调用账号当前模型")
-    cwd = args.get("cwd") or prof.get("cwd") or None
+    cwd = validate_workspace_path(args.get("cwd") or prof.get("cwd") or None)
     # timeout_s 是「无进展预算」: 长任务只要还在出字就不会被切断,
     # 连续这么久没有任何新输出才判定卡死 (见 async_worker.run_cmd_mode)。
     timeout = _positive_seconds(args.get("timeout_s"), CLI_IDLE_TIMEOUT_SEC)
@@ -687,15 +788,19 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
             # Variadic flags such as --allowedTools can otherwise swallow a
             # prompt blindly appended to the end of an older profile.
             cmd.insert(prompt_at + 1, "{task}")
+        elif plan.get("message_file"):
+            raise TaskContractError("CLI 已含固定提示词；messages_file 无法安全替代",
+                                    code=ERROR_CONFIG, stage="command_binding",
+                                    worker_reason="fixed_prompt")
         else:
             raise ValueError("CLI 已含固定提示词；请用 {task} 显式标出任务参数位置")
     if plan.get("message_file"):
-        if "--message" not in cmd:
-            raise ValueError("messages_file 附件要求 CLI 以 --message {task} 配置文本输入")
-        prompt_at = cmd.index("--message")
-        if cmd[prompt_at + 1:prompt_at + 2] != ["{task}"]:
-            raise ValueError("messages_file 附件的 --message 后必须是 {task}")
-        del cmd[prompt_at:prompt_at + 2]
+        binding_data = plan.get("binding") or {}
+        cmd = bind_message_file_command(cmd, MessageInputBinding(
+            mode="messages_file",
+            flag=str(binding_data.get("flag") or "--messages-file"),
+            path=str(binding_data.get("path") or ""),
+        ))
     if plan.get("input_file"):
         prompt_at = next((i for i, item in enumerate(cmd) if item == "{task}"), None)
         if prompt_at is None or prompt_at == 0 or cmd[prompt_at - 1] not in ("-p", "--print"):
@@ -752,6 +857,16 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
         cmd = prepare_command(cmd, env=process_env)
     except (OSError, ValueError) as exc:
         return f"{agent} CLI 启动失败: {exc}"
+    attachment_values = plan["metadata"].get("attachments") or []
+    task_summary = plan.get("logical_task_summary") or logical_task_summary(agent, task, attachment_values)
+    try:
+        _audit({"event": "dispatch_intent", "stage": "dispatch_acceptance", "worker": agent,
+                "logical_task_summary": task_summary, "ref_status": "pending",
+                "dispatch_count": 1, "status": "running",
+                **public_attachment_summary(attachment_values)})
+    except Exception as exc:
+        raise TaskContractError("Dispatch audit is unavailable; worker was not started",
+                                code=ERROR_AUDIT, stage="audit") from exc
     # async_default: 该 worker 任务耗时长(CDP GUI 驱动/CLI 长生成), 强制异步受理
     # 立即返回受理号, 后台经 async_worker 执行, 调度方用 hub_result/ref 轮询
     # (置于函数体顶层: 占位符 {task} 模式与无 model_arg 的 worker 同样走异步,
@@ -765,13 +880,25 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
                                 "hard_timeout_s": hard_timeout,
                                 "attachment_dir": plan["staging"], "attachment_parent": str((STATE / "attachments").resolve()),
                                 "input_file": plan.get("input_file"), "availability_state": str(STATE), "profile_signature": profile_signature(prof),
-                                "public_options": dict(plan["metadata"], model=model)},
+                                "public_options": dict(plan["metadata"], model=model,
+                                                         logical_task_summary=task_summary)},
                                env=process_env)
         except (OSError, RuntimeError) as exc:
             return f"{agent} CLI 启动失败: {exc}"
         plan["async_started"] = True
+        degraded = _audit_quarantine({"event": "dispatch_accepted", "stage": "dispatch_acceptance",
+                                      "worker": agent, "logical_task_summary": task_summary,
+                                      "ref": ref, "ref_status": "present", "dispatch_count": 1,
+                                      "status": "running", "worker_status": "running",
+                                      **public_attachment_summary(attachment_values)})
+        if degraded:
+            try:
+                _save_result(ref, audit_degraded=True)
+            except (OSError, ValueError):
+                pass
         cb_note = f"\n完成后将回调: {cb}" if cb else ""
-        return (f"[{agent}/{ref}] 任务已异步受理 (此类任务耗时长, 不阻塞等待)。{cb_note}\n"
+        degraded_note = " audit_degraded=true" if degraded else ""
+        return (f"[{agent}/{ref}] 任务已异步受理 (此类任务耗时长, 不阻塞等待)。{degraded_note}{cb_note}\n"
                 f"查询结果: hub_result(ref=\"{ref}\")\n"
                 f"查存活状态: hub_task_status(ref=\"{ref}\")  ← 先看 verdict，再看结果\n"
                 f"verdict=working/alive_waiting/gui_working 时任务仍在工作，不要按墙钟截断；"
@@ -810,6 +937,12 @@ def _dispatch_prepared_cli(args, agent, prof, plan):
             detail = detail[-800:]
         out = parsed["error"] or detail or "CLI 已退出但没有可验证的回答；请检查原任务，不要自动重复派发。"
     _record_cli_outcome(agent, prof, model, "completed" if code == 0 else "error", out)
+    _audit_quarantine({"event": "dispatch_terminal", "stage": "worker_execution", "worker": agent,
+                       "logical_task_summary": task_summary, "ref_status": "absent",
+                       "dispatch_count": 1, "status": "completed" if code == 0 else "failed",
+                       "worker_status": "completed" if code == 0 else "error",
+                       "error_code": None if code == 0 else "WORKER_EXECUTION_FAILED",
+                       **public_attachment_summary(attachment_values)})
     tag = f"{agent}/{model}" if model else agent
     return _truncate(f"[{tag}] exit={code}\n{out or '(无输出)'}")
 
@@ -919,7 +1052,9 @@ def _tool_hub_capabilities_impl(args):
             models.append(item)
         defaults = public_model_capabilities(agent, profile, default_model or "")
         is_configured = bool(profile.get("cli")) or agent in ("traecode", "trae") or bool(profile.get("gateway"))
+        policy = AttachmentPolicyResolver(agent, profile, default_model or "").snapshot()
         workers[agent] = {"configured": is_configured, "default_model": default_model,
+                          "platform": policy["platform"], "attachment_policy": policy,
                           "model_selection": bool(profile.get("model_arg")),
                           "availability": local_availability(agent, profile, None), "models": models,
                           # 客户端目录里可能声明了别名表之外的模型（如控制台的 MODEL_CATALOG），
@@ -1039,7 +1174,9 @@ def tool_hub_result_json(args):
     if not data:
         return json.dumps({"ref": ref, "status": "unknown", "verdict": "unknown",
                            "text": "未找到任务结果，请核对 ref。"}, ensure_ascii=False)
-    keys = ("ref", "agent", "status", "text", "progress", "exit_code", "updated_at", "model", "thinking", "stream", "attachments", "usage",
+    keys = ("ref", "agent", "status", "worker_status", "error_code", "failure_stage", "error_details",
+            "dispatch_count", "status_history", "last_confirmed_status", "audit_degraded", "verification",
+            "text", "progress", "exit_code", "updated_at", "model", "thinking", "stream", "attachments", "usage",
             "timeout_kind", "partial_text")
     out = {key: data[key] for key in keys if key in data}
     live = _task_liveness(data)
@@ -1100,6 +1237,7 @@ def _start_async(agent, mode, task, metadata, session_id="", env=None):
     process_env.update(HUB_RESULTS_DIR=str(RESULTS_DIR), TRAE_GATEWAY=TRAE_GATEWAY,
                        HUB_STATE_DIR=str(STATE), TRAE_DOM_READ=TRAE_DOM_READ, ZCODE_DOM_DRIVER=ZCODE_DOM_DRIVER)
     _save_result(ref, agent=agent, status="running", task=task, started_at=time.time(),
+                 dispatch_count=1, worker_status="running",
                  liveness_source="gui" if mode in ("trae", "zcode") else "process",
                  **metadata.get("public_options", {}))
     try:
@@ -1173,6 +1311,16 @@ def _format_result(d):
     ref = d.get("ref", "?")
     text = d.get("text") or ""
     out = f"[{ref}] agent={d.get('agent')} status={d.get('status')}"
+    if d.get("worker_status") and d.get("worker_status") != d.get("status"):
+        out += " worker_status=" + str(d["worker_status"])
+    if d.get("error_code"):
+        out += " error_code=" + str(d["error_code"])
+    if d.get("failure_stage"):
+        out += " failure_stage=" + str(d["failure_stage"])
+    if d.get("dispatch_count") is not None:
+        out += " dispatch_count=" + str(d["dispatch_count"])
+    if d.get("audit_degraded"):
+        out += " audit_degraded=true"
     if d.get("status") == "running" and d.get("progress"):
         out += f"\n[执行中·受控端界面快照] {str(d['progress'])[:600]}"
     out += f"\n{_truncate(str(text)) or '(尚无文本)'}"

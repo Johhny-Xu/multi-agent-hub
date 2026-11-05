@@ -11,6 +11,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-11-05
+
+### 移动端滑轨常驻克隆（路线 Y）与零刷新原位更新
+
+- **首尾常驻克隆 + 全程 scroll-snap**：平台滑轨在首尾各挂一张常驻克隆卡，滚动过程
+  始终启用 `scroll-snap-type: x mandatory`，静止后只执行一次 `warp()` 等价瞬移。
+  这样既不需要在 `touchstart` 里阻塞 145ms 做位置换算，也不会在滑到首尾时出现
+  死区回跳。
+- **数据签名短路与原位 DOM 复用**：`renderAgents` / `qa-grid` 先比较数据签名，
+  相同就直接返回；不同则按 key 原位复用节点，不再每 30 秒全量重建，也不再重播
+  433ms 的 `cardStaggerIn` 入场动画。
+- **时间戳与克隆卡重写**：修复 `__railLastScrollAt` 时间戳混用，静默窗扩大到 800ms；
+  `syncOne` 增加 `__srcHtmlSnapshot`，克隆卡不再因 `innerHTML` 恒不相等而每次重写。
+- **开关与过渡**：首尾卡片的「已启用」开关改用 `defaultChecked` 序列化，并对克隆
+  伪元素屏蔽 `*::before` / `*::after` 过渡，跨界时旋钮不再滑动。
+
+### MiniMaxCode 附件直传修复并激活
+
+- `hub/capabilities.json` 与 `hub/task_contract.py` 将 `minimaxcode` 的文本与图片
+  附件绑定改为 `mcode exec` 实装支持的 `--file <path>` 可重复参数，同时保留
+  `{task}` 位置参数。
+- 新增 `hub/dispatch_audit.py` 与离线 / 实时回归验收，附件派发链路可单独审计。
+
+### Mobile Shell v2 与对话流去卡片
+
+- 子代理回复去掉卡片背景框与左边框，与用户气泡区分开，对齐现代流式正文阅读体验
+  （实现与权重推导见 `docs/bubble-flat.md`）。
+- 未锁定侧栏首次点击平台行保持展开，不再被自动收起。
+
 ## [1.0.20] - 2026-11-03
 
 ### 新增：存活探针的「活跃窗口」可配置（`AGENTHUB_LIVENESS_ACTIVE_OUTPUT_S`）

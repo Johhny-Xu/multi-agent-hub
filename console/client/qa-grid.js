@@ -1204,9 +1204,27 @@
 
   function hydrateWorkerSlots(card) {
     const worker = card.getAttribute('data-worker');
-    if (!worker || (!quotaData && !accountData && !modelsData)) return;
+    if (!worker || (!quotaData && !accountData && !modelsData)) return false;
     const q = (quotaData && quotaData.workers && quotaData.workers[worker]) || {};
     const acc = (accountData && accountData.workers && accountData.workers[worker]) || { profiles: [] };
+
+    // 根因 C：60s 定时 load 不再无差别清空重写槽位。
+    // 按 worker 计算「渲染所需数据」的稳定签名，数据没变且槽位已填充时直接跳过，
+    // 一次 textContent 都不写（原实现每次都先清空再重建，槽位会闪一下）。
+    let wSig = '';
+    try {
+      const mw = (modelsData && modelsData.workers && modelsData.workers[worker]) || null;
+      wSig = JSON.stringify([
+        // 只取真正参与渲染的字段：fetchedAt / updatedAt 这类时间戳每轮都变，
+        // 放进签名会让守卫永远失效。
+        q.plan || '', q.account || '', q.message || '', q.status || '', q.quotas || null,
+        (acc.profiles || []).map((p) => [p.name, p.display, p.identity, !!p.active, !!p.stale]),
+        mw ? { d: mw.default || '', m: (mw.models || []).map((m) => [m.id, m.alias, m.name, m.credits, m.tag, m.ctx, !!m.isDefault]) } : null,
+      ]);
+    } catch (e) { wSig = ''; }
+    const qSlotCheck = card.querySelector(`[data-quota-slot="${worker}"]`);
+    if (wSig && card.__qaSlotSig === wSig && qSlotCheck && qSlotCheck.childNodes.length) return false;
+    card.__qaSlotSig = wSig;
 
     const activeProf = (acc && acc.profiles && acc.profiles.find((p) => p.active)) || null;
     const accDisp = (activeProf && (activeProf.display || activeProf.name)) || (q && q.account) || '';
@@ -1284,12 +1302,21 @@
       authSlot.textContent = '';
       authSlot.appendChild(authRow(worker, q, acc));
     }
+    return true;
   }
 
   function hydrateAllUnifiedCards() {
     const agentsEl = document.getElementById('agents');
     if (!agentsEl) return;
-    agentsEl.querySelectorAll('.uh-card[data-worker]').forEach((card) => hydrateWorkerSlots(card));
+    // 只 hydrate 真实卡；常驻克隆卡由 syncOne 的 __srcHtmlSnapshot 守卫同步，
+    // 绝不能在这里被清空重写（否则每次轮询克隆卡都会整块重建）。
+    let changed = false;
+    agentsEl.querySelectorAll('.uh-card[data-worker]:not(.mobile-loop-clone)').forEach((card) => {
+      if (hydrateWorkerSlots(card)) changed = true;
+    });
+    if (changed && typeof agentsEl.__syncResidentClones === 'function') {
+      agentsEl.__syncResidentClones();
+    }
   }
 
   window.__ahHydrateUnifiedCards = hydrateAllUnifiedCards;
@@ -1574,6 +1601,7 @@
     const card = document.getElementById('settings-checkin-card');
     if (!card) return;
 
+    const isMobileUI = () => document.documentElement.getAttribute('data-ui') === 'mobile';
     const escapeHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     const refreshBtn = document.getElementById('btn-checkin-refresh');
@@ -1589,6 +1617,8 @@
     const overallPill = document.getElementById('checkin-overall-pill');
 
     let currentCheckinData = null;
+    // 闪示结束需要「强制重绘」按钮真实状态：此时数据签名没变，不能被签名守卫挡掉
+    let forceOverviewRender = false;
 
     // 格式化状态徽章
     const updateBadge = (elId, status, text) => {
@@ -1633,9 +1663,10 @@
       }
       box.innerHTML = list.map((a) => {
         const st = String(a.status || 'pending');
+        const failedText = isMobileUI() ? '失败' : (a.message || '失败');
         const stateText = st === 'success'
           ? (a.credits ? `+${a.credits}` : '已签到')
-          : (st === 'already' ? '今日已签' : (st === 'failed' ? (a.message || '失败') : (st === 'expired' ? '凭据失效' : '待打卡')));
+          : (st === 'already' ? (isMobileUI() ? '已签到' : '今日已签') : (st === 'failed' ? failedText : (st === 'expired' ? '凭据失效' : '待打卡')));
         const name = escapeHtml((a.display || a.name || '未知账号')
           + (a.fresh ? '（新增）' : (a.stale ? '（已切走）' : '')));
         const cls = st === 'expired' ? 'failed' : st;
@@ -1674,8 +1705,53 @@
       : () => ({ ok: false, text: '未取得平台状态', title: '无法确认签到结果', still: [] });
     const CHECKIN_BADGE_IDS = CardState ? CardState.CHECKIN_BADGE_IDS : {};
 
+    // 手机端卡片很窄：状态只显示「已签到 / 失败 / 待开启 / 部分已签」这类短句，
+    // 后端的完整说明留在 title 里，不再把整段日志塞进「打卡状态」右侧。
+    const mobileStatusText = (key, info) => {
+      if (!info) return '未配置';
+      if (key === 'meoo') {
+        const ok = info.status === 'success' || info.status === 'already';
+        return ok ? '登录态正常' : '登录态异常';
+      }
+      const st = checkinCardState({ ...info, platform: key });
+      return String(st.badge || '')
+        .replace(/^今日已签到$/, '已签到')
+        .replace(/^今日已签$/, '已签到')
+        .replace(/^今日已领取$/, '已领取')
+        .replace(/^签到失败$/, '失败')
+        .replace(/^部分成功（(.+)）$/, '部分已签（$1）')
+        .replace(/^待补签$/, '待签到')
+        .replace(/^等上游下发$/, '待下发')
+        .replace(/^活动未开启$/, '未开启');
+    };
+
+    const setPlatformMessage = (elId, key, info) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      if (isMobileUI()) {
+        el.textContent = mobileStatusText(key, info);
+        el.title = (info && info.message) || '';
+      } else {
+        el.textContent = (info && info.message) || '今日尚未执行';
+      }
+    };
+
     const renderOverview = (data) => {
       if (!data || !data.platforms) return;
+      // 根因 C：60s 定时刷新不再无差别重写签到卡。
+      // 数据签名未变 + 真实卡已存在 + 没有按钮处于执行/闪示中 → 整段跳过。
+      const gridEl = document.querySelector('.checkin-cards-grid');
+      let cSig = '';
+      try { cSig = JSON.stringify([data.platforms, data.history || [], data.autoCheckin !== false]); } catch (e) { cSig = ''; }
+      let btnBusy = false;
+      document.querySelectorAll('.btn-do-checkin').forEach((b) => { if (b._busy || b._flashTimer) btnBusy = true; });
+      if (!forceOverviewRender && gridEl && cSig && gridEl.__checkinSig === cSig && !btnBusy &&
+          gridEl.querySelectorAll('.checkin-card:not(.mobile-loop-clone)').length) {
+        currentCheckinData = data;
+        return;
+      }
+      forceOverviewRender = false;
+      if (gridEl && cSig) gridEl.__checkinSig = cSig;
       currentCheckinData = data;
 
       if (autoCheckbox) {
@@ -1689,8 +1765,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-wb');
         if (credEl) credEl.textContent = credentialText(p.workbuddy);
-        const msgEl = document.getElementById('msg-wb');
-        if (msgEl) msgEl.textContent = p.workbuddy.message || '今日尚未执行';
+        setPlatformMessage('msg-wb', 'workbuddy', p.workbuddy);
         const rewEl = document.getElementById('reward-wb');
         if (rewEl) rewEl.textContent = p.workbuddy.credits ? `${p.workbuddy.credits}${p.workbuddy.consecutiveDays ? ` (连签${p.workbuddy.consecutiveDays}天)` : ''}` : '-';
         renderAccountRows('accts-wb', p.workbuddy.accounts);
@@ -1701,8 +1776,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-cb');
         if (credEl) credEl.textContent = credentialText(p.codebuddy);
-        const msgEl = document.getElementById('msg-cb');
-        if (msgEl) msgEl.textContent = p.codebuddy.message || '今日尚未执行';
+        setPlatformMessage('msg-cb', 'codebuddy', p.codebuddy);
         const rewEl = document.getElementById('reward-cb');
         if (rewEl) rewEl.textContent = p.codebuddy.credits ? `${p.codebuddy.credits}${p.codebuddy.consecutiveDays ? ` (连签${p.codebuddy.consecutiveDays}天)` : ''}` : '-';
         renderAccountRows('accts-cb', p.codebuddy.accounts);
@@ -1713,8 +1787,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-trae');
         if (credEl) credEl.textContent = credentialText(p.traecode);
-        const msgEl = document.getElementById('msg-trae');
-        if (msgEl) msgEl.textContent = p.traecode.message || '今日尚未执行';
+        setPlatformMessage('msg-trae', 'traecode', p.traecode);
         const rewEl = document.getElementById('reward-trae');
         if (rewEl) rewEl.textContent = p.traecode.credits ? `${p.traecode.credits}${p.traecode.consecutiveDays ? ` (连签${p.traecode.consecutiveDays}天)` : ''}` : '-';
         renderAccountRows('accts-trae', p.traecode.accounts);
@@ -1725,8 +1798,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-ca');
         if (credEl) credEl.textContent = credentialText(p.codearts);
-        const msgEl = document.getElementById('msg-ca');
-        if (msgEl) msgEl.textContent = p.codearts.message || '今日尚未执行';
+        setPlatformMessage('msg-ca', 'codearts', p.codearts);
         const rewEl = document.getElementById('reward-ca');
         if (rewEl) rewEl.textContent = p.codearts.credits ? `${p.codearts.credits}` : '-';
         renderAccountRows('accts-ca', p.codearts.accounts);
@@ -1737,8 +1809,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-qd');
         if (credEl) credEl.textContent = credentialText(p.qoder);
-        const msgEl = document.getElementById('msg-qd');
-        if (msgEl) msgEl.textContent = p.qoder.message || '今日尚未执行';
+        setPlatformMessage('msg-qd', 'qoder', p.qoder);
         const rewEl = document.getElementById('reward-qd');
         if (rewEl) rewEl.textContent = p.qoder.credits ? `${p.qoder.credits} Credits` : '-';
         renderAccountRows('accts-qd', p.qoder.accounts);
@@ -1750,8 +1821,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-qdcn');
         if (credEl) credEl.textContent = credentialText(qdcn);
-        const msgEl = document.getElementById('msg-qdcn');
-        if (msgEl) msgEl.textContent = qdcn.message || '今日尚未执行';
+        setPlatformMessage('msg-qdcn', 'qoder-cn', qdcn);
         const rewEl = document.getElementById('reward-qdcn');
         if (rewEl) rewEl.textContent = qdcn.credits ? `${qdcn.credits} Credits` : '-';
         renderAccountRows('accts-qdcn', qdcn.accounts);
@@ -1763,8 +1833,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-mm');
         if (credEl) credEl.textContent = credentialText(mm);
-        const msgEl = document.getElementById('msg-mm');
-        if (msgEl) msgEl.textContent = mm.message || '今日尚未执行';
+        setPlatformMessage('msg-mm', 'minimaxcode', mm);
         const rewEl = document.getElementById('reward-mm');
         if (rewEl) rewEl.textContent = mm.credits ? `${mm.credits} 积分${mm.consecutiveDays ? ` (连签${mm.consecutiveDays}天)` : ''}` : (mm.consecutiveDays ? `连签${mm.consecutiveDays}天` : '-');
         renderAccountRows('accts-mm', mm.accounts);
@@ -1776,8 +1845,7 @@
         // 徽章 / 按钮由下方统一的「签到卡片状态」渲染
         const credEl = document.getElementById('cred-meoo');
         if (credEl) credEl.textContent = credentialText(mo);
-        const msgEl = document.getElementById('msg-meoo');
-        if (msgEl) msgEl.textContent = mo.message || '今日尚未执行';
+        setPlatformMessage('msg-meoo', 'meoo', mo);
         const rewEl = document.getElementById('reward-meoo');
         if (rewEl) rewEl.textContent = mo.credits ? `${mo.credits} 积分` : '-';
         renderAccountRows('accts-meoo', mo.accounts);
@@ -1879,6 +1947,7 @@
           body: JSON.stringify({ platform })
         });
         const json = await parseRunResponse(res);
+        if (!json.ok) throw new Error(json.error || '签到请求失败');
         if (btn) btn._busy = false;
         let overview = null;
         if (json.overview?.platforms) {
@@ -1897,6 +1966,7 @@
           btn._flashTimer = setTimeout(() => {
             btn._flashTimer = null;
             // 闪示结束回到真实状态（可能已经变成「今日已签」或「待开启」）
+            forceOverviewRender = true;
             if (currentCheckinData) renderOverview(currentCheckinData);
           }, 3000);
         }
@@ -1944,8 +2014,10 @@
     const railBusyUntil = { t: 0 };
     let railRaf = 0;
     let activeSyncTimer = 0;
+    let lastActiveCard = null;
 
-    const platOfCard = (el) => String(el?.id || '').replace('card-checkin-', '');
+    // 克隆根节点的 id 被摘掉了（防重复 id），改读 cloneCard 留下的 data-clone-of
+    const platOfCard = (el) => String(el?.id || el?.getAttribute?.('data-clone-of') || '').replace('card-checkin-', '');
     // 卡片对应的子代理：以卡片内品牌图标的 data-agent 为准（WorkBuddy 卡片的 id 是 workbuddy，
     // 但它的子代理是 codebuddy-cn，主题色要跟着后者）
     const agentOfCard = (card) => card?.querySelector('.checkin-brand-icon[data-agent]')?.getAttribute('data-agent') || platOfCard(card);
@@ -1961,6 +2033,7 @@
       const cs = getComputedStyle(rail);
       return parseFloat(cs.columnGap || cs.gap || '0') || 0;
     };
+    let lastMobileActivePlat = '';
     // 选中态只允许存在一个：胶囊高亮 + 该卡片顶部配色条一起切
     const setActivePlat = (plat) => {
       platTabs.forEach((b) => {
@@ -1968,9 +2041,19 @@
         b.classList.toggle('active', on);
         b.setAttribute('aria-selected', on ? 'true' : 'false');
       });
+      if (isMobileUI() && plat !== lastMobileActivePlat) {
+        lastMobileActivePlat = plat;
+        const activeBtn = Array.from(platTabs).find((b) => b.getAttribute('data-plat') === plat);
+        if (activeBtn && window.HubRail?.centerTab) {
+          window.HubRail.centerTab(activeBtn.parentElement, activeBtn);
+        }
+      }
       if (!rail) return;
+      // 根因 D：常驻克隆卡也要同帧拿到高亮，滑到首/尾克隆时才会与真实卡完全一致。
       Array.from(rail.children).forEach((card) => {
-        card.classList.toggle('is-selected', plat !== 'all' && platOfCard(card) === plat);
+        const on = plat !== 'all' && platOfCard(card) === plat;
+        card.classList.toggle('is-selected', on);
+        card.classList.toggle('active', on);
       });
     };
 
@@ -1981,7 +2064,9 @@
       if (!rail || !card) return;
       railBusyUntil.t = Date.now() + 900;
       if (railDrag) {
-        railDrag.alignToSlot(rail, card, { slot: 1, loop: true, duration: 480 });
+        railDrag.alignToSlot(rail, card, isMobileUI()
+          ? { slot: 0, loop: false, duration: 420 }
+          : { slot: 1, loop: true, duration: 480 });
       } else {
         const step = card.offsetWidth + railGap();
         const left = Math.max(0, card.offsetLeft - step);
@@ -1996,6 +2081,9 @@
     // 循环：始终在轨道两端各留出半张卡的余量，于是可以一直往同一方向滑下去。
     // 每次只搬一张卡（一次 if/else），避免两个 while 互相把 scrollLeft 推回去。
     const rebalanceRail = () => {
+      // 手机端交给 CSS scroll-snap 整卡吸附：再叠加 JS 搬卡会瞬间改变首尾顺序，
+      // 表现为滑动时闪出一堆平台。桌面端保留循环滑轨。
+      if (isMobileUI()) return;
       if (!rail || rail.scrollWidth <= rail.clientWidth + 8) return;
       // 拖动过程中不要搬家：drag 的 startLeft 基准会被打乱，手感会跳
       if (rail.classList.contains('dragging')) return;
@@ -2022,13 +2110,49 @@
       // 程序化滚动（点胶囊）期间不抢主：否则刚点中的气泡会被邻近卡片顶掉，
       // 看起来就像同时亮了两个
       if (Date.now() < railBusyUntil.t) return;
-      // 高亮 = 落在「第二个位置」的那张卡（与点击后对齐的规则一致，避免点了 A 亮 B）
+      if (isMobileUI()) {
+        // 手机端轨道结构恒为 [frontClone, 真实1..N, backClone]，原生 mandatory snap 全程开启。
+        // 高亮用缓存的 step / firstSnap 做 O(1) 推算；停在首克隆映射真实末卡，
+        // 停在尾克隆映射真实首卡。绝不在这里并发跑 smooth scrollTo 和原生 snap 抢主。
+        const cards = Array.from(rail.children).filter((c) => !c.classList.contains('mobile-loop-clone'));
+        if (!cards.length) return;
+        const step = rail.__railStep || 0;
+        const firstSnap = rail.__railFirstSnap || 0;
+        let best = null;
+        if (step > 0) {
+          let idx = Math.round((rail.scrollLeft - firstSnap) / step);
+          if (idx < 0) idx = cards.length - 1;
+          else if (idx > cards.length - 1) idx = 0;
+          best = cards[idx] || null;
+          if (best && best.hidden) best = null;
+        }
+        if (!best) {
+          // 平台筛选会把卡 hidden，偏移全塌了，退回一次就近扫描
+          const center = rail.scrollLeft + rail.clientWidth / 2;
+          let bestDist = Infinity;
+          cards.forEach((card) => {
+            if (card.hidden) return;
+            const mid = card.offsetLeft + card.offsetWidth / 2;
+            const dist = Math.abs(mid - center);
+            if (dist < bestDist) { bestDist = dist; best = card; }
+          });
+        }
+        if (!best) return;
+        // 只有活动卡真正变化时才切 class，避免每帧无谓的样式重算
+        if (best !== lastActiveCard) {
+          lastActiveCard = best;
+          setActivePlat(platOfCard(best));
+        }
+        return;
+      }
+      // 桌面端：高亮 = 落在「第二个位置」的那张卡（与点击后对齐的规则一致，避免点了 A 亮 B）
       const first = rail.children[0];
       const step = first ? first.offsetWidth + railGap() : 0;
       const anchor = rail.scrollLeft + step;
       let best = null;
       let bestDist = Infinity;
       Array.from(rail.children).forEach((card) => {
+        if (card.classList.contains('mobile-loop-clone')) return;
         const dist = Math.abs(card.offsetLeft - anchor);
         if (dist < bestDist) { bestDist = dist; best = card; }
       });
@@ -2044,11 +2168,21 @@
           railRaf = 0;
           rebalanceRail();
           clearTimeout(activeSyncTimer);
-          activeSyncTimer = setTimeout(syncActiveFromScroll, 120);
+          activeSyncTimer = setTimeout(syncActiveFromScroll, isMobileUI() ? 160 : 120);
         });
       }, { passive: true });
       // 松手后再补一次循环补偿，保证两端始终有余量
       rail.addEventListener('pointerup', () => setTimeout(rebalanceRail, 0));
+      // 手机端不加无限搬卡，只在首尾边界做一次单卡循环（最后一张→第一张，反向同理）
+      if (railDrag && railDrag.bindMobileWrap) {
+        railDrag.bindMobileWrap(rail, {
+          onStart: () => { railBusyUntil.t = Date.now() + 700; },
+          onDone: () => {
+            railBusyUntil.t = 0;
+            syncActiveFromScroll();
+          }
+        });
+      }
       // 首屏保持「全部」高亮，不预先给任何卡片上配色条
       setActivePlat('all');
     }

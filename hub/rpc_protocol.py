@@ -1,4 +1,5 @@
 """Shared MCP JSON-RPC handling for the Hub and its scoped Trae server."""
+import json
 import math
 
 
@@ -47,5 +48,14 @@ def handle_request(req, *, tools, handlers, name, version, protocol="2024-11-05"
         try:
             return ok({"content": [{"type": "text", "text": str(fn(arguments))}], "isError": False})
         except Exception as exc:
+            public = getattr(exc, "to_public", None)
+            if callable(public):
+                try:
+                    payload = public()
+                except Exception:
+                    payload = None
+                if isinstance(payload, dict) and payload.get("error_code"):
+                    return ok({"content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+                               "isError": True})
             return ok({"content": [{"type": "text", "text": f"工具执行出错: {exc}"}], "isError": True})
     return error(-32601, f"Method not found: {method}")
