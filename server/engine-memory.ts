@@ -31,7 +31,10 @@ const MINUTE_MS = 60_000, DAY_MINUTES = 24 * 60;
 export const ENGINE_PROCESS_KINDS: ReadonlySet<string> = new Set(["claudeAgent", "codex", "opencodeGo", "grokAgent", "geminiAgent", "kimiAgent",
   "droidAgent", "cursorAgent", "qwenAgent", "hermesAgent", "clineAgent", "copilotAgent", "commandCodeAgent", "customAcp", "piAgent", "antigravityAgent",
   // Same per-thread process model as the ACP engines above.
-  "codebuddyAgent", "codebuddyCnAgent", "qoderAgent", "qoderCnAgent", "codeartsAcpAgent", "mcodeAgent", "meooAgent"]);
+  "codebuddyAgent", "codebuddyCnAgent", "qoderAgent", "qoderCnAgent", "codeartsAcpAgent", "mcodeAgent", "meooAgent",
+  // dsh runs one process per thread as well; it was absent from this set upstream, so its threads never got the
+  // same memory accounting the other ACP engines get.
+  "deepseekAgent"]);
 
 export interface HostMemory { totalBytes: number; availableBytes: number; swapFreeBytes: number; oomKills: number | null; fullStall10: number | null }
 

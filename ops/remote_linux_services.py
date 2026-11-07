@@ -216,7 +216,7 @@ def main():
         (root / ".run").mkdir(exist_ok=True)
         with operation_lock(root):
             if args.action == "stop":
-                for name in ("console", "hub"):
+                for name in ("hub",):
                     stop_service(root, name)
             else:
                 node = node_runtime(env)
@@ -229,22 +229,21 @@ def main():
                     agents.parent.mkdir(parents=True, exist_ok=True)
                     with agents.open("xb") as dest:
                         dest.write((root / "hub/agents.example.json").read_bytes())
-                for name in ("console", "hub"):
+                for name in ("hub",):
                     stop_service(root, name)
                 started = []
                 try:
                     hub = start_service(root, "hub", [python, str(root / "hub/agent_hub.py"), "--http", env["AGENTHUB_PORT"], "--host", env["AGENTHUB_HOST"]], env)
                     started.append("hub")
                     wait_health(hub, endpoint(env["AGENTHUB_HOST"], env["AGENTHUB_PORT"], "/health"), args.health_timeout, "agent-hub")
-                    console = start_service(root, "console", [node, str(root / "console/server.mjs")], env)
-                    started.append("console")
-                    wait_health(console, endpoint(env["HUBCONSOLE_HOST"], env["HUBCONSOLE_PORT"], "/dashboard"), args.health_timeout)
+                    # The WebUI console was removed in v1.3.0; only the hub's MCP pool starts here.
+                    # The workbench runs separately (README: server/openmausbot.ts serve).
                 except BaseException:
                     for name in reversed(started):
                         stop_service(root, name)
                     raise
                 if not args.silent:
-                    print("Hub and console passed owned HTTP health checks")
+                    print("Hub passed its owned HTTP health check")
         if not args.silent and args.action == "stop":
             print("Stopped matching services recorded by this checkout")
         return 0
