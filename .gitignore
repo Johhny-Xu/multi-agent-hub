@@ -36,3 +36,12 @@ dist/
 desktop/node_modules/
 desktop/dist/
 desktop/dist-*/
+
+# ── hub 侧运行时产物（v1.3 合并进来的模块沿用这些路径）
+hub/agents.json
+hub/state/
+hub/results/
+.run/
+logs/
+.agenthub/
+*.bak-*

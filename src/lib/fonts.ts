@@ -1,0 +1,36 @@
+export const FONT_IDS = ["skin", "system", "inter", "poppins", "serif"] as const;
+export type FontId = (typeof FONT_IDS)[number];
+
+export const DEFAULT_FONT: FontId = "skin";
+
+const KEY = "omb-font";
+
+function isFontId(value: unknown): value is FontId {
+  return FONT_IDS.includes(value as FontId);
+}
+
+function getStore(): Storage | undefined {
+  try {
+    return typeof localStorage === "undefined" ? undefined : localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+export function readFont(): FontId {
+  try {
+    const stored = getStore()?.getItem(KEY);
+    return isFontId(stored) ? stored : DEFAULT_FONT;
+  } catch {
+    return DEFAULT_FONT;
+  }
+}
+
+export function applyFont(id: FontId): void {
+  if (id === DEFAULT_FONT) delete document.documentElement.dataset.font;
+  else document.documentElement.dataset.font = id;
+  try {
+    getStore()?.setItem(KEY, id);
+  } catch {
+  }
+}

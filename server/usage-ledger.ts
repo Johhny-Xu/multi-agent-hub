@@ -1,0 +1,354 @@
+// Append-only usage rows under <data>/usage/ (0600): bookkeeping never fails the turn, and rows never carry message text.
+import { personOf } from "./usage-attribution.ts";
+import { readFileSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import type { TraceParent, TraceStatus, TraceUsageStatus } from "../shared/usage-trace.ts";
+import type { ResolvedSender } from "../shared/wire.ts";
+import type { CostSource } from "./model-prices.ts";
+import { billableFor, type PriceList } from "./prices.ts";
+import type { RequestAuth } from "./request-auth.ts";
+
+/** `helper`: a job the helper model wrote for `botId`, kept apart from `bot` so its cost reads on its own. */
+/** `email` on an owner, routine, bot or helper row: the person it was spent for (`usage-attribution.ts`), such as the
+ * person whose turn delegated to it. */
+export type UsageTrigger =
+  | { kind: "user"; email?: string; label?: string }
+  | { kind: "owner"; email?: string }
+  | { kind: "routine"; routineId?: string; label?: string; runId?: string; email?: string }
+  | { kind: "bot"; botId?: string; email?: string }
+  | { kind: "helper"; botId?: string; job?: string; email?: string };
+
+export interface UsageRow {
+  at: string;
+  botId: string;
+  botName: string;
+  threadId: string;
+  instanceId: string;
+  driverKind: string;
+  model: string;
+  input: number;
+  output: number;
+  cachedInput?: number;
+  promptBytes?: { stable: number; volatile: number };
+  costUsd: number | null;
+  costSource?: CostSource;
+  trigger: UsageTrigger;
+  /** The bot's department when the row was booked. */
+  section?: string;
+  /** Trace fields, on rows booked since traces were recorded: older rows have none and show as untimed. */
+  turnId?: string;
+  startedAt?: string;
+  endedAt?: string;
+  /** The turn that delegated, handed off or resumed into this one. */
+  parent?: TraceParent;
+  outcome?: { status: TraceStatus; reason?: string };
+  steps?: number;
+  tools?: number;
+  toolErrors?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+  contextTokens?: number;
+  contextWindow?: number;
+  usageStatus?: TraceUsageStatus;
+}
+
+export type UsageGroupBy = "bot" | "model" | "user" | "day" | "engine" | "routine" | "department";
+export const USAGE_GROUPINGS: readonly UsageGroupBy[] = ["bot", "model", "user", "day", "engine", "routine", "department"];
+
+export interface UsageGroup {
+  key: string;
+  label: string;
+  turns: number;
+  input: number;
+  output: number;
+  cachedInput: number;
+  costUsd: number | null;
+  estimatedUsd: number | null;
+  unpriced: number;
+  billableUsd: number | null;
+}
+
+export interface UsageSummary {
+  groups: UsageGroup[];
+  total: UsageGroup;
+}
+
+const DIR = "usage";
+const MAX_RANGE_DAYS = 366;
+const DAY_MS = 24 * 60 * 60_000;
+const writeQueues = new Map<string, Promise<void>>();
+
+const clean = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+const finiteOrNull = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+
+const promptBytesOf = (value: unknown): { stable: number; volatile: number } | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as { stable?: unknown; volatile?: unknown };
+  return typeof record.stable === "number" && typeof record.volatile === "number"
+    ? { stable: clean(record.stable), volatile: clean(record.volatile) }
+    : null;
+};
+
+export function monthKey(at: Date): string {
+  return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export function usageFileFor(dataDir: string, at: Date): string {
+  return join(dataDir, DIR, `${monthKey(at)}.jsonl`);
+}
+
+export function usageRowKey(row: Pick<UsageRow, "at" | "threadId" | "botId">): string {
+  return `${row.at}|${row.threadId}|${row.botId}`;
+}
+
+export function appendUsage(dataDir: string, row: Omit<UsageRow, "at"> & { at?: string }): Promise<boolean> {
+  const { promptBytes: rawPromptBytes, ...rest } = row;
+  const promptBytes = promptBytesOf(rawPromptBytes);
+  const record: UsageRow = {
+    ...rest,
+    at: row.at ?? new Date().toISOString(),
+    input: clean(row.input),
+    output: clean(row.output),
+    ...(typeof row.cachedInput === "number" ? { cachedInput: clean(row.cachedInput) } : {}),
+    ...(promptBytes ? { promptBytes } : {}),
+    costUsd: finiteOrNull(row.costUsd),
+  };
+  if (record.costUsd === null) delete record.costSource;
+  else record.costSource = row.costSource === "estimated" ? "estimated" : "reported";
+  const previous = writeQueues.get(dataDir) ?? Promise.resolve();
+  const attempt = previous.then(() => write(dataDir, record));
+  const queued = attempt.then(
+    () => undefined,
+    () => {
+    },
+  );
+  writeQueues.set(dataDir, queued);
+  void queued.finally(() => {
+    if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
+  });
+  return attempt.then(() => true, () => false);
+}
+
+async function write(dataDir: string, record: UsageRow): Promise<void> {
+  await mkdir(join(dataDir, DIR), { recursive: true, mode: 0o700 });
+  await appendFile(usageFileFor(dataDir, new Date(record.at)), JSON.stringify(record) + "\n", { mode: 0o600 });
+}
+
+export async function flushUsageLedger(dataDir: string): Promise<void> {
+  await writeQueues.get(dataDir);
+}
+
+const isTrigger = (value: unknown): value is UsageTrigger =>
+  typeof value === "object" && value !== null && typeof (value as UsageTrigger).kind === "string";
+
+export const isUsageRow = (value: unknown): value is UsageRow =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as UsageRow).at === "string" &&
+  typeof (value as UsageRow).botId === "string" &&
+  typeof (value as UsageRow).model === "string" &&
+  typeof (value as UsageRow).input === "number" &&
+  typeof (value as UsageRow).output === "number" &&
+  isTrigger((value as UsageRow).trigger);
+
+export function monthsBetween(from: Date, to: Date): string[] {
+  const keys: string[] = [];
+  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  while (cursor.getTime() <= to.getTime()) {
+    keys.push(monthKey(cursor));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return keys;
+}
+
+export function readUsage(dataDir: string, range: { from: Date; to: Date }): UsageRow[] {
+  const rows: UsageRow[] = [];
+  const from = range.from.getTime();
+  const to = range.to.getTime();
+  for (const key of monthsBetween(range.from, range.to)) {
+    let text: string;
+    try {
+      text = readFileSync(join(dataDir, DIR, `${key}.jsonl`), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      try {
+        const value: unknown = JSON.parse(line);
+        if (!isUsageRow(value)) continue;
+        const at = Date.parse(value.at);
+        if (at >= from && at <= to) rows.push(value);
+      } catch {
+      }
+    }
+  }
+  return rows;
+}
+
+export function parseUsageRange(from: string | null | undefined, to: string | null | undefined, now = new Date()): { from: Date; to: Date } | null {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const parse = (value: string, endOfDay: boolean): Date | null => {
+    const match = day.exec(value);
+    if (!match) return null;
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0));
+    // Reject 2026-02-31 style rollovers.
+    return date.getUTCMonth() === Number(match[2]) - 1 && date.getUTCDate() === Number(match[3]) ? date : null;
+  };
+  const start = from ? parse(from, false) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = to ? parse(to, true) : now;
+  if (!start || !end || start.getTime() > end.getTime()) return null;
+  if (end.getTime() - start.getTime() > MAX_RANGE_DAYS * DAY_MS) return null;
+  return { from: start, to: end };
+}
+
+export function usageTriggerFor(auth: RequestAuth): UsageTrigger {
+  return auth.kind === "session"
+    ? { kind: "user", ...(auth.session.email ? { email: auth.session.email } : {}), label: auth.session.label }
+    : { kind: "owner" };
+}
+
+export function queuedTurnTrigger(item: { trigger?: UsageTrigger; sender?: ResolvedSender; peerAsk?: unknown }): UsageTrigger | undefined {
+  if (item.trigger) return item.trigger;
+  if (item.peerAsk) return undefined;
+  return item.sender ? { kind: "user", label: item.sender.name } : { kind: "owner" };
+}
+
+export function triggerKey(trigger: UsageTrigger): string {
+  switch (trigger.kind) {
+    case "user":
+      return `user:${(trigger.email ?? trigger.label ?? "").toLowerCase() || "unknown"}`;
+    case "owner":
+      return "owner";
+    case "routine":
+      return `routine:${trigger.routineId ?? trigger.label ?? "unknown"}`;
+    case "helper":
+      return "helper";
+    default:
+      return "bot";
+  }
+}
+
+export function triggerLabel(trigger: UsageTrigger): string {
+  switch (trigger.kind) {
+    case "user":
+      return trigger.email ?? trigger.label ?? "Signed-in user";
+    case "owner":
+      return "This computer";
+    case "routine":
+      return `Routine: ${trigger.label ?? trigger.routineId ?? "unknown"}`;
+    case "helper":
+      return "Helper model";
+    default:
+      return "Bot to bot";
+  }
+}
+
+function groupOf(row: UsageRow, groupBy: UsageGroupBy): { key: string; label: string } {
+  switch (groupBy) {
+    case "bot":
+      return { key: `bot:${row.botId}`, label: row.botName || row.botId };
+    case "model":
+      return { key: `model:${row.driverKind}/${row.model}`, label: row.model };
+    case "user": {
+      // A routine's or a teammate's work for a known person counts as theirs.
+      const email = personOf(row.trigger);
+      return email ? { key: `user:${email.toLowerCase()}`, label: email } : { key: triggerKey(row.trigger), label: triggerLabel(row.trigger) };
+    }
+    case "day":
+      return { key: `day:${row.at.slice(0, 10)}`, label: row.at.slice(0, 10) };
+    case "routine":
+      return row.trigger.kind === "routine"
+        ? { key: triggerKey(row.trigger), label: row.trigger.label ?? row.trigger.routineId ?? "unknown" }
+        : { key: "manual", label: "Not from a routine" };
+    case "department":
+      return { key: `department:${row.section ?? ""}`, label: row.section ?? "" };
+
+    default:
+      return { key: `engine:${row.driverKind}`, label: row.driverKind };
+  }
+}
+
+function emptyGroup(key: string, label: string): UsageGroup {
+  return { key, label, turns: 0, input: 0, output: 0, cachedInput: 0, costUsd: null, estimatedUsd: null, unpriced: 0, billableUsd: null };
+}
+
+export function costSourceOf(row: Pick<UsageRow, "costUsd" | "costSource">): CostSource | null {
+  if (finiteOrNull(row.costUsd) === null) return null;
+  return row.costSource === "estimated" ? "estimated" : "reported";
+}
+
+function add(group: UsageGroup, row: UsageRow, prices: PriceList | null): void {
+  group.turns += 1;
+  group.input += clean(row.input);
+  group.output += clean(row.output);
+  group.cachedInput += clean(row.cachedInput);
+  const cost = finiteOrNull(row.costUsd);
+  if (cost === null) group.unpriced += 1;
+  else {
+    group.costUsd = (group.costUsd ?? 0) + cost;
+    if (costSourceOf(row) === "estimated") group.estimatedUsd = (group.estimatedUsd ?? 0) + cost;
+  }
+  const billable = prices ? billableFor(row, prices) : null;
+  if (billable !== null) group.billableUsd = (group.billableUsd ?? 0) + billable;
+}
+
+export function summarizeUsage(rows: UsageRow[], groupBy: UsageGroupBy, prices: PriceList | null = null): UsageSummary {
+  const groups = new Map<string, UsageGroup>();
+  const total = emptyGroup("total", "total");
+  for (const row of rows) {
+    const { key, label } = groupOf(row, groupBy);
+    let group = groups.get(key);
+    if (!group) {
+      group = emptyGroup(key, label);
+      groups.set(key, group);
+    }
+    add(group, row, prices);
+    add(total, row, prices);
+  }
+  const ordered = [...groups.values()];
+  if (groupBy === "day") ordered.sort((a, b) => a.key.localeCompare(b.key));
+  else {
+    ordered.sort((a, b) => {
+      const costA = a.costUsd ?? Number.NEGATIVE_INFINITY;
+      const costB = b.costUsd ?? Number.NEGATIVE_INFINITY;
+      return costB - costA || b.input + b.output - (a.input + a.output);
+    });
+  }
+  return { groups: ordered, total };
+}
+
+export function csvCell(value: string | number | null): string {
+  if (value === null) return "";
+  const text = String(value);
+  // A leading formula character is neutralised, so a spreadsheet never executes a bot name or an email.
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+}
+
+export function usageCsv(rows: UsageRow[], prices: PriceList | null = null): string {
+  const header = ["time", "bot", "model", "engine", "triggered_by", "input_tokens", "output_tokens", "cached_input_tokens", "cost_usd", "cost_source", ...(prices ? ["billable_usd"] : []), "thread", "department", "person"];
+  const lines = [header.join(",")];
+  for (const row of rows) {
+    lines.push([
+      row.at,
+      row.botName || row.botId,
+      row.model,
+      row.driverKind,
+      triggerLabel(row.trigger),
+      clean(row.input),
+      clean(row.output),
+      clean(row.cachedInput),
+      finiteOrNull(row.costUsd),
+      costSourceOf(row),
+      ...(prices ? [billableFor(row, prices)] : []),
+      row.threadId,
+      row.section ?? "",
+      personOf(row.trigger) ?? "",
+    ].map(csvCell).join(","));
+  }
+  return lines.join("\n") + "\n";
+}

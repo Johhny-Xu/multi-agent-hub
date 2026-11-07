@@ -1,0 +1,101 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "openmausbot-control-plane",
+  "main": "src/index.ts",
+  "account_id": "0c92969a82eb9e173b013a7e7a02333d",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "accounts.openmausbot.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "BETTER_AUTH_URL": "https://accounts.openmausbot.com",
+    "EMAIL_FROM": "noreply@openmausbot.com",
+    "ALLOWED_ORIGINS": "",
+    "CLOUDFLARE_ACCOUNT_ID": "0c92969a82eb9e173b013a7e7a02333d",
+    "CLOUDFLARE_ZONE_ID": "bae08399bb6f96eb7266c65ac0057eee",
+    "COMPANION_HOST_SUFFIX": "openmausbot.com",
+    // More Cloudflare accounts for managed endpoints (README "Several
+    // Cloudflare accounts"). Unset: the account above is the only one. A new
+    // endpoint goes to the account with the most room; an endpoint never
+    // leaves the account it was created in, so never edit an entry's
+    // accountId, zoneId or companionHostSuffix once it holds endpoints (add a
+    // new entry instead). The same JSON may be a secret to keep the IDs out of
+    // this file. Each entry's token is the secret named by apiTokenSecret
+    // (wrangler secret put CLOUDFLARE_API_TOKEN_MAUSBOT_SI), never a var, and
+    // is listed in secrets.required below (as is this JSON when it is a
+    // secret) so every deploy keeps it. To stop new endpoints going to an
+    // account and keep its own, set its "newEndpoints": false.
+    // Supamaus account, zone mausbot.si. dnsRecordLimit 3500 is the Pro (upgraded Oct 21; was 200 on Free)
+    // plan's record quota for a zone added after Sep 2024; on Pro it is 3,500
+    // (set it here once the zone is on Pro), and the tunnel quota (1,000)
+    // binds first. Desktop apps accept mausbot.si hostnames from 0.1.104 (#2582).
+    "CLOUDFLARE_ENDPOINT_ACCOUNTS": [
+      {
+        "accountId": "bbb5305f06e28a6f2abaac299f3b09dc",
+        "zoneId": "4ded3da43e7b2c3a5f27b0fb33e5bd7a",
+        "companionHostSuffix": "mausbot.si",
+        "apiTokenSecret": "CLOUDFLARE_API_TOKEN_MAUSBOT_SI",
+        "tunnelLimit": 1000,
+        "dnsRecordLimit": 3500,
+        "minAppVersion": "0.1.104"
+      }
+    ],
+    // Managed endpoint capacity of the account above (see README "Tunnel
+    // capacity and idle reclaim"): its tunnel quota and its zone's DNS record
+    // quota. They drive the 90% usage alert and /healthz, rank accounts for
+    // new endpoints, and tell a tunnel-quota 429 from a rate limit, so keep
+    // them equal to Cloudflare's real quotas. They never refuse an
+    // allocation on their own. The openmausbot.com zone is on Pro: 3,500
+    // DNS records.
+    "OMB_TUNNEL_LIMIT": "1000",
+    "OMB_DNS_RECORD_LIMIT": "3500",
+    // "on" marks idle tunnels for cleanup; "observe" only logs candidates.
+    "OMB_TUNNEL_RECLAIM": "on",
+    // Days a tunnel must have been offline (and its installation quiet)
+    // before reclaim (minimum 3). Never-connected tunnels use a fixed two days.
+    // A reclaimed installation gets its same hostname back when it returns.
+    "OMB_TUNNEL_OFFLINE_RECLAIM_DAYS": "3",
+    // Cleanup rows per five-minute cron run. 20 needs Workers Paid; use 4 on
+    // Workers Free (50 subrequests per invocation).
+    "OMB_CLEANUP_SWEEP_LIMIT": "20",
+    // HighLevel OAuth relay (README "HighLevel OAuth relay"). The client id
+    // is public (it is in the authorization URL); the secret is
+    // HIGHLEVEL_CLIENT_SECRET, set with `wrangler secret put` and deliberately
+    // not in secrets.required: the relay answers 503 highlevel_unavailable
+    // until it exists. The redirect URL must match the one registered in the
+    // HighLevel Marketplace app exactly.
+    "HIGHLEVEL_CLIENT_ID": "6ad0c3b87999ff4de949c785-mv9n5v73",
+    "HIGHLEVEL_REDIRECT_URL": "https://accounts.openmausbot.com/v1/highlevel/callback",
+    "HIGHLEVEL_SCOPES": "contacts.readonly contacts.write opportunities.readonly opportunities.write conversations.readonly locations.readonly calendars.readonly calendars/events.readonly users.readonly"
+  },
+  "secrets": {
+    "required": ["BETTER_AUTH_SECRET", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_TOKEN_MAUSBOT_SI"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "openmausbot-control-plane",
+      "database_id": "8a7c34ed-5428-4ae2-8722-fef2fe9bf160",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["noreply@openmausbot.com"]
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  }
+}
