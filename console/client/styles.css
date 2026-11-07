@@ -13805,3 +13805,17 @@ html:not([data-ui="mobile"]) #model-popover-panel { width: min(400px, calc(100cq
 /* 窄宽度下底栏「完成」不再折成两行，左侧摘要自行省略 */
 html:not([data-ui="mobile"]) #model-popover-panel .mp-done-btn { white-space: nowrap !important; flex-shrink: 0 !important; }
 html:not([data-ui="mobile"]) #model-popover-panel .mp-summary { min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+
+/* Bot 工作台：同一台机器上的 8801 服务，按当前主机名拼地址，手机走局域网也指得对。
+   懒加载：只有第一次切到这个视图才赋 src，平时不占一个常驻 iframe 的内存。 */
+.bots-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 56px);
+  border: 0;
+  border-radius: 12px;
+  background: var(--gem-bg-card, #0b0b0d);
+}
+@media (max-width: 720px) {
+  .bots-frame { height: calc(100vh - 96px); }
+}

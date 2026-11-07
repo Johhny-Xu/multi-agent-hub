@@ -5264,6 +5264,13 @@
         p.classList.toggle('active', show);
         p.hidden = !show;
       });
+      // Bot 工作台是一个独立进程（8801），用 iframe 嵌进来；第一次打开才赋 src。
+      if (tab.id === 'tab-bots') {
+        var frame = document.getElementById('bots-frame');
+        if (frame && !frame.getAttribute('src')) {
+          frame.setAttribute('src', location.protocol + '//' + location.hostname + ':8801/');
+        }
+      }
       // 需求：对话这个侧边栏按钮按下收起或者展开侧边栏
       if (tab.id === 'tab-chat') {
         if (isCurrentActive) {
