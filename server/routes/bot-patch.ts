@@ -1,4 +1,3 @@
-import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import { approvalModeFor, isApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";

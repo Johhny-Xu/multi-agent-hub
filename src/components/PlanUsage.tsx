@@ -442,7 +442,6 @@ export function PlanUsage({
             const hasWorkerQuotas = Boolean(worker?.quotas && worker.quotas.length > 0);
             const plan = provider?.plan || worker?.plan || null;
             const isInstalled = instance.snapshot.state === "available";
-            const isSignedIn = isInstalled && (instance.snapshot.authenticated === true || instance.access === "custom" || instance.snapshot.authenticated !== false);
             const isNotSignedIn = isInstalled && instance.snapshot.authenticated === false;
 
             return (

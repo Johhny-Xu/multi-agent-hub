@@ -63,6 +63,8 @@ function refRegex(worker) {
 }
 
 function cleanText(text) {
+  // Strips ANSI colour escapes from CLI output; the ESC control character is the point.
+  // oxlint-disable-next-line no-control-regex
   return String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
 }
 

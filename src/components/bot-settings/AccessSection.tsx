@@ -30,7 +30,6 @@ import {
 } from "@/lib/connector-grants";
 import { inputCls } from "./field";
 import { openKeySettings } from "../keys/key-focus";
-import { KeysLink } from "../keys/KeysLink";
 import type { ConnectorScope, ConnectorScopes } from "../../../shared/connector-scopes";
 import type { useBotSettingsDerived } from "./useBotSettingsDerived";
 

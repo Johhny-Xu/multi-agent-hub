@@ -92,7 +92,7 @@ export function createVpsStatusStore(file?: string): VpsStatusStore {
       load();
       const live = new Set(liveIds);
       let changed = false;
-      for (const id of [...statuses.keys()]) {
+      for (const id of Array.from(statuses.keys())) {
         if (!live.has(id)) {
           statuses.delete(id);
           changed = true;

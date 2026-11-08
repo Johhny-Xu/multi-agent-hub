@@ -18,6 +18,9 @@
     "electron/vendor/**",
     "release/**",
     "third_party/**",
-    "electron/resources/**"
+    "electron/resources/**",
+    "checkin/**",
+    "server/checkin/*.mjs",
+    "tests/console_*.mjs"
   ]
 }

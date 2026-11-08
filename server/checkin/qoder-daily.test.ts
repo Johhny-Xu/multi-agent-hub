@@ -5,9 +5,9 @@
 //   3. 请求要带 UMID 组件给出的设备风控头
 //   4. 组件定位 / 官方包提取（tar + base64 ELF）可用
 import { test, assert } from './testing/testkit.ts';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 
@@ -16,8 +16,7 @@ const {
   qoderTodayWindowStart,
 } = await import('./checkin.mjs');
 const {
-  qoderHeaders, listQoderCampaigns, claimQoderCampaign, refreshQoderToken, persistQoderToken,
-  encryptLegacyQoderUser, decryptLegacyQoderUser,
+  qoderHeaders,
 } = await import('./qoder.mjs');
 const device = await import('./qoder-device.mjs');
 

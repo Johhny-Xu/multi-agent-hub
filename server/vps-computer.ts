@@ -98,8 +98,8 @@ const desktopTunnels = new Map<
 
 function invalidateVpsTargetStatus(target: SshVpsTarget): void {
   const prefix = `${target.instanceId}:${target.revision}:`;
-  for (const key of [...statusCache.keys()]) if (key.startsWith(prefix)) statusCache.delete(key);
-  for (const key of [...pendingStatuses.keys()]) if (key.startsWith(prefix)) pendingStatuses.delete(key);
+  for (const key of Array.from(statusCache.keys())) if (key.startsWith(prefix)) statusCache.delete(key);
+  for (const key of Array.from(pendingStatuses.keys())) if (key.startsWith(prefix)) pendingStatuses.delete(key);
 }
 
 function invalidateVpsStatus(key: string): void {
@@ -296,7 +296,7 @@ export function closeVpsDesktopTunnel(key: string) {
 }
 
 export function closeAllVpsDesktopTunnels(): void {
-  for (const key of [...desktopTunnels.keys()]) stopDesktopTunnel(key);
+  for (const key of Array.from(desktopTunnels.keys())) stopDesktopTunnel(key);
 }
 
 export function vpsDesktopConnection(key: string) {

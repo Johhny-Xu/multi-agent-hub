@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DATA_DIR, type AppConfig } from "./config.ts";
+import { DATA_DIR } from "./config.ts";
 import { loadEnvironmentId } from "./environment.ts";
 import {
   VPS_CONTAINER_LABEL,
@@ -13,7 +13,6 @@ import {
   type VpsCommandRunner,
 } from "./vps-computer.ts";
 
-const CONFIG: AppConfig = { vps: { sshAlias: "production-vps" } };
 const TARGET = { instanceId: "primary", sshAlias: "production-vps", revision: "rev-1" };
 const targets = (aliases: string[]) => aliases.map((sshAlias, index) => ({ instanceId: `host-${index}`, sshAlias, revision: `rev-${index}` }));
 const OWNER: ManagedVpsOwner = { botId: "bot-current", name: "Research", inUse: false };

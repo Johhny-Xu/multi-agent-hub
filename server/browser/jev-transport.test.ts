@@ -131,7 +131,7 @@ describe("jev-transport", () => {
       executionState: "completed",
     });
 
-    const step1 = await finishAutomationStep(handle);
+    await finishAutomationStep(handle);
     const step2 = await finishAutomationStep(handle); // Second call returns null (only recorded once)
     expect(step2).toBeNull();
   });

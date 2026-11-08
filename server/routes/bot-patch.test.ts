@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WireBot } from "../../shared/wire.ts";
-import { VPS_BOT_ALIAS_CHANGE_ERROR, VPS_BOT_ALIAS_LIFECYCLE_ERROR, VPS_BOT_ALIAS_RESOURCES_ERROR } from "../cloud-backend.ts";
+import { VPS_BOT_ALIAS_CHANGE_ERROR } from "../cloud-backend.ts";
 import { DATA_DIR, type AppConfig } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import type { RequestAuth } from "../request-auth.ts";

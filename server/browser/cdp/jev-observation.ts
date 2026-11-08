@@ -1,5 +1,5 @@
 // Host adapter for fast DOM observation, target resolution, and guard validation in CdpPage.
-import type { BrowserChoice, BrowserObservation, BrowserOperation, BrowserScope } from "../jev-types.ts";
+import type { BrowserObservation, BrowserOperation, BrowserScope } from "../jev-types.ts";
 import type { CdpPage } from "./page.ts";
 import type { NodeHandle } from "./refs.ts";
 import { DriverError } from "./errors.ts";

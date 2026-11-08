@@ -11,7 +11,7 @@ function fixture(options: {
 } = {}) {
   const requests: Array<{ method: string; params: any }> = [];
   const clients: Array<VpsMcpClient & { closed: boolean }> = [];
-  const createClient = (connection: VpsMcpConnection) => {
+  const createClient = (_connection: VpsMcpConnection) => {
     const client = {
       closed: false,
       initialize: vi.fn(async () => ({})),

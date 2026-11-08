@@ -221,7 +221,7 @@ describe("Web-chat server routes", () => {
       token: () => "secret-token-123",
     });
 
-    const { req, res, written, json } = createMockReqRes({
+    const { req, res, json } = createMockReqRes({
       url: "/api/web-chat/ws?token=secret-token-123",
       remoteAddress: "192.168.1.100",
     });

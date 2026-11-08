@@ -142,7 +142,6 @@ const LIFECYCLE = {
 } as const;
 
 /** A box is only usable while it runs; any other state the provider names is not usable either. */
-const RUNNING_STATES = new Set(["running", "ready", "active", "up", "started", "online"]);
 const NOT_RUNNING_STATES = new Set(["stopped", "halted", "asleep", "hibernated", "suspended", "offline", "paused", "error", "failed", "terminated", "deleted"]);
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -352,7 +351,7 @@ export function createVpsMcpAdapter(deps: VpsMcpDeps): VpsMcpAdapter {
       }
     },
     async close(targetKey) {
-      for (const [key, entry] of [...clients]) {
+      for (const [key, entry] of Array.from(clients)) {
         if (!key.startsWith(`${targetKey}:`)) continue;
         clients.delete(key);
         await entry.client.close().catch(() => {});
@@ -374,7 +373,7 @@ export function createVpsMcpAdapter(deps: VpsMcpDeps): VpsMcpAdapter {
         } else {
           await boxCall(target, principal, signal, LIFECYCLE.stop.remote, box);
         }
-      } catch (error) {
+      } catch {
         return view(target.instance, null, "unreachable");
       }
       return view(target.instance, "running");

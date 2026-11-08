@@ -82,7 +82,7 @@ function usePlaceChoices(bot: Bot) {
 }
 
 export function WherePage({ bot, derived }: { bot: Bot; derived: Derived }) {
-  const { dispatch, state } = useStore();
+  const { dispatch } = useStore();
   const { options, current, usingNow } = usePlaceChoices(bot);
   const [localAutoWarning, setLocalAutoWarning] = useState<{ botId: string; patch: BotPatch } | null>(null);
   const { patch, approvalMode } = derived;

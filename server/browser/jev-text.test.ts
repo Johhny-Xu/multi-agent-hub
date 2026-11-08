@@ -8,7 +8,6 @@ import {
   request9RouterText,
   requestBrowserText,
   resolveNineRouterKey,
-  TEXT_REQUEST_TTL_MS,
 } from "./jev-text.ts";
 import type { AppConfig } from "../config.ts";
 import type { BrowserCandidate, BrowserObservation, BrowserScope, BrowserTextContext } from "./jev-types.ts";

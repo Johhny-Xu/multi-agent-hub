@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config.ts";
 import { deciderConfigSchema } from "../decider/config.ts";
-import { maskProxyUrl } from "../decider/proxy.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createDeciderRoutes } from "./decider.ts";
 

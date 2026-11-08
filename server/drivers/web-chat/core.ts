@@ -22,7 +22,7 @@ import { profileDir } from "../../browser/chrome/profile.ts";
 import { DATA_DIR } from "../../config.ts";
 import type { ViewerHub } from "../../browser/viewers/core.ts";
 import type { BrowserService, BrowserTarget } from "../../browser/service.ts";
-import type { SiteAdapter, WebChatConfig, WebChatPage, WebChatSelectors, WebChatTransportMode } from "./types.ts";
+import type { SiteAdapter, WebChatConfig, WebChatPage, WebChatSelectors } from "./types.ts";
 import { checkCdpAvailable, createWebChatPageFromCdpEndpoint, resolveConnectOverCDP } from "./cdp-transport.ts";
 import { getDefaultUserscriptBridge, WebChatUserscriptBridge } from "./userscript-bridge.ts";
 import {
@@ -196,7 +196,7 @@ export async function runWebChatTurn(options: WebChatTurnOptions): Promise<strin
 
   const selectors: WebChatSelectors = {
     ...adapter.selectors,
-    ...(config.selectors ?? {}),
+    ...config.selectors,
   };
 
   const baseEvent = {
@@ -463,7 +463,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
       const { instanceId, environment, config } = input;
       const selectors: WebChatSelectors = {
         ...adapter.selectors,
-        ...(config.selectors ?? {}),
+        ...config.selectors,
       };
       const sessionsFile = resolveSessionsFile(environment, instanceId, config);
       const sessionStore = new WebChatSessionStore(sessionsFile);
@@ -950,12 +950,6 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
             state: "unknown",
             authenticated: false,
             reason: "需在工作台浏览器查看器中打开并登录 Hark，或连接油猴脚本/CDP",
-          };
-
-          return {
-            state: "unavailable",
-            authenticated: false,
-            reason: "未检测到可用的真实浏览器传输：请安装油猴脚本并打开 Hark 页面，或以 --remote-debugging-port=9222 启动 Chrome",
           };
         },
         async dispose(): Promise<void> {

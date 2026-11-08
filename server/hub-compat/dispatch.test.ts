@@ -914,7 +914,7 @@ describe("hub-compat 事件流", () => {
       expect(all.next).toBe(all.events.at(-1).seq);
       // 序号严格递增，客户端可以只记 lastSeq
       expect(all.events.map((event: any) => event.seq)).toEqual(
-        [...all.events.map((event: any) => event.seq)].sort((a, b) => a - b));
+        all.events.map((event: any) => event.seq).sort((a, b) => a - b));
 
       const incremental = JSON.parse(await tools.hub_events({ ref, since: all.next }));
       expect(incremental.events).toEqual([]);

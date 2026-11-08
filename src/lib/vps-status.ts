@@ -76,7 +76,7 @@ export function vpsStatusPatch(view: VpsInstanceView): Partial<VpsInstanceView> 
 export function vpsMergedRows(rows: readonly VpsInstanceView[], local: readonly VpsInstanceView[] | null): VpsInstanceView[] {
   if (!local) return [...rows];
   const patches = new Map(local.map((entry) => [entry.id, vpsStatusPatch(entry)]));
-  const merged = rows.map((row) => ({ ...row, ...(patches.get(row.id) ?? {}) }));
+  const merged = rows.map((row) => ({ ...row, ...patches.get(row.id) }));
   for (const entry of local) {
     if (!rows.some((row) => row.id === entry.id)) merged.push(entry);
   }

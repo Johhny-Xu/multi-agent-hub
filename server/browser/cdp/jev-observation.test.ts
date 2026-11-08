@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   readJevObservation,
   resolveJevTarget,
-  validateJevObservation,
 } from "./jev-observation.ts";
 import { JEV_DOM_SCRIPT } from "./jev-dom.ts";
 import { RefCounter, RefTable } from "./refs.ts";
@@ -17,7 +16,7 @@ function createMockPage(overrides: {
   const sentMethods: string[] = [];
   const session = {
     id: "sess_1",
-    send: vi.fn(async (method: string, params: Record<string, unknown> = {}) => {
+    send: vi.fn(async (method: string, _params: Record<string, unknown> = {}) => {
       sentMethods.push(method);
       if (method === "Runtime.evaluate") {
         return { result: { value: overrides.evaluateResult ?? null, objectId: "obj_123" } };

@@ -3,8 +3,6 @@ import {
   buildBrowserActionSpace,
   buildBrowserQuestions,
   chooseBrowserAction,
-  MIN_MARGIN,
-  MIN_PTOP,
 } from "./jev-policy.ts";
 import type { BrowserCandidate, BrowserObservation } from "./jev-types.ts";
 

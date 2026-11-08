@@ -137,7 +137,7 @@ describe("checking every computer at once", () => {
       (id, reason) => failed.push({ id, error: reason }),
     );
     expect(failed.map((f) => f.id)).toEqual(["a"]);
-    expect((failed[0]?.error as Error).message).toBe("timeout");
+    expect((failed[0]?.error as Error | undefined)?.message).toBe("timeout");
   });
 });
 

@@ -4,7 +4,6 @@ import { JEV_VALIDATE_GUARD_SCRIPT } from "./jev-dom.ts";
 import * as actions from "./actions.ts";
 import type { CdpSession } from "./connection.ts";
 import { RefCounter, RefTable } from "./refs.ts";
-import { DriverError } from "./errors.ts";
 
 describe("jev-guards", () => {
   it("allows geometry only animation without another decision", () => {

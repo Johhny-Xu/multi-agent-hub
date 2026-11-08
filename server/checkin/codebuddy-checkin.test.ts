@@ -16,9 +16,7 @@ const {
   aggregatePlatformStatus,
   codeBuddyCreditsArrived,
   buildCodeBuddyActivityEvent,
-  isCodeBuddyAccountRestricted,
   decideCodeBuddyOutcome,
-  checkinWorkBuddyOne,
 } = await import('./checkin.mjs');
 const { encryptLegacyQoderUser } = await import('./qoder.mjs');
 

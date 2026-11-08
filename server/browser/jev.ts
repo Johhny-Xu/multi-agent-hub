@@ -24,15 +24,12 @@ import {
   requestBrowserText,
 } from "./jev-text.ts";
 import type {
-  BrowserChoice,
-  BrowserExecution,
   BrowserHistoryEntry,
   BrowserObservation,
   BrowserPrimitive,
   BrowserScope,
   BrowserTransport,
   PreparedBrowserAction,
-  TargetOperation,
 } from "./jev-types.ts";
 
 export const DEFAULT_ACTIVE_BUDGET_MS = 12_000;
@@ -100,18 +97,14 @@ export function createBrowserGateway(deps: BrowserGatewayDeps): BrowserGateway {
       const history: BrowserHistoryEntry[] = meta?.history ? [...meta.history] : [];
       const steps: BrowserStepSummary[] = [];
 
-      let lastObs: BrowserObservation | undefined;
-
       while (remainingSteps > 0 && remainingBudgetMs > 0) {
         if (scope.signal.aborted) {
           return { status: "interrupted", reason: "cancelled", steps };
         }
 
-        const observeStart = now();
         let observation: BrowserObservation;
         try {
           observation = await transport.observe(scope);
-          lastObs = observation;
         } catch {
           return { status: "needs-agent", reason: "unsupported-observation", steps };
         }

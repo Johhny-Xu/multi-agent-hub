@@ -1,5 +1,5 @@
 // Policy and batch question generator for Jev browser automation.
-import type { Answers, ChoiceAnswer, ChoiceQuestion, DeciderQuestion, DeciderResult } from "../decider/types.ts";
+import type { Answers, ChoiceAnswer, DeciderQuestion, DeciderResult } from "../decider/types.ts";
 import type {
   BrowserActionSpace,
   BrowserCandidate,
@@ -94,7 +94,7 @@ function targetHeadName(op: TargetOperation): string {
 export function buildBrowserQuestions(
   goal: string,
   space: BrowserActionSpace,
-  recentActions: readonly string[] = [],
+  _recentActions: readonly string[] = [],
 ): BrowserQuestionBatch {
   const questions: Record<string, DeciderQuestion> = {};
   const singletonTargets = new Map<TargetOperation, string>();

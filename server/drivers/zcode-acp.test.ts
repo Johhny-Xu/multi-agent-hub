@@ -22,7 +22,6 @@ import {
   preferredZcodeModelId,
   providerFile,
   readZcodeAccountCredentials,
-  recycleZcodeAppServer,
   scheduleZcodeAppServerRecycle,
   withByokProvider,
   withPlanProvider,

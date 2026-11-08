@@ -56,7 +56,7 @@ function startBridge(
       FAKE_ZCODE_MODE: mode,
       FAKE_ZCODE_STATE_FILE: stateFile,
       ...(tickMs === undefined ? {} : { FAKE_ZCODE_TICK_MS: String(tickMs) }),
-      ...(setup?.(dir) ?? {}),
+      ...setup?.(dir),
     },
     stdio: ["pipe", "pipe", "pipe"],
   });

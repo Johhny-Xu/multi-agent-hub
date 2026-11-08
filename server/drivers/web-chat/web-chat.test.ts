@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +8,7 @@ import { BrowserService, type BrowserTarget } from "../../browser/service.ts";
 import { FakeBackend, FakeChrome, type FakeDocument } from "../../browser/testing/fake-chrome.ts";
 import type { ViewerHub } from "../../browser/viewers/core.ts";
 import { WebChatUserscriptBridge } from "./userscript-bridge.ts";
-import { checkCdpAvailable, createWebChatPageFromCdpEndpoint, resolveConnectOverCDP } from "./cdp-transport.ts";
+import { createWebChatPageFromCdpEndpoint, resolveConnectOverCDP } from "./cdp-transport.ts";
 import {
   checkPageLogin,
   createDefaultWorkbenchPageFactory,
@@ -1480,8 +1479,8 @@ describe("Web-chat driver (Hark)", () => {
 
     describe("D: Workbench Transport Tab Behavior", () => {
       it("reuses existing hark.com tab without opening a new one or closing existing user tabs", async () => {
-        let openedTab = false;
-        let closedTab = false;
+        let _openedTab = false;
+        let _closedTab = false;
         const existingHarkTab = {
           id: "tab-hark-1",
           page: {
@@ -1507,8 +1506,8 @@ describe("Web-chat driver (Hark)", () => {
           host: {
             running: async () => {},
             tabs: () => [userOtherTab, existingHarkTab],
-            openTab: vi.fn(async () => { openedTab = true; return {} as any; }),
-            closeTab: vi.fn(async () => { closedTab = true; }),
+            openTab: vi.fn(async () => { _openedTab = true; return {} as any; }),
+            closeTab: vi.fn(async () => { _closedTab = true; }),
           },
         } as unknown as ViewerHub;
 

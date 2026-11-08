@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserGateway, type BrowserGatewayDeps } from "./jev.ts";
-import type { BrowserExecution, BrowserObservation, BrowserScope, BrowserTransport, PreparedBrowserAction } from "./jev-types.ts";
+import type { BrowserExecution, BrowserObservation, BrowserScope, BrowserTransport } from "./jev-types.ts";
 import type { Decider } from "../decider/index.ts";
 import type { AppConfig } from "../config.ts";
 
