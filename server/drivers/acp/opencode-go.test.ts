@@ -16,6 +16,7 @@ import {
   createOpenCodeDriver,
   describeOpenCodeAccountError,
   discoverOpenCodeModels,
+  ensureOpenCodeInjectModel,
   openCodeFreeFallback,
   openCodeOwnedDirectories,
   OpenCodeDriver,
@@ -931,6 +932,123 @@ describe("OpenCode after a login added since its process started", () => {
   });
 });
 
+describe("OpenCode local inject models", () => {
+  const fixtures: Array<{ scratch: string; instance: ProviderInstance; recorder: EventRecorder }> = [];
+  afterEach(async () => {
+    for (const entry of fixtures.splice(0)) {
+      entry.recorder.stop();
+      await entry.instance.dispose();
+      await removeTempDir(entry.scratch);
+    }
+    resetOpenCodeModelCache();
+  });
+  const open = async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "omb-opencode-inject-"));
+    const modelsFile = join(scratch, "models");
+    writeFileSync(modelsFile, "opencode/big-pickle");
+    const driver = createOpenCodeDriver(async () => catalog("opencode/big-pickle"));
+    const instance = await driver.create({
+      instanceId: "opencode-inject", displayName: "OpenCode", enabled: true,
+      config: { cli: FAKE_CLI, fullAuto: false, workspace: scratch },
+      environment: {
+        HOME: scratch, USERPROFILE: scratch, XDG_CONFIG_HOME: join(scratch, "config"), XDG_DATA_HOME: join(scratch, "data"),
+        FAKE_ACP_MODELS_FILE: modelsFile, FAKE_ACP_LAUNCH_COUNT_FILE: join(scratch, "launches"),
+        FAKE_ACP_DUMP: join(scratch, "dump"),
+      },
+    });
+    const recorder = recordEvents(instance.adapter);
+    fixtures.push({ scratch, instance, recorder });
+    const run = async (model: string) => {
+      const { turnId } = await instance.adapter.sendTurn({ threadId: "t-inject", text: "hello", model });
+      return recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    };
+    const launches = () => Number(readFileSync(join(scratch, "launches"), "utf8"));
+    const promptModels = () => readFileSync(`${join(scratch, "dump")}.prompts.jsonl`, "utf8").trim().split("\n")
+      .map((line) => JSON.parse(line) as { pid: number; model: string });
+    return { scratch, run, launches, promptModels };
+  };
+
+  it("runs an inject model from a provider declared at spawn, leaving opencode.json alone", async () => {
+    const f = await open();
+    expect(await f.run("omlx::GLM-5.2-fp8")).toMatchObject({ ok: true });
+    expect(f.launches()).toBe(1);
+    expect(f.promptModels().map((prompt) => prompt.model)).toEqual(["omlx/GLM-5.2-fp8"]);
+    expect(existsSync(join(f.scratch, "config", "opencode", "opencode.json"))).toBe(false);
+  });
+
+  it("respawns for another inject model, and reuses the process while the pick is unchanged", async () => {
+    const f = await open();
+    expect(await f.run("omlx::GLM-5.2-fp8")).toMatchObject({ ok: true });
+    expect(await f.run("omlx::Qwen3.6-35B-A3B-bf16")).toMatchObject({ ok: true });
+    expect(await f.run("omlx::Qwen3.6-35B-A3B-bf16")).toMatchObject({ ok: true });
+    expect(f.launches()).toBe(2);
+    const prompts = f.promptModels();
+    expect(prompts.map((prompt) => prompt.model)).toEqual([
+      "omlx/GLM-5.2-fp8", "omlx/Qwen3.6-35B-A3B-bf16", "omlx/Qwen3.6-35B-A3B-bf16",
+    ]);
+    expect(prompts[1]!.pid).not.toBe(prompts[0]!.pid);
+    expect(prompts[2]!.pid).toBe(prompts[1]!.pid);
+  });
+});
+
+describe("OpenCode inject model output limit", () => {
+  const injectedModels = (env: Record<string, string | undefined>) => {
+    ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env);
+    return (JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as {
+      provider: Record<string, { models: Record<string, { limit?: { context: number; output: number } }> }>;
+    }).provider.omlx.models["GLM-5.2-fp8"];
+  };
+
+  it("declares limit.output 64000 on the injected model entry, tunable by OMB_BYOK_MAX_OUTPUT_TOKENS", () => {
+    expect(injectedModels({})).toMatchObject({ limit: { context: 0, output: 64_000 } });
+    expect(injectedModels({ OMB_BYOK_MAX_OUTPUT_TOKENS: "131072" }))
+      .toMatchObject({ limit: { context: 0, output: 131_072 } });
+  });
+
+  it("keeps OMB_BYOK_MAX_OUTPUT_TOKENS values that are not positive integers at 64000", () => {
+    for (const value of ["0", "-5", "12.5", "much", ""]) {
+      expect(injectedModels({ OMB_BYOK_MAX_OUTPUT_TOKENS: value })).toMatchObject({
+        limit: { context: 0, output: 64_000 },
+      });
+    }
+  });
+
+  it("raises OpenCode 1.19's request ceiling to the same number, but never one the person set", () => {
+    const env: Record<string, string | undefined> = {};
+    ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env);
+    expect(env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe("64000");
+    const tuned: Record<string, string | undefined> = { OMB_BYOK_MAX_OUTPUT_TOKENS: "96000" };
+    ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", tuned);
+    expect(tuned.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe("96000");
+    const persons: Record<string, string | undefined> = { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "32000" };
+    ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", persons);
+    expect(persons.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe("32000");
+  });
+
+  it("leaves a model entry the person declared, and a non-inject id, untouched", () => {
+    const env: Record<string, string | undefined> = {
+      OPENCODE_CONFIG_CONTENT: JSON.stringify({
+        provider: {
+          omlx: {
+            options: { baseURL: "http://127.0.0.1:8080/v1" },
+            models: { mine: { name: "Mine", limit: { context: 200_000, output: 32_000 } } },
+          },
+        },
+      }),
+    };
+    ensureOpenCodeInjectModel("omlx::mine", env);
+    const entry = (JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as {
+      provider: Record<string, { models: Record<string, unknown> }>;
+    }).provider.omlx.models.mine;
+    expect(entry).toEqual({ name: "Mine", limit: { context: 200_000, output: 32_000 } });
+    expect(env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe("64000");
+    const plain: Record<string, string | undefined> = {};
+    expect(ensureOpenCodeInjectModel("opencode/big-pickle", plain)).toBe("opencode/big-pickle");
+    expect(plain.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBeUndefined();
+    expect(plain.OPENCODE_CONFIG_CONTENT).toBeUndefined();
+  });
+});
+
 describe("OpenCode catalog probes", () => {
   afterEach(() => resetOpenCodeModelCache());
 
@@ -1202,7 +1320,9 @@ describe("OpenCode session variants", () => {
     const f = await fixture({ [model]: variantConfig(["low", "high"]) });
     expect((await f.run({ variant: "high" })).done).toMatchObject({ ok: true });
     const before = f.calls().length;
-    const { done, events } = await f.run({ threadId: "resumed-thread", resumeCursor: "native-resumed", variant: "high" });
+    const folder = join(dirname(f.dump), "resumed-thread");
+    mkdirSync(folder);
+    const { done, events } = await f.run({ threadId: "resumed-thread", cwd: folder, resumeCursor: "native-resumed", variant: "high" });
     expect(done).toMatchObject({ ok: true, threadId: "resumed-thread" });
     expect(f.calls().slice(before).map((entry) => entry.params)).toEqual([{ sessionId: "native-resumed", configId: "effort", value: "high" }]);
     expect(events.filter((event) => event.type === "session.model-variants").every((event) => event.threadId === "resumed-thread")).toBe(true);

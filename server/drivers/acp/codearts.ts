@@ -47,6 +47,8 @@ const support: AcpSupport = {
   nativeSource: "codearts.acp",
   images: false,
   loginNote: LOGIN_NOTE,
+  // The bridge answers session/new with a bare sessionId and drops its mcpServers.
+  mcp: false,
 
   // node runs the bridge; the CodeArts binary stays the CLI the snapshot and the adapter check.
   resolveCommand: (env, config) => {

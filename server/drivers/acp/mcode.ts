@@ -79,6 +79,8 @@ const support: AcpSupport = {
   nativeSource: "mcode.acp",
   images: false,
   loginNote: LOGIN_NOTE,
+  // `mcode exec` takes no MCP config, so the bridge drops session/new's mcpServers.
+  mcp: false,
 
   // node runs the bridge; the mcode binary stays the CLI the snapshot checks.
   resolveCommand: (env, config) => {

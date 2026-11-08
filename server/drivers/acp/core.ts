@@ -10,19 +10,20 @@ import { lstat, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promi
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { createHash } from "node:crypto";
 
-import { PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
+import { loadConfig, PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
+import { applyCentralCliKeys } from "../../cli-keys.ts";
 import { openStartupModelCatalog } from "../../startup-model-catalog.ts";
 import { acpModelCatalog } from "./model-catalog.ts";
 import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, type DeviceSignIn } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../../procs.ts";
+import { CLI_VERSION_TIMEOUT_MS, describeSpawnFailure, execCli, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { sanitizeAcpToolMessage } from "./tool-log.ts";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
 import {
-  classifyQuiet, describeQuiet, formatQuietLimit, quietNoticeText, lastSeenPhrase, LIMIT_WORDS, LogTail, promptIdleTimeoutMs, quietKey, quietNoticeMs, quietTickMs, quietVerdict, sampleProcessTree,
+  classifyQuiet, describeQuiet, formatQuietLimit, quietNoticeText, lastSeenPhrase, LIMIT_WORDS, LogTail, promptIdleTimeoutMs, quietKey, quietNoticeMs, quietTickMs, quietVerdict, sampleProcessTree, toolDrainMs,
   type LogSignal, type ProcessSample, type QuietState,
 } from "./quiet-status.ts";
 import { readSessionReport } from "./session-reports.ts";
@@ -187,6 +188,9 @@ export interface AcpSupport {
   clientCapabilitiesMeta?: Record<string, unknown>;
   /** The agent reaches MCP servers by URL: OpenMausBot's own servers are this server's endpoints, no process each. */
   ownMcpOverHttp?: boolean;
+  /** The engine receives session/new's mcpServers. A bridge that drops them (codearts, meoo,
+   *  mcode) declares false, and the workbench then offers the bot no MCP-class tools. */
+  mcp?: boolean;
   /** How many tools the agent lists of its own beside the MCP servers', counted against a provider's tool limit. */
   engineTools?: number;
   /** The agent's own debug log, read while a prompt is quiet: a new line proves it alive and `parse`
@@ -260,6 +264,7 @@ const SESSION_CONFIG_TIMEOUT = 300_000;
 const NEW_SESSION_TIMEOUT = 300_000;
 const LOAD_SESSION_TIMEOUT = 120_000;
 const ACP_STUCK_AFTER_MS = 180_000;
+const TOOL_DRAIN_TICK_MS = 100;
 const SHARED_SESSIONS_MAX = 6, SHARED_SESSIONS_LIFETIME = 12;
 /** Closing a session for these leaves its process fit for other threads' sessions; any other reason retires it. */
 const HEALTHY_CLOSE = new Set(["idle", "reset", "contract", "stop", "stopAll", "dispose", "approval-unconfirmed"]);
@@ -270,6 +275,18 @@ function isHermesReasoningReplay(chunk: string, streamed: string): boolean {
   const replay = chunk.trim();
   return reply !== "" && /^(?:> |-# )?💭/.test(replay) && replay.endsWith(reply)
     && /\n\n[ \t]*$/.test(replay.slice(0, -reply.length));
+}
+
+/** `end_turn` with a tool call still in progress is not the end of the turn: agy 1.5.3's run_command moves a command
+ * that outlives its foreground wait to a background task and answers end_turn without ever completing the call, so the
+ * command's output would be lost and its silence mistaken for a finished turn. Wait for the call to drain, up to the
+ * budget; a Stop or the session dying ends the wait. */
+async function drainRunningTools(current: AcpTurn): Promise<boolean> {
+  const deadline = Date.now() + toolDrainMs();
+  while (current.runningTools.size > 0 && !current.state.settled && !current.state.stopped && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, TOOL_DRAIN_TICK_MS));
+  }
+  return current.runningTools.size === 0;
 }
 
 let unkeyedToolSeq = 0;
@@ -306,6 +323,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
   }
   const DRIVER_KIND = support.driverKind;
   const SOURCE = support.nativeSource;
+  const mcpCapable = support.mcp !== false;
   const decodeConfig = decodeAcpConfig(support.defaultCli);
   const DENY_TIMEOUT_NOTE =
     "OpenMausBot: nobody answered this permission request in time. Skip this action and finish what you can without it.";
@@ -339,6 +357,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           if (!allowedCredentials.has(key)) delete env[key];
         }
         stripControlPlaneEnv(env);
+        applyCentralCliKeys(env, loadConfig(), allowedCredentials, input.environment);
         support.transformEnv?.(env, activeConfig, instanceId, input.environment);
         return env;
       };
@@ -606,8 +625,11 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         if (end.error) emit({ ...base(threadId, current.turnId), type: "runtime.error", ...end.error });
         emit({ ...base(threadId, current.turnId), type: "turn.completed", ok: end.ok, stopReason: end.stopReason, cost: null });
         if (session.child.exitCode === null && !session.closing && !session.dead) {
-          armIdle(threadId);
-          recycleWhenIdle(session.host);
+          if (session.retireAfterTurn) closeSession(threadId, "idle");
+          else {
+            armIdle(threadId);
+            recycleWhenIdle(session.host);
+          }
         } else if (session.dead && sessions.get(threadId) === session) {
           sessions.delete(threadId);
         }
@@ -623,16 +645,16 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             ? { jsonrpc: "2.0", id: msg.id, result: question.cancelled }
             : { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "method not found" } });
       };
-      const sharedHost = (hostKey: string | null): AcpHost | null => {
+      const sharedHost = (hostKey: string | null, threadId: string, cwd: string): AcpHost | null => {
         if (hostKey === null) return null;
-        for (const host of hosts) if (host.key === hostKey && host.accepts(SHARED_SESSIONS_MAX, SHARED_SESSIONS_LIFETIME)) return host;
+        for (const host of hosts) if (host.key === hostKey && host.accepts(SHARED_SESSIONS_MAX, SHARED_SESSIONS_LIFETIME, threadId, cwd)) return host;
         return null;
       };
-      const hostFor = (launch: { command: string }, argv: string[], env: Record<string, string | undefined>, cwd: string,
+      const hostFor = (threadId: string, launch: { command: string }, argv: string[], env: Record<string, string | undefined>, cwd: string,
         hostKey: string | null): AcpHost => {
-        const running = sharedHost(hostKey);
+        const running = sharedHost(hostKey, threadId, cwd);
         if (running) return running;
-        const child = spawnCli(launch.command, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"], box: { allowEnv: instanceEnvNames(input.environment, env) } }, "bot");
+        const child = spawnCli(launch.command, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"], box: { allowEnv: instanceEnvNames(input.environment, env), botThreads: hostKey !== null } }, "bot");
         const host = new AcpHost(child, hostKey, { source: SOURCE, logMessage: nativeLogMessage, unrouted: refuse });
         hosts.add(host);
         child.once("close", () => hosts.delete(host));
@@ -650,8 +672,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         hostKey: string | null,
       ): AcpSession => {
         const commandCwd = permissionLaunchCwd(cwd);
-        const host = hostFor(launch, argv, env, cwd, hostKey);
-        const acp = host.link(threadId);
+        const host = hostFor(threadId, launch, argv, env, cwd, hostKey);
+        const acp = host.link(threadId, cwd);
         const send = (obj: unknown) => acp.send(obj);
 
         const resolveClientPath = async (requestPath: unknown): Promise<string> => {
@@ -1093,8 +1115,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           ? { ...spawnEnv, [support.sessionModelEnv]: launchModel }
           : spawnEnv;
         let launchedThisTurn = false;
-        // The folder and the tool selection ride session/new, so threads differing only there can share a process; never two audiences of a Team Cloud, whose engine homes differ.
-        const hostKey = support.shareProcess && inheritedScopeFingerprint === null ? JSON.stringify([...processContract, launchModel ?? null, engineHomes.scope()]) : null;
+        // The folder and the tool selection ride session/new, so threads differing only there can share a process (in the bot box, only one bot's); never two audiences of a Team Cloud, whose engine homes differ.
+        const hostKey = support.shareProcess && inheritedScopeFingerprint === null ? JSON.stringify([...processContract, launchModel ?? null, engineHomes.scope(), sharedBoxScope(cwd)]) : null;
         const launchSession = () => {
           const opened = openSession(threadId, launch, [...(launch.args ?? []), ...spawnArgs], launchEnv, cwd, contractKey, hostKey);
           opened.launchModel = launchModel;
@@ -1119,7 +1141,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             if (pooled.dead) sessions.delete(threadId);
             else closeSession(threadId, "contract");
           }
-          const joining = sharedHost(hostKey);
+          const joining = sharedHost(hostKey, threadId, cwd);
           await turn.engineAdmission?.(joining ? "session" : "process", joining?.child.pid);
           requireRunning();
           if (active.has(threadId)) throw new Error("a turn is already running on this thread");
@@ -1506,6 +1528,11 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               });
             }
             const reason = result?.stopReason;
+            const drained = reason === "end_turn" ? await drainRunningTools(current) : true;
+            if (reason === "end_turn" && !drained && !state.settled && !state.stopped) {
+              emit({ ...base(threadId, turnId), type: "runtime.notice",
+                message: `${support.displayName} ended its turn while a command was still running; that command's output is not in this turn.` });
+            }
             if (reason === "end_turn") settle(threadId, session, true, null);
             else if (reason === "cancelled" || state.stopped) settle(threadId, session, true, "cancelled");
             else {
@@ -1586,7 +1613,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const env = childEnv();
         if (support.snapshot) return support.snapshot(env, config, instanceId);
         const probe = await new Promise<{ version?: string; reason?: string; other?: true }>((resolve) => {
-          execCli(config.cli, ["--version"], { timeout: 8000, env }, (err, stdout, stderr) => {
+          execCli(config.cli, ["--version"], { timeout: CLI_VERSION_TIMEOUT_MS, env }, (err, stdout, stderr) => {
             if (err) {
               const failure = err as NodeJS.ErrnoException & { killed?: boolean };
               const reason = failure.code === "ENOENT"
@@ -1594,7 +1621,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 : failure.code === "EACCES" || failure.code === "EPERM"
                   ? `\`${config.cli}\` isn't executable. Check its file permissions, then check again.`
                   : failure.killed && failure.code == null
-                    ? `\`${config.cli}\` version check timed out after 8 seconds. Check it in a terminal on the server, then try again.`
+                    ? `\`${config.cli}\` version check timed out after ${CLI_VERSION_TIMEOUT_MS / 1000} seconds. Check it in a terminal on the server, then try again.`
                     : `\`${config.cli}\` version check failed. Run it with --version on the server to diagnose the installation, then check again.`;
               // Do not echo arbitrary CLI output or its environment into Settings.
               resolve({ reason });
@@ -1682,17 +1709,17 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           provider: DRIVER_KIND,
           capabilities: {
             sessionModelSwitch: "unsupported",
-            agentsMcp: true,
-        customMcp: true,
-            computerMcp: true,
-            composioMcp: true,
-            browserMcp: true,
-            dataMcp: true, highlevelMcp: true, deviceMcp: true,
+            agentsMcp: mcpCapable,
+            customMcp: mcpCapable,
+            computerMcp: mcpCapable,
+            composioMcp: mcpCapable,
+            browserMcp: mcpCapable,
+            dataMcp: mcpCapable, emailMcp: mcpCapable, deviceMcp: mcpCapable,
             images: support.images !== false,
             nativeImageInput: support.images === true,
             effortLevels: support.effortLevels,
             modelVariants: support.modelVariants === true,
-            localComputerMcp: true,
+            localComputerMcp: mcpCapable,
             contextReading: "meter",
             engineAdmission: true, ...(support.askTool ? { askTool: { kind: "native" as const, name: support.askTool } } : {}),
           },
@@ -1712,6 +1739,19 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             for (const [threadId, children] of retiring) {
               for (const child of children) void retireChild(threadId, child);
             }
+          },
+          closeIdleSessions: () => {
+            let closed = 0;
+            for (const [threadId, session] of Array.from(sessions)) {
+              if (session.closing || session.dead) continue;
+              if (session.current) {
+                session.retireAfterTurn = true;
+                continue;
+              }
+              closeSession(threadId, "idle");
+              closed += 1;
+            }
+            return closed;
           },
           onEvent: (listener) => {
             listeners.add(listener);

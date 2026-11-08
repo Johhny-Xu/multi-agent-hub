@@ -20,6 +20,12 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
 
+/** The bridge's own keepalive cadence; a test shortens it to observe one heartbeat quickly. */
+function heartbeatMs(): number {
+  const configured = Number(process.env.OMB_MCODE_HEARTBEAT_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : HEARTBEAT_MS;
+}
+
 const LOGIN_NOTE =
   "MiniMax Code is not signed in — open a terminal, run `mcode login` and finish its sign-in, then try again.";
 
@@ -34,6 +40,7 @@ interface Session {
   id: string;
   cwd: string;
   model?: string;
+  nativeSessionId?: string;
 }
 
 interface RunningTask {
@@ -141,6 +148,179 @@ function usageFrom(value: unknown): Usage | undefined {
   return Object.values(usage).some((entry) => entry !== undefined) ? usage : undefined;
 }
 
+/** ACP's tool statuses, from the ones a native tool call reports. */
+function acpToolStatus(status: unknown, fallback: "pending" | "in_progress" | "completed"): "pending" | "in_progress" | "completed" | "failed" {
+  if (status === undefined || status === null) return fallback;
+  const text = String(status).toLowerCase();
+  if (text === "pending") return "pending";
+  if (text === "1" || text === "started" || text === "running" || text === "in_progress") return "in_progress";
+  if (text === "2" || text === "completed" || text === "succeeded" || text === "success") return "completed";
+  if (text === "3" || text === "failed" || text === "error") return "failed";
+  return fallback;
+}
+
+/** ACP's tool kinds, so the hub can show what a call is doing and not only that it ran. */
+function acpToolKind(name: string): string {
+  const text = name.toLowerCase();
+  if (text.includes("read") || text.includes("view")) return "read";
+  if (text.includes("edit") || text.includes("write") || text.includes("patch")) return "edit";
+  if (text.includes("delete") || text.includes("remove")) return "delete";
+  if (text.includes("move") || text.includes("rename")) return "move";
+  if (text.includes("search") || text.includes("find") || text.includes("grep")) return "search";
+  if (text.includes("fetch") || text.includes("http") || text.includes("web")) return "fetch";
+  if (text.includes("think") || text.includes("plan")) return "think";
+  if (text.includes("shell") || text.includes("bash") || text.includes("terminal") || text.includes("exec") || text.includes("command")) return "execute";
+  return "other";
+}
+
+function failureMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return "";
+  const record = error as Record<string, unknown>;
+  if (typeof record.message === "string") return record.message;
+  return failureMessage(record.error);
+}
+
+/**
+ * The native `mcode exec` event stream, mapped onto ACP session updates: the assistant text, and the
+ * lifecycle of every tool call under one id, so a start, an update and a result stay linked to each other.
+ */
+export class McodeTurnProjector {
+  private _text = "";
+  private _usage: Usage | undefined;
+  private _execStatus: string | undefined;
+  private _authFailed = false;
+  private _failed = false;
+  private _failureMessage = "";
+  private readonly streamedItems = new Set<string>();
+  private readonly startedTools = new Set<string>();
+  private readonly finishedTools = new Set<string>();
+  private readonly emit: (update: Record<string, unknown>) => void;
+  private anonymousTools = 0;
+
+  constructor(emit: (update: Record<string, unknown>) => void) {
+    this.emit = emit;
+  }
+
+  get text(): string { return this._text; }
+  get usage(): Usage | undefined { return this._usage; }
+  get execStatus(): string | undefined { return this._execStatus; }
+  get authFailed(): boolean { return this._authFailed; }
+  get failed(): boolean { return this._failed; }
+  get failureMessage(): string { return this._failureMessage; }
+
+  handle(event: Record<string, unknown>): void {
+    const type = typeof event.type === "string" ? event.type : "";
+    if (type === "item.started" || type === "item.updated" || type === "item.completed") {
+      const item = event.item as Record<string, unknown> | undefined;
+      if (!item || typeof item !== "object") return;
+      if (item.type === "agent_message") this.handleText(type, item);
+      else if (item.type === "tool_call") this.handleTool(type, item);
+      return;
+    }
+    if (type === "turn.completed") {
+      this._usage = usageFrom(event.usage) ?? this._usage;
+      return;
+    }
+    if (type === "turn.failed" || type === "exec.failed") {
+      this.noteFailure(event.error ?? event.message);
+      return;
+    }
+    if (type === "exec.completed") {
+      const result = event.result as Record<string, unknown> | undefined;
+      if (!result || typeof result !== "object") return;
+      if (typeof result.status === "string") this._execStatus = result.status;
+      this._usage = usageFrom(result.usage) ?? this._usage;
+      // A turn that produced no deltas still has its reply here; never duplicate one already streamed.
+      if (!this._text.trim()) {
+        const reply = typeof result.answer === "string" ? result.answer
+          : typeof result.output === "string" ? result.output : "";
+        if (reply.trim()) this.emitText(reply);
+      }
+      if (result.error !== undefined && result.error !== null) this.noteFailure(result.error);
+      else if (this._execStatus === "failed" || this._execStatus === "error") this.markFailed();
+    }
+  }
+
+  private emitText(delta: string): void {
+    if (!delta) return;
+    this._text += delta;
+    this.emit({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: delta } });
+  }
+
+  private handleText(type: string, item: Record<string, unknown>): void {
+    const id = typeof item.id === "string" ? item.id : "";
+    const delta = typeof item.contentDelta === "string" ? item.contentDelta : "";
+    if (delta) {
+      if (id) this.streamedItems.add(id);
+      this.emitText(delta);
+      return;
+    }
+    if (type !== "item.completed") return;
+    const content = typeof item.content === "string" ? item.content : "";
+    if (!content || this.alreadyStreamed(id, content)) return;
+    if (id) this.streamedItems.add(id);
+    this.emitText(content);
+  }
+
+  /** A message is streamed once: by its own deltas, or by a completed item that repeats what was already sent. */
+  private alreadyStreamed(id: string, content: string): boolean {
+    if (id && this.streamedItems.has(id)) return true;
+    const seen = this._text.trimEnd();
+    return seen.length > 0 && seen.endsWith(content.trimEnd());
+  }
+
+  private handleTool(type: string, item: Record<string, unknown>): void {
+    // Some turns carry the call's fields on the item itself instead of a nested `toolCall`.
+    const call = item.toolCall && typeof item.toolCall === "object" && !Array.isArray(item.toolCall)
+      ? item.toolCall as Record<string, unknown>
+      : item;
+    const callId = typeof call.id === "string" ? call.id : "";
+    const itemId = typeof item.id === "string" ? item.id : "";
+    const key = callId || itemId || `mcode-tool-${++this.anonymousTools}`;
+    if (this.finishedTools.has(key)) return;
+    const name = typeof call.name === "string" && call.name ? call.name : "tool";
+    const fallback = type === "item.started" ? "pending" : type === "item.updated" ? "in_progress" : "completed";
+    let status = acpToolStatus(call.status, fallback);
+    const failed = call.error !== undefined && call.error !== null;
+    if (failed) status = "failed";
+    const output = call.output !== undefined && call.output !== null ? call.output : failed ? { error: call.error } : undefined;
+    const payload: Record<string, unknown> = { toolCallId: key, status };
+    if (call.input !== undefined) payload.rawInput = call.input;
+    if (output !== undefined) payload.rawOutput = output;
+    if (this.startedTools.has(key)) {
+      this.emit({ sessionUpdate: "tool_call_update", ...payload });
+    } else {
+      this.startedTools.add(key);
+      this.emit({
+        sessionUpdate: "tool_call",
+        toolCallId: key,
+        title: name.slice(0, 120),
+        name,
+        kind: acpToolKind(name),
+        ...payload,
+      });
+    }
+    if (status === "completed" || status === "failed") this.finishedTools.add(key);
+  }
+
+  /** Vendor diagnostics never reach the hub verbatim; only the login hint is recognised. */
+  markAuthFailure(): void {
+    this._authFailed = true;
+  }
+
+  private markFailed(): void {
+    this._failed = true;
+  }
+
+  private noteFailure(error: unknown): void {
+    const message = failureMessage(error);
+    this.markFailed();
+    if (message) this._failureMessage = message;
+    if (/sign in|login|unauthori[sz]ed/i.test(message)) this.markAuthFailure();
+  }
+}
+
 function definedUsage(usage: Usage): Record<string, number> {
   const out: Record<string, number> = {};
   if (usage.inputTokens !== undefined) out.inputTokens = usage.inputTokens;
@@ -204,21 +384,17 @@ export function startBridge(): void {
       "--output-format", "stream-json",
       "--timeout", `${timeoutSec}s`,
       ...(model ? ["--model", model] : []),
+      ...(session.nativeSessionId ? ["--session", session.nativeSessionId] : []),
       text,
     ];
 
     const env: Record<string, string | undefined> = { ...process.env };
     if (home) env.HOME = home;
 
-    let textOut = "";
-    let usage: Usage | undefined;
-    let execStatus: string | undefined;
-    let authFailed = false;
+    const projector = new McodeTurnProjector((value) => update(session.id, value));
     let settled = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let hardStop: ReturnType<typeof setTimeout> | null = null;
-    // An item's deltas already carried its text; its completed form must not be appended again.
-    const streamedItems = new Set<string>();
 
     const finish = (result: RunResult): void => {
       if (settled) return;
@@ -227,15 +403,6 @@ export function startBridge(): void {
       if (hardStop) clearTimeout(hardStop);
       if (running.get(session.id)?.child === child) running.delete(session.id);
       resolveRun(result);
-    };
-
-    const emitText = (chunk: string): void => {
-      if (!chunk) return;
-      textOut += chunk;
-      update(session.id, {
-        sessionUpdate: "agent_message_chunk",
-        content: { type: "text", text: chunk },
-      });
     };
 
     const handleEvent = (line: string): void => {
@@ -249,47 +416,12 @@ export function startBridge(): void {
       }
       if (!event || typeof event !== "object") return;
       const record = event as Record<string, unknown>;
-      const type = typeof record.type === "string" ? record.type : "";
-      const item = record.item as Record<string, unknown> | undefined;
-
-      if ((type === "item.started" || type === "item.updated") && item && item.type === "agent_message") {
-        const delta = typeof item.contentDelta === "string" ? item.contentDelta : "";
-        if (delta) {
-          if (typeof item.id === "string") streamedItems.add(item.id);
-          emitText(delta);
-        }
-        return;
+      // mcode 0.6.12 exec starts fresh unless --session names this ACP session's own history.
+      if ((record.type === "session.started" || record.type === "session.resumed")
+          && typeof record.sessionId === "string" && record.sessionId) {
+        session.nativeSessionId = record.sessionId;
       }
-      if (type === "item.completed" && item && item.type === "agent_message") {
-        const id = typeof item.id === "string" ? item.id : "";
-        const content = typeof item.content === "string" ? item.content : "";
-        if (content && !(id && streamedItems.has(id))) emitText(content);
-        return;
-      }
-      if (type === "turn.completed") {
-        usage = usageFrom(record.usage) ?? usage;
-        return;
-      }
-      if (type === "exec.completed") {
-        const result = record.result as Record<string, unknown> | undefined;
-        if (result) {
-          if (typeof result.status === "string") execStatus = result.status;
-          usage = usageFrom(result.usage) ?? usage;
-          const output = typeof result.output === "string" ? result.output : "";
-          // A turn that produced no deltas still has its reply here; never duplicate one already streamed.
-          if (!textOut && output) emitText(output);
-          if (result.status !== "succeeded") {
-            const failure = result.error as Record<string, unknown> | string | undefined;
-            const message = typeof failure === "string" ? failure
-              : failure && typeof failure === "object" && typeof failure.message === "string" ? failure.message : "";
-            if (/sign in|login|unauthori[sz]ed/i.test(message)) authFailed = true;
-          }
-        }
-        return;
-      }
-      if (type === "exec.failed" || type === "turn.failed") {
-        if (typeof record.message === "string" && /sign in|login|unauthor/i.test(record.message)) authFailed = true;
-      }
+      projector.handle(record);
     };
 
     let pending = "";
@@ -320,7 +452,7 @@ export function startBridge(): void {
     }
     children.add(child);
     running.set(session.id, { child, cancelled: false, settle: finish });
-    heartbeat = setInterval(() => update(session.id, { sessionUpdate: "mcode_bridge_heartbeat" }), HEARTBEAT_MS);
+    heartbeat = setInterval(() => update(session.id, { sessionUpdate: "mcode_bridge_heartbeat" }), heartbeatMs());
     heartbeat.unref?.();
     // `mcode` enforces its own deadline; this is the backstop if it cannot.
     hardStop = setTimeout(() => {
@@ -334,7 +466,7 @@ export function startBridge(): void {
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (chunk: string) => {
       // Never forward vendor diagnostics verbatim; only the login hint is recognised.
-      if (/sign in to minimax|run `?mcode login`?/i.test(chunk)) authFailed = true;
+      if (/sign in to minimax|run `?mcode login`?/i.test(chunk)) projector.markAuthFailure();
     });
     child.once("error", () => {
       children.delete(child);
@@ -346,11 +478,16 @@ export function startBridge(): void {
       pending = "";
       const task = running.get(session.id);
       if (task?.cancelled) return finish({ kind: "cancelled" });
-      if (execStatus === "succeeded" || (execStatus === undefined && code === 0)) {
-        if (!textOut.trim()) return finish({ kind: "error", message: errorText("empty") });
-        return finish({ kind: "text", text: textOut, streamed: true, ...(usage ? { usage } : {}) });
+      // A turn that reported its own failure is a failure, whatever the exit code was.
+      if (projector.failed) {
+        return finish({ kind: "error", message: errorText(projector.authFailed ? "auth" : "failed") });
       }
-      if (authFailed) return finish({ kind: "error", message: errorText("auth") });
+      if (projector.execStatus === "succeeded" || (projector.execStatus === undefined && code === 0)) {
+        const text = projector.text;
+        if (!text.trim()) return finish({ kind: "error", message: errorText("empty") });
+        return finish({ kind: "text", text, streamed: true, ...(projector.usage ? { usage: projector.usage } : {}) });
+      }
+      if (projector.authFailed) return finish({ kind: "error", message: errorText("auth") });
       finish({ kind: "error", message: errorText("failed") });
     });
   });

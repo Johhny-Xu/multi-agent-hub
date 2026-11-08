@@ -56,6 +56,8 @@ export interface AcpSession {
   authenticated: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
   closing: boolean;
+  /** A turn was running when its engine process was retired: close it once that turn ends. */
+  retireAfterTurn?: boolean;
   /** Set when a shared process's session closes through `session/close`: true once the agent confirms it. */
   closeConfirmed?: Promise<boolean>;
   dead: boolean;

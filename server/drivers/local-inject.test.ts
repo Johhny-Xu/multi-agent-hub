@@ -46,6 +46,25 @@ describe("inject ids", () => {
   });
 });
 
+describe("9router host", () => {
+  it("decodes a 9router pick and keys it only from the OMB-injected env", () => {
+    expect(decodeInjectId("9router::stai/step-5-preview")).toEqual({ host: "9router", model: "stai/step-5-preview" });
+    const host = LOCAL_HOSTS.find((h) => h.id === "9router")!;
+    expect(host.apiKeyEnv).toBe("OMB_9ROUTER_API_KEY");
+    expect(host.apiKey).toBeUndefined();
+    const env: Record<string, string | undefined> = { OMB_9ROUTER_API_KEY: "k-9r" };
+    expect(applyOpenAIInject(env, "9router::stai/step-5-preview")).toEqual({ model: "stai/step-5-preview", injected: true });
+    expect(env.OPENAI_BASE_URL).toBe("http://127.0.0.1:20128/v1");
+    expect(env.OPENAI_API_KEY).toBe("k-9r");
+  });
+
+  it("gives 9router's /models a longer probe window than local runtimes", () => {
+    const host = LOCAL_HOSTS.find((h) => h.id === "9router")!;
+    expect(host.probeTimeoutMs).toBeGreaterThanOrEqual(5000);
+    expect(LOCAL_HOSTS.find((h) => h.id === "ollama")!.probeTimeoutMs).toBeUndefined();
+  });
+});
+
 describe("contextWindowsFromPs", () => {
   it("reads Ollama's per-model context_length from /api/ps, keyed by full and base id", () => {
     const windows = contextWindowsFromPs({
@@ -908,45 +927,74 @@ describe("applyDroidLocalAuthEnv", () => {
 });
 
 describe("ensureOpenCodeInjectModel", () => {
-  it("merges a host provider into opencode.json without dropping existing models", () => {
+  it("declares the host provider in OPENCODE_CONFIG_CONTENT without writing opencode.json", () => {
     const home = mkdtempSync(join(tmpdir(), "omb-opencode-inject-"));
     scratchDirs.push(home);
     const dir = join(home, ".config", "opencode");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, "opencode.json"),
-      JSON.stringify({
-        provider: {
-          omlx: {
-            npm: "@ai-sdk/openai-compatible",
-            name: "oMLX",
-            options: { baseURL: "http://127.0.0.1:8080/v1" },
-            models: { "already-there": { name: "Keep me" } },
-          },
-        },
+    const onDisk = JSON.stringify({
+      provider: { venice: { npm: "@ai-sdk/openai-compatible", options: { baseURL: "https://api.venice.ai/api/v1" } } },
+    });
+    writeFileSync(join(dir, "opencode.json"), onDisk);
+    const env: Record<string, string | undefined> = {
+      HOME: home,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify({
+        provider: { omlx: { options: { baseURL: "http://old" }, models: { "already-there": { name: "Keep me" } } } },
       }),
-    );
-    const native = ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", { HOME: home });
-    expect(native).toBe("omlx/GLM-5.2-fp8");
-    const config = JSON.parse(readFileSync(join(dir, "opencode.json"), "utf8")) as {
-      provider: { omlx: { models: Record<string, { name: string }>; options: { baseURL: string } } };
     };
-    expect(config.provider.omlx.models["already-there"]).toEqual({ name: "Keep me" });
-    expect(config.provider.omlx.models["GLM-5.2-fp8"]).toBeTruthy();
-    expect(config.provider.omlx.options.baseURL).toBe("http://127.0.0.1:8080/v1");
+    expect(ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env)).toBe("omlx/GLM-5.2-fp8");
+    expect(readFileSync(join(dir, "opencode.json"), "utf8")).toBe(onDisk);
+    const content = JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as {
+      provider: Record<string, { options: { baseURL: string }; models: Record<string, unknown> }>;
+    };
+    expect(content.provider.omlx.models["already-there"]).toEqual({ name: "Keep me" });
+    expect(content.provider.omlx.models["GLM-5.2-fp8"]).toBeTruthy();
+    expect(content.provider.omlx.options.baseURL).toBe("http://127.0.0.1:8080/v1");
+    expect(content.provider.venice).toBeUndefined();
   });
 
-  it("injects into a default object when opencode.json is malformed", () => {
-    const home = mkdtempSync(join(tmpdir(), "omb-opencode-bad-json-"));
+  it("keys a host with an apiKeyEnv through an OpenCode env reference, never the key itself", () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-opencode-inject-env-"));
     scratchDirs.push(home);
-    const dir = join(home, ".config", "opencode");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "opencode.json"), "{not-json");
-    expect(ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", { HOME: home })).toBe("omlx/GLM-5.2-fp8");
-    const config = JSON.parse(readFileSync(join(dir, "opencode.json"), "utf8")) as {
-      provider: { omlx: { models: Record<string, unknown> } };
+    const env: Record<string, string | undefined> = { HOME: home, OMB_9ROUTER_API_KEY: "omb-router-fake-key" };
+    expect(ensureOpenCodeInjectModel("9router::stai/step-5-preview", env)).toBe("9router/stai/step-5-preview");
+    const content = JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as {
+      provider: Record<string, { options: { baseURL: string; apiKey: string } }>;
     };
-    expect(config.provider.omlx.models["GLM-5.2-fp8"]).toBeTruthy();
+    expect(content.provider["9router"].options.baseURL).toBe("http://127.0.0.1:20128/v1");
+    expect(content.provider["9router"].options.apiKey).toBe("{env:OMB_9ROUTER_API_KEY}");
+    expect(env.OPENCODE_CONFIG_CONTENT).not.toContain("omb-router-fake-key");
+  });
+
+  it("keeps a host without an apiKeyEnv on the hostApiKey constant", () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-opencode-inject-const-"));
+    scratchDirs.push(home);
+    const env: Record<string, string | undefined> = { HOME: home };
+    expect(ensureOpenCodeInjectModel("ollama::qwen3:32b", env)).toBe("ollama/qwen3:32b");
+    const content = JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as {
+      provider: Record<string, { options: { apiKey: string } }>;
+    };
+    expect(content.provider.ollama.options.apiKey).toBe("ollama");
+  });
+
+  it("declares each inject model, so a different pick changes the spawn env", () => {
+    const env: Record<string, string | undefined> = {};
+    expect(ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env)).toBe("omlx/GLM-5.2-fp8");
+    const first = env.OPENCODE_CONFIG_CONTENT;
+    expect(ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env)).toBe("omlx/GLM-5.2-fp8");
+    expect(env.OPENCODE_CONFIG_CONTENT).toBe(first);
+    expect(ensureOpenCodeInjectModel("omlx::Qwen3.6-35B-A3B-bf16", env)).toBe("omlx/Qwen3.6-35B-A3B-bf16");
+    expect(env.OPENCODE_CONFIG_CONTENT).not.toBe(first);
+  });
+
+  it("leaves a non-inject id and a malformed OPENCODE_CONFIG_CONTENT alone", () => {
+    const env: Record<string, string | undefined> = { OPENCODE_CONFIG_CONTENT: "{not-json" };
+    expect(ensureOpenCodeInjectModel("opencode/big-pickle", env)).toBe("opencode/big-pickle");
+    expect(ensureOpenCodeInjectModel("nosuch::model", env)).toBe("nosuch::model");
+    expect(env.OPENCODE_CONFIG_CONTENT).toBe("{not-json");
+    const clean: Record<string, string | undefined> = {};
+    expect(ensureOpenCodeInjectModel("opencode/big-pickle", clean)).toBe("opencode/big-pickle");
+    expect(clean.OPENCODE_CONFIG_CONTENT).toBeUndefined();
   });
 });
 

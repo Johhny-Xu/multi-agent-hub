@@ -155,30 +155,29 @@ describe("OpenCode config file", () => {
     writeFileSync(join(dir, "opencode.json"), content);
     return { home, path: join(dir, "opencode.json") };
   };
-  const addLocalModel = (home: string) => ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", { HOME: home });
+  const addLocalModel = (env: Record<string, string | undefined>) => ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env);
 
   it.each(["\n", "\r\n"])("keeps the page's plain-JSON provider with %j line endings", (lineEnding) => {
     const source = example(PAGE.replace(/\r?\n/gu, lineEnding));
     const pasted = JSON.parse(source) as { provider: Record<string, unknown> };
     const { home, path } = configHome(source);
+    const env: Record<string, string | undefined> = { HOME: home };
 
-    expect(addLocalModel(home)).toBe("omlx/GLM-5.2-fp8");
-    const after = JSON.parse(readFileSync(path, "utf8")) as { provider: Record<string, unknown> };
-    expect(after.provider.myrouter).toEqual(pasted.provider.myrouter);
-    expect(after.provider.omlx).toBeTruthy();
+    expect(addLocalModel(env)).toBe("omlx/GLM-5.2-fp8");
+    expect(readFileSync(path, "utf8")).toBe(source);
+    const content = JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as { provider: Record<string, unknown> };
+    expect(pasted.provider.myrouter).toBeTruthy();
+    expect(content.provider.omlx).toBeTruthy();
   });
 
-  it("loses a provider written with a comment, which is why the page asks for plain JSON", () => {
+  it("leaves a file written with comments byte-identical, so its providers survive", () => {
     const commented = example().replace("\"myrouter\": {", "// my router\n    \"myrouter\": {");
     const { home, path } = configHome(commented);
+    const env: Record<string, string | undefined> = { HOME: home };
 
-    addLocalModel(home);
-    const after = JSON.parse(readFileSync(path, "utf8")) as { provider: Record<string, unknown> };
-    expect(after.provider.myrouter).toBeUndefined();
-
-    expect(section("### OpenCode")).toContain(
-      "Keep this file plain JSON, with no comments or trailing commas. OpenMausBot edits it when an OpenCode bot uses a model running on this computer.",
-    );
+    addLocalModel(env);
+    expect(readFileSync(path, "utf8")).toBe(commented);
+    expect(env.OPENCODE_CONFIG_CONTENT).toBeTruthy();
   });
 });
 

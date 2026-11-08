@@ -1,5 +1,5 @@
 // Every local host × every agent writer, with the model-id dialects those CLIs actually speak.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -252,15 +252,17 @@ describe("Grok / Kimi / Droid / OpenCode writers × live ids", () => {
     });
   });
 
-  it.each(["omlx", "ollama", "lmstudio"] as const)("OpenCode provider/%s model key keeps slashes", (hostId) => {
+  it.each(["omlx", "ollama", "lmstudio"] as const)("OpenCode provider/%s model key keeps slashes in OPENCODE_CONFIG_CONTENT", (hostId) => {
     const home = scratchHome("omb-oc-mx-");
-    const native = ensureOpenCodeInjectModel(encodeInjectId(hostId, "qwen/qwen3-coder-next"), { HOME: home });
+    const env: Record<string, string | undefined> = { HOME: home };
+    const native = ensureOpenCodeInjectModel(encodeInjectId(hostId, "qwen/qwen3-coder-next"), env);
     expect(native).toBe(`${hostId}/qwen/qwen3-coder-next`);
-    const config = JSON.parse(readFileSync(join(home, ".config", "opencode", "opencode.json"), "utf8")) as {
+    const content = JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as {
       provider: Record<string, { options: { baseURL: string }; models: Record<string, unknown> }>;
     };
-    expect(config.provider[hostId].options.baseURL).toBe(localHost(hostId)!.baseUrl);
-    expect(config.provider[hostId].models["qwen/qwen3-coder-next"]).toBeTruthy();
+    expect(content.provider[hostId].options.baseURL).toBe(localHost(hostId)!.baseUrl);
+    expect(content.provider[hostId].models["qwen/qwen3-coder-next"]).toBeTruthy();
+    expect(existsSync(join(home, ".config", "opencode", "opencode.json"))).toBe(false);
   });
 });
 

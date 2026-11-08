@@ -20,6 +20,9 @@ import { KimiAgentDriver } from "./kimi.ts";
 import { DroidAgentDriver } from "./droid.ts";
 import { CursorAgentDriver } from "./cursor.ts";
 import { QwenAgentDriver } from "./qwen.ts";
+import { CodeArtsAgentDriver } from "./codearts.ts";
+import { MeooAgentDriver } from "./meoo.ts";
+import { McodeAgentDriver } from "./mcode.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { TurnWatchdog } from "../../turn-watchdog.ts";
 import { startFakeHttpMcp } from "../../testing/fake-http-mcp-server.ts";
@@ -245,6 +248,51 @@ describe("ACP decodeConfig", () => {
   });
 });
 
+describe("ACP MCP capability declaration", () => {
+  const MCP_FLAGS = [
+    "agentsMcp", "customMcp", "computerMcp", "composioMcp", "browserMcp",
+    "dataMcp", "emailMcp", "deviceMcp", "localComputerMcp",
+  ] as const;
+
+  async function capabilitiesOf(driver: ReturnType<typeof createAcpDriver>, instanceId: string) {
+    const instance = await driver.create({
+      instanceId,
+      displayName: "Capabilities",
+      environment: {},
+      enabled: true,
+      config: driver.defaultConfig(),
+    });
+    try {
+      return { ...instance.adapter.capabilities };
+    } finally {
+      await instance.dispose();
+    }
+  }
+
+  it("turns every MCP-class capability off when the support declares mcp: false", async () => {
+    const driver = createAcpDriver({ ...SELECT_MODEL_SUPPORT, driverKind: "noMcpTest", mcp: false });
+    const capabilities = await capabilitiesOf(driver, "no-mcp-capabilities");
+    for (const flag of MCP_FLAGS) expect(capabilities[flag]).toBe(false);
+    expect(capabilities.images).toBe(true);
+  });
+
+  it("keeps every MCP-class capability on when the support does not declare mcp", async () => {
+    const capabilities = await capabilitiesOf(SelectModelDriver, "default-mcp-capabilities");
+    for (const flag of MCP_FLAGS) expect(capabilities[flag]).toBe(true);
+  });
+
+  it("declares mcp: false on the bridge drivers that drop session/new's mcpServers", async () => {
+    for (const [name, driver] of [
+      ["codearts", CodeArtsAgentDriver],
+      ["meoo", MeooAgentDriver],
+      ["mcode", McodeAgentDriver],
+    ] as const) {
+      const capabilities = await capabilitiesOf(driver, `${name}-capabilities`);
+      for (const flag of MCP_FLAGS) expect(capabilities[flag], `${name} ${flag}`).toBe(false);
+    }
+  });
+});
+
 describe("ACP turns (fake CLI)", () => {
   let instance: ProviderInstance;
   let recorder: EventRecorder;
@@ -312,6 +360,8 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_IMAGE_CAPABILITY;
     delete process.env.FAKE_ACP_GROK_VERSION;
     delete process.env.FAKE_ACP_TOOL_MS;
+    delete process.env.FAKE_ACP_TOOL_NEVER;
+    delete process.env.OMB_ACP_TOOL_DRAIN_MS;
     delete process.env.FAKE_ACP_USAGE_UPDATES_FILE;
     delete process.env.FAKE_ACP_UPDATES_FILE;
     delete process.env.OMB_ACP_PLAN_LINES;
@@ -2108,6 +2158,38 @@ describe("ACP turns (fake CLI)", () => {
     expect(recorder.events.find(e => e.type === "item.completed" && e.itemType === "tool")).toMatchObject({ ok: true });
   });
 
+  it("does not end a turn at end_turn while its command is still running", async () => {
+    process.env.OMB_ACP_TOOL_DRAIN_MS = "5000";
+    process.env.FAKE_ACP_TOOL_MS = "700";
+    await create(GrokAgentDriver, "end-turn-while-tool-runs");
+    await instance.adapter.sendTurn({ threadId: "t-long-command", text: "run the tests" });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(recorder.events.some((e) => e.type === "turn.completed")).toBe(false);
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
+    const types = recorder.events.map((e) => e.type);
+    expect(types.indexOf("turn.completed")).toBeGreaterThan(types.indexOf("item.completed"));
+    expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "tool")).toMatchObject({ ok: true });
+    expect(recorder.events.some((e) => e.type === "runtime.notice")).toBe(false);
+  });
+
+  it("ends a turn at once when the CLI really ends it", async () => {
+    process.env.OMB_ACP_TOOL_DRAIN_MS = "30000";
+    await create(GrokAgentDriver);
+    const started = Date.now();
+    await instance.adapter.sendTurn({ threadId: "t-real-end", text: "go" });
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+
+  it("ends a turn with a notice when its backgrounded command never reports back", async () => {
+    process.env.OMB_ACP_TOOL_DRAIN_MS = "250";
+    process.env.FAKE_ACP_TOOL_NEVER = "1";
+    await create(GrokAgentDriver, "end-turn-while-tool-runs");
+    await instance.adapter.sendTurn({ threadId: "t-long-command-gone", text: "run the tests" });
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
+    expect(recorder.events.find((e) => e.type === "runtime.notice")?.message).toMatch(/command was still running/i);
+  });
+
   it("reports a running tool's kind for the chat's status line while it runs silently", async () => {
     process.env.FAKE_ACP_TOOL_MS = "300";
     await create(QwenAgentDriver, "slow-tool");
@@ -2943,6 +3025,77 @@ describe("ACP turns (fake CLI)", () => {
       // the dump is per-process and overwritten on spawn, so this is the resumed child
       expect(rpc()).toContain("session/load");
       expect(rpc()).toContain("initialize");
+    }, 30_000);
+
+    it("closes an idle engine on request and starts the next turn in a new process", async () => {
+      countFile = join(scratch, "launches");
+      rpcFile = join(scratch, "rpc.json");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      process.env.FAKE_ACP_RPC_DUMP = rpcFile;
+      await create();
+      const first = await instance.adapter.sendTurn({ threadId: "t-pool-release", text: "one" });
+      expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === first.turnId)).toMatchObject({ ok: true });
+      expect(launches()).toBe(1);
+
+      expect(instance.adapter.closeIdleSessions?.()).toBe(1);
+
+      const second = await instance.adapter.sendTurn({
+        threadId: "t-pool-release",
+        text: "two",
+        resumeCursor: "fake-acp-session",
+      });
+      expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === second.turnId)).toMatchObject({ ok: true });
+      expect(launches()).toBe(2);
+    }, 30_000);
+
+    it("lets a running turn finish, then closes its engine", async () => {
+      countFile = join(scratch, "launches");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      const hold = join(scratch, "hold");
+      writeFileSync(hold, "");
+      process.env.FAKE_ACP_HOLD_FILE = hold;
+      try {
+        await create();
+        const first = await instance.adapter.sendTurn({ threadId: "t-pool-release-busy", text: "one" });
+        await new Promise<void>((resolve, reject) => {
+          const deadline = Date.now() + 20_000;
+          const check = () => {
+            if (Date.now() > deadline) return reject(new Error("the engine process never started"));
+            if (existsSync(countFile)) return resolve();
+            setTimeout(check, 25);
+          };
+          check();
+        });
+        expect(instance.adapter.closeIdleSessions?.()).toBe(0);
+        expect(launches()).toBe(1);
+
+        unlinkSync(hold);
+        expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === first.turnId)).toMatchObject({ ok: true });
+        await new Promise<void>((resolve, reject) => {
+          const deadline = Date.now() + 20_000;
+          const log = join(NATIVE_DIR, "t-pool-release-busy.ndjson");
+          const check = () => {
+            if (Date.now() > deadline) return reject(new Error("the engine was never closed after its turn"));
+            try {
+              if (readFileSync(log, "utf8").includes('"close":"idle"')) return resolve();
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT") return reject(error);
+            }
+            setTimeout(check, 25);
+          };
+          check();
+        });
+
+        const second = await instance.adapter.sendTurn({
+          threadId: "t-pool-release-busy",
+          text: "two",
+          resumeCursor: "fake-acp-session",
+        });
+        expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === second.turnId)).toMatchObject({ ok: true });
+        expect(launches()).toBe(2);
+      } finally {
+        delete process.env.FAKE_ACP_HOLD_FILE;
+      }
     }, 30_000);
 
     it("respawns when the spawn contract changes", async () => {

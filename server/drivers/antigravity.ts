@@ -54,11 +54,25 @@ export function normalizeAntigravityTurn(turn: SendTurnInput, offeredModels: rea
     : turn;
 }
 
-/** Antigravity's session modes: `yolo` for Full, `auto_edit` for auto-accept edits, `default` otherwise (it has no reviewer for Auto). */
-export function antigravityPermissionMode(fullAuto: boolean, approvalMode?: ApprovalMode): "yolo" | "auto_edit" | "default" {
-  if (fullAuto || approvalMode === "full") return "yolo";
-  return approvalMode === "edits" ? "auto_edit" : "default";
+/** Antigravity's session modes: `yolo` for Full, `auto_edit` for auto-accept edits, `default` otherwise (it has no reviewer for Auto).
+ * The agy CLI from 1.5 renamed them: it offers `default`, `accept-edits` and `plan`, and Full is the
+ * `--dangerously-skip-permissions` launch flag instead of a mode. Pass the offered values to get the one this runtime takes;
+ * `null` means Full is carried by that flag and no mode is set. */
+export function antigravityPermissionMode(fullAuto: boolean, approvalMode?: ApprovalMode): "yolo" | "auto_edit" | "default";
+export function antigravityPermissionMode(fullAuto: boolean, approvalMode: ApprovalMode | undefined, offered: readonly string[]): string | null;
+export function antigravityPermissionMode(fullAuto: boolean, approvalMode?: ApprovalMode, offered?: readonly string[]): string | null {
+  const full = fullAuto || approvalMode === "full";
+  if (!offered) {
+    if (full) return "yolo";
+    return approvalMode === "edits" ? "auto_edit" : "default";
+  }
+  if (full) return offered.includes("yolo") ? "yolo" : null;
+  if (approvalMode === "edits") return ["accept-edits", "auto_edit"].find((mode) => offered.includes(mode)) ?? "default";
+  return "default";
 }
+
+/** Full access on an agy CLI is a launch flag (1.5+ dropped the yolo session mode). */
+export const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions";
 
 const managedAsset = resolveAntigravityReleaseAsset();
 
@@ -95,7 +109,10 @@ const support: AcpSupport = {
     if (profile.tempDirectory) scheduleAntigravityTempSweep(instanceId);
     return {
       command: runtime.executablePath,
-      args: runtime.spawnArgs,
+      // The agy CLI takes Full as a flag on `acp`; the packaged ACP server keeps its yolo session mode.
+      args: runtime.kind === "cli" && config.fullAuto
+        ? [...runtime.spawnArgs, ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]
+        : runtime.spawnArgs,
       env: profile.environment,
     };
   },
@@ -144,7 +161,13 @@ const support: AcpSupport = {
     if (!Array.isArray(configOptions) || !configOptions.some(option => option?.id === "mode")) {
       return;
     }
-    const wanted = antigravityPermissionMode(config.fullAuto, turn.approvalMode);
+    const modeOption = configOptions.find((option) => option?.id === "mode");
+    const offered: string[] = Array.isArray(modeOption?.options)
+      ? modeOption.options.flatMap((option: any) => typeof option?.value === "string" ? [option.value] : [])
+      : [];
+    const wanted = antigravityPermissionMode(config.fullAuto, turn.approvalMode, offered);
+    // Full on an agy CLI rides the launch flag; its session stays in the mode it opened in.
+    if (wanted === null) return;
     const result = await request("session/set_config_option", {
       sessionId,
       configId: "mode",

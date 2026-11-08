@@ -13,6 +13,8 @@ export interface LocalHost {
   baseUrl: string;
   apiKey?: string;
   apiKeyEnv?: string;
+  /** /models answers slower than a local runtime (a router fans out to its providers). */
+  probeTimeoutMs?: number;
 }
 
 export const LOCAL_HOSTS: LocalHost[] = [
@@ -23,6 +25,8 @@ export const LOCAL_HOSTS: LocalHost[] = [
   { id: "lmstudio", label: "LM Studio", baseUrl: "http://127.0.0.1:1234/v1", apiKey: "lm-studio" },
   { id: "unsloth", label: "Unsloth", baseUrl: "http://127.0.0.1:8888/v1", apiKeyEnv: "UNSLOTH_STUDIO_AUTH_TOKEN" },
   { id: "unsloth_api", label: "Unsloth", baseUrl: "http://127.0.0.1:8888/v1", apiKeyEnv: "UNSLOTH_STUDIO_AUTH_TOKEN" },
+  // 9router: key comes only from the OMB-injected env (never 9router's own database).
+  { id: "9router", label: "9router", baseUrl: "http://127.0.0.1:20128/v1", apiKeyEnv: "OMB_9ROUTER_API_KEY", probeTimeoutMs: 6000 },
 ];
 
 export const INJECT_SEP = "::";
@@ -230,7 +234,7 @@ async function timedJson(
   fetchImpl: typeof fetch,
 ): Promise<unknown | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1200);
+  const timer = setTimeout(() => controller.abort(), host.probeTimeoutMs ?? 1200);
   timer.unref?.();
   try {
     const response = await fetchImpl(url, {

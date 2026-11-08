@@ -11,10 +11,32 @@ import { join } from "node:path";
 import { userHome } from "../../env-path.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
 
+/**
+ * `qodercli --thinking <mode>` (its --help, both builds: auto, adaptive, enabled, disabled). ACP has no session
+ * option for it, so the mode travels on argv like CodeBuddy's effort: the picker's variant, or a `-enabled`
+ * style suffix on the model id (what hub dispatch can send). No variant keeps the CLI's own default.
+ */
+export const QODER_THINKING = [
+  { id: "auto", label: "Thinking: Auto" },
+  { id: "adaptive", label: "Thinking: Adaptive" },
+  { id: "enabled", label: "Thinking: On" },
+  { id: "disabled", label: "Thinking: Off" },
+];
+const THINKING_SUFFIX = new RegExp(`^(.*)-(${QODER_THINKING.map((t) => t.id).join("|")})$`, "i");
+
+export function splitQoderThinking(model: string | undefined, variant: string | undefined): { model: string | undefined; thinking: string | undefined } {
+  if (variant) return { model, thinking: variant };
+  const match = model && model !== "auto" ? THINKING_SUFFIX.exec(model) : null;
+  if (!match) return { model, thinking: undefined };
+  return { model: match[1], thinking: match[2]!.toLowerCase() };
+}
+
+const withThinking = <T extends { id: string }>(options: T[]) => options.map((option) => ({ ...option, variants: QODER_THINKING }));
+
 /** Qoder's own model ids. Re-detect replaces this list with whatever the live session advertises. */
 const QODER_MODELS = {
   default: "dfmodel",
-  options: [
+  options: withThinking([
     { id: "dfmodel", label: "DeepSeek Flash" },
     { id: "dmodel", label: "DeepSeek Pro" },
     { id: "Kimi-K3.1-Pro", label: "Kimi K3.1 Pro" },
@@ -29,19 +51,19 @@ const QODER_MODELS = {
     // on use — so it lives here rather than in the live probe, same as QoDuck.
     { id: "Sonus", label: "Sonus (8×)" },
     { id: "auto", label: "Auto" },
-  ],
+  ]),
 };
 
 const QODER_CN_MODELS = {
-  default: "Kimi-K3.1-Pro",
-  options: [
+  default: "dfmodel",
+  options: withThinking([
     { id: "Kimi-K3.1-Pro", label: "Kimi K3.1 Pro" },
     { id: "dfmodel", label: "DeepSeek Flash" },
     { id: "dmodel", label: "DeepSeek Pro" },
     { id: "glm", label: "GLM 5.3" },
     { id: "qwen", label: "Qwen 3.8" },
     { id: "auto", label: "Auto" },
-  ],
+  ]),
 };
 
 /** `qodercli login` writes into ~/.qoder (qoderclicn into ~/.qoder-cn); the presence of the state file is the signal. */
@@ -65,8 +87,11 @@ const intl: AcpSupport = {
   nativeSource: "qoder.acp",
   loginNote: "Qoder is not signed in — run `qodercli login` in a terminal first, then return here.",
   install: QODER_INSTALL,
-  // --acp is the verified entry point; -m carries the model the bot picked.
-  spawnArgs: (_config, turn) => ["--acp", ...(turn.model ? ["-m", turn.model] : [])],
+  // --acp is the verified entry point; -m carries the model the bot picked, --thinking the picked thinking mode.
+  spawnArgs: (_config, turn) => {
+    const { model, thinking } = splitQoderThinking(turn.model, turn.variant);
+    return ["--acp", ...(model ? ["-m", model] : []), ...(thinking ? ["--thinking", thinking] : [])];
+  },
   pickAuthMethod: () => null,
   authFailure: "continue",
   isAuthenticated: qoderSignedIn(".qoder"),

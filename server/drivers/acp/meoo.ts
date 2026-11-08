@@ -18,7 +18,7 @@ import { versionFromProbe } from "./version-probe.ts";
 
 /** `GET /projects/<id>/agent/capabilities` on 2026-11-07 for this account's project; `auto` is its own default. */
 const MEOO_MODELS = {
-  default: "auto",
+  default: "moonshot/kimi-k3.1-pro",
   options: [
     { id: "auto", label: "Auto" },
     { id: "max", label: "Max" },
@@ -103,6 +103,8 @@ const support: AcpSupport = {
   nativeSource: "meoo.acp",
   images: false,
   loginNote: LOGIN_NOTE,
+  // The bridge runs one Agent Run HTTP call per turn and never reads session/new's mcpServers.
+  mcp: false,
 
   // node runs the bridge; the meoo binary stays the CLI the snapshot checks.
   resolveCommand: (env) => {

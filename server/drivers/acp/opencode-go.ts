@@ -14,6 +14,15 @@ import { OPENCODE_STANDALONE } from "./opencode-release.ts";
 import { createAcpDriver, type AccountErrorCode, type AcpConfig, type AcpSupport } from "./core.ts";
 import { offeredModels, surveyModelVariants } from "./config-options.ts";
 import { declareTypedOpenCodeModel } from "./opencode-typed-model.ts";
+import {
+  declareLiveOpenCodeModels,
+  keepOpenCodeModelsFresh,
+  markOpenCodeCatalogRefreshed,
+  refreshLiveModelLists,
+  resetLiveModelLists,
+  type OpenCodeModelSources,
+  type OpenCodeRefreshSchedule,
+} from "./opencode-model-refresh.ts";
 import { parseOpenCodeLogLine } from "./quiet-status.ts";
 import type { ModelCatalog, ModelVariantOption, ProviderDriver, ProviderErrorCode } from "../../contracts.ts";
 import { titleCaseModelId } from "../../contracts.ts";
@@ -30,12 +39,14 @@ const paidModels = new Set<string>();
 const DISCOVERY_TIMEOUT_MS = 20_000;
 const EFFORT_SURVEY_MS = 8_000;
 const DISCOVERY_PROBE_TTL_MS = 30_000;
+/** How long a listing OpenCode 2 runs stays open for its own catalog refresh to land (2.2.5 fetched 11 MB in 4 s). */
+const SELF_REFRESH_SETTLE_MS = 10_000;
 const discoveryProbeCache = new Map<string, { expiresAt: number; result: Promise<boolean> }>();
 
 export type OpenCodeCatalogLoader = (
   environment: Record<string, string | undefined>,
   cli: string,
-  options?: { refresh?: boolean },
+  options?: { refresh?: boolean; settleMs?: number },
 ) => Promise<ModelCatalog>;
 
 function labelForModel(id: string): string {
@@ -230,11 +241,15 @@ function runOpenCodeModelsVerbose(
   });
 }
 
-/** OpenCode (1.19.4) lists models from its models.dev cache, or without one the snapshot built into it, and neither
- * `opencode models` nor `opencode acp` refetches it; `models --refresh` does, and the next process reads it. */
-function refreshOpenCodeModelCache(cli: string, environment: Record<string, string | undefined>): Promise<void> {
+/** OpenCode 1.19.4 lists models from its models.dev cache file and `models --refresh` refetches it. Every other
+ * process of it starts a background refetch under a cross-process lock that a process ended mid-fetch leaves held,
+ * and the next refetch waits until the lock is a minute old. OpenCode 2.2.5 rejects the flag (exit 1): each of its
+ * processes refetches its catalog itself, in the background, at start. */
+const MODELS_REFRESH_TIMEOUT_MS = 75_000;
+
+function refreshOpenCodeModelCache(cli: string, environment: Record<string, string | undefined>): Promise<boolean> {
   return new Promise((resolve) => {
-    execCli(cli, ["models", "--refresh"], { timeout: DISCOVERY_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, env: environment }, () => resolve());
+    execCli(cli, ["models", "--refresh"], { timeout: MODELS_REFRESH_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, env: environment }, (error) => resolve(!error));
   });
 }
 
@@ -294,11 +309,14 @@ export function surveyOpenCodeEfforts(
   return surveyModelVariants(request, session, budgetMs);
 }
 
+/** `settleMs` keeps the process open that long after it starts, then lists again: OpenCode 2's own catalog refresh
+ * reaches a running process's later sessions only. */
 export async function probeOpenCodeSession(
   cli: string,
   environment: Record<string, string | undefined>,
   folder?: string,
   timeoutMs = DISCOVERY_TIMEOUT_MS,
+  settleMs = 0,
 ): Promise<OpenCodeSessionProbe> {
   const cwd = folder ?? await discoveryDirectory();
   const deadline = Date.now() + timeoutMs;
@@ -388,7 +406,12 @@ export async function probeOpenCodeSession(
       const session = await request("session/new", { cwd, mcpServers: [] });
       listed = { session, efforts: new Map() };
       const budget = Math.min(EFFORT_SURVEY_MS, deadline - Date.now() - 1_000);
-      return { session, efforts: await surveyOpenCodeEfforts(request, session, budget) };
+      const efforts = await surveyOpenCodeEfforts(request, session, budget);
+      if (!settleMs) return { session, efforts };
+      const wait = Math.min(settleMs, timeoutMs - 2_000) - (Date.now() - (deadline - timeoutMs));
+      if (wait > 0) await new Promise((resolveWait) => setTimeout(resolveWait, wait));
+      const later = await request("session/new", { cwd, mcpServers: [] });
+      return { session: catalogFromOpenCodeSession(later) ? later : session, efforts };
     })().then((result) => finish(null, result), (error: Error) => finish(error));
   });
 }
@@ -408,11 +431,15 @@ function withEfforts(
 export async function discoverOpenCodeModels(
   environment: Record<string, string | undefined>,
   cli = "opencode",
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean; settleMs?: number } = {},
 ): Promise<ModelCatalog> {
-  if (options.refresh) await refreshOpenCodeModelCache(cli, environment);
-  const probeSession = () => probeOpenCodeSession(cli, environment);
-  const readMetadata = () => runOpenCodeModelsVerbose(cli, environment).then(parseOpenCodeModels);
+  const settleMs = options.refresh && !await refreshOpenCodeModelCache(cli, environment)
+    ? options.settleMs ?? SELF_REFRESH_SETTLE_MS
+    : 0;
+  // A listing ends long before a catalog refetch would: it reads the cache, unless it waits for OpenCode 2's own refetch.
+  const listing = settleMs ? environment : { ...environment, OPENCODE_DISABLE_MODELS_FETCH: "1" };
+  const probeSession = () => probeOpenCodeSession(cli, listing, undefined, DISCOVERY_TIMEOUT_MS, settleMs);
+  const readMetadata = () => runOpenCodeModelsVerbose(cli, listing).then(parseOpenCodeModels);
   let [session, verbose] = await Promise.allSettled([probeSession(), readMetadata()]);
   // Two OpenCode processes starting together in a fresh home race to create its database and one fails
   // (1 in 8 fresh homes). A timed-out half is not retried.
@@ -469,6 +496,7 @@ export async function canRunOpenCode(
 
 export function resetOpenCodeModelCache() {
   discoveryFolder = null;
+  resetLiveModelLists();
   lastSuccessfulCatalog.clear();
   catalogRevisions.clear();
   discoveryProbeCache.clear();
@@ -517,7 +545,24 @@ function opencodeConfigDir(env: Record<string, string | undefined>): string {
   return join(env.XDG_CONFIG_HOME || join(home, ".config"), "opencode");
 }
 
-/** Upsert an openai-compatible provider so OpenCode can select host/model. */
+function configRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+/** Output tokens an injected BYOK model may produce per turn. The 32000 OpenCode defaults to is where long-thinking
+ * models stop before answering (FIX-E54). */
+const DEFAULT_BYOK_MAX_OUTPUT_TOKENS = 64_000;
+
+function byokMaxOutputTokens(env: Record<string, string | undefined>): number {
+  const parsed = Number(env.OMB_BYOK_MAX_OUTPUT_TOKENS);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_BYOK_MAX_OUTPUT_TOKENS;
+}
+
+/** Upsert an openai-compatible provider so OpenCode can select host/model. OpenCode reads its config
+ * once per process and merges OPENCODE_CONFIG_CONTENT over its other config, so the provider rides
+ * that env and a turn that picks another inject model respawns with it; writing this machine's
+ * opencode.json would land the api key there in plaintext and never reach a process started earlier.
+ * With an apiKeyEnv the value is OpenCode's `{env:<name>}` reference, so the key stays in the child env. */
 export function ensureOpenCodeInjectModel(
   modelId: string,
   env: Record<string, string | undefined> = process.env,
@@ -528,41 +573,35 @@ export function ensureOpenCodeInjectModel(
   if (!host) return modelId;
 
   const native = `${inject.host}/${inject.model}`;
-  const dir = opencodeConfigDir(env);
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, "opencode.json");
-  let config: Record<string, unknown> = { $schema: "https://opencode.ai/config.json" };
-  if (existsSync(path)) {
+  let config: Record<string, unknown> = {};
+  if (env.OPENCODE_CONFIG_CONTENT?.trim()) {
     try {
-      config = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-    } catch {}
+      const parsed = JSON.parse(env.OPENCODE_CONFIG_CONTENT) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return native;
+      config = parsed as Record<string, unknown>;
+    } catch {
+      return native;
+    }
   }
-  const providers =
-    config.provider && typeof config.provider === "object" && !Array.isArray(config.provider)
-      ? { ...(config.provider as Record<string, unknown>) }
-      : {};
-  const previous = providers[inject.host];
-  const existing =
-    previous && typeof previous === "object" && !Array.isArray(previous)
-      ? { ...(previous as Record<string, unknown>) }
-      : {
-          npm: "@ai-sdk/openai-compatible",
-          name: host.label,
-          options: {},
-          models: {},
-        };
-  const options =
-    existing.options && typeof existing.options === "object" && !Array.isArray(existing.options)
-      ? { ...(existing.options as Record<string, unknown>) }
-      : {};
+  const providers = { ...configRecord(config.provider) };
+  const existing = configRecord(providers[inject.host]);
+  const options = { ...configRecord(existing.options) };
   options.baseURL = host.baseUrl;
-  if (!options.apiKey) options.apiKey = hostApiKey(host, env);
-  const models =
-    existing.models && typeof existing.models === "object" && !Array.isArray(existing.models)
-      ? { ...(existing.models as Record<string, unknown>) }
-      : {};
+  if (!options.apiKey) options.apiKey = host.apiKeyEnv ? `{env:${host.apiKeyEnv}}` : hostApiKey(host, env);
+  const models = { ...configRecord(existing.models) };
   if (!models[inject.model]) {
-    models[inject.model] = { name: `${inject.model} (${host.label})` };
+    models[inject.model] = {
+      name: `${inject.model} (${host.label})`,
+      // OpenCode 1.19 rejects a model entry whose limit names output but not context; 0 is its own "unknown" and
+      // keeps context handling as it was. 2.x sends limit.output as the request cap as-is.
+      limit: { context: 0, output: byokMaxOutputTokens(env) },
+    };
+  }
+  // OpenCode 1.19 caps every request at min(model.limit.output, OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX ?? 32000),
+  // so the entry's limit.output alone never lifts that 32000; 2.x ignores the variable. Only inject turns get it:
+  // the env is part of the spawn fingerprint, so OpenCode's own models keep a process without it.
+  if (!env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX?.trim()) {
+    env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = String(byokMaxOutputTokens(env));
   }
   providers[inject.host] = {
     ...existing,
@@ -571,8 +610,7 @@ export function ensureOpenCodeInjectModel(
     options,
     models,
   };
-  config.provider = providers;
-  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...config, provider: providers });
   return native;
 }
 
@@ -816,7 +854,11 @@ function openCodeLoginsFingerprint(env: Record<string, string | undefined>): str
 }
 
 /** `ownAccess` hears, per instance, whether its last sign-in read found access of the person's own. */
-const support = (loadCatalog: OpenCodeCatalogLoader, ownAccess = new Map<string, boolean>()): AcpSupport => ({
+const support = (
+  loadCatalog: OpenCodeCatalogLoader,
+  ownAccess = new Map<string, boolean>(),
+  sources: OpenCodeModelSources = {},
+): AcpSupport => ({
   driverKind: "opencodeGo",
   displayName: "OpenCode",
   models: NO_MODELS,
@@ -854,6 +896,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader, ownAccess = new Map<string,
   resolveTurnModel: (model, env) => model ? declareTypedOpenCodeModel(env, model) ?? ensureOpenCodeInjectModel(model, env) : model,
   transformEnv: (env, config, instanceId, instanceEnvironment) => {
     withholdProviderKeysWhenManaged(env, config, instanceId, instanceEnvironment);
+    declareLiveOpenCodeModels(env, sources.liveLists);
     applyStandaloneSpawnEnv(OPENCODE_STANDALONE, env, config.cli);
   },
   spawnFingerprint: (env, config) => openCodeSpawnFingerprint(env, config.cli),
@@ -880,10 +923,12 @@ const support = (loadCatalog: OpenCodeCatalogLoader, ownAccess = new Map<string,
   },
   classifyError: classifyOpenCodeError,
   describeAccountError: describeOpenCodeAccountError,
-  resolveModels: async (environment, config, _instanceId, fresh) => mergeLocalInject(
-    await loadCatalog(environment, config.cli, { refresh: fresh === true }),
-    environment,
-  ),
+  resolveModels: async (environment, config, instanceId, fresh) => {
+    if (fresh) markOpenCodeCatalogRefreshed(instanceId, (sources.now ?? Date.now)());
+    await refreshLiveModelLists(environment, { lists: sources.liveLists, fetch: sources.fetch, now: sources.now });
+    declareLiveOpenCodeModels(environment, sources.liveLists);
+    return mergeLocalInject(await loadCatalog(environment, config.cli, { refresh: fresh === true }), environment);
+  },
   buildPromptText: (turn) => turn.system ? `${turn.system}\n\n${turn.text}` : turn.text,
 });
 
@@ -919,14 +964,20 @@ export function classifyOpenCodeError(error: unknown): ProviderErrorCode | undef
 
 export const classifyOpenCodeGoError = classifyOpenCodeError;
 
+export type { OpenCodeRefreshSchedule };
+
 /** Its status says `freeFallback` while only Zen's free no-login models make it ready (contracts.ts). */
-export function createOpenCodeDriver(loadCatalog: OpenCodeCatalogLoader = discoverOpenCodeModels): ProviderDriver<AcpConfig> {
+export function createOpenCodeDriver(
+  loadCatalog: OpenCodeCatalogLoader = discoverOpenCodeModels,
+  schedule: OpenCodeRefreshSchedule = {},
+): ProviderDriver<AcpConfig> {
   const ownAccess = new Map<string, boolean>();
-  const driver = createAcpDriver(support(loadCatalog, ownAccess));
+  const driver = createAcpDriver(support(loadCatalog, ownAccess, schedule));
   return {
     ...driver,
     async create(input) {
       const instance = await driver.create(input);
+      keepOpenCodeModelsFresh(instance, input.instanceId, schedule);
       const read = instance.snapshot.bind(instance);
       instance.snapshot = async () => {
         const snapshot = await read();

@@ -61,6 +61,7 @@ function rig(options: {
   };
   let seq = 0;
   let items = 0;
+  let askSeq = 0;
   const base = (threadId: string) => ({
     eventId: `e${++seq}`, provider: "fake", threadId, createdAt: "2026-10-13T00:00:00.000Z",
     ...(state.turnId === undefined ? {} : { turnId: state.turnId }),
@@ -108,6 +109,15 @@ function rig(options: {
     loop(count: number, command = "git status", result: Result = SAME, threadId = T) { times(count, () => this.run(command, result, threadId)); },
     ask: (tool = "Bash", summary = "npm test", threadId = T) =>
       emit({ ...base(threadId), type: "request.opened", requestType: "permission", tool, summary }),
+    /** A permission ask that carries a request id, so the guard can follow it to its answer. */
+    tracked: (tool = "Bash", summary = "npm test", threadId = T) => {
+      const requestId = `req-${++askSeq}`;
+      emit({ ...base(threadId), type: "request.opened", requestType: "permission", tool, summary, requestId });
+      return requestId;
+    },
+    /** The answer to a tracked ask, as a driver reports a person's or the harness's decision. */
+    decided: (requestId: string, behavior: "allow" | "deny", threadId = T) =>
+      emit({ ...base(threadId), type: "request.resolved", requestId, behavior, source: "user" }),
     /** One of the thousands of events a turn streams that are no tool call. */
     delta: (threadId = T) => emit({ ...base(threadId), type: "content.delta", streamKind: "assistant_text", delta: "…" }),
     began: (threadId = T) => emit({ ...base(threadId), type: "turn.started" }),
@@ -427,6 +437,14 @@ describe("loop guard, which turns it leaves alone", () => {
     const r = rig({ settings: STOPS });
     for (let i = 0; i < 25; i++) r.ask();
     expect(r.notices()).toEqual([5, 10, 20].map((count) => `Same call repeated ${count}× — Bash: npm test — it may be stuck`));
+    expect(r.steers).toEqual([]);
+    expect(r.interrupts).toEqual([]);
+  });
+
+  it("counts an ask it cannot follow to its answer when it opens, and never acts on it either", () => {
+    const r = rig({ settings: STOPS });
+    for (let i = 0; i < 25; i++) r.tracked();
+    expect(r.notices()).toEqual([]);
     expect(r.steers).toEqual([]);
     expect(r.interrupts).toEqual([]);
   });
@@ -774,6 +792,45 @@ describe("loop guard, the same command", () => {
     // the same long command, with its arguments whole, is one command
     times(10, () => r.play({ title: "Bash", summary: long.slice(0, 200), input: JSON.stringify({ command: long }, null, 2) }));
     expect(r.interrupts).toHaveLength(1);
+  });
+});
+
+// An ask the guard can follow to its answer counts only once it is refused.
+describe("loop guard, permission asks it can follow", () => {
+  const BROWSER = "driver:mcp:acp_7f3a requires approval (medium)";
+
+  it("does not count five asks answered allow, however alike they read: different tools behind the same words", () => {
+    const r = rig({ settings: { enabled: false } });
+    // an ACP agent's browser calls — open, click, get_title, screenshot, wait — every ask worded the same
+    for (let i = 0; i < 5; i++) r.decided(r.tracked("other", BROWSER), "allow");
+    expect(r.rows).toEqual([]);
+  });
+
+  it("still counts one call refused five times, and says so at the fifth refusal, not before", () => {
+    const r = rig({ settings: { enabled: false } });
+    for (let i = 0; i < 4; i++) r.decided(r.tracked("Bash", "npm test"), "deny");
+    expect(r.notices()).toEqual([]);
+    r.decided(r.tracked("Bash", "npm test"), "deny");
+    expect(r.notices()).toEqual(["Same call repeated 5× — Bash: npm test — it may be stuck"]);
+  });
+
+  it("does not count an ask a person allowed either, or one refused after the turn ended", () => {
+    const r = rig({ settings: { enabled: false } });
+    for (let i = 0; i < 5; i++) r.decided(r.tracked("Bash", "npm test"), "allow");
+    expect(r.notices()).toEqual([]);
+    const open = r.tracked("Bash", "npm test");
+    r.completed();
+    r.decided(open, "deny");
+    expect(r.notices()).toEqual([]);
+  });
+
+  it("reads a refusal and an allow for what they are: four refusals, an allow, a fifth refusal is five", () => {
+    const r = rig({ settings: { enabled: false } });
+    for (let i = 0; i < 4; i++) r.decided(r.tracked("Bash", "npm test"), "deny");
+    r.decided(r.tracked("Bash", "npm test"), "allow");
+    expect(r.notices()).toEqual([]);
+    r.decided(r.tracked("Bash", "npm test"), "deny");
+    expect(r.notices()).toEqual(["Same call repeated 5× — Bash: npm test — it may be stuck"]);
   });
 });
 

@@ -323,6 +323,12 @@ export const limitQuietMs = (): number => knob("OMB_ACP_LIMIT_QUIET_MS", DEFAULT
 export const usageLimitWait = (status: number | null | undefined, waitMs: number | null | undefined): boolean =>
   status === 429 && (waitMs ?? 0) > limitQuietMs();
 
+/** An engine that answers `end_turn` while a tool call is still in progress (agy 1.5.3 moves a command to a
+ * background task after its foreground wait) has not ended the work: how long that call may hold the turn open
+ * (OMB_ACP_TOOL_DRAIN_MS overrides). */
+export const DEFAULT_TOOL_DRAIN_MS = 3 * 60_000;
+export const toolDrainMs = (): number => knob("OMB_ACP_TOOL_DRAIN_MS", DEFAULT_TOOL_DRAIN_MS);
+
 /** No open request, no CPU and nothing logged, this long: the engine is stuck, and the turn is stopped
  * (OMB_ACP_NO_SIGNS_STOP_MS overrides). */
 export const DEFAULT_NO_SIGNS_STOP_MS = 5 * 60_000;

@@ -101,7 +101,6 @@ function shown(key: string | null): CountedCall | null {
 type ToolStart = Extract<RuntimeEvent, { type: "item.started" }>;
 
 function countedCall(event: RuntimeEvent): CountedCall | null {
-  if (event.type === "request.opened" && event.requestType === "permission") return shown(callKey(event.tool, event.summary));
   if (event.type !== "item.started" || event.itemType !== "tool") return null;
   const key = toolItemKey(event.title, event.input);
   // The chip quotes the title only, never the input the key counts on.
@@ -142,6 +141,8 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
   const streaks = new RepeatStreak<CountedCall>({ maxPending: MAX_CALLS_PER_TURN });
   const acted = new Map<string, { stopped: boolean; steered: Set<string> }>();
   const turnOf = new Map<string, string>();
+  /** Permission asks opened but not yet answered, by request id: counted only when refused. */
+  const asks = new Map<string, Map<string, CountedCall>>();
   const log = (what: string, threadId: string, streak: number) =>
     (deps.log ?? console.info)(`[loop-guard] ${what}: thread=${threadId} failures-in-a-row=${streak}`);
 
@@ -152,8 +153,17 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
 
   const settle = (threadId: string) => {
     repeats.settle(threadId);
+    asks.delete(threadId);
     startOver(threadId);
     turnOf.delete(threadId);
+  };
+
+  const chip = (threadId: string, call: CountedCall) => {
+    const { threshold } = repeats.record(threadId, call.key);
+    if (threshold) {
+      const { tool, args } = call;
+      deps.append(threadId, { name: `Same call repeated ${threshold}× — ${tool}: ${args.slice(0, 80)}${args.length > 80 ? "…" : ""} — it may be stuck`, ok: false });
+    }
   };
 
   const steer = (threadId: string, note: string, streak: number) => {
@@ -210,14 +220,31 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
       return;
     }
 
-    const counted = countedCall(event);
-    if (counted) {
-      const { threshold } = repeats.record(threadId, counted.key);
-      if (threshold) {
-        const { tool, args } = counted;
-        deps.append(threadId, { name: `Same call repeated ${threshold}× — ${tool}: ${args.slice(0, 80)}${args.length > 80 ? "…" : ""} — it may be stuck`, ok: false });
-      }
+    // An ask counts only once it is refused: one answered "allow" ran (Full access answers every ask itself, and
+    // vendors word every ask alike), while one with no request id cannot be followed to its answer and counts as it opens.
+    if (event.type === "request.opened" && event.requestType === "permission") {
+      const call = shown(callKey(event.tool, event.summary));
+      if (!call) return;
+      if (event.requestId === undefined) return chip(threadId, call);
+      let per = asks.get(threadId);
+      if (!per) asks.set(threadId, (per = new Map()));
+      per.delete(event.requestId);
+      if (per.size >= MAX_CALLS_PER_TURN) per.delete(per.keys().next().value!);
+      per.set(event.requestId, call);
+      return;
     }
+    if (event.type === "request.resolved") {
+      const per = asks.get(threadId);
+      const call = event.requestId === undefined ? undefined : per?.get(event.requestId);
+      if (per && call && event.requestId !== undefined) {
+        per.delete(event.requestId);
+        if (event.behavior !== "allow") chip(threadId, call);
+      }
+      return;
+    }
+
+    const counted = countedCall(event);
+    if (counted) chip(threadId, counted);
 
     if ((event.type !== "item.started" && event.type !== "item.completed") || event.itemType !== "tool") return;
     const settings = deps.settings();
