@@ -8,7 +8,7 @@ import {
   listCheckinAccounts,
   runCheckin,
   updateCheckinConfig
-} from '../console/checkin.mjs';
+} from '../checkin/checkin.mjs';
 
 test('checkin open source projects catalog covers all three platforms', () => {
   assert.ok(OPEN_SOURCE_PROJECTS.workbuddy.length >= 2, 'WorkBuddy has open source projects');

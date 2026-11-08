@@ -21,7 +21,7 @@ process.env.AGENTHUB_HOME = tempHome;
 // 组件/安装路径全部短路：本测试只验证「环境变量三件套的选择逻辑」
 process.env.QODER_UMID_NO_INSTALL = '1';
 
-const { resolveQoderDevice, resetQoderDeviceCache } = await import('../console/qoder-device.mjs');
+const { resolveQoderDevice, resetQoderDeviceCache } = await import('../checkin/qoder-device.mjs');
 
 const KEYS = [
   'QODER_MACHINE_TOKEN', 'QODER_MACHINE_CODE', 'QODER_MACHINE_TYPE',

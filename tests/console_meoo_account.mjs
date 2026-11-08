@@ -9,8 +9,8 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { detectAccountInfo, WORKER_CRED_FILES } = await import('../console/accounts.mjs');
-const { LOGIN_COMMANDS, startLogin } = await import('../console/auth.mjs');
+const { detectAccountInfo, WORKER_CRED_FILES } = await import('../checkin/accounts.mjs');
+const { LOGIN_COMMANDS, startLogin } = await import('../checkin/auth.mjs');
 
 test('登录指令已登记 meoo：粘贴 AK 即可完成认证', async () => {
   const spec = LOGIN_COMMANDS.meoo;

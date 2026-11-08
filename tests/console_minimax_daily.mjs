@@ -21,7 +21,7 @@ async function makeHome({ records, state } = {}) {
 /** 每次都拿一份全新的模块实例，好让 AGENTHUB_HOME 在 import 时生效 */
 async function loadModule(home) {
   process.env.AGENTHUB_HOME = home;
-  return import(`../console/minimax-checkin.mjs?case=${++seq}`);
+  return import(`../checkin/minimax-checkin.mjs?case=${++seq}`);
 }
 
 function stubFetch(handler) {

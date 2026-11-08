@@ -9,7 +9,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { detectAccountInfo } = await import('../console/accounts.mjs');
+const { detectAccountInfo } = await import('../checkin/accounts.mjs');
 
 const AK = 'HPUATESTAK00000000000000000001';
 const SK = 'sk-test-000000000000000000000000000';

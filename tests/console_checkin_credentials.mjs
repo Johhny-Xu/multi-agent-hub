@@ -12,8 +12,8 @@ const root = await mkdtemp(join(tmpdir(), 'agenthub-checkin-'));
 process.env.AGENTHUB_HOME = root;
 process.env.AGENTHUB_CHECKIN_STATE = join(root, 'checkin-state.json');
 
-const mod = await import('../console/checkin.mjs');
-const { readQoderCredential, readQoderCredentialAt, persistQoderToken } = await import('../console/qoder.mjs');
+const mod = await import('../checkin/checkin.mjs');
+const { readQoderCredential, readQoderCredentialAt, persistQoderToken } = await import('../checkin/qoder.mjs');
 
 /** 造一个 JWT：只需要 payload，代码只解析不验签 */
 function fakeJwt(payload) {

@@ -12,7 +12,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const trae = await import('../console/trae-checkin.mjs');
+const trae = await import('../checkin/trae-checkin.mjs');
 
 const b64url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
 const fakeJwt = (payload) => `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;

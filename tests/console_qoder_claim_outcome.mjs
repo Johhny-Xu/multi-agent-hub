@@ -21,9 +21,9 @@ process.env.QODER_MACHINE_TOKEN = 'tok-test';
 process.env.QODER_MACHINE_CODE = 'code-test';
 process.env.QODER_MACHINE_TYPE = 'type-test';
 
-const { qoderClaimOutcome, qoderQuotaCooldown, platformNeedsRetry, aggregatePlatformStatus, checkinQoder } = await import('../console/checkin.mjs');
-const { encryptLegacyQoderUser } = await import('../console/qoder.mjs');
-const device = await import('../console/qoder-device.mjs');
+const { qoderClaimOutcome, qoderQuotaCooldown, platformNeedsRetry, aggregatePlatformStatus, checkinQoder } = await import('../checkin/checkin.mjs');
+const { encryptLegacyQoderUser } = await import('../checkin/qoder.mjs');
+const device = await import('../checkin/qoder-device.mjs');
 
 const MACHINE_ID = '0123456789abcdef';
 const JWT = ['eyJhbGciOiJIUzI1NiJ9', Buffer.from(JSON.stringify({ exp: 9999999999, sub: 'u1' })).toString('base64url'), 'sig'].join('.');
@@ -118,7 +118,7 @@ test('领取阶段 112 保留 exhausted 类型，不误报每日计费上限', a
       return new Response(JSON.stringify({ code: 112, message: 'quota exhausted', pricingUrl: 'https://x/pricing' }), { status: 403 });
     }
     return new Response(JSON.stringify({ campaigns: [{
-      campaignId: 'daily-112', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMABLE', benefit: { amount: 100 },
+      campaignId: 'daily-112', title: '每日签到', actionType: 'CLAIM_BENEFIT', claimStatus: 'CLAIMABLE', benefit: { amount: 100 },
     }] }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   let out;
@@ -147,8 +147,8 @@ test('客户端资源目录严格地区隔离，不跨地区混用', () => {
   assert.ok(cnDirs.every((d) => !/(^|[\\/])Qoder([\\/]|$)/.test(d)), `国内版目录不能含国际版组件：${cnDirs.join(' | ')}`);
 });
 
-test('兜底客户端版本对齐 1.1.69', () => {
-  assert.equal(device.QODER_DEFAULT_CLIENT_VERSION, '1.1.69');
+test('兜底客户端版本对齐 1.1.83', () => {
+  assert.equal(device.QODER_DEFAULT_CLIENT_VERSION, '1.1.83');
 });
 
 // ---------------------------------------------------------------- 重试判定

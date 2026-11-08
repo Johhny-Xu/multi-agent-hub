@@ -17,8 +17,8 @@ process.env.AGENTHUB_HOME = tempHome;
 process.env.AGENTHUB_CHECKIN_STATE = join(tempHome, 'checkin-state.json');
 process.env.QODER_UMID_NO_INSTALL = '1';
 
-const { checkinQoder } = await import('../console/checkin.mjs');
-const { encryptLegacyQoderUser } = await import('../console/qoder.mjs');
+const { checkinQoder } = await import('../checkin/checkin.mjs');
+const { encryptLegacyQoderUser } = await import('../checkin/qoder.mjs');
 
 const MACHINE_ID = '0123456789abcdef';
 // exp=9999999999（2286 年）：保证测试期间 token 永不触发刷新分支
@@ -72,7 +72,7 @@ test('设备头拿到空列表时，最小请求头复取能看到活动并领�
   assert.equal(lists[1].headers['Cosy-MachineId'], undefined, '复取用最小请求头');
   const claim = seen.find((s) => s.url.includes('/claim'));
   assert.ok(claim, '应发起领取');
-  assert.ok(claim.headers['Cosy-MachineId'], '领取仍走原设备头路径（与上游一致）');
+  assert.equal(claim.headers['Cosy-MachineId'], undefined, '对齐 v1.0.16：claim 请求采用最小鉴权头，移除完整设备头');
 });
 
 test('最小头显示今日已领时采纳结果，不误报「上游未下发」也不排重试', async () => {
@@ -143,7 +143,7 @@ test('国际版既不触发最小头复取，也不跨地区换 openapi', async 
   }
   assert.equal(res.platform, 'qoder');
   const lists = seen.filter((s) => s.url.endsWith('/me/campaigns'));
-  assert.equal(lists.length, 1, '国际版只有首发一次：既没有最小头复取，也没有跨地区重试');
+  assert.equal(lists.length, 2, '国际版两段式（v1.0.14）：第一段读 uid + 第二段带设备头二次拉取，既没有最小头复取，也没有跨地区重试');
   assert.ok(lists[0].url.includes('openapi.qoder.sh'), '国际版首发打 sh');
   assert.ok(lists.every((s) => !s.url.includes('openapi.qoder.com.cn')), '国际版不打国内站');
   assert.equal(res.credits, 0);

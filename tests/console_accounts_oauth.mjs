@@ -75,7 +75,7 @@ test('账号 OAuth 隔离回归', { concurrency: false }, async (t) => {
     }
     syncBuiltinESMExports();
 
-    const authURL = new URL('../console/auth.mjs', import.meta.url).href;
+    const authURL = new URL('../checkin/auth.mjs', import.meta.url).href;
     hook = registerHooks({
       load(url, context, nextLoad) {
         if (url !== authURL) return nextLoad(url, context);
@@ -88,7 +88,7 @@ test('账号 OAuth 隔离回归', { concurrency: false }, async (t) => {
         };
       },
     });
-    const { addFromSandbox, saveAccount, switchAccount, detectAccountInfo } = await import('../console/accounts.mjs');
+    const { addFromSandbox, saveAccount, switchAccount, detectAccountInfo } = await import('../checkin/accounts.mjs');
     const workerDir = (worker) => join(home, '.agenthub', 'accounts', worker);
     const profileNames = async (worker) => (await readdir(workerDir(worker))).filter((name) => !name.startsWith('.')).sort();
     const readMeta = async (dir) => JSON.parse(await readFile(join(dir, 'meta.json'), 'utf-8'));

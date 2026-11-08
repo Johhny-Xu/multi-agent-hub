@@ -3,17 +3,24 @@
 // Each handler has one hard-coded upstream. No caller-supplied URL is ever fetched, so this cannot be
 // pointed at another host (SSRF); the only variable part is a path, and that path is normalised here.
 // Everything degrades to { ok: false } when the hub is down: OpenMausBot itself never waits on it.
+// Check-in is the exception: it runs in this process (./checkin), so it keeps working when the console is not up.
 import { Buffer } from "node:buffer";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { PASS, type RouteHandler } from "./routes/table.ts";
+import { createCheckinApi, ensureCheckinScheduler } from "./checkin/routes.ts";
+import { hubEventLog, redactEventText } from "./hub-compat/events.ts";
+import { resolveStateDir } from "./hub-compat/store.ts";
+import type { Store } from "./store.ts";
 
 const CONSOLE = "http://127.0.0.1:8890";
 const SCHEDULER = "http://127.0.0.1:8790/mcp";
 /** A hub that is not answering in three seconds is reported as down, not waited on. */
 const PROBE_MS = 3_000;
-/** A check-in run really does the work, so it is given longer than a probe. */
-const RUN_MS = 120_000;
+const QUOTA_RELAY_MS = 30_000;
+const QUOTA_FALLBACK_MS = 25_000;
 
-/** The console's check-in endpoints, keyed by the part after `/checkin`. */
+/** The check-in endpoints, keyed by the part after `/checkin`; the Daily page calls these. */
 const CHECKIN_ROUTES: Record<string, "GET" | "POST"> = {
   "/status": "GET",
   "/projects": "GET",
@@ -102,9 +109,180 @@ function extensionOf(path: string): string {
   return dot < 0 ? "" : path.slice(dot).toLowerCase();
 }
 
-export function createHubBridgeRoutes(): RouteHandler {
-  return async ({ req, res, path, method, json, readBody }) => {
-    if (!path.startsWith("/hub/") && !path.startsWith("/api/checkin/")) return PASS;
+/** Finished work stays on the page this long, so a task that ends while it is open is still readable. */
+const RECENT_TASK_WINDOW_S = 300;
+const TASK_LIST_LIMIT = 20;
+/** Longest one SSE response lives before EventSource reconnects with the same cursor. */
+const TASK_EVENTS_MAX_MS = 55_000;
+
+interface HubTaskView {
+  ref: string;
+  agent: string;
+  status: string;
+  title: string;
+  progress: string | null;
+  startedAt: number | null;
+  updatedAt: number;
+  elapsedS: number | null;
+  exitCode: number | null;
+  result: string | null;
+}
+
+/**
+ * The dispatch records hub-compat writes (`<stateDir>/results/<ref>.json`), shaped for the
+ * settings page: running first, then whatever finished in the last five minutes.
+ */
+async function readHubTasks(): Promise<HubTaskView[]> {
+  const resultsDir = join(resolveStateDir(), "results");
+  let names: string[];
+  try {
+    names = await readdir(resultsDir);
+  } catch {
+    return [];
+  }
+  const now = Date.now() / 1000;
+  const tasks: HubTaskView[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const ref = name.slice(0, -5);
+    // The compat tools also keep "zcode-last"/"trae-last" summaries; they are not dispatches.
+    if (ref === "zcode-last" || ref === "trae-last") continue;
+    let data: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(await readFile(join(resultsDir, name), "utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      data = parsed as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const status = String(data.status ?? "unknown");
+    const updatedAt = Number(data.updated_at ?? 0) || now;
+    if (status !== "running" && now - updatedAt > RECENT_TASK_WINDOW_S) continue;
+    const startedAt = Number(data.started_at ?? 0) || null;
+    const ended = status === "completed" || status === "error" || status === "timeout";
+    tasks.push({
+      ref: String(data.ref ?? ref),
+      agent: String(data.agent ?? "unknown"),
+      status,
+      title: data.task ? redactEventText(data.task).slice(0, 160) : "",
+      progress: data.progress ? redactEventText(data.progress).slice(0, 240) : null,
+      startedAt,
+      updatedAt,
+      elapsedS: startedAt ? Math.max(0, Math.round((status === "running" ? now : updatedAt) - startedAt)) : null,
+      exitCode: data.exit_code === null || data.exit_code === undefined ? null : Number(data.exit_code),
+      result: ended && data.text ? redactEventText(data.text).slice(0, 400) : null,
+    });
+  }
+  tasks.sort((left, right) =>
+    (left.status === "running" ? 0 : 1) - (right.status === "running" ? 0 : 1) || right.updatedAt - left.updatedAt);
+  return tasks.slice(0, TASK_LIST_LIMIT);
+}
+
+/**
+ * SSE over the same JSONL the compat process appends to: replay from `since`, then poll
+ * the file (a 700ms tail is plenty for a status line) until a terminal event.
+ */
+function streamHubTaskEvents(res: import("node:http").ServerResponse, ref: string, since: number): void {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-store, no-transform",
+    connection: "keep-alive",
+    "x-accel-buffering": "no",
+  });
+  res.write(": connected\n\n");
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+  const log = hubEventLog(resolveStateDir());
+  let cursor = Number.isFinite(since) ? since : 0;
+  let closed = false;
+  let poll: ReturnType<typeof setInterval> | null = null;
+  let ping: ReturnType<typeof setInterval> | null = null;
+  let deadline: ReturnType<typeof setTimeout> | null = null;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (poll) clearInterval(poll);
+    if (ping) clearInterval(ping);
+    if (deadline) clearTimeout(deadline);
+    if (!res.writableEnded) res.end();
+  };
+  const flush = () => {
+    if (closed) return;
+    let terminal = false;
+    for (const event of log.list(ref, cursor, 500)) {
+      cursor = event.seq;
+      try {
+        res.write(`id: ${event.seq}\nevent: hub\ndata: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        close();
+        return;
+      }
+      if (event.kind === "done" || event.kind === "error" || event.kind === "timeout") terminal = true;
+    }
+    if (terminal) {
+      res.write(`event: end\ndata: ${JSON.stringify({ ref, at: Date.now() / 1000 })}\n\n`);
+      close();
+    }
+  };
+  flush();
+  if (closed) return;
+  poll = setInterval(flush, 700);
+  ping = setInterval(() => {
+    try {
+      res.write(": ping\n\n");
+    } catch {
+      close();
+    }
+  }, 15_000);
+  deadline = setTimeout(close, TASK_EVENTS_MAX_MS);
+  res.on("close", close);
+  res.on("error", close);
+}
+
+/**
+ * The hub-compat process writes a dispatch's progress back into the thread that asked for it.
+ *
+ * The line is a bot line, not a person's: a person's line is what starts a turn of that bot, so
+ * a dispatch that reported back as a person's words would make the asking bot report back
+ * again. A bot line is read by the person and never wakes anybody.
+ */
+export function appendOriginLine(
+  store: Pick<Store, "appendMessage" | "botByThread" | "patchTask">,
+  threadId: string,
+  text: string,
+): { ok: true; threadId: string; messageId?: string } | { ok: false; status: number; error: string } {
+  if (!/^[\w-]{1,128}$/.test(threadId)) return { ok: false, status: 400, error: "threadId must be a task id" };
+  const line = redactEventText(text).slice(0, 400);
+  if (!line) return { ok: false, status: 400, error: "text required" };
+  const bot = store.botByThread(threadId);
+  if (!bot) return { ok: false, status: 404, error: "no such thread" };
+  const message = store.appendMessage(threadId, { role: "bot", kind: "text", text: line });
+  store.patchTask(bot.id, threadId, { unread: true });
+  return { ok: true, threadId, messageId: message?.id };
+}
+
+export function createHubBridgeRoutes(deps: {
+  store: Pick<Store, "appendMessage" | "botByThread" | "patchTask">;
+  getAllQuotas?: (opts?: { force?: boolean }) => Promise<unknown>;
+  /** Whether the console answers at all; a console that is up but slow must not trigger a second quota fetch. */
+  consoleReachable?: () => Promise<boolean>;
+  /** Total budget for the in-process quota fallback. */
+  quotaFallbackMs?: number;
+  askConsole?: typeof askConsole;
+}): RouteHandler {
+  const checkinApi = createCheckinApi();
+  ensureCheckinScheduler();
+  return async ({ req, res, path, url, method, json, readBody }) => {
+    if (!path.startsWith("/hub/") && !path.startsWith("/api/checkin/")
+      && path !== "/api/hub/tasks" && !path.startsWith("/api/hub/")) return PASS;
+
+    if (method === "POST" && path === "/api/hub/origin") {
+      const body = await readBody(req, 64 * 1024);
+      const threadId = typeof (body as { threadId?: unknown })?.threadId === "string" ? (body as { threadId: string }).threadId : "";
+      const text = typeof (body as { text?: unknown })?.text === "string" ? (body as { text: string }).text : "";
+      const outcome = appendOriginLine(deps.store, threadId, text);
+      if (!outcome.ok) return json(res, outcome.status, { error: outcome.error });
+      return json(res, 201, { ok: true, threadId: outcome.threadId, messageId: outcome.messageId });
+    }
 
     // A trailing slash keeps the console page's relative asset URLs under /hub/ui/.
     if (method === "GET" && path === "/hub/ui") {
@@ -118,14 +296,57 @@ export function createHubBridgeRoutes(): RouteHandler {
       return json(res, 200, { console: { ok: consoleOk, url: CONSOLE }, scheduler: { ok: schedulerOk, url: SCHEDULER } });
     }
 
+    // Dispatched work, read from the compat process's own state: the settings page subscribes here
+    // instead of polling hub_task_status. Both routes sit behind this server's normal auth gate.
+    if (method === "GET" && path === "/api/hub/tasks") {
+      return json(res, 200, { ok: true, tasks: await readHubTasks() });
+    }
+
+    const taskEvents = /^\/api\/hub\/tasks\/([^/]+)\/events$/.exec(path);
+    if (taskEvents) {
+      if (method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+      let ref: string;
+      try {
+        ref = decodeURIComponent(taskEvents[1]!);
+      } catch {
+        return json(res, 400, { ok: false, error: "bad_ref" });
+      }
+      if (!/^[A-Za-z0-9._-]{1,160}$/.test(ref)) return json(res, 400, { ok: false, error: "bad_ref" });
+      const headerSince = Number(req.headers["last-event-id"] ?? "");
+      const querySince = Number(url.searchParams.get("since") ?? "");
+      const since = Math.max(Number.isFinite(headerSince) ? headerSince : 0, Number.isFinite(querySince) ? querySince : 0);
+      streamHubTaskEvents(res, ref, since);
+      return;
+    }
+    if (path.startsWith("/api/hub/")) return json(res, 405, { ok: false, error: "method_not_allowed" });
+
     // The console already aggregates each worker's remaining allowance; the daily page reads it through here so the
     // phone never needs a second origin (and a second sign-in) to see quotas.
+    // When the external console is unreachable, fall back to native in-process quota tracking (vendor-quota.mjs).
     if (method === "GET" && path === "/hub/quota") {
-      const upstream = await askConsole("GET", "/api/quota", undefined, 8_000);
-      if (!upstream) return json(res, 502, { ok: false, error: "console_unreachable" });
-      res.writeHead(upstream.status, { "content-type": "application/json; charset=utf-8", "content-length": String(upstream.body.length), "cache-control": "no-store" });
-      res.end(upstream.body);
-      return;
+      const ask = deps.askConsole ?? askConsole;
+      // The console's /api/quota takes ~4 s warm and 20 s+ cold (E39): wait for it rather than racing it.
+      const upstream = await ask("GET", "/api/quota", undefined, QUOTA_RELAY_MS);
+      if (upstream) {
+        res.writeHead(upstream.status, { "content-type": "application/json; charset=utf-8", "content-length": String(upstream.body.length), "cache-control": "no-store" });
+        res.end(upstream.body);
+        return;
+      }
+      // Up but slow: the console is already fetching (and may be refreshing OAuth tokens it writes back to the
+      // credential files), so a second fetch here would race it. Only a console that is down hands over (E39).
+      const up = await (deps.consoleReachable ?? (() => reachable(CONSOLE)))();
+      if (up) return json(res, 504, { ok: false, error: "console_slow" });
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        const fetchQuotas = deps.getAllQuotas ?? (await import("../checkin/vendor-quota.mjs")).getAllQuotas;
+        const budget = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("quota_timeout")), deps.quotaFallbackMs ?? QUOTA_FALLBACK_MS); });
+        const data = await Promise.race([fetchQuotas({ force: url.searchParams.get("refresh") === "1" }), budget]);
+        return json(res, 200, data);
+      } catch (error) {
+        return json(res, (error as Error)?.message === "quota_timeout" ? 504 : 502, { ok: false, error: (error as Error)?.message === "quota_timeout" ? "quota_timeout" : "console_unreachable" });
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     }
 
     if (method === "GET" && (path === "/hub/ui/" || path.startsWith("/hub/ui/"))) {
@@ -151,24 +372,25 @@ export function createHubBridgeRoutes(): RouteHandler {
     if (method !== expected) return json(res, 405, { ok: false, error: "method_not_allowed" });
 
     if (method === "GET") {
-      const upstream = await askConsole("GET", `/api/checkin${checkin}`);
-      if (!upstream) return json(res, 502, { ok: false, error: "console_unreachable" });
-      res.writeHead(upstream.status, { "content-type": "application/json; charset=utf-8", "content-length": String(upstream.body.length), "cache-control": "no-store" });
-      res.end(upstream.body);
-      return;
+      return json(res, 200, checkin === "/status" ? await checkinApi.status() : checkinApi.projects());
     }
 
-    // The run body is passed through as sent ({ platform: "all" | "<name>" }); an empty body stays empty JSON.
-    let body = "{}";
+    let body: Record<string, unknown> = {};
     try {
       const sent = await readBody(req, 64 * 1024);
-      if (sent !== undefined && sent !== null) body = JSON.stringify(sent);
+      if (sent && typeof sent === "object") body = sent as Record<string, unknown>;
     } catch {
       return json(res, 400, { ok: false, error: "bad_body" });
     }
-    const upstream = await askConsole("POST", `/api/checkin${checkin}`, body, checkin === "/run" ? RUN_MS : PROBE_MS);
-    if (!upstream) return json(res, 502, { ok: false, error: "console_unreachable" });
-    res.writeHead(upstream.status, { "content-type": "application/json; charset=utf-8", "content-length": String(upstream.body.length), "cache-control": "no-store" });
-    res.end(upstream.body);
+    try {
+      if (checkin === "/run") {
+        const target = typeof body.platform === "string" && body.platform ? body.platform : "all";
+        return json(res, 200, await checkinApi.run(target));
+      }
+      if (checkin === "/history/clear") return json(res, 200, await checkinApi.clearHistory());
+      return json(res, 200, await checkinApi.config(body));
+    } catch (error) {
+      return json(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
   };
 }

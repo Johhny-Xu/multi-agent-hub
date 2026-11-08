@@ -12,9 +12,9 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 
-const { extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow, qoderTodayWindowStart } = await import('../console/checkin.mjs');
-const { qoderHeaders, listQoderCampaigns, claimQoderCampaign } = await import('../console/qoder.mjs');
-const device = await import('../console/qoder-device.mjs');
+const { extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow, qoderTodayWindowStart } = await import('../checkin/checkin.mjs');
+const { qoderHeaders, listQoderCampaigns, claimQoderCampaign } = await import('../checkin/qoder.mjs');
+const device = await import('../checkin/qoder-device.mjs');
 
 const DEVICE = {
   worker: 'qoder',
@@ -73,10 +73,10 @@ test('设备头来自 UMID 组件，缺组件时不编造', () => {
 
   const bare = qoderHeaders('qoder', 'dt-token');
   assert.equal(bare['Cosy-MachineToken'], undefined);
-  assert.equal(bare['cosy-version'], '1.1.69');
+  assert.equal(bare['cosy-version'], '1.1.83');
 });
 
-test('拉活动列表不带 forceRefresh（带上会被服务端过滤掉每日活动行），领取带设备头', async () => {
+test('拉活动列表不带 forceRefresh（带上会被服务端过滤掉每日活动行），领取采用最小请求形态', async () => {
   const seen = [];
   const original = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
@@ -94,7 +94,7 @@ test('拉活动列表不带 forceRefresh（带上会被服务端过滤掉每日�
   assert.ok(!seen[0].url.includes('forceRefresh'), '活动列表不能带 forceRefresh=true');
   assert.equal(seen[0].headers['Cosy-MachineToken'], 'tok-abc');
   assert.match(seen[1].url, /\/campaigns\/camp%201\/claim$/);
-  assert.equal(seen[1].headers['Cosy-MachineToken'], 'tok-abc');
+  assert.equal(seen[1].headers['Cosy-MachineToken'], undefined, '对齐 v1.0.16 最小鉴权头，移除完整设备头');
 });
 
 // ---------------------------------------------------------------- 设备身份
@@ -244,15 +244,15 @@ test('本机 CLI 的 runtime-info 能被识别（执行部分仅 Unix）', async
     const cli = await device.findCliUmid(home, 'qoder');
     assert.ok(cli, '应找到 .bin 下的 runtime-info');
     assert.equal(cli.source, 'qodercli');
-    assert.equal(cli.env, 3, '国际版运行环境码固定为 3');
+    assert.equal(cli.env, 4, '国际版 CLI 运行环境码固定为 4（v1.0.14）');
     const found = await device.findQoderUmidComponent(home, 'qoder');
     assert.ok(found, '应找到 UMID 组件');
-    assert.equal(found.env, 3, '国际版运行环境码固定为 3，与组件来源无关');
+    assert.equal(found.env, found.source === 'app' ? 3 : 4, '客户端运行环境码 3，CLI 运行环境码 4');
     if (process.platform === 'win32') {
       t.diagnostic('Windows 下 .cmd 无法直接 execFile，执行链路由 n5095 实测覆盖');
       return;
     }
-    const risk = await device.runQoderUmidComponent(found.path, found.env, 'u1');
+    const risk = await device.runQoderUmidComponent(cli.path, cli.env, 'u1');
     assert.equal(risk.machineToken, 'tok-x');
     assert.equal(risk.machineType, 'type-x');
   } finally {

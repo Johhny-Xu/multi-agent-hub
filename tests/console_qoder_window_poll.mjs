@@ -28,8 +28,8 @@ const {
   qoderPeriodNeedsCheck, platformNeedsRetry, aggregatePlatformStatus,
   selectAutoCheckinPlatforms, checkinQoder, retryBudgetFor,
   startAutoCheckinScheduler, stopAutoCheckinScheduler, nextAutoCheckinDelay,
-} = await import('../console/checkin.mjs');
-const { encryptLegacyQoderUser } = await import('../console/qoder.mjs');
+} = await import('../checkin/checkin.mjs');
+const { encryptLegacyQoderUser } = await import('../checkin/qoder.mjs');
 
 const MACHINE_ID = '0123456789abcdef';
 const JWT = ['eyJhbGciOiJIUzI1NiJ9', Buffer.from(JSON.stringify({ exp: 9999999999, sub: 'u1' })).toString('base64url'), 'sig'].join('.');

@@ -16,7 +16,7 @@ const root = await mkdtemp(join(tmpdir(), 'agenthub-checkin-sync-'));
 process.env.AGENTHUB_HOME = root;
 process.env.AGENTHUB_CHECKIN_STATE = join(root, 'checkin-state.json');
 
-const { getCheckinOverview, listCheckinAccounts, pendingAccountPlatforms, checkinMiniMaxPlatform, runCheckin } = await import('../console/checkin.mjs');
+const { getCheckinOverview, listCheckinAccounts, pendingAccountPlatforms, checkinMiniMaxPlatform, runCheckin } = await import('../checkin/checkin.mjs');
 
 const STATE_FILE = join(root, 'checkin-state.json');
 

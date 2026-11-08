@@ -9,7 +9,7 @@ const tempHome = await mkdtemp(join(tmpdir(), 'agenthub-cb-checkin-'));
 process.env.AGENTHUB_HOME = tempHome;
 process.env.AGENTHUB_CHECKIN_STATE = join(tempHome, 'checkin-state.json');
 
-const { checkinCodeBuddy, runCheckin, runAutoCheckinTick, getCheckinOverview, listCheckinAccounts } = await import('../console/checkin.mjs');
+const { checkinCodeBuddy, runCheckin, runAutoCheckinTick, getCheckinOverview, listCheckinAccounts } = await import('../checkin/checkin.mjs');
 const {
   CHECKIN_PLATFORMS,
   platformNeedsRetry,
@@ -19,8 +19,8 @@ const {
   buildCodeBuddyActivityEvent,
   isCodeBuddyAccountRestricted,
   decideCodeBuddyOutcome,
-} = await import('../console/checkin.mjs');
-const { encryptLegacyQoderUser } = await import('../console/qoder.mjs');
+} = await import('../checkin/checkin.mjs');
+const { encryptLegacyQoderUser } = await import('../checkin/qoder.mjs');
 
 /** 与 checkin.mjs 的 getTodayStr 同格式（本地时区 YYYY-MM-DD） */
 function todayStr() {
@@ -276,6 +276,7 @@ test('手动与自动签到并发：自动重试计数递增且不覆盖手动�
     const accounts = await listCheckinAccounts(plat);
     platforms[plat] = {
       lastDate: today,
+      lastTime: '23:59',
       status: 'success',
       retryCount: 0,
       accounts: accounts.map((account) => ({ identity: account.identity, display: account.display, status: 'success' })),

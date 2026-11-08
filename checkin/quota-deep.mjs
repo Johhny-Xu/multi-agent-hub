@@ -207,9 +207,34 @@ async function qoderQuota(worker) {
 
 // ---------------------------------------------------------------- Trae CN
 const TRAE_ENTITLE_PATH = '/trae/api/v2/pay/user_current_entitlement_list';
+// HUB src/trae.ts:64 TRAE_ENT_USAGE_PATH：entitlement 列表不可用时的兜底端点
+const TRAE_ENT_USAGE_PATH = '/trae/api/v2/pay/ide_user_ent_usage';
 const TRAE_STATUS_PATH = '/trae/api/v2/ug/checkin_credits/status';
 const TRAE_REQ_BODY = '{"require_usage": true}';
+// HUB trae-credits.ts:331：兜底请求体带 req_source: 2
+const TRAE_ENT_USAGE_BODY = '{"require_usage": true, "req_source": 2}';
 const TRAE_STATUS_BODY = '{"req_source":1}';
+
+/**
+ * 权益包 → 账号积分汇总。credits_limit = -1 表示**无限**（HUB trae-credits.ts
+ * 的对齐结论：remain = Σ(credits_limit − usage.credits_amount)，-1 是无限包，
+ * 不并入求和，单独以 unlimited 标出）；credits_limit ≤ 0 的其余形态跳过。
+ */
+export function traePacksSummary(packs) {
+  if (!Array.isArray(packs)) return null;
+  let total = 0;
+  let used = 0;
+  let unlimited = false;
+  let found = false;
+  for (const pack of packs) {
+    const limit = toNum(pack?.entitlement_base_info?.quota?.credits_limit);
+    const packUsed = toNum(pack?.usage?.credits_amount);
+    if (limit === -1) { unlimited = true; found = true; used += Math.max(0, packUsed); continue; }
+    if (limit > 0) { found = true; total += limit; used += Math.max(0, packUsed); }
+  }
+  if (!found) return null;
+  return { total, used, unlimited };
+}
 
 /**
  * Trae CN 账号积分 + 今日签到。
@@ -217,6 +242,8 @@ const TRAE_STATUS_BODY = '{"req_source":1}';
  * 令牌解析与签到共用一套：桌面端 storage.json 的 accessToken 常常已过期，
  * 真正可用的是 `~/.agenthub/trae-token-cache.json` 里续期后的那份，所以要先
  * 合并缓存再判失效，401/1001 时用 refreshToken 现场续期一次。
+ * 积分主端点是 user_current_entitlement_list；**失败时用 ide_user_ent_usage
+ * （req_source: 2）兜底**（HUB src/trae-credits.ts:331-340 的口径）。
  * 只读：绝不调用 claim 端点。
  */
 async function traeQuota() {
@@ -285,6 +312,17 @@ async function traeQuota() {
   let entitle = await post(TRAE_ENTITLE_PATH, TRAE_REQ_BODY);
   if (isAuthDead(entitle) && await renew()) entitle = await post(TRAE_ENTITLE_PATH, TRAE_REQ_BODY);
 
+  // 兜底：主端点失败（续期后仍失败）时改问 ide_user_ent_usage（HUB trae-credits.ts:331）
+  let usedFallback = false;
+  if (!entitle.ok || !entitle.json) {
+    let fallback = await post(TRAE_ENT_USAGE_PATH, TRAE_ENT_USAGE_BODY);
+    if (isAuthDead(fallback) && await renew()) fallback = await post(TRAE_ENT_USAGE_PATH, TRAE_ENT_USAGE_BODY);
+    if (fallback.ok && fallback.json) {
+      entitle = fallback;
+      usedFallback = true;
+    }
+  }
+
   let status = await post(TRAE_STATUS_PATH, TRAE_STATUS_BODY);
   if (isAuthDead(status) && await renew()) status = await post(TRAE_STATUS_PATH, TRAE_STATUS_BODY);
 
@@ -298,11 +336,16 @@ async function traeQuota() {
 
   const root = entitle.json?.data && typeof entitle.json.data === 'object' ? entitle.json.data : entitle.json;
   const summary = root?.usage_summary && typeof root.usage_summary === 'object' ? root.usage_summary : {};
+  const packs = Array.isArray(root?.user_entitlement_pack_list) ? root.user_entitlement_pack_list : [];
+  const packsSummary = traePacksSummary(packs);
+
   let total = toNum(summary.total_amount);
   let used = toNum(summary.consumed_amount);
-  const packs = Array.isArray(root?.user_entitlement_pack_list) ? root.user_entitlement_pack_list : [];
-
-  if (total <= 0) {
+  if (packsSummary) {
+    // 权益包口径优先于 usage_summary：无限包（credits_limit=-1）只有这里能看到
+    total = packsSummary.total;
+    used = packsSummary.used;
+  } else if (total <= 0) {
     // usage_summary 缺失时按权益包求和（只算 credits_limit > 0 的包）
     let sumTotal = 0;
     let sumUsed = 0;
@@ -318,8 +361,22 @@ async function traeQuota() {
     if (found) { total = sumTotal; used = sumUsed; }
   }
 
+  const unlimited = packsSummary?.unlimited === true;
   const quotas = [];
-  if (total > 0 || used > 0) {
+  if (unlimited) {
+    quotas.push({
+      name: '账号积分',
+      displayName: '账号积分',
+      used: round2(used),
+      total: 0,
+      remaining: 0,
+      remainingPercentage: 0,
+      resetAt: null,
+      unlimited: true,
+      isCreditBalance: true,
+      unit: 'credits',
+    });
+  } else if (total > 0 || used > 0) {
     const remaining = Math.max(0, total - used);
     quotas.push({
       name: '账号积分',
@@ -355,7 +412,7 @@ async function traeQuota() {
   if (!quotas.length) {
     return { account, plan, message: `Trae CN 凭据在线（${account}），上游未返回积分明细。` };
   }
-  return { account, plan, quotas };
+  return { account, plan, quotas, ...(usedFallback ? { message: '主端点不可用，本次积分数据来自 ide_user_ent_usage 兜底。' } : {}) };
 }
 
 // ---------------------------------------------------------------- 出口
