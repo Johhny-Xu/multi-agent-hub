@@ -1,0 +1,45 @@
+name: CI
+
+# The lean lane this repository runs on every pull request and push to main:
+# targeted unit tests of the CI wiring itself. Deliberately no full typecheck
+# (`pnpm typecheck` type-builds every project here) and no packaging, e2e or
+# smoke jobs: packages are gated by release.yml's tag build, and
+# scripts/ci-scope.test.ts still targets the upstream lane this repository
+# does not carry.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  unit:
+    name: Targeted unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Targeted unit tests
+        run: pnpm exec vitest run scripts/ci-workflow.test.ts scripts/ci-linux-lanes.test.ts scripts/release-ci.test.ts

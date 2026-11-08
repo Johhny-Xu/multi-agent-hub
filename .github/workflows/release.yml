@@ -1,0 +1,140 @@
+name: Release
+
+# Tag-only packaging. Pushing v* builds the two desktop packages GitHub's free
+# runners can build without signing credentials, then publishes them on the
+# tag's GitHub release. macOS is deliberately absent: its dmg/zip are signed
+# and notarized, which needs the certificate and App Store Connect key from
+# docs/releasing.md, and those secrets do not exist here.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  linux:
+    name: Linux packages (AppImage, deb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Check the tag matches package.json
+        run: |
+          node -e 'const {version}=require("./package.json");const tag=process.env.GITHUB_REF_NAME;if(`v${version}`!==tag){console.error(`tag ${tag} does not match package.json ${version}`);process.exit(1)}'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Linux packages
+        run: pnpm package:linux
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/latest-linux.yml
+            release/*.blockmap
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Windows installer (nsis)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Check the tag matches package.json
+        run: |
+          node -e 'const {version}=require("./package.json");const tag=process.env.GITHUB_REF_NAME;if(`v${version}`!==tag){console.error(`tag ${tag} does not match package.json ${version}`);process.exit(1)}'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows packages
+        run: pnpm package:win
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release
+          path: |
+            release/*.exe
+            release/*.zip
+            release/latest.yml
+            release/*.blockmap
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # The updater feeds are part of the release contract: an installer
+      # published without latest.yml leaves every installed Windows copy
+      # stranded on its current version.
+      - name: Check the updater feeds and installers are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -l artifacts
+          for pattern in '*.AppImage' '*.deb' 'latest-linux.yml' '*-setup.exe' 'latest.yml'; do
+            if ! compgen -G "artifacts/${pattern}" > /dev/null; then
+              echo "missing release asset: ${pattern}"
+              exit 1
+            fi
+          done
+
+      - name: Publish the tag's release with GITHUB_TOKEN
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          prerelease=()
+          case "${tag}" in
+            *-*) prerelease=(--prerelease) ;;
+          esac
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            gh release upload "${tag}" artifacts/* --clobber
+          else
+            gh release create "${tag}" artifacts/* --verify-tag \
+              --title "${tag}" --generate-notes "${prerelease[@]}"
+          fi
