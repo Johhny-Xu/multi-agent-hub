@@ -388,7 +388,7 @@ export function memberBot<T extends object>(bot: T, visible: VisibleSet): T {
   if (visible.everything) return visible.member ? withoutServerAlias(bot) : bot;
   const shown = visible.filtersThreads ? withLevel(shownConversations(bot, visible), visible) : bot;
   if (!visible.member) return shown;
-  const { visibility: _visibility, vpsAlias: _vpsAlias, ...rest } = shown as T & { visibility?: unknown; peers?: unknown; vpsAlias?: unknown };
+  const { visibility: _visibility, vpsAlias: _vpsAlias, vpsInstanceId: _vpsInstanceId, ...rest } = shown as T & { visibility?: unknown; peers?: unknown; vpsAlias?: unknown; vpsInstanceId?: unknown };
   const peers = Array.isArray(rest.peers) ? (rest.peers as unknown[]).filter((id): id is string => typeof id === "string" && visible.bot(id)) : undefined;
   return { ...rest, ...(peers ? { peers } : {}) } as T;
 }
@@ -450,15 +450,15 @@ function teamConversation(tasks: readonly unknown[]): string | undefined {
 
 /** The SSH alias of the server a bot's VPS computer lives on: an admin's, like the default alias in config. */
 export function withoutServerAlias<T extends object>(bot: T): T {
-  if (!("vpsAlias" in bot)) return bot;
-  const { vpsAlias: _vpsAlias, ...rest } = bot as T & { vpsAlias?: unknown };
+  if (!("vpsAlias" in bot) && !("vpsInstanceId" in bot)) return bot;
+  const { vpsAlias: _vpsAlias, vpsInstanceId: _vpsInstanceId, ...rest } = bot as T & { vpsAlias?: unknown; vpsInstanceId?: unknown };
   return rest as T;
 }
 
 /** A broadcast as every member receives it before any audience narrowing; the same object when nothing changes. */
 export function memberFramePayload(payload: Record<string, unknown>): Record<string, unknown> {
   const bot = payload.kind === "bot" ? payload.bot : undefined;
-  return bot && typeof bot === "object" && "vpsAlias" in bot ? { ...payload, bot: withoutServerAlias(bot) } : payload;
+  return bot && typeof bot === "object" && ("vpsAlias" in bot || "vpsInstanceId" in bot) ? { ...payload, bot: withoutServerAlias(bot) } : payload;
 }
 
 /** A room as a member receives it: without its audience floor. */

@@ -1,6 +1,7 @@
 import { brokerRemoteMcp, type BrokerTurn } from "./bot-box/broker-mcp.ts";
 import type { AppConfig } from "./config.ts";
 import type { McpServerSpec, SendTurnInput } from "./contracts.ts";
+import { markHubOriginThread } from "./hub-origin-thread.ts";
 import { parseStoredMcpServer } from "./mcp-registry.ts";
 
 export function customMcpResultBudgets(cfg: AppConfig, names: readonly string[]): Record<string, number> {
@@ -23,6 +24,8 @@ export function attachCustomMcp(
   turn?: BrokerTurn,
 ): void {
   if (!Object.keys(custom).length) return;
+  // The hub's own server learns which thread asked, so a dispatch can report back into it.
+  if (turn?.threadId) markHubOriginThread(custom, turn.threadId);
   integrations.custom = turn ? brokerRemoteMcp(custom, turn) : custom;
   const budgets = customMcpResultBudgets(cfg, Object.keys(custom));
   if (Object.keys(budgets).length) integrations.customResultBudgets = budgets;

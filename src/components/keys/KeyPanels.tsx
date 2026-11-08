@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import { Switch } from "../SettingsPrimitives";
 import { KEY_FIELD } from "./KeyRow";
 import { cleanKey, looksLikeKey } from "./key-save";
+import { VpsInstancesSettings } from "../VpsInstancesSettings";
 
 /** Security: write-only; the server returns names, never keys, and hands the keys to OpenCode alone. */
 export function OpenCodeProviderKeys() {
@@ -138,67 +139,9 @@ export function AnthropicEveryClaudeBot() {
   );
 }
 
-/** Non-secret Docker-over-SSH target. Keys and passwords stay with SSH. */
+/** Managed VPS computers: SSH hosts and simular-box connections, listed by instance. */
 export function VpsConnection() {
-  const { state, dispatch } = useStore();
-  const [alias, setAlias] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const configured = Boolean(state.config?.vps?.configured);
-  const clearing = !alias.trim() && configured;
-
-  useEffect(() => {
-    setAlias(state.config?.vps?.sshAlias ?? "");
-  }, [state.config?.vps?.sshAlias]);
-
-  const save = () => {
-    if (saving || (!alias.trim() && !configured)) return;
-    setSaving(true);
-    setError(null);
-    api("/api/config", { method: "PUT", body: JSON.stringify({ vps: { sshAlias: alias.trim() } }) })
-      .then((status: ConfigStatus) => {
-        dispatch({ type: "configStatus", config: status });
-        setAlias(status.vps?.sshAlias ?? "");
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setSaving(false));
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[12px] leading-4 text-ink-secondary">
-        {t("keys.vps.descBefore")}
-        <a href="https://github.com/milind-soni/OpenMausBot/blob/main/docs/byo-vps.md" target="_blank" rel="noopener noreferrer" className="text-accent-text hover:underline">
-          {t("keys.vps.descLink")}
-        </a>
-        {t("keys.vps.descAfter")}
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="text"
-          data-key-input
-          value={alias}
-          onChange={(e) => setAlias(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && save()}
-          placeholder="my-vps"
-          aria-label={t("keys.vps.aria")}
-          autoComplete="off"
-          spellCheck={false}
-          className={cn(KEY_FIELD, "w-auto min-w-[min(100%,12rem)] flex-1")}
-        />
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || (!alias.trim() && !configured) || alias.trim() === (state.config?.vps?.sshAlias ?? "")}
-          className={cn("ui-button shrink-0", !clearing && "ui-button-primary")}
-          title={clearing ? t("keys.vps.removeAlias") : undefined}
-        >
-          {saving ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : clearing ? t("keys.row.remove") : t("common.save")}
-        </button>
-      </div>
-      {error && <div role="alert" className="text-[12px] leading-4 text-danger">{error}</div>}
-    </div>
-  );
+  return <VpsInstancesSettings />;
 }
 
 export function OpenAiCompatUrl() {

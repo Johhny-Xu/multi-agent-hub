@@ -36,6 +36,9 @@ export const ENGINE_VERSIONS: Readonly<Record<string, EngineVersionPin>> = {
   opencodeGo: { target: OPENCODE_STANDALONE.version, minimum: "1.19.4", acp: ["acp"], formerNpm: ["opencode-ai"] },
   cursorAgent: { target: CURSOR_STANDALONE.version, minimum: CURSOR_STANDALONE.version },
   antigravityAgent: { target: ANTIGRAVITY_RELEASE_VERSION, minimum: ANTIGRAVITY_RELEASE_VERSION },
+  // Not pinned: this vendor's npm package is not on the public registry, so no version could be verified here.
+  codebuddyAgent: { target: LATEST, minimum: "0.0.0" },
+  codebuddyCnAgent: { target: LATEST, minimum: "0.0.0" },
 };
 
 /** The exact npm version Install asks for; undefined follows npm's `latest` tag. */

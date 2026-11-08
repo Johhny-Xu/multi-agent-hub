@@ -15,7 +15,8 @@ export function AutomaticRecoverySettings() {
   const value = draft ?? state.config?.automaticRecovery ?? { enabled: false };
   const engines = state.instances.filter((instance) => instance.snapshot.state === "available" && !instance.policy);
   const engine = engines.find((instance) => instance.instanceId === value.backup?.instanceId);
-  const models = engine?.models.options.filter((model) => !model.orgBlocked && (engine.snapshot.authenticated !== false || model.custom)) ?? [];
+  const models = engine?.models.options.filter((model) => !model.orgBlocked && (engine.snapshot.authenticated !== false || model.custom)
+    && (model.hidden !== true || model.id === value.backup?.model)) ?? [];
   const ready = models.some((model) => model.id === value.backup?.model);
   const change = (next: Recovery) => { setDraft(next); setError(""); };
   const save = async () => {
@@ -56,7 +57,7 @@ export function AutomaticRecoverySettings() {
             <option value="">{t("settings.recovery.chooseEngine")}</option>
             {value.backup && !engine && <option value={value.backup.instanceId} disabled>{t("settings.recovery.unavailable", { name: value.backup.instanceId })}</option>}
             {engines.map((instance) => <option key={instance.instanceId} value={instance.instanceId}
-              disabled={!instance.models.options.some((model) => instance.snapshot.authenticated !== false || model.custom)}>{instance.displayName}</option>)}
+              disabled={!instance.models.options.some((model) => model.hidden !== true && (instance.snapshot.authenticated !== false || model.custom))}>{instance.displayName}</option>)}
           </Select>
         </div>
         <div className="min-w-0">

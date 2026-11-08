@@ -13,6 +13,7 @@ import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
 import { usePlaceViews } from "../PlaceChip";
 import { screenFramePreview } from "../ScreenFrame";
 import type { BotPatch, useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
+import { CloudBackendPicker } from "../CloudBackendPicker";
 import type { SimplePageId } from "./page-registry";
 import { Card, NavRow, RadioRow } from "./rows";
 
@@ -26,10 +27,7 @@ interface PlaceOption {
   disabled?: boolean;
 }
 
-const EXTRA_PLACE_LABEL: Record<Exclude<PlaceChoice, "auto" | "local" | "cloud" | "browser">, () => string> = {
-  vm: () => t("place.vm"),
-  off: () => t("place.off"),
-};
+const OFF_LABEL = () => t("place.off");
 
 export function useOpenComputer(bot: Pick<Bot, "id">) {
   const { dispatch } = useStore();
@@ -72,22 +70,24 @@ function usePlaceChoices(bot: Bot) {
     ...(placeViews.local.policy ? [choice("local")] : []),
     ...(placeViews.browser.policy || current === "browser" ? [choice("browser")] : []),
     ...(placeViews.cloud.policy ? [choice("cloud")] : []),
-    ...(current === "vm" || current === "off" ? [{ value: current, label: EXTRA_PLACE_LABEL[current](), disabled: true }] : []),
+    // Offered as in the Screen panel and the composer, so a bot can be kept on the private desktop from here too.
+    ...(placeViews.vm.policy || current === "vm" ? [choice("vm")] : []),
+    ...(current === "off" ? [{ value: current, label: OFF_LABEL(), disabled: true }] : []),
   ];
   const liveSurface = bot.tasks?.find((task) => task.threadId === bot.threadId)?.surface;
   const usingNow = liveSurface && liveSurface !== current ? placeLabel(liveSurface) : null;
   const currentLabel = options.find((option) => option.value === current)?.label
-    ?? (current === "auto" || current === "vm" || current === "off" ? undefined : placeLabel(current));
+    ?? (current === "auto" || current === "off" ? undefined : placeLabel(current));
   return { options, current, currentLabel, usingNow };
 }
 
 export function WherePage({ bot, derived }: { bot: Bot; derived: Derived }) {
-  const { dispatch } = useStore();
+  const { dispatch, state } = useStore();
   const { options, current, usingNow } = usePlaceChoices(bot);
   const [localAutoWarning, setLocalAutoWarning] = useState<{ botId: string; patch: BotPatch } | null>(null);
   const { patch, approvalMode } = derived;
   const choosePlace = (value: PlaceChoice) => {
-    if (value === current || value === "vm" || value === "off") return;
+    if (value === current || value === "off") return;
     if (value === "local" && approvalMode === "auto") {
       setLocalAutoWarning({ botId: bot.id, patch: { computer: "local", acknowledgeLocalAuto: true } });
       return;
@@ -112,6 +112,14 @@ export function WherePage({ bot, derived }: { bot: Bot; derived: Derived }) {
           ))}
         </div>
       </Card>
+      {current === "cloud" && (
+        <CloudBackendPicker
+          compact
+          value={bot.cloudBackend ?? "box"}
+          instanceId={bot.vpsInstanceId}
+          onChange={({ backend, instanceId }) => patch({ cloudBackend: backend, ...(instanceId !== undefined ? { vpsInstanceId: instanceId } : {}) })}
+        />
+      )}
       {usingNow && <p data-panel-using-now className="mx-1 text-[13px] text-ink-secondary">{t("computer.simple.usingNow", { place: usingNow })}</p>}
       <LocalComputerAutoWarning
         open={localAutoWarning !== null}

@@ -168,7 +168,10 @@ export function ComputerPanel({
   const [teamComputer, setTeamComputer] = useState<{
     id: string; name: string; botId: string; section: string;
   } | null>(null);
-  const cloudBackend = bot.cloudBackend ?? "box";
+  const hasBoat = Boolean(state.config?.box?.configured || state.config?.box?.included);
+  const vpsInstances = state.config?.vps?.instances ?? [];
+  const hasVps = vpsInstances.length > 0 || Boolean(state.config?.vps?.configured);
+  const cloudBackend = bot.cloudBackend === "vps" || (!hasBoat && hasVps) ? "vps" : "box";
   const computerSelectionPersisted = Boolean(
     persistedComputerSelection
       && persistedComputerSelection.botId === bot.id
@@ -198,6 +201,7 @@ export function ComputerPanel({
   const updateComputerSelection = useCallback((patch: {
     computer?: Bot["computer"] | null;
     cloudBackend?: CloudBackend;
+    vpsInstanceId?: string;
     browser?: boolean;
     acknowledgeLocalAuto?: boolean;
   }) => {
@@ -1313,6 +1317,11 @@ export function ComputerPanel({
             )}
             {computerStatusCurrent && bot.computer === "cloud" && cloudBackend === "vps" && (phase === "ready" || phase === "starting") && !liveHere && <span className="text-[11px]">{t("computer.badge.vps")}</span>}
         </div>
+        {!profileBot.computer && liveTask?.surfaceAuto && liveTask.placementReason ? (
+          <p data-testid="auto-placement-reason" className="mb-1.5 text-[11px] leading-relaxed text-ink-secondary">
+            {t("computer.autoPlacement", { reason: liveTask.placementReason })}
+          </p>
+        ) : null}
         <div className={cn("relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-xl bg-card", liveHere && "ring-2 ring-accent")}>
           {liveHere && liveTarget ? (
             <Suspense fallback={<Loader2 size={18} className="animate-spin text-ink-secondary" />}>
@@ -1724,7 +1733,8 @@ export function ComputerPanel({
             <CloudBackendPicker
               compact
               value={cloudBackend}
-              onChange={(backend) => updateComputerSelection({ cloudBackend: backend })}
+              instanceId={profileBot.vpsInstanceId}
+              onChange={({ backend, instanceId }) => updateComputerSelection({ cloudBackend: backend, ...(instanceId !== undefined ? { vpsInstanceId: instanceId } : {}) })}
             />
           )}
         </div>

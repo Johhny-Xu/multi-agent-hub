@@ -208,7 +208,7 @@ describe("the v2 stream", () => {
     expect(texts).toEqual([{ type: "viewport", width: 1280, height: 800, setting: { mode: "fill" }, zoom: 1 }]);
     expect(fixture.inputs).toEqual(interactive ? [...mutations, null] : []);
     expect(fixture.attachments).toEqual([{
-      owner: "local-owner", person: "local-owner", canOperate: interactive, maxWidth: 1280, maxHeight: 800, quality: 70, pace: "hi", authPrompts: true, pagePopups: true,
+      owner: "local-owner", person: "local-owner", mayStart: false, canOperate: interactive, maxWidth: 1280, maxHeight: 800, quality: 70, pace: "hi", authPrompts: true, pagePopups: true,
       ...(interactive ? { size: { width: 1600, height: 1000 } } : {}),
     }]);
   });

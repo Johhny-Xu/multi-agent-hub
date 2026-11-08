@@ -25,6 +25,21 @@ describe("ProviderRegistry", () => {
     expect(registry.instances()).toHaveLength(1);
   });
 
+  it("closes idle engine processes on every instance of one driver, and no other", async () => {
+    const acp = makeFakeDriver({ kind: "acp" });
+    const other = makeFakeDriver({ kind: "other" });
+    const registry = new ProviderRegistry([acp.driver, other.driver]);
+    await registry.load({ a: { driver: "acp" }, b: { driver: "acp" }, c: { driver: "other" } });
+    const closed: string[] = [];
+    for (const id of ["a", "b", "c"]) {
+      registry.get(id)!.adapter.closeIdleSessions = () => { closed.push(id); return 1; };
+    }
+
+    expect(registry.releaseIdleSessions("a")).toBe(2);
+    expect(closed).toEqual(["a", "b"]);
+    expect(registry.releaseIdleSessions("missing")).toBe(0);
+  });
+
   it("uses defaultConfig when the entry has no config", async () => {
     const fake = makeFakeDriver();
     const registry = new ProviderRegistry([fake.driver]);
@@ -205,6 +220,30 @@ describe("ProviderRegistry", () => {
     } finally {
       Object.defineProperty(process, "platform", platform);
     }
+  });
+
+  it("tells its listeners when a status read finds a signed-out engine signed in, however that sign-in happened, and only then", async () => {
+    let authenticated: boolean | undefined = false;
+    const fake = makeFakeDriver({ get answer() { return { state: "available" as const, version: "1.0.0", ...(authenticated === undefined ? {} : { authenticated }) }; } });
+    const registry = new ProviderRegistry([fake.driver]);
+    await registry.load({ a: { driver: "fake" } });
+    const heard: string[] = [];
+    registry.onSignedIn((instanceId) => heard.push(instanceId));
+    const read = async () => {
+      registry.forgetSnapshots();
+      await registry.describe();
+    };
+    await read();
+    expect(heard).toEqual([]);
+    authenticated = true;
+    await read();
+    expect(heard).toEqual(["a"]);
+    await read();
+    authenticated = undefined;
+    await read();
+    authenticated = true;
+    await read();
+    expect(heard, "signed in all along: nothing new to tell").toEqual(["a"]);
   });
 
   it("describe() reports a snapshot() failure as unavailable rather than throwing", async () => {

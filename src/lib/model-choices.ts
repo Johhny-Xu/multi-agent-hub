@@ -6,6 +6,12 @@ type ModelOption = InstanceInfo["models"]["options"][number];
 
 export type ModelChoice = ModelOption & { nativeModel?: string; variant?: string };
 
+/** Models a picker may offer: those hidden in the engine's settings stay out, except one that is already selected. */
+export function pickableModels(instance: InstanceInfo, current: readonly (string | undefined)[] = []): ModelOption[] {
+  const keep = new Set(current.filter((id): id is string => Boolean(id)));
+  return instance.models.options.filter((option) => option.hidden !== true || keep.has(option.id));
+}
+
 /** Antigravity exposes one model plus a thinking level; present its levels wherever models are picked. */
 export function modelChoices(instance: InstanceInfo, options: readonly ModelOption[]): ModelChoice[] {
   if (instance.driverKind !== "antigravityAgent") return [...options];

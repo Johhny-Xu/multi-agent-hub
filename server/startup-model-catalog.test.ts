@@ -9,7 +9,7 @@ import { ProviderRegistry } from "./harness/registry.ts";
 import * as procs from "./procs.ts";
 import { holdUntilFirstEngineRead } from "./first-engine-read.ts";
 import { CodexDriver } from "./drivers/codex.ts";
-import { openStartupModelCatalog, readStartupModelCache, readStartupModelCacheEntry, STARTUP_MODEL_CACHE_FRESH_MS, unconfirmedModelCatalog, writeStartupModelCache } from "./startup-model-catalog.ts";
+import { driverFingerprint, openStartupModelCatalog, readStartupModelCache, readStartupModelCacheEntry, STARTUP_MODEL_CACHE_FRESH_MS, unconfirmedModelCatalog, writeStartupModelCache } from "./startup-model-catalog.ts";
 
 const CACHED: ModelCatalog = {
   default: "cached-model",
@@ -183,6 +183,81 @@ describe("startup model catalogs", () => {
     await (open("timed-build", 0, "0.0.1 an older image").opened as { pending: Promise<void> }).pending;
     expect(refreshes).toBe(3);
     expect(readStartupModelCacheEntry("timed-fresh")).toMatchObject({ catalog: CACHED, checkedAt: now - STARTUP_MODEL_CACHE_FRESH_MS + 1, build: expect.any(String) });
+  });
+
+  it("reads the list again when the driver code that listed it changed, and the old list stands in until the read lands", async () => {
+    seedBots();
+    const now = 1_800_000_000_000;
+    let refreshes = 0;
+    let used: ModelCatalog | null = null;
+    writeStartupModelCache("drifted", CACHED, { checkedAt: now, fingerprint: "drivers-before" });
+    const opened = openStartupModelCatalog({
+      instanceId: "drifted",
+      fingerprint: "drivers-after",
+      use: (catalog) => { used = catalog; },
+      current: () => FRESH,
+      refresh: async () => { refreshes += 1; },
+      now,
+    }) as { pending: Promise<void> };
+    expect(used).toEqual(CACHED);
+    await opened.pending;
+    expect(refreshes).toBe(1);
+    expect(readStartupModelCacheEntry("drifted")).toMatchObject({ catalog: FRESH, fingerprint: "drivers-after" });
+  });
+
+  it("keeps a fresh list the same driver code produced without reading it again", async () => {
+    seedBots();
+    const now = 1_800_000_000_000;
+    let refreshes = 0;
+    writeStartupModelCache("same-drivers", CACHED, { checkedAt: now, fingerprint: "drivers-same" });
+    const opened = openStartupModelCatalog({
+      instanceId: "same-drivers",
+      fingerprint: "drivers-same",
+      use: () => {},
+      current: () => FRESH,
+      refresh: async () => { refreshes += 1; },
+      now,
+    });
+    expect(await opened).toBeNull();
+    expect(refreshes).toBe(0);
+  });
+
+  it("keeps the old list when the read after a driver change fails", async () => {
+    seedBots();
+    const now = 1_800_000_000_000;
+    let used: ModelCatalog | null = null;
+    writeStartupModelCache("drifted-failed", CACHED, { checkedAt: now, fingerprint: "drivers-before" });
+    const opened = openStartupModelCatalog({
+      instanceId: "drifted-failed",
+      fingerprint: "drivers-after",
+      use: (catalog) => { used = catalog; },
+      current: () => FRESH,
+      refresh: async () => { throw new Error("the CLI timed out"); },
+      now,
+    }) as { pending: Promise<void> };
+    await opened.pending;
+    expect(used).toEqual(CACHED);
+    expect(readStartupModelCacheEntry("drifted-failed")).toMatchObject({ catalog: CACHED, fingerprint: "drivers-before" });
+  });
+
+  it("reads again a list saved before fingerprints existed, and keeps it as the stand-in", async () => {
+    seedBots();
+    const now = 1_800_000_000_000;
+    let refreshes = 0;
+    let used: ModelCatalog | null = null;
+    mkdirSync(join(DATA_DIR, "providers", "engine-models"), { recursive: true });
+    writeFileSync(join(DATA_DIR, "providers", "engine-models", "legacy.json"), JSON.stringify({ ...CACHED, checkedAt: now }));
+    const opened = openStartupModelCatalog({
+      instanceId: "legacy",
+      use: (catalog) => { used = catalog; },
+      current: () => FRESH,
+      refresh: async () => { refreshes += 1; },
+      now,
+    }) as { pending: Promise<void> };
+    expect(used).toEqual(CACHED);
+    await opened.pending;
+    expect(refreshes).toBe(1);
+    expect(readStartupModelCacheEntry("legacy")?.fingerprint).toBe(driverFingerprint());
   });
 
   it("reads the list again when an engine opens a second time in one run: its key or settings just changed", async () => {

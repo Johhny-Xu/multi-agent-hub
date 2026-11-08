@@ -84,7 +84,7 @@ describe("J11: a failed place's row", () => {
 
   it("reads the Boat sign-up as My Cloud's on a desktop with a paid plan", () => {
     const needsKey: PlaceRow = { state: "cc-needs-key", params: { bot: "Scout" }, source: "works-on" };
-    expect(show(stored(needsKey)).html).toContain("Bots here can get their own cloud desktops from Boat, a paid service.");
+    expect(show(stored(needsKey)).html).toContain("Bots here can get their own cloud desktops from Boat, a paid service, or an added VPS.");
     const seat = { server: "mac", plan: true, role: "admin", mode: "simple" } as const;
     expect(placeRowViewFor(needsKey, seat)).toMatchObject({
       state: "cc-on-my-cloud", line: "Cloud desktops from your plan work for Cloud bots for now.", action: { id: "open-my-cloud" },

@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Bot as BotIcon, MessageSquare, Search, Users } from "lucide-react";
 import { api, openBot, useStore, type Bot, type Group } from "@/state/store";
 import { rankByName } from "@/lib/palette-rank";
+import { useAdvancedMode } from "@/lib/interface-mode";
+import { isDebugBot, isDebugSearchHit } from "@/lib/debug-zone";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { cn } from "@/lib/cn";
 import type { SearchHit } from "@/lib/search-hit";
@@ -20,10 +22,17 @@ export function openCommandPalette() {
   window.dispatchEvent(new Event(OPEN_EVENT));
 }
 
-export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+export function CommandPalette({
+  onOpenChange,
+  initialOpen,
+}: {
+  onOpenChange?: (open: boolean) => void;
+  initialOpen?: boolean;
+}) {
   const { state, dispatch } = useStore();
   const showThreads = useShowThreads();
-  const [open, setOpen] = useState(false);
+  const advanced = useAdvancedMode();
+  const [open, setOpen] = useState(initialOpen ?? false);
   const [query, setQuery] = useState("");
   const [messageHits, setMessageHits] = useState<SearchHit[]>([]);
   const [cursor, setCursor] = useState(0);
@@ -84,12 +93,15 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
 
   if (!open) return null;
 
-  const bots = rankByName(state.bots.filter((b) => !b.hidden), q);
+  const bots = rankByName(state.bots.filter((b) => !b.hidden && (advanced || !isDebugBot(b))), q);
   const rooms = rankByName(state.groups, q);
+  const visibleHits = q
+    ? (advanced ? messageHits : messageHits.filter((hit) => !isDebugSearchHit(hit, state.bots)))
+    : [];
   const entries: PaletteEntry[] = [
     ...bots.map((bot): PaletteEntry => ({ kind: "bot", bot })),
     ...rooms.map((group): PaletteEntry => ({ kind: "room", group })),
-    ...(q ? messageHits.map((hit): PaletteEntry => ({ kind: "message", hit })) : []),
+    ...visibleHits.map((hit): PaletteEntry => ({ kind: "message", hit })),
   ];
   const selected = entries.length ? Math.min(cursor, entries.length - 1) : 0;
 
@@ -215,13 +227,13 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
               </>,
             ),
           )}
-          {q && messageHits.length > 0 && (
+          {q && visibleHits.length > 0 && (
             <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-secondary">
               {t("palette.messages")}
             </div>
           )}
           {q &&
-            messageHits.map((hit, i) => {
+            visibleHits.map((hit, i) => {
               const before = hit.snippet.slice(0, hit.matchStart);
               const match = hit.snippet.slice(hit.matchStart, hit.matchStart + hit.matchLength);
               const after = hit.snippet.slice(hit.matchStart + hit.matchLength);

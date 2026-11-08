@@ -52,10 +52,18 @@ export const DEFAULT_FLEET: InstanceConfigMap = {
   codearts: { driver: "codeartsAcpAgent" },
   mcode: { driver: "mcodeAgent" },
   meoo: { driver: "meooAgent" },
+  // mah 迁移进来的两个引擎只有切号（service-accounts），还没有可跑回合的驱动：
+  // registry 会按 unknown driver 保留为 shadow（unavailable），删除注册会让快照重新不可见。
+  traecode: { driver: "traecodeAgent" },
+  mimocode: { driver: "mimocodeAgent" },
+  perch: { driver: "perchAgent" },
+  qwenpaw: { driver: "qwenpawAgent" },
+  zcode: { driver: "zcodeAgent" },
   qwen: { driver: "qwenAgent" },
   hermes: { driver: "hermesAgent" },
   cline: { driver: "clineAgent" },
   pi: { driver: "piAgent" },
+  harkWeb: { driver: "harkWeb" },
 };
 
 const CUSTOM_ONLY = {
@@ -87,5 +95,11 @@ export const PRODUCT_FLEET_ADDITIONS = {
   codearts: { driver: "codeartsAcpAgent" },
   mcode: { driver: "mcodeAgent" },
   meoo: { driver: "meooAgent" },
+  traecode: { driver: "traecodeAgent" },
+  mimocode: { driver: "mimocodeAgent" },
+  perch: { driver: "perchAgent" },
+  qwenpaw: { driver: "qwenpawAgent" },
+  zcode: { driver: "zcodeAgent" },
+  harkWeb: { driver: "harkWeb" },
   ...CUSTOM_ONLY,
 } as const;

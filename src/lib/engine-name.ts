@@ -5,6 +5,7 @@ const DEFAULT_NAME_KEY: Readonly<Record<string, LocaleKey>> = {
   claudeApi: "engines.defaultName.claudeApi",
   chatgpt: "engines.defaultName.chatgpt",
   openaiCompat: "engines.defaultName.openaiCompat",
+  harkWeb: "engines.defaultName.harkWeb",
 };
 
 export function engineDisplayName(instance: { instanceId: string; displayName: string }): string {

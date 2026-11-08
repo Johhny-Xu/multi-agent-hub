@@ -3,6 +3,8 @@
 import { Pin, PinOff } from "lucide-react";
 import type { InboxView } from "../../../shared/inbox";
 import { t } from "@/lib/i18n";
+import { useAdvancedMode } from "@/lib/interface-mode";
+import { isDebugBot } from "@/lib/debug-zone";
 import { useStore } from "@/state/store";
 import { useTeamPeople } from "@/state/team-people";
 import { AttentionThreadRows, attentionJumpAction, crossBotAttentionThreads } from "../SidebarBotActivity";
@@ -13,15 +15,17 @@ import { inboxFixes } from "./inbox-view";
 
 export function InboxActive({ view }: { view: InboxView | null }) {
   const { state, dispatch } = useStore();
+  const advanced = useAdvancedMode();
   const team = useTeamPeople();
   const pinned = useAttentionPinned();
   const rows = view?.rows ?? [];
   const asked = new Set(rows.filter((row) => row.tab === "needs-you").map((row) => row.origin?.threadId));
   const news = new Set(rows.filter((row) => row.tab === "info").map((row) => row.origin?.threadId));
   const atWork = (task: { busy?: boolean; activity?: string; queued?: boolean }) => task.busy === true || task.activity === "working" || task.queued === true;
-  const entries = crossBotAttentionThreads(state.bots, state.pendingQueued, undefined, state.groups)
+  const availableBots = advanced ? state.bots : state.bots.filter((b) => !isDebugBot(b));
+  const entries = crossBotAttentionThreads(availableBots, state.pendingQueued, undefined, state.groups)
     .filter((entry) => !asked.has(entry.task.threadId) && (atWork(entry.task) || !news.has(entry.task.threadId)));
-  const fixes = inboxFixes(team?.needsYou, view);
+  const fixes = inboxFixes(team?.needsYou, view, { advanced, bots: state.bots });
   return (
     <>
       {fixes.length > 0 && (

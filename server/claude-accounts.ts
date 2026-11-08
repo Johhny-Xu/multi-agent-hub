@@ -18,6 +18,8 @@ export const instanceSettingsSchema = z.object({
   configDir: configDir.optional(),
   tools: z.boolean().optional(),
   hidden: z.boolean().optional(),
+  disabled: z.boolean().optional(),
+  hiddenModels: z.array(z.string().trim().min(1).max(256)).max(1000).optional(),
   /** null goes back to the server's default wait. */
   replyWaitMinutes: z.number().int().min(1).max(60).nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "No settings supplied");

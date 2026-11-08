@@ -1,7 +1,7 @@
 import { z, type ZodString } from "zod";
 import * as boat from "../boat.ts";
 import type { ComputerControl } from "../computer-control.ts";
-import { isValidSshAlias, localVmMaxInstances, localVmMode, type AppConfig } from "../config.ts";
+import { localVmMaxInstances, localVmMode, type AppConfig } from "../config.ts";
 import {
   containerComputerAction,
   containerComputerExists,
@@ -24,7 +24,7 @@ import type { SessionRegistry } from "../sessions.ts";
 import { sectionKey, type BotRecord, type Store } from "../store.ts";
 import { teamComputerAssignment, teamComputerCreate, teamComputerOwner, type TeamComputerRecord, type TeamComputers } from "../team-computers.ts";
 import * as vps from "../vps-computer.ts";
-import { vpsAliasesInPlay } from "../vps-hosts.ts";
+import { listVpsTargets, vpsAliasesInPlay } from "../vps-hosts.ts";
 import type { BusyFlag, RemoteComputerProvider } from "./config.ts";
 import { createComputerFramesRoutes } from "./computer-frames.ts";
 import { createComputerUsageRoutes } from "./computer-usage.ts";
@@ -235,13 +235,59 @@ export function createComputerRoutes(deps: ComputerRouteDeps): RouteHandler {
     }
     if (method === "GET" && path === "/api/computers/vps") {
       res.setHeader("cache-control", "private, no-store");
-      // Computers live on the default server and on each bot's own: list them all, tagged by alias.
-      return json(res, 200, await vps.listManagedVpsComputers(
-        cfg,
-        managedBoatOwners(),
-        undefined,
-        vpsAliasesInPlay(cfg, store.bots),
-      ));
+      const allTargets = listVpsTargets(cfg);
+      const configured = allTargets
+        .filter((target) => target.instance.kind === "ssh")
+        .map((target) => ({
+          instanceId: target.instance.id,
+          sshAlias: (target.instance as { sshAlias: string }).sshAlias,
+          revision: target.revision,
+        }));
+      // Before the migration writes a list, the aliases in play are the only inventory there is.
+      const legacy = cfg.vps?.version === 2 ? [] : vpsAliasesInPlay(cfg, store.bots)
+        .filter((alias) => !configured.some((target) => target.sshAlias === alias))
+        .map((alias) => ({ instanceId: alias, sshAlias: alias, revision: "" }));
+      const inventory = await vps.listManagedVpsComputers([...configured, ...legacy], managedBoatOwners());
+      const sections = allTargets.map((target) => {
+        if (target.instance.kind === "ssh") {
+          const alias = (target.instance as { sshAlias: string }).sshAlias;
+          const desktops = inventory.instances.filter((inst) => inst.instanceId === target.instance.id || inst.vpsAlias === alias);
+          return {
+            id: target.instance.id,
+            name: target.instance.name,
+            kind: "ssh" as const,
+            sshAlias: alias,
+            state: desktops.some((d) => d.state === "running") ? "running" : "ready",
+            desktops,
+          };
+        }
+        return {
+          id: target.instance.id,
+          name: target.instance.name,
+          kind: "mcp" as const,
+          mcpServer: (target.instance as { mcpServer: string }).mcpServer,
+          boxId: (target.instance as { boxId: string }).boxId,
+          state: "ready",
+          desktops: [],
+        };
+      });
+      if (sections.length === 0 && legacy.length > 0) {
+        for (const leg of legacy) {
+          const desktops = inventory.instances.filter((inst) => inst.vpsAlias === leg.sshAlias);
+          sections.push({
+            id: leg.instanceId,
+            name: leg.sshAlias,
+            kind: "ssh",
+            sshAlias: leg.sshAlias,
+            state: desktops.some((d) => d.state === "running") ? "running" : "ready",
+            desktops,
+          });
+        }
+      }
+      return json(res, 200, {
+        ...inventory,
+        sections,
+      });
     }
     m = path.match(/^\/api\/computers\/vps\/([\w-]+)\/remove$/);
     if (m && method === "POST") {
@@ -255,21 +301,19 @@ export function createComputerRoutes(deps: ComputerRouteDeps): RouteHandler {
       if (typeof body?.confirmName !== "string" || body.confirmName.length > 100) {
         return json(res, 400, { error: "confirmName must be the VPS computer name shown in Settings" });
       }
-      const alias = body?.alias;
-      if (alias !== undefined && !isValidSshAlias(alias)) {
-        return json(res, 400, { error: "alias must be a simple SSH config alias" });
+      if (typeof body?.containerId !== "string" || !/^[a-f0-9]{64}$/i.test(body.containerId)) {
+        return json(res, 400, { error: "containerId must be the immutable id shown in the inventory" });
       }
-      // An explicit alias may only name a server the inventory scans: anything else would open
-      // docker-over-SSH to an arbitrary host from the user's SSH config.
-      if (alias !== undefined && !vpsAliasesInPlay(cfg, store.bots).includes(alias)) {
-        return json(res, 400, { error: "alias must be the default server or a bot's own SSH alias" });
+      const target = listVpsTargets(cfg).find((candidate) => candidate.instance.id === m[1] && candidate.instance.kind === "ssh");
+      if (!target || target.instance.kind !== "ssh") {
+        return json(res, 404, { error: "no such VPS instance" });
       }
       const releaseComputerLifecycle = claimManagedVpsMutation(m[1]);
       try {
         return json(res, 200, await vps.removeManagedVpsComputer(
-          alias ? { vps: { sshAlias: alias } } : cfg,
+          { instanceId: target.instance.id, sshAlias: target.instance.sshAlias, revision: target.revision },
           managedBoatOwners(),
-          m[1],
+          { containerName: body.containerName ?? "", containerId: body.containerId },
           body.confirmName,
         ));
       } finally {

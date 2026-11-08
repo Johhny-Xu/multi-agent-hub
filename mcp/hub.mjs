@@ -207,6 +207,12 @@ async function taskOptions(options = {}) {
   return result;
 }
 
+/** The thread that asked for this dispatch, when the host mounted the hub MCP with one. Absent here means absent on the wire. */
+function originThreadHeader() {
+  const thread = String(process.env.HUB_ORIGIN_THREAD || process.env.AGENTHUB_ORIGIN_THREAD || "").trim();
+  return thread ? { "X-Hub-Origin-Thread": thread } : {};
+}
+
 function hubError(kind, text) {
   const error = new Error(text);
   error.kind = kind;
@@ -222,7 +228,7 @@ async function callTool(name, args, timeoutMs, allowToolError = false) {
   target.searchParams.delete("token");
   const resp = await fetch(target, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}), ...originThreadHeader() },
     body: payload,
     signal: AbortSignal.timeout(Math.max(1, Math.ceil(timeoutMs))),
   });

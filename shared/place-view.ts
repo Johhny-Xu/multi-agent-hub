@@ -101,6 +101,7 @@ export interface PlaceFacts {
   browserOn: boolean;
   role: "admin" | "user";
   mode?: "simple" | "advanced";
+  hasVps?: boolean;
   /** The cloud computer as last seen; unknown reads as not made yet. */
   computer?: "none" | "starting" | "waking" | "on" | "asleep";
   /** Auto uses a team's shared cloud computer by this name. */
@@ -155,8 +156,8 @@ export const PLACE_EN = {
   "place.view.ccProvider.line": "Your Boat account couldn't start {bot}'s cloud desktop: {words}",
   "place.view.ccOnMyCloud.short": "For Cloud bots",
   "place.view.ccOnMyCloud.line": "Cloud desktops from your plan work for Cloud bots for now.",
-  "place.view.ccNeedsKey.short": "Connect Boat first",
-  "place.view.ccNeedsKey.line": "Bots here can get their own cloud desktops from Boat, a paid service.",
+  "place.view.ccNeedsKey.short": "Connect Boat or add a VPS",
+  "place.view.ccNeedsKey.line": "Bots here can get their own cloud desktops from Boat, a paid service, or an added VPS.",
   "place.view.vps.short": "Your own machine",
   "place.view.vps.line": "Uses your own Linux machine, connected over SSH.",
   "place.view.browser.short": "Web pages only",
@@ -329,6 +330,7 @@ export function placeState(facts: PlaceFacts): { state: PlaceState; params: Plac
   if (vps) return { state: "vps", params: { bot } };
   if (facts.refusal) return { state: facts.refusal.state, params: { bot, ...facts.refusal.params } };
   if (facts.boat === "none") {
+    if (facts.hasVps) return { state: "vps", params: { bot } };
     // My Cloud always has the plan's computers while the plan is active.
     if (facts.server === "my-cloud") return { state: "cc-unavailable", params: { bot } };
     return { state: facts.plan ? "cc-on-my-cloud" : "cc-needs-key", params: { bot } };

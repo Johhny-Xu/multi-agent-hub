@@ -61,6 +61,10 @@ describe("shared wire model", () => {
     for (const surfaceSource of ["auto", "user"] as const) {
       expect(toWireTask({ ...fullTask, surfaceSource }, botModel)).not.toHaveProperty("surfaceSource");
     }
+    expect(toWireTask({ ...fullTask, surfaceSource: "auto", placementReason: "本机 CPU 92%，转云端 VPS instabox" }, botModel))
+      .toMatchObject({ surfaceAuto: true, placementReason: "本机 CPU 92%，转云端 VPS instabox" });
+    expect(toWireTask({ ...fullTask, surfaceSource: "user", placementReason: "本机 CPU 92%，转云端 VPS instabox" }, botModel))
+      .not.toHaveProperty("placementReason");
   });
 
   it("sends the model a thread runs on, and whether it follows its bot's", () => {

@@ -19,6 +19,8 @@
 //     | echo-gated (echo the whole prompt; hold until FAKE_ACP_GATE_FILE exists) | safe-agent-reads
 //     | stall-after-text | stall-after-tool (then silent forever) | slow-tool (silent for FAKE_ACP_TOOL_MS, or until
 //       FAKE_ACP_TOOL_GATE exists when set; FAKE_ACP_TOOL_OUTPUT is the text its running call shows meanwhile)
+//     | end-turn-while-tool-runs (agy 1.5.3: a backgrounded command, end_turn with the call still in_progress, then the
+//       call completes after FAKE_ACP_TOOL_MS unless FAKE_ACP_TOOL_NEVER=1)
 //     | quiet-then-answer (silent for FAKE_ACP_QUIET_MS; with QWEN_HOME, append FAKE_ACP_QWEN_LOG lines to
 //       Qwen's debug log every FAKE_ACP_LOG_EVERY_MS; with XDG_DATA_HOME, append FAKE_ACP_OPENCODE_LOG lines once to
 //       OpenCode's shared log, {session} replaced by the session id) | mcp-tools (list each mcpServers entry's tools with
@@ -43,7 +45,10 @@
 //   FAKE_ACP_MODELS_FILE  the same list, read once at startup, as `opencode acp` never re-reads a login
 //   FAKE_ACP_MODELS_REFRESH_FROM  `models --refresh` copies this file over FAKE_ACP_MODELS_FILE, as OpenCode 1.19.4
 //     refetches its models.dev cache only then; OPENCODE_CONFIG_CONTENT's provider models join any model list
-//   FAKE_ACP_MODELS_LIST=v2  OpenCode 2: `models` answers empty with exit 0, `models --verbose` exits 1
+//   FAKE_ACP_MODELS_LIST=v2  OpenCode 2: `models` answers empty with exit 0, `models --verbose` and `models --refresh` exit 1;
+//     with FAKE_ACP_MODELS_REFRESH_FROM a running process refreshes its own list after FAKE_ACP_SELF_REFRESH_MS (default 300)
+//   FAKE_ACP_MODELS_LOCK  path: as OpenCode 1.19.4, a `models` or `acp` process without OPENCODE_DISABLE_MODELS_FETCH=1
+//     starts a catalog fetch under this lock and, ended early, leaves it; `models --refresh` fails while it is held
 //   FAKE_ACP_MODELS_LIST=auto-only  Cursor CLI 2026.10.22: `models` lists only `auto`
 //   FAKE_ACP_VERBOSE_FAIL_ONCE  marker path: the first `models --verbose` fails, like a new OpenCode home's first run
 //   FAKE_ACP_MODEL_STICKS  set_config_option succeeds but keeps the old model
@@ -88,13 +93,24 @@ const modelsText = process.env.FAKE_ACP_MODELS_FILE && existsSync(process.env.FA
   ? readFileSync(process.env.FAKE_ACP_MODELS_FILE, "utf8")
   : process.env.FAKE_ACP_MODELS ?? "";
 // One id per line when the list holds a newline (DeepSeek's wire values are JSON pairs with commas); else comma-separated.
-const models = modelsText.split(modelsText.includes("\n") ? "\n" : ",").map((id) => id.trim()).filter(Boolean);
-try {
-  const declared = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || "{}")?.provider ?? {};
-  for (const [provider, entry] of Object.entries<any>(declared)) {
-    for (const id of Object.keys(entry?.models ?? {})) if (models.length && !models.includes(`${provider}/${id}`)) models.push(`${provider}/${id}`);
-  }
-} catch {}
+const listedModels = (text: string) => {
+  const ids = text.split(text.includes("\n") ? "\n" : ",").map((id) => id.trim()).filter(Boolean);
+  try {
+    const declared = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || "{}")?.provider ?? {};
+    for (const [provider, entry] of Object.entries<any>(declared)) {
+      for (const id of Object.keys(entry?.models ?? {})) if (ids.length && !ids.includes(`${provider}/${id}`)) ids.push(`${provider}/${id}`);
+    }
+  } catch {}
+  return ids;
+};
+const models = listedModels(modelsText);
+if (process.env.FAKE_ACP_MODELS_LIST === "v2" && process.env.FAKE_ACP_MODELS_REFRESH_FROM && process.argv[2] === "acp") {
+  setTimeout(() => {
+    const upstream = readFileSync(process.env.FAKE_ACP_MODELS_REFRESH_FROM!, "utf8");
+    if (process.env.FAKE_ACP_MODELS_FILE) writeFileSync(process.env.FAKE_ACP_MODELS_FILE, upstream);
+    models.splice(0, models.length, ...listedModels(upstream));
+  }, Number(process.env.FAKE_ACP_SELF_REFRESH_MS ?? 300)).unref();
+}
 const defaultModelEnv = process.env.AGY_ACP_DEFAULT_MODEL;
 if (models.length && defaultModelEnv && !models.includes(defaultModelEnv)) models.push(defaultModelEnv);
 let currentModel: string | null = models.length && defaultModelEnv ? defaultModelEnv : models[0] ?? null;
@@ -253,6 +269,7 @@ const dumpEnv = Object.fromEntries(
     "COPILOT_GITHUB_TOKEN",
     "GH_TOKEN",
     "GITHUB_TOKEN",
+    "COMMAND_CODE_API_KEY",
   ].flatMap((key) => (process.env[key] === undefined ? [] : [[key, process.env[key]]] as const)),
 );
 const dumpState: Record<string, unknown> = { argv, env: dumpEnv, pid: process.pid };
@@ -297,7 +314,19 @@ if (argv[0] === "status" || argv[0] === "whoami") {
   console.log(JSON.stringify({ isAuthenticated: authenticated }));
   process.exit(0);
 }
+const catalogLock = process.env.FAKE_ACP_MODELS_LOCK;
+if (catalogLock && (argv[0] === "models" || argv[0] === "acp") && !argv.includes("--refresh") && process.env.OPENCODE_DISABLE_MODELS_FETCH !== "1") {
+  writeFileSync(catalogLock, String(process.pid));
+}
 if (argv[0] === "models" && argv.includes("--refresh")) {
+  if (catalogLock && existsSync(catalogLock)) {
+    console.error("models.dev cache is locked by another process");
+    process.exit(1);
+  }
+  if (process.env.FAKE_ACP_MODELS_LIST === "v2") {
+    console.error("Unrecognized flag: --refresh in command opencode models");
+    process.exit(1);
+  }
   if (process.env.FAKE_ACP_MODELS_REFRESH_FROM && process.env.FAKE_ACP_MODELS_FILE) {
     writeFileSync(process.env.FAKE_ACP_MODELS_FILE, readFileSync(process.env.FAKE_ACP_MODELS_REFRESH_FROM));
   }
@@ -1015,6 +1044,22 @@ function handle(msg: any) {
           return;
         }
         setTimeout(answer, Number(process.env.FAKE_ACP_TOOL_MS ?? 600));
+        return;
+      }
+      if (mode === "end-turn-while-tool-runs") {
+        // agy 1.5.3: run_command outlives its foreground wait, the harness moves it to a background task and
+        // answers end_turn with the call still in_progress. FAKE_ACP_TOOL_NEVER=1 keeps it unfinished.
+        const tool = (update: Record<string, unknown>) =>
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { toolCallId: "tc-long", ...update } } });
+        tool({ sessionUpdate: "tool_call", title: "nice node_modules/.bin/vitest run", kind: "execute",
+          rawInput: { CommandLine: "nice node_modules/.bin/vitest run", WaitMsBeforeAsync: 5000 } });
+        tool({ sessionUpdate: "tool_call_update", status: "in_progress" });
+        out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "正在运行测试验证..." } } } });
+        complete();
+        if (process.env.FAKE_ACP_TOOL_NEVER !== "1") {
+          setTimeout(() => tool({ sessionUpdate: "tool_call_update", status: "completed", rawOutput: { output: "done" } }),
+            Number(process.env.FAKE_ACP_TOOL_MS ?? 600));
+        }
         return;
       }
       if (mode === "unkeyed-tool") {

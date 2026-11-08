@@ -16,7 +16,7 @@ vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({ state: { ...original.initialState, config: fixture.config ?? original.initialState.config }, dispatch: fixture.dispatch }) };
 });
-// The connected-apps list (Composio accounts plus the native HighLevel connection) is seeded per test.
+// The connected-apps list (Composio accounts plus the native Email connection) is seeded per test.
 vi.mock("./useBotApps", async (importOriginal) => ({
   ...await importOriginal<typeof import("./useBotApps")>(),
   useBotApps: () => fixture.apps,
@@ -280,19 +280,26 @@ describe("Research (treg) card", () => {
 
 describe("a VPS bot's own server", () => {
   it("is offered on a saved VPS bot beside the default, and never while a new bot or the New bot defaults are drafted", async () => {
-    fixture.config = { vps: { configured: true, sshAlias: "production-vps" } } as Partial<ConfigStatus>;
-    const vpsBot = makeBot({ computer: "cloud", cloudBackend: "vps", vpsAlias: "alpha-vps" });
+    fixture.config = {
+      vps: {
+        configured: true,
+        revision: "r",
+        defaultInstanceId: "production",
+        instances: [
+          { id: "production", name: "instabox", kind: "ssh", configured: true, available: null, capabilities: { status: true, join: true, screenshot: true, start: true, stop: true, remove: true } },
+        ],
+      },
+    } as unknown as Partial<ConfigStatus>;
+    const vpsBot = makeBot({ computer: "cloud", cloudBackend: "vps", vpsInstanceId: "production" });
     const saved = render(vpsBot);
-    expect(saved).toContain("Server (SSH alias)");
-    expect(saved).toContain("Leave empty to use production-vps from Settings → API keys.");
-    expect(saved).toContain('value="alpha-vps"');
-    expect(render(makeBot({ computer: "cloud", cloudBackend: "box" }))).not.toContain("Server (SSH alias)");
+    expect(saved).toContain('data-testid="cloud-backend-picker"');
+    expect(saved).toContain('aria-label="VPS computer"');
+    expect(saved).toContain('value="production"');
     const { BotEditorContext } = await import("./BotEditorContext");
     const { api } = await import("@/state/store");
     const drafted = renderToStaticMarkup(createElement(StoreProvider, null,
       createElement(BotEditorContext.Provider, { value: { request: api, draft: true } }, createElement(AccessSection, { bot: vpsBot, derived: makeDerived() }))));
-    expect(drafted).toContain("Self-hosted VPS");
-    expect(drafted).not.toContain("Server (SSH alias)");
+    expect(drafted).toContain('data-testid="cloud-backend-picker"');
   });
 });
 
@@ -334,21 +341,12 @@ describe("AccessSection Record browser steps", () => {
 describe("AccessSection per-app scopes", () => {
   const app = (slug: string, label: string) => ({ slug, label, blurb: "", card: { logo: null, domain: null, label }, scope: "write" as const });
 
-  it("lists HighLevel by name next to the Composio apps once the server reports it connected", () => {
-    fixture.apps = { phase: "ready", connectedSlugs: ["gmail", "highlevel"], apps: [app("gmail", "Gmail"), app("highlevel", "HighLevel")] };
+  it("lists Email by name next to the Composio apps once the server reports a mailbox connected", () => {
+    fixture.apps = { phase: "ready", connectedSlugs: ["email", "gmail"], apps: [app("email", "Email"), app("gmail", "Gmail")] };
     const html = render(makeBot({ connectorScopes: { apps: { gmail: "write" } } }));
-    expect(html).toContain('aria-label="highlevel access"');
-    expect(html).toMatch(/<span class="min-w-0 text-\[13px\] text-ink">HighLevel</);
+    expect(html).toContain('aria-label="email access"');
+    expect(html).toMatch(/<span class="min-w-0 text-\[13px\] text-ink">Email</);
     expect(html).not.toContain("not connected");
-    // Tool-by-tool grants are Composio's list; HighLevel is scoped by read/write only.
-    expect([...html.matchAll(/truncate font-mono text-\[13px\] text-ink">([^<]*)</g)].map((match) => match[1])).toEqual(["gmail"]);
-  });
-
-  it("leaves HighLevel out while it is not connected", () => {
-    fixture.apps = { phase: "ready", connectedSlugs: ["gmail"], apps: [app("gmail", "Gmail")] };
-    const html = render(makeBot({ connectorScopes: { apps: { gmail: "write" } } }));
-    expect(html).not.toContain("HighLevel");
-    expect(html).not.toContain("highlevel");
   });
 
   it("shows no scope rows until the account list is known", () => {

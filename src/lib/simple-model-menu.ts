@@ -5,7 +5,7 @@ import { modelOptionLabel } from "./model-label";
 import { filterCustomModels, partitionCustomModels, suggestedModels } from "./custom-models";
 import { engineDisplayName, isCustomOnly, SIGN_IN_FAMILY_LABEL, signInFamily, splitEngineRail } from "./engine-rail";
 import { displayModelLabel, shortModelLabel } from "./model-friendly";
-import { choiceIsSelected, modelChoices, takesTypedModels, type ModelChoice } from "./model-choices";
+import { choiceIsSelected, modelChoices, pickableModels, takesTypedModels, type ModelChoice } from "./model-choices";
 
 export type ModelOption = InstanceInfo["models"]["options"][number];
 
@@ -110,10 +110,11 @@ export function repeatedModelLabels(options: readonly ModelOption[]): Set<string
   return repeated;
 }
 
-function listedModels(instance: InstanceInfo) {
+function listedModels(instance: InstanceInfo, current: readonly (string | undefined)[] = []) {
   const signedOut = !isCustomOnly(instance) && needsSignIn(instance);
-  const own = isCustomOnly(instance) || signedOut ? [] : modelChoices(instance, instance.models.options.filter((option) => !option.custom));
-  const local = partitionCustomModels(instance.models.options.filter((option) => option.custom));
+  const pickable = pickableModels(instance, current);
+  const own = isCustomOnly(instance) || signedOut ? [] : modelChoices(instance, pickable.filter((option) => !option.custom));
+  const local = partitionCustomModels(pickable.filter((option) => option.custom));
   return { signedOut, own, all: [...own, ...local.pinned, ...local.rest] };
 }
 
@@ -153,7 +154,10 @@ function currentRow(input: SimpleMenuInput): MenuCurrent {
 
 export function simpleModelMenu(input: SimpleMenuInput): SimpleMenu {
   const { listed, selection, bot, expanded, probing } = input;
-  const models = new Map(listed.map((instance) => [instance.instanceId, listedModels(instance)]));
+  const models = new Map(listed.map((instance) => [instance.instanceId, listedModels(instance, [
+    selection.instanceId === instance.instanceId ? selection.model : undefined,
+    bot.selection.instanceId === instance.instanceId ? bot.selection.model : undefined,
+  ])]));
   const total = listed.filter((instance) => !instance.policy && !needsCli(instance))
     .reduce((sum, instance) => sum + models.get(instance.instanceId)!.all.length, 0);
   const search = total > SIMPLE_SEARCH_AFTER || listed.some((instance) => takesTypedModels(instance) && !instance.policy && !needsCli(instance));

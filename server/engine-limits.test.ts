@@ -61,6 +61,24 @@ describe("usage limits a bot reads", () => {
     ]);
   });
 
+  it("lists an OpenCode Go account's allowance like the other plans", () => {
+    const [account] = read({
+      instances: [instance("oc", "opencodeGo", "OpenCode")],
+      report: report(row("oc", { driver: "opencode", plan: "Go", fiveHour: open(30), weekly: open(55) })),
+    });
+    expect(account).toMatchObject({ account: "OpenCode", engine: "opencodeGo", status: "ok", plan: "Go" });
+    expect(account?.windows.map((window) => window.name)).toEqual(["5-hour", "weekly"]);
+  });
+
+  it("lists a Meoo account's credit allowance like the other plans", () => {
+    const [account] = read({
+      instances: [instance("meoo", "meooAgent", "Meoo")],
+      report: report(row("meoo", { driver: "meoo", plan: "Free 免费版", fiveHour: closed, weekly: closed, extra: [{ label: "Model credits", usedPercent: 48.9, remainingPercent: 51.1, resetsAt: AT, amounts: { used: 22_000, total: 45_000 } }] })),
+    });
+    expect(account).toMatchObject({ account: "Meoo", engine: "meooAgent", status: "ok", plan: "Free 免费版", checkedAt: AT });
+    expect(account?.windows).toEqual([{ name: "Model credits", usedPercent: 48.9, resetsAt: AT }]);
+  });
+
   it("says unknown, not unsupported, when the read itself failed", () => {
     expect(read({ instances: [instance("claude"), instance("cursor", "cursorAgent", "Cursor")], report: null }).map((account) => account.status)).toEqual(["unknown", "unsupported"]);
   });

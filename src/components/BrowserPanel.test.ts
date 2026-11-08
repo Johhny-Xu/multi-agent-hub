@@ -145,6 +145,26 @@ describe("the browser panel's connection", () => {
     expect(host.textContent).not.toContain("Starting the browser…");
   });
 
+  it("says the browser is not running yet, starts it only when asked, and shows it once it runs", async () => {
+    await render();
+    const socket = FakeSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.open();
+      socket.message({ type: "unstarted" });
+      socket.control("unclaimed");
+    });
+    await flush();
+    expect(host.textContent).toContain(t("browser.panel.notStarted"));
+    expect(socket.sent).not.toContainEqual({ type: "wake" });
+    await act(async () => button(t("browser.panel.start")).click());
+    expect(socket.sent).toContainEqual({ type: "wake" });
+    expect(host.textContent).toContain(t("browser.panel.starting"));
+    await act(async () => socket.message({ type: "awake" }));
+    await flush();
+    expect(host.textContent).not.toContain(t("browser.panel.notStarted"));
+    expect(FakeSocket.instances).toHaveLength(1);
+  });
+
   it("says the browser closed after it sat unused, opens it again only when asked, and shows it once it runs", async () => {
     const socket = await streaming("unclaimed");
     await act(async () => socket.message({ type: "asleep" }));

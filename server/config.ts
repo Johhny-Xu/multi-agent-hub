@@ -1,6 +1,6 @@
 // ~/.openmausbot/config.json, with env vars overriding its credentials.
 import { readFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
-import { homedir } from "node:os";
+import { dataHome } from "./data-dir.ts";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -13,7 +13,17 @@ import { anthropicKeyEnv } from "./anthropic-key-env.ts";
 import { withoutComputerEngine } from "./computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
 import { replaySettings } from "./replay-settings.ts";
+import { DEFAULT_AUTO_PLACEMENT, type AutoPlacementSettings } from "./host-load.ts";
 import { EFFORT_LEVELS, type EffortLevel } from "../shared/wire.ts";
+import {
+  MAX_VPS_INSTANCES,
+  VPS_INSTANCE_ID,
+  VPS_INSTANCE_NAME_MAX,
+  normalizeVpsConfigV2,
+  vpsConfigProblem,
+  type StoredVpsConfig,
+  type VpsConfig,
+} from "../shared/vps.ts";
 import { isModelVariant, type InstanceConfigMap, type McpServerSpec, type ModelSelection } from "./contracts.ts";
 import { API_KEY_FLEET, DEFAULT_FLEET, OPENAI_API_INSTANCE, OPENROUTER_API_INSTANCE, CLAUDE_API_INSTANCE, PRODUCT_FLEET_ADDITIONS } from "./instance-fleets.ts";
 export { CLAUDE_API_INSTANCE, OPENAI_API_INSTANCE, OPENROUTER_API_INSTANCE, XAI_API_INSTANCE } from "./instance-fleets.ts";
@@ -33,6 +43,7 @@ import { MAX_LOCAL_VM_IDLE_TIMEOUT_MINUTES, MAX_LOCAL_VM_MAX_INSTANCES, MIN_LOCA
 export * from "./local-vm-settings.ts";
 
 const optionalText = z.string().optional();
+export const LEGACY_VPS_ALIAS_ERROR = "This app version stores VPS computers by instance id. Reload the app to manage them.";
 const SSH_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const LEGACY_BROWSER_PROFILE_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BROWSER_PROFILE_ID = /^[a-z0-9_-]{1,40}$/;
@@ -55,12 +66,16 @@ export function isValidSshAlias(value: unknown): value is string {
   return typeof value === "string" && SSH_ALIAS.test(value);
 }
 
-export function normalizeVpsConfig(raw: unknown): { sshAlias?: string } {
+export function normalizeVpsConfig(raw: unknown): StoredVpsConfig {
   if (raw === undefined || raw === null) return {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error("vps must be an object containing an SSH config alias");
+    throw new Error("vps must be an object containing an instance list or an SSH config alias");
   }
-  const alias = (raw as Record<string, unknown>).sshAlias;
+  const value = raw as Record<string, unknown>;
+  if (value.version === 2 || value.instances !== undefined) {
+    return normalizeVpsConfigV2(value);
+  }
+  const alias = value.sshAlias;
   if (alias === undefined || alias === "") return {};
   if (!isValidSshAlias(alias)) {
     throw new Error("vps.sshAlias must be a simple SSH config alias (letters, numbers, dot, dash, or underscore)");
@@ -68,8 +83,36 @@ export function normalizeVpsConfig(raw: unknown): { sshAlias?: string } {
   return { sshAlias: alias };
 }
 
-const vpsConfigSchema = z.object({
-  sshAlias: z.string().refine((value) => value === "" || isValidSshAlias(value), { message: "must be a simple SSH config alias" }).optional(),
+const vpsInstanceSchema = z.union([
+  z.object({
+    id: z.string().regex(VPS_INSTANCE_ID),
+    name: z.string().trim().min(1).max(VPS_INSTANCE_NAME_MAX),
+    kind: z.literal("ssh"),
+    sshAlias: z.string().refine(isValidSshAlias, { message: "must be a simple SSH config alias" }),
+  }).strict(),
+  z.object({
+    id: z.string().regex(VPS_INSTANCE_ID),
+    name: z.string().trim().min(1).max(VPS_INSTANCE_NAME_MAX),
+    kind: z.literal("mcp"),
+    adapter: z.literal("simular-box"),
+    mcpServer: z.string().trim().min(1).max(64),
+    boxId: z.string().trim().min(1).max(200),
+  }).strict(),
+]);
+const vpsConfigSchema = z.union([
+  z.object({
+    version: z.literal(2),
+    instances: z.array(vpsInstanceSchema).max(MAX_VPS_INSTANCES),
+    defaultInstanceId: z.string().regex(VPS_INSTANCE_ID).optional(),
+  }).strict(),
+  z.object({
+    sshAlias: z.string().refine((value) => value === "" || isValidSshAlias(value), { message: "must be a simple SSH config alias" }).optional(),
+  }),
+]).superRefine((value, ctx) => {
+  if ("version" in value && value.version === 2) {
+    const problem = vpsConfigProblem(value as VpsConfig);
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  }
 });
 const roomConfigSchema = z.object({
   turnTimeoutMinutes: z
@@ -279,7 +322,8 @@ const instanceConfigSchema = z.object({
       .refine((icon) => providerIconError(icon) === null, { message: "Invalid provider icon" }),
   ]).optional(),
   environment: z.record(z.string(), z.string()).optional(),
-  enabled: z.boolean().optional(), hidden: z.boolean().optional(),
+  enabled: z.boolean().optional(), hidden: z.boolean().optional(), disabled: z.boolean().optional(),
+  hiddenModels: z.array(z.string().trim().min(1).max(256)).max(1000).optional(),
   access: z.enum(["subscription", "custom", "api"]).optional(),
   config: z.json().optional(),
 });
@@ -300,6 +344,15 @@ const automaticRecoverySchema = z.object({
 const cacheKeepWarmSchema = z.object({
   enabled: z.boolean(),
   windowMinutes: z.number().int().min(15).max(MAX_WINDOW_MINUTES).optional(),
+}).strict();
+/** Auto placement's load thresholds. Every field is optional so one setting can be changed alone. */
+const autoPlacementSchema = z.object({
+  enabled: z.boolean().optional(),
+  cpuHigh: z.number().min(1).max(100).optional(),
+  cpuLow: z.number().min(0).max(99).optional(),
+  memHighPct: z.number().min(0).max(100).optional(),
+  memLowPct: z.number().min(0).max(100).optional(),
+  memMinMb: z.number().int().min(0).max(1_000_000).optional(),
 }).strict();
 const threadsConfigSchema = z.object({
   maxConcurrentPerBot: z.number().int().min(1).max(MAX_CONCURRENT_BOT_THREADS),
@@ -328,6 +381,7 @@ const appConfigSchema = z.object({
   defaultModelSelection: defaultModelSelectionSchema.optional(),
   automaticRecovery: automaticRecoverySchema.optional(),
   cacheKeepWarm: cacheKeepWarmSchema.optional(),
+  autoPlacement: autoPlacementSchema.optional(),
   newBotDefaults: newBotDefaultsSchema.optional(),
   newBots: newBotsConfigSchema.optional(),
   /** CLI launch preferences; never enables remote access implicitly. */
@@ -345,6 +399,14 @@ const appConfigSchema = z.object({
   xai: z.object({ key: optionalText, url: optionalText }).optional(),
   /** Anthropic API key for Claude Code billed per token; `url` is for a proxy or test double. Never a login OAuth token. */
   anthropic: z.object({ key: optionalText, url: optionalText, everyClaudeBot: z.boolean().optional() }).optional(),
+  /** Gemini API key. One copy feeds every engine that reads GEMINI_API_KEY or GOOGLE_API_KEY. */
+  gemini: z.object({ key: optionalText, url: optionalText }).optional(),
+  /** Zhipu (BigModel) Open Platform key for engines and ZCode's own-key models; `models` overrides the ids listed. */
+  zhipu: z.object({
+    key: optionalText,
+    url: optionalText,
+    models: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
+  }).optional(),
   /** OpenAI API key for the `openai` instance only; Codex keeps its own login. */
   openai: z.object({ key: optionalText }).optional(),
   /** OpenRouter key, for the `openrouter` instance only. */
@@ -455,6 +517,8 @@ export interface AppConfig extends HelperConfig {
   /** Off by default; one backup attempt only before any work starts. */
   automaticRecovery?: { enabled: boolean; backup?: ModelSelection };
   cacheKeepWarm?: { enabled: boolean; windowMinutes?: number };
+  /** Auto placement: which local load sends a turn to the cloud. Absent = defaults, enabled. */
+  autoPlacement?: { enabled?: boolean; cpuHigh?: number; cpuLow?: number; memHighPct?: number; memLowPct?: number; memMinMb?: number };
   /** UI creation template. Saving it never mutates a bot or grants access. */
   newBotDefaults?: NewBotDefaults;
   newBots?: { effort?: EffortLevel };
@@ -475,6 +539,8 @@ export interface AppConfig extends HelperConfig {
   deepseek?: { key?: string };
   /** `everyClaudeBot`: the key runs every Claude bot instead of its login; unset means true. */
   anthropic?: { key?: string; url?: string; everyClaudeBot?: boolean };
+  gemini?: { key?: string; url?: string };
+  zhipu?: { key?: string; url?: string; models?: string[] };
   openai?: { key?: string };
   openrouter?: { key?: string };
   budgets?: { monthlyUsd?: number; warnAtPercent?: number };
@@ -486,8 +552,8 @@ export interface AppConfig extends HelperConfig {
   composio?: { apiKey?: string; userId?: string; sessionId?: string };
   /** Boat token (ascii.dev renamed Box to Boat); config key "box", env BOX_TOKEN. */
   box?: { token?: string };
-  /** A named host from the user's SSH config. Authentication stays with SSH. */
-  vps?: { sshAlias?: string };
+  /** Managed VPS computers: SSH containers or simular-box boxes; legacy files still carry sshAlias. */
+  vps?: StoredVpsConfig;
   opencodeGo?: { apiKey?: string; providerKeys?: Record<string, string> };
   tts?: { key?: string; fishKey?: string; geminiKey?: string; voice?: string; provider?: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai" | "gemini" | "openai"; baseUrl?: string; model?: string; fishModel?: FishTtsModel; everyReply?: boolean };
   decider?: DeciderConfig;
@@ -599,8 +665,17 @@ export function parseConfigPatch(value: JsonValue): ConfigPatch {
   return parsed.data;
 }
 
+/** The pre-v2 single host; only the migration reads it. */
 export function vpsSshAlias(cfg: AppConfig): string | null {
   return isValidSshAlias(cfg.vps?.sshAlias) ? cfg.vps.sshAlias : null;
+}
+
+/** The migrated instance list, or null while a legacy file has not been migrated yet. */
+export function vpsInstancesConfig(cfg: AppConfig): VpsConfig | null {
+  const vps = cfg.vps;
+  return vps && vps.version === 2 && Array.isArray(vps.instances)
+    ? { version: 2, instances: vps.instances, ...(vps.defaultInstanceId ? { defaultInstanceId: vps.defaultInstanceId } : {}) }
+    : null;
 }
 
 /** Revalidated because the value is forwarded into a child process environment. */
@@ -618,6 +693,19 @@ export function mcpCallTimeoutMinutes(cfg: AppConfig): number {
 
 export function cacheKeepWarmSettings(cfg: AppConfig): { enabled: boolean; windowMinutes: number } {
   return { enabled: cfg.cacheKeepWarm?.enabled === true, windowMinutes: cfg.cacheKeepWarm?.windowMinutes ?? DEFAULT_WINDOW_MINUTES };
+}
+
+export function autoPlacementSettings(cfg: AppConfig): AutoPlacementSettings {
+  const stored = cfg.autoPlacement;
+  const number = (value: number | undefined, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return {
+    enabled: stored?.enabled !== false,
+    cpuHigh: number(stored?.cpuHigh, DEFAULT_AUTO_PLACEMENT.cpuHigh),
+    cpuLow: number(stored?.cpuLow, DEFAULT_AUTO_PLACEMENT.cpuLow),
+    memHighPct: number(stored?.memHighPct, DEFAULT_AUTO_PLACEMENT.memHighPct),
+    memLowPct: number(stored?.memLowPct, DEFAULT_AUTO_PLACEMENT.memLowPct),
+    memMinMb: number(stored?.memMinMb, DEFAULT_AUTO_PLACEMENT.memMinMb),
+  };
 }
 
 export function threadEventLogMaxBytes(cfg: AppConfig): number | null {
@@ -710,8 +798,8 @@ export function changedInstanceIds(before: Record<string, unknown>, after: Recor
     .filter((id) => !isDeepStrictEqual(before[id], after[id]));
 }
 
-export const DATA_DIR = process.env.OMB_DATA_DIR ?? join(homedir(), ".openmausbot");
-const LEGACY_DATA_DIR = join(homedir(), ".opengrokbot");
+export const DATA_DIR = process.env.OMB_DATA_DIR || join(dataHome(), ".openmausbot");
+const LEGACY_DATA_DIR = join(dataHome(), ".opengrokbot");
 export const EVENTS_DIR = join(DATA_DIR, "events");
 export const NATIVE_DIR = join(DATA_DIR, "native");
 
@@ -930,7 +1018,7 @@ export function saveConfig(
   const keepImageModels = keepKeysOutOfImageModels(disk, checkedPatch.imageGen);
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "treg", "postiz", "groq", "greenference", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine", "newBots", "safetyFloor"] as const) {
+  for (const key of ["xai", "anthropic", "gemini", "zhipu", "mistral", "cerebras", "treg", "postiz", "groq", "greenference", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine", "newBots", "safetyFloor", "autoPlacement"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);
@@ -943,7 +1031,13 @@ export function saveConfig(
     disk[key] = merged;
   }
   keepImageModels();
-  if (checkedPatch.vps !== undefined) disk.vps = normalizeVpsConfig(checkedPatch.vps);
+  if (checkedPatch.vps !== undefined) {
+    const legacyWrite = "sshAlias" in checkedPatch.vps && checkedPatch.vps.sshAlias !== undefined;
+    if (legacyWrite && jsonObjectSchema.safeParse(disk.vps).success && (disk.vps as { version?: unknown })?.version === 2) {
+      throw Object.assign(new Error(LEGACY_VPS_ALIAS_ERROR), { status: 400 });
+    }
+    disk.vps = normalizeVpsConfig(checkedPatch.vps);
+  }
   for (const key of ["language", "computerName"] as const) if (checkedPatch[key] !== undefined) disk[key] = checkedPatch[key];
   if (checkedPatch.customDomain !== undefined) disk.customDomain = checkedPatch.customDomain;
   if (checkedPatch.signIn !== undefined) disk.signIn = checkedPatch.signIn;
@@ -1247,9 +1341,18 @@ function skipMcpEntry(name: string, why: string): void {
   console.error(`mcpServers.${JSON.stringify(name)} skipped — ${why}`);
 }
 
+/** A source MCP registered as a computer is reserved: it never also mounts as an ordinary server. */
+export function computerMcpServerNames(cfg: AppConfig): ReadonlySet<string> {
+  const vps = cfg.vps;
+  if (!vps || vps.version !== 2 || !Array.isArray(vps.instances)) return new Set();
+  return new Set(vps.instances.flatMap((instance) => instance.kind === "mcp" ? [instance.mcpServer] : []));
+}
+
 export function customMcpServers(cfg: AppConfig, only?: string[], botId?: string): Record<string, CustomMcpServer> {
   const out: Record<string, CustomMcpServer> = {};
+  const computerSources = computerMcpServerNames(cfg);
   for (const [name, raw] of Object.entries(cfg.mcpServers ?? {})) {
+    if (computerSources.has(name)) continue;
     if (only && !only.includes(name)) continue;
     const parsed = parseStoredMcpServer(name, raw);
     if (!parsed.ok) {

@@ -25,7 +25,6 @@ import {
   MANAGED_LABEL,
 } from "./container-computer.ts";
 import { PIDS_LIMIT } from "./container-limits.ts";
-import type { AppConfig } from "./config.ts";
 import {
   VPS_CONTAINER_LABEL,
   VPS_ENVIRONMENT_LABEL,
@@ -35,6 +34,7 @@ import {
   vpsComputerAction,
   vpsComputerJoin,
   vpsDesktopConnection,
+  vpsTargetKey,
   closeVpsDesktopTunnel,
   closeAllVpsDesktopTunnels,
   vpsComputerScreenshot,
@@ -54,7 +54,8 @@ import {
 } from "./vps-computer.ts";
 
 const BOT_ID = "bot-1234-abcd";
-const CONFIG: AppConfig = { vps: { sshAlias: "production-vps" } };
+const TARGET = { instanceId: "primary", sshAlias: "production-vps", revision: "rev-1" };
+const target = (sshAlias: string) => ({ instanceId: sshAlias, sshAlias, revision: `rev-${sshAlias}` });
 const IMAGE_ID = `sha256:${"a".repeat(64)}`;
 const CONTAINER_ID = "b".repeat(64);
 const screenshot = Buffer.concat([
@@ -307,7 +308,7 @@ describe("VPS computer", () => {
 
   it("reports a ready container only when image, labels, isolation, mounts, network, and Cua pass", async () => {
     const fake = fixture();
-    const status = await vpsComputerStatus(CONFIG, BOT_ID, fake.runner);
+    const status = await vpsComputerStatus(TARGET, BOT_ID, fake.runner);
     expect(status).toMatchObject({
       configured: true,
       daemonUp: true,
@@ -342,8 +343,8 @@ describe("VPS computer", () => {
     { Memory: 0, MemorySwap: -1, NanoCpus: 0, PidsLimit: -1, ShmSize: 64 * 1024 ** 2, OomKillDisable: null },
   ])("reuses a VPS container with operator-selected resources: %j", async (hostConfig) => {
     const fake = fixture({ hostConfig });
-    expect(await vpsComputerStatus(CONFIG, BOT_ID, fake.runner)).toMatchObject({ security: "hardened", ready: true });
-    expect((await vpsComputerAction("provision", CONFIG, BOT_ID, fake.runner)).ready).toBe(true);
+    expect(await vpsComputerStatus(TARGET, BOT_ID, fake.runner)).toMatchObject({ security: "hardened", ready: true });
+    expect((await vpsComputerAction("provision", TARGET, BOT_ID, fake.runner)).ready).toBe(true);
     expect(fake.calls.some(({ args }) => ["rm", "run", "build", "pull"].includes(args[2]!))).toBe(false);
   });
 
@@ -351,13 +352,13 @@ describe("VPS computer", () => {
     const updates = (fake: ReturnType<typeof fixture>) => fake.calls.filter(({ args }) => args[2] === "update").map(({ args }) => args.slice(2));
     const settle = () => new Promise((resolve) => setImmediate(resolve));
     const old = fixture({ containerId: "d".repeat(64) });
-    await vpsComputerStatus(CONFIG, BOT_ID, old.runner);
+    await vpsComputerStatus(TARGET, BOT_ID, old.runner);
     await settle();
-    await vpsComputerStatus(CONFIG, BOT_ID, old.runner);
+    await vpsComputerStatus(TARGET, BOT_ID, old.runner);
     await settle();
     expect(updates(old)).toEqual([["update", "--pids-limit", String(PIDS_LIMIT), "d".repeat(64)]]);
     const chosen = fixture({ containerId: "e".repeat(64), hostConfig: { PidsLimit: 1024 } });
-    await vpsComputerStatus(CONFIG, BOT_ID, chosen.runner);
+    await vpsComputerStatus(TARGET, BOT_ID, chosen.runner);
     await settle();
     expect(updates(chosen)).toEqual([]);
   });
@@ -365,43 +366,43 @@ describe("VPS computer", () => {
   it.each(["no", "always", "on-failure", "unless-stopped"])(
     "reuses a VPS container with operator-selected restart policy %s", async (restartPolicyName) => {
       const fake = fixture({ restartPolicyName });
-      expect(await vpsComputerStatus(CONFIG, BOT_ID, fake.runner)).toMatchObject({ security: "hardened", ready: true });
-      expect((await vpsComputerAction("provision", CONFIG, BOT_ID, fake.runner)).ready).toBe(true);
+      expect(await vpsComputerStatus(TARGET, BOT_ID, fake.runner)).toMatchObject({ security: "hardened", ready: true });
+      expect((await vpsComputerAction("provision", TARGET, BOT_ID, fake.runner)).ready).toBe(true);
       expect(fake.calls.some(({ args }) => ["rm", "run"].includes(args[2]!))).toBe(false);
     },
   );
 
   it("refuses host mounts, public ports, and unowned containers", async () => {
-    const mounted = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ mounts: true }).runner);
+    const mounted = await vpsComputerStatus(TARGET, BOT_ID, fixture({ mounts: true }).runner);
     expect(mounted.ready).toBe(false);
     expect(mounted.mounts).toBe("unsafe");
 
-    const publicPorts = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ publicPorts: true }).runner);
+    const publicPorts = await vpsComputerStatus(TARGET, BOT_ID, fixture({ publicPorts: true }).runner);
     expect(publicPorts.ready).toBe(false);
     expect(publicPorts.network).toBe("unsafe");
 
-    const publishedAll = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ publishAllPorts: true }).runner);
+    const publishedAll = await vpsComputerStatus(TARGET, BOT_ID, fixture({ publishAllPorts: true }).runner);
     expect(publishedAll.ready).toBe(false);
     expect(publishedAll.network).toBe("unsafe");
 
-    const devices = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ deviceRequests: true }).runner);
+    const devices = await vpsComputerStatus(TARGET, BOT_ID, fixture({ deviceRequests: true }).runner);
     expect(devices.ready).toBe(false);
     expect(devices.security).toBe("unsafe");
 
-    const sharedNetwork = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ networkMode: "shared-net" }).runner);
+    const sharedNetwork = await vpsComputerStatus(TARGET, BOT_ID, fixture({ networkMode: "shared-net" }).runner);
     expect(sharedNetwork.ready).toBe(false);
     expect(sharedNetwork.network).toBe("unsafe");
 
-    const hostNetwork = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ networkMode: "host" }).runner);
+    const hostNetwork = await vpsComputerStatus(TARGET, BOT_ID, fixture({ networkMode: "host" }).runner);
     expect(hostNetwork.ready).toBe(false);
     expect(hostNetwork.network).toBe("unsafe");
 
-    const privileged = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ privileged: true }).runner);
+    const privileged = await vpsComputerStatus(TARGET, BOT_ID, fixture({ privileged: true }).runner);
     expect(privileged.ready).toBe(false);
     expect(privileged.security).toBe("unsafe");
 
     const hostNamespaces = await vpsComputerStatus(
-      CONFIG,
+      TARGET,
       BOT_ID,
       fixture({ pidMode: "host", ipcMode: "host" }).runner,
     );
@@ -409,7 +410,7 @@ describe("VPS computer", () => {
     expect(hostNamespaces.security).toBe("unsafe");
 
     const extraCapability = await vpsComputerStatus(
-      CONFIG,
+      TARGET,
       BOT_ID,
       fixture({ capAdd: ["CAP_SETUID", "CAP_SETGID", "CAP_SYS_ADMIN"] }).runner,
     );
@@ -417,41 +418,41 @@ describe("VPS computer", () => {
     expect(extraCapability.security).toBe("unsafe");
 
     const unsafeProfile = await vpsComputerStatus(
-      CONFIG,
+      TARGET,
       BOT_ID,
       fixture({ securityOpt: ["seccomp=unconfined"], cgroupnsMode: "host" }).runner,
     );
     expect(unsafeProfile.ready).toBe(false);
     expect(unsafeProfile.security).toBe("unsafe");
 
-    const autoRemove = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ hostConfig: { AutoRemove: true } }).runner);
+    const autoRemove = await vpsComputerStatus(TARGET, BOT_ID, fixture({ hostConfig: { AutoRemove: true } }).runner);
     expect(autoRemove.ready).toBe(false);
     expect(autoRemove.security).toBe("unsafe");
 
-    const wrongImage = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ containerImageId: "c".repeat(64) }).runner);
+    const wrongImage = await vpsComputerStatus(TARGET, BOT_ID, fixture({ containerImageId: "c".repeat(64) }).runner);
     expect(wrongImage.ready).toBe(false);
     expect(wrongImage.imageMatches).toBe(false);
 
-    const malformedImageId = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ inspectedImageId: "--help" }).runner);
+    const malformedImageId = await vpsComputerStatus(TARGET, BOT_ID, fixture({ inspectedImageId: "--help" }).runner);
     expect(malformedImageId.ready).toBe(false);
     expect(malformedImageId.image).toBe(false);
 
-    const malformedContainerId = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ containerId: "--help" }).runner);
+    const malformedContainerId = await vpsComputerStatus(TARGET, BOT_ID, fixture({ containerId: "--help" }).runner);
     expect(malformedContainerId.ready).toBe(false);
     expect(malformedContainerId.container_id).toBeNull();
 
-    const unowned = await vpsComputerStatus(CONFIG, BOT_ID, fixture({ managed: false }).runner);
+    const unowned = await vpsComputerStatus(TARGET, BOT_ID, fixture({ managed: false }).runner);
     expect(unowned.ready).toBe(false);
     expect(unowned.managed).toBe(false);
   });
 
   it("lets explicit provisioning build and run the pinned container, but Auto only reuses", async () => {
     const auto = fixture({ image: false, container: false });
-    expect(await reuseVps(CONFIG, BOT_ID, auto.runner)).toBeNull();
+    expect(await reuseVps(TARGET, BOT_ID, auto.runner)).toBeNull();
     expect(auto.calls.some(({ args }) => ["run", "start", "build", "pull"].includes(args[2]!))).toBe(false);
 
     const provision = fixture({ image: false, container: false });
-    const status = await vpsComputerAction("provision", CONFIG, BOT_ID, provision.runner);
+    const status = await vpsComputerAction("provision", TARGET, BOT_ID, provision.runner);
     expect(status.ready).toBe(true);
     const run = provision.calls.find(({ args }) => args[2] === "run")?.args ?? [];
     expect(run).toContain("--memory");
@@ -485,7 +486,7 @@ describe("VPS computer", () => {
       rebuiltImageId: IMAGE_ID,
     });
 
-    const status = await vpsComputerAction("provision", CONFIG, BOT_ID, provision.runner);
+    const status = await vpsComputerAction("provision", TARGET, BOT_ID, provision.runner);
     expect(status.ready).toBe(true);
     const run = provision.calls.find(({ args }) => args[2] === "run")?.args ?? [];
     expect(run.at(-1)).toBe(IMAGE_ID);
@@ -494,13 +495,13 @@ describe("VPS computer", () => {
 
   it("starts and sleeps only the managed container, never the VPS", async () => {
     const start = fixture({ running: false });
-    const started = await vpsComputerAction("start", CONFIG, BOT_ID, start.runner);
+    const started = await vpsComputerAction("start", TARGET, BOT_ID, start.runner);
     expect(started.container).toBe("running");
     expect(start.calls.some(({ args }) => args[2] === "start")).toBe(true);
     expect(start.calls.some(({ args }) => ["rm", "system", "reboot", "shutdown"].includes(args[2]!))).toBe(false);
 
     const stop = fixture();
-    const stopped = await vpsComputerAction("stop", CONFIG, BOT_ID, stop.runner);
+    const stopped = await vpsComputerAction("stop", TARGET, BOT_ID, stop.runner);
     expect(stopped.container).toBe("stopped");
     expect(stop.calls.some(({ args }) => args[2] === "stop" && args[3] === CONTAINER_ID)).toBe(true);
     expect(stop.calls.some(({ args }) => ["rm", "system", "reboot", "shutdown"].includes(args[2]!))).toBe(false);
@@ -509,8 +510,8 @@ describe("VPS computer", () => {
   it("serializes concurrent provisioning for the same bot", async () => {
     const fake = fixture({ image: false, container: false });
     const results = await Promise.all([
-      vpsComputerAction("provision", CONFIG, BOT_ID, fake.runner),
-      vpsComputerAction("provision", CONFIG, BOT_ID, fake.runner),
+      vpsComputerAction("provision", TARGET, BOT_ID, fake.runner),
+      vpsComputerAction("provision", TARGET, BOT_ID, fake.runner),
     ]);
     expect(results.every((status) => status.ready)).toBe(true);
     expect(fake.calls.filter(({ args }) => args[2] === "run")).toHaveLength(1);
@@ -518,7 +519,7 @@ describe("VPS computer", () => {
 
   it("returns an already-ready provision after one fresh inspection", async () => {
     const fake = fixture();
-    expect((await vpsComputerAction("provision", CONFIG, BOT_ID, fake.runner)).ready).toBe(true);
+    expect((await vpsComputerAction("provision", TARGET, BOT_ID, fake.runner)).ready).toBe(true);
     expect(fake.calls.filter(({ args }) => args[2] === "image")).toHaveLength(1);
     expect(fake.calls.filter(({ args }) => args.includes("get_desktop_state"))).toHaveLength(1);
   });
@@ -532,9 +533,9 @@ describe("VPS computer", () => {
       if (args[2] === "build") await gate;
       return fake.runner(args, options);
     };
-    const first = vpsComputerAction("provision", CONFIG, BOT_ID, runner);
+    const first = vpsComputerAction("provision", TARGET, BOT_ID, runner);
     let secondFailure: unknown;
-    const second = vpsComputerAction("provision", CONFIG, BOT_ID, runner).catch((error) => { secondFailure = error; return null; });
+    const second = vpsComputerAction("provision", TARGET, BOT_ID, runner).catch((error) => { secondFailure = error; return null; });
     try {
       await vi.advanceTimersByTimeAsync(6_000);
       expect(secondFailure).toBeUndefined();
@@ -559,12 +560,12 @@ describe("VPS computer", () => {
       if (args.includes("--screenshot-out-file")) await gate;
       return fake.runner(args, options);
     };
-    const preview = vpsComputerScreenshot(CONFIG, BOT_ID, runner);
+    const preview = vpsComputerScreenshot(TARGET, BOT_ID, runner);
     await vi.advanceTimersByTimeAsync(0);
     let failure: unknown;
     const readiness = (mode === "provision"
-      ? vpsComputerAction("provision", CONFIG, BOT_ID, runner)
-      : inspectVpsForAuto(CONFIG, BOT_ID, runner)).catch((error) => { failure = error; return null; });
+      ? vpsComputerAction("provision", TARGET, BOT_ID, runner)
+      : inspectVpsForAuto(TARGET, BOT_ID, runner)).catch((error) => { failure = error; return null; });
     try {
       await vi.advanceTimersByTimeAsync(6_000);
       expect(failure).toBeUndefined();
@@ -581,7 +582,7 @@ describe("VPS computer", () => {
   });
 
   it("shares one Auto inspection among turns that ask while it runs, never jumping a stop queued behind it", async () => {
-    const config: AppConfig = { vps: { sshAlias: "burst-vps" } };
+    const config = target("burst-vps");
     const fake = fixture();
     let release!: () => void;
     let gate = new Promise<void>((resolve) => { release = resolve; });
@@ -607,12 +608,8 @@ describe("VPS computer", () => {
 
   it("keeps provisioning and readiness checks on the alias captured at operation start", async () => {
     const fake = fixture({ container: false });
-    const config: AppConfig = { vps: { sshAlias: "original-vps" } };
-    const runner: VpsCommandRunner = async (args, options) => {
-      const result = await fake.runner(args, options);
-      if (args[2] === "run") config.vps!.sshAlias = "replacement-vps";
-      return result;
-    };
+    const config = target("original-vps");
+    const runner: VpsCommandRunner = fake.runner;
 
     expect((await vpsComputerAction("provision", config, BOT_ID, runner)).ready).toBe(true);
     expect(fake.calls.some(({ args }) => args[2] === "run")).toBe(true);
@@ -620,11 +617,11 @@ describe("VPS computer", () => {
   });
 
   it("mounts the official Cua MCP server through the tiny remote exec bridge", () => {
-    const connection = vpsComputerMcp(CONFIG, BOT_ID);
+    const connection = vpsComputerMcp(TARGET, BOT_ID);
     expect(connection.command).toBe(process.execPath);
     expect(connection.args.slice(-2)).toEqual(["production-vps", vpsContainerName(BOT_ID)]);
     expect(connection.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
-    expect(vpsComputerMcp(CONFIG, BOT_ID, CONTAINER_ID).args.slice(-2)).toEqual(["production-vps", CONTAINER_ID]);
+    expect(vpsComputerMcp(TARGET, BOT_ID, CONTAINER_ID).args.slice(-2)).toEqual(["production-vps", CONTAINER_ID]);
     expect(vpsContainerMcpArgs("production-vps", vpsContainerName(BOT_ID))).toEqual([
       "-H",
       "ssh://production-vps",
@@ -650,7 +647,7 @@ describe("VPS computer", () => {
 
   it("captures screenshots through Cua Driver and validates the returned image", async () => {
     const fake = fixture();
-    const frame = await vpsComputerScreenshot(CONFIG, BOT_ID, fake.runner);
+    const frame = await vpsComputerScreenshot(TARGET, BOT_ID, fake.runner);
     expect(frame).toEqual({ png: screenshot.toString("base64"), format: "png" });
     expect(fake.calls.some(({ args }) => args.includes("get_desktop_state"))).toBe(true);
     const transfer = fake.calls.find(({ args }) => args.includes("openmausbot-preview"))!.args;
@@ -661,16 +658,16 @@ describe("VPS computer", () => {
     expect(transfer[transfer.indexOf("-c") + 1]).toContain("image.thumbnail((1280, 1280))");
     expect(fake.calls.some(({ args }) => args.includes("rm") && args.includes("-f"))).toBe(true);
 
-    await expect(vpsComputerScreenshot(CONFIG, BOT_ID, fixture({ screenshotValid: false }).runner)).rejects.toThrow(/incomplete/);
+    await expect(vpsComputerScreenshot(TARGET, BOT_ID, fixture({ screenshotValid: false }).runner)).rejects.toThrow(/incomplete/);
 
     const failedCapture = fixture({ screenshotCaptureFails: true });
-    await expect(vpsComputerScreenshot(CONFIG, BOT_ID, failedCapture.runner)).rejects.toThrow(/capture failed/);
+    await expect(vpsComputerScreenshot(TARGET, BOT_ID, failedCapture.runner)).rejects.toThrow(/capture failed/);
     expect(failedCapture.calls.some(({ args }) => args.includes("rm") && args.includes("-f"))).toBe(true);
   });
 
   it.skipIf(!hasPillow)("transfers real JPEG previews at quality 70, within 1280px without upscaling", async () => {
     const fake = fixture();
-    await vpsComputerScreenshot(CONFIG, BOT_ID, fake.runner);
+    await vpsComputerScreenshot(TARGET, BOT_ID, fake.runner);
     const transfer = fake.calls.find(({ args }) => args.includes("openmausbot-preview"))!.args;
     // The exact in-container script with only the local Pillow interpreter and a disposable image swapped in; no Docker or SSH.
     const script = transfer[transfer.indexOf("-c") + 1].replace("/opt/venv/bin/python", "python3");
@@ -694,7 +691,7 @@ describe("VPS computer", () => {
         expect(JSON.parse(decoded)).toEqual({ format: "JPEG", size: expected, mode: "RGB", quality70: true });
         expect(jpeg.length).toBeLessThan(original.length / 2);
         expect(readFileSync(path).equals(original)).toBe(true);
-        const frame = await vpsComputerScreenshot(CONFIG, BOT_ID, async (args, options) => args.includes("openmausbot-preview")
+        const frame = await vpsComputerScreenshot(TARGET, BOT_ID, async (args, options) => args.includes("openmausbot-preview")
           ? { stdout: encoded, stderr: "" }
           : fake.runner(args, options));
         expect(frame).toEqual({ png: encoded, format: "jpeg" });
@@ -704,7 +701,7 @@ describe("VPS computer", () => {
 
   it.skipIf(process.platform === "win32")("falls back to the original PNG when conversion is unavailable or fails", async () => {
     const fake = fixture();
-    await vpsComputerScreenshot(CONFIG, BOT_ID, fake.runner);
+    await vpsComputerScreenshot(TARGET, BOT_ID, fake.runner);
     const transfer = fake.calls.find(({ args }) => args.includes("openmausbot-preview"))!.args;
     const originalScript = transfer[transfer.indexOf("-c") + 1];
     const scratch = mkdtempSync(join(tmpdir(), "omb-vps-preview-fallback-"));
@@ -729,9 +726,9 @@ describe("VPS computer", () => {
       if (args.includes("--screenshot-out-file")) { entered(); await gate; }
       return fake.runner(args, options);
     };
-    const first = vpsComputerScreenshot(CONFIG, BOT_ID, runner);
+    const first = vpsComputerScreenshot(TARGET, BOT_ID, runner);
     await capturing;
-    const second = vpsComputerScreenshot(CONFIG, BOT_ID, runner);
+    const second = vpsComputerScreenshot(TARGET, BOT_ID, runner);
     expect(vpsLifecycleBusy()).toBe(true);
     release();
     const frames = await Promise.all([first, second]);
@@ -743,7 +740,7 @@ describe("VPS computer", () => {
   });
 
   it("pins the capture alias and never shares its frame with a different VPS", async () => {
-    const cfg: AppConfig = { vps: { sshAlias: "first-preview-vps" } };
+    const cfg = target("first-preview-vps");
     const fake = fixture();
     let release!: () => void;
     let entered!: () => void;
@@ -755,8 +752,7 @@ describe("VPS computer", () => {
     };
     const first = vpsComputerScreenshot(cfg, BOT_ID, runner);
     await capturing;
-    cfg.vps!.sshAlias = "second-preview-vps";
-    await vpsComputerScreenshot(cfg, BOT_ID, runner);
+    await vpsComputerScreenshot(target("second-preview-vps"), BOT_ID, runner);
     release();
     await first;
     for (const alias of ["first-preview-vps", "second-preview-vps"]) {
@@ -783,14 +779,14 @@ describe("VPS computer", () => {
       };
       const start = Date.now();
       let settled = false;
-      const first = vpsComputerScreenshot(CONFIG, BOT_ID, runner).finally(() => { settled = true; });
+      const first = vpsComputerScreenshot(TARGET, BOT_ID, runner).finally(() => { settled = true; });
       const rejected = expect(first).rejects.toMatchObject({ status: 504 });
       await vi.advanceTimersByTimeAsync(35_000);
       expect(calls.find(({ args }) => args.includes("openmausbot-preview"))?.timeoutMs).toBe(13_000);
       expect(calls.find(({ args }) => args.includes("rm"))?.timeoutMs).toBe(4_000);
       expect(vpsLifecycleBusy()).toBe(true);
       expect(settled).toBe(false);
-      const joined = expect(vpsComputerScreenshot(CONFIG, BOT_ID, runner)).rejects.toMatchObject({ status: 504 });
+      const joined = expect(vpsComputerScreenshot(TARGET, BOT_ID, runner)).rejects.toMatchObject({ status: 504 });
       await vi.advanceTimersByTimeAsync(9_999);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
@@ -798,7 +794,7 @@ describe("VPS computer", () => {
       expect(Date.now() - start).toBe(45_000);
       expect(calls.filter(({ args }) => args.includes("--screenshot-out-file"))).toHaveLength(1);
       expect(vpsLifecycleBusy()).toBe(false);
-      await expect(vpsComputerScreenshot(CONFIG, BOT_ID, fixture().runner)).resolves.toMatchObject({ format: "png" });
+      await expect(vpsComputerScreenshot(TARGET, BOT_ID, fixture().runner)).resolves.toMatchObject({ format: "png" });
     } finally { vi.useRealTimers(); }
   });
 
@@ -808,7 +804,7 @@ describe("VPS computer", () => {
     const gate = new Promise<void>((resolve) => { release = resolve; });
     try {
       const fake = fixture();
-      const cfg: AppConfig = { vps: { sshAlias: "cache-preview-vps" } };
+      const cfg = target("cache-preview-vps");
       let entered!: () => void;
       const capturing = new Promise<void>((resolve) => { entered = resolve; });
       let captures = 0;
@@ -851,7 +847,7 @@ describe("VPS computer", () => {
   });
 
   it("shares status-first cold inspection with other polls and a preview", async () => {
-    const cfg: AppConfig = { vps: { sshAlias: "status-first-vps" } };
+    const cfg = target("status-first-vps");
     const fake = fixture();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -881,7 +877,7 @@ describe("VPS computer", () => {
 
   it("keeps a preview bounded when an independently owned status poll is slower", async () => {
     vi.useFakeTimers();
-    const cfg: AppConfig = { vps: { sshAlias: "slow-shared-status-vps" } };
+    const cfg = target("slow-shared-status-vps");
     const fake = fixture();
     mockTransport(async (args, options) => {
       // Every command is healthy, but the full inspection outlasts the preview's budget.
@@ -905,7 +901,7 @@ describe("VPS computer", () => {
   });
 
   it("does not republish an old ready poll after stopping the container", async () => {
-    const cfg: AppConfig = { vps: { sshAlias: "stale-status-vps" } };
+    const cfg = target("stale-status-vps");
     const fake = fixture();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -931,7 +927,7 @@ describe("VPS computer", () => {
   });
 
   it("invalidates a late startup poll only after provisioning finishes readiness", async () => {
-    const cfg: AppConfig = { vps: { sshAlias: "startup-status-vps" } };
+    const cfg = target("startup-status-vps");
     const fake = fixture({ container: false });
     let releaseReady!: () => void;
     const readyGate = new Promise<void>((resolve) => { releaseReady = resolve; });
@@ -978,19 +974,19 @@ describe("VPS computer", () => {
       if (args[2] === "inspect") throw new Error("ssh: connect to host production-vps port 22: Connection timed out");
       return fake.runner(args, options);
     };
-    const status = await vpsComputerStatus(CONFIG, BOT_ID, flaky);
+    const status = await vpsComputerStatus(TARGET, BOT_ID, flaky);
     expect(status.daemonUp).toBe(false);
     expect(status.ready).toBe(false);
     expect(status.problem).toMatch(/Docker over SSH failed while checking the VPS/);
 
-    await expect(vpsComputerAction("provision", CONFIG, BOT_ID, flaky)).rejects.toThrow(/Docker over SSH failed/);
+    await expect(vpsComputerAction("provision", TARGET, BOT_ID, flaky)).rejects.toThrow(/Docker over SSH failed/);
     expect(fake.calls.some(({ args }) => args[2] === "run")).toBe(false);
 
     const imageFlaky: VpsCommandRunner = async (args, options) => {
       if (args[2] === "image") throw new Error("kex_exchange_identification: read: Connection reset by peer");
       return fake.runner(args, options);
     };
-    const imageStatus = await vpsComputerStatus(CONFIG, BOT_ID, imageFlaky);
+    const imageStatus = await vpsComputerStatus(TARGET, BOT_ID, imageFlaky);
     expect(imageStatus.daemonUp).toBe(false);
     expect(imageStatus.problem).toMatch(/Docker over SSH failed while checking the VPS/);
   });
@@ -1002,14 +998,14 @@ describe("VPS computer", () => {
       if (args[2] === command && ++attempts === 1) throw new Error("Docker-over-SSH command timed out");
       return fake.runner(args, options);
     };
-    expect((await vpsComputerAction("provision", CONFIG, BOT_ID, runner)).ready).toBe(true);
+    expect((await vpsComputerAction("provision", TARGET, BOT_ID, runner)).ready).toBe(true);
     expect(attempts).toBe(2);
     expect(fake.calls.every(({ args }) => ["image", "inspect", "exec"].includes(args[2]!))).toBe(true);
   });
 
   it("bounds inspection retries and never replays a failed lifecycle command", async () => {
     const unavailable = vi.fn(async () => { throw new Error("Docker-over-SSH command timed out"); });
-    const status = await vpsComputerStatus(CONFIG, BOT_ID, unavailable);
+    const status = await vpsComputerStatus(TARGET, BOT_ID, unavailable);
     expect(unavailable).toHaveBeenCalledTimes(2);
     expect(status).toMatchObject({ ready: false, daemonUp: false });
     expect(status.problem).toContain("Check that the VPS is online");
@@ -1020,7 +1016,7 @@ describe("VPS computer", () => {
       if (args[2] === "start") { starts++; throw new Error("Docker-over-SSH command timed out"); }
       return fake.runner(args, options);
     };
-    await expect(vpsComputerAction("start", CONFIG, BOT_ID, runner)).rejects.toThrow("timed out");
+    await expect(vpsComputerAction("start", TARGET, BOT_ID, runner)).rejects.toThrow("timed out");
     expect(starts).toBe(1);
   });
 
@@ -1032,43 +1028,43 @@ describe("VPS computer", () => {
         if (args[2] === "image") { attempts++; throw new Error(message); }
         return fake.runner(args, options);
       };
-      expect((await vpsComputerStatus(CONFIG, BOT_ID, runner)).ready).toBe(false);
+      expect((await vpsComputerStatus(TARGET, BOT_ID, runner)).ready).toBe(false);
       expect(attempts).toBe(1);
     },
   );
 
   it("removes a managed container even when its image is incompatible, then provisions fresh", async () => {
     const stale = fixture({ containerImageId: `sha256:${"c".repeat(64)}` });
-    expect((await vpsComputerStatus(CONFIG, BOT_ID, stale.runner)).imageMatches).toBe(false);
-    await expect(vpsComputerAction("provision", CONFIG, BOT_ID, stale.runner)).rejects.toThrow(/incompatible|unsafe/);
+    expect((await vpsComputerStatus(TARGET, BOT_ID, stale.runner)).imageMatches).toBe(false);
+    await expect(vpsComputerAction("provision", TARGET, BOT_ID, stale.runner)).rejects.toThrow(/incompatible|unsafe/);
 
-    const removed = await vpsComputerAction("remove", CONFIG, BOT_ID, stale.runner);
+    const removed = await vpsComputerAction("remove", TARGET, BOT_ID, stale.runner);
     expect(removed.container).toBe("missing");
     expect(stale.calls.some(({ args }) => args[2] === "rm" && args[3] === "-f" && args[4] === CONTAINER_ID)).toBe(true);
 
-    const rebuilt = await vpsComputerAction("provision", CONFIG, BOT_ID, stale.runner);
+    const rebuilt = await vpsComputerAction("provision", TARGET, BOT_ID, stale.runner);
     expect(rebuilt.ready).toBe(true);
   });
 
   it("never removes a container OpenMausBot did not create", async () => {
     const unowned = fixture({ managed: false });
-    await expect(vpsComputerAction("remove", CONFIG, BOT_ID, unowned.runner)).rejects.toThrow(/did not create/);
+    await expect(vpsComputerAction("remove", TARGET, BOT_ID, unowned.runner)).rejects.toThrow(/did not create/);
     expect(unowned.calls.some(({ args }) => args[2] === "rm")).toBe(false);
 
     const foreign = fixture({ environmentId: "11111111-2222-4333-8444-555555555555" });
-    expect((await vpsComputerStatus(CONFIG, BOT_ID, foreign.runner)).managed).toBe(false);
-    await expect(vpsComputerAction("remove", CONFIG, BOT_ID, foreign.runner)).rejects.toThrow(/did not create/);
+    expect((await vpsComputerStatus(TARGET, BOT_ID, foreign.runner)).managed).toBe(false);
+    await expect(vpsComputerAction("remove", TARGET, BOT_ID, foreign.runner)).rejects.toThrow(/did not create/);
     expect(foreign.calls.some(({ args }) => args[2] === "rm")).toBe(false);
 
     const absent = fixture({ container: false });
-    const afterMissing = await vpsComputerAction("remove", CONFIG, BOT_ID, absent.runner);
+    const afterMissing = await vpsComputerAction("remove", TARGET, BOT_ID, absent.runner);
     expect(afterMissing.container).toBe("missing");
     expect(absent.calls.some(({ args }) => args[2] === "rm")).toBe(false);
   });
 
   it("surfaces the supervisor error log when the desktop probe fails", async () => {
     const fake = fixture({ desktopProbeFails: true });
-    const status = await vpsComputerStatus(CONFIG, BOT_ID, fake.runner);
+    const status = await vpsComputerStatus(TARGET, BOT_ID, fake.runner);
     expect(status.desktopReady).toBe(false);
     expect(status.desktop_error).toContain("did not become ready");
     expect(status.problem).toContain("desktop failed to start");
@@ -1087,7 +1083,7 @@ describe("VPS computer", () => {
         }
         return fake.runner(args, options);
       };
-      const pending = vpsComputerAction("provision", CONFIG, BOT_ID, runner);
+      const pending = vpsComputerAction("provision", TARGET, BOT_ID, runner);
       await vi.advanceTimersByTimeAsync(10_000);
       const status = await pending;
       expect(status.ready).toBe(true);
@@ -1118,7 +1114,7 @@ describe("VPS computer", () => {
       };
       const startedAt = Date.now();
       let finishedAt = Infinity;
-      const pending = vpsComputerAction("provision", CONFIG, BOT_ID, runner).then((status) => {
+      const pending = vpsComputerAction("provision", TARGET, BOT_ID, runner).then((status) => {
         finishedAt = Date.now();
         return status;
       });
@@ -1143,10 +1139,10 @@ describe("VPS computer", () => {
         if (args[2] === "build") await buildGate;
         return fake.runner(args, options);
       };
-      const first = vpsComputerAction("provision", CONFIG, BOT_ID, slowRunner);
+      const first = vpsComputerAction("provision", TARGET, BOT_ID, slowRunner);
       // let the first action reach its (gated) docker build
       await vi.advanceTimersByTimeAsync(0);
-      const second = vpsComputerAction(action, CONFIG, BOT_ID, slowRunner);
+      const second = vpsComputerAction(action, TARGET, BOT_ID, slowRunner);
       const rejection = expect(second).rejects.toThrow(/being prepared/);
       await vi.advanceTimersByTimeAsync(5_000);
       await rejection;
@@ -1156,7 +1152,7 @@ describe("VPS computer", () => {
       const status = await first;
       expect(status.ready).toBe(true);
       expect(vpsLifecycleBusy()).toBe(false);
-      expect((await inspectVpsForAuto(CONFIG, BOT_ID, fake.runner)).ready).toBe(true);
+      expect((await inspectVpsForAuto(TARGET, BOT_ID, fake.runner)).ready).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -1198,7 +1194,7 @@ describe("remote desktop tunnel ownership", () => {
     });
     const runner = fixture().runner;
     try {
-      await vpsComputerJoin(CONFIG, BOT_ID, runner, true);
+      await vpsComputerJoin(TARGET, BOT_ID, runner, true);
       return { child, runner };
     } catch (error) { child.kill(); throw error; }
   }
@@ -1206,7 +1202,7 @@ describe("remote desktop tunnel ownership", () => {
   it("retains multiple tabs, survives reconnect, then reclaims the idle tunnel", async () => {
     const { child } = await openFixture();
     try {
-      const connection = vpsDesktopConnection(BOT_ID)!;
+      const connection = vpsDesktopConnection(vpsTargetKey(TARGET, BOT_ID))!;
       expect(connection.password).toBeTruthy();
       const first = connection.retain();
       const second = connection.retain();
@@ -1223,16 +1219,16 @@ describe("remote desktop tunnel ownership", () => {
       await vi.advanceTimersByTimeAsync(30_001);
       expect(child.kill).toHaveBeenCalledTimes(1);
       expect(connection.live()).toBe(false);
-      expect(vpsDesktopConnection(BOT_ID)).toBeUndefined();
+      expect(vpsDesktopConnection(vpsTargetKey(TARGET, BOT_ID))).toBeUndefined();
     } finally { closeAllVpsDesktopTunnels(); vi.useRealTimers(); }
   });
 
   it("does not close a native owner's tunnel when a remote tab leaves", async () => {
     const { child, runner } = await openFixture();
     try {
-      const release = vpsDesktopConnection(BOT_ID)!.retain();
+      const release = vpsDesktopConnection(vpsTargetKey(TARGET, BOT_ID))!.retain();
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      const native = await vpsComputerJoin(CONFIG, BOT_ID, runner);
+      const native = await vpsComputerJoin(TARGET, BOT_ID, runner);
       expect(native.joinUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
       release();
       await vi.advanceTimersByTimeAsync(30_001);
@@ -1244,14 +1240,48 @@ describe("remote desktop tunnel ownership", () => {
   it("keeps remote tabs connected when the native viewer closes", async () => {
     const { child, runner } = await openFixture();
     try {
-      const release = vpsDesktopConnection(BOT_ID)!.retain();
+      const release = vpsDesktopConnection(vpsTargetKey(TARGET, BOT_ID))!.retain();
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      await vpsComputerJoin(CONFIG, BOT_ID, runner);
-      expect(closeVpsDesktopTunnel(BOT_ID)).toEqual({ closed: false });
+      await vpsComputerJoin(TARGET, BOT_ID, runner);
+      expect(closeVpsDesktopTunnel(vpsTargetKey(TARGET, BOT_ID))).toEqual({ closed: false });
       expect(child.killed).toBe(false);
       release();
       await vi.advanceTimersByTimeAsync(30_001);
       expect(child.kill).toHaveBeenCalledTimes(1);
     } finally { closeAllVpsDesktopTunnels(); vi.useRealTimers(); }
+  });
+});
+
+describe("VPS targets stay separate", () => {
+  it("does not reuse a tunnel after the instance changes", () => {
+    const other = { ...TARGET, instanceId: "other", revision: "rev-2" };
+    expect(vpsTargetKey(TARGET, BOT_ID)).not.toBe(vpsTargetKey(other, BOT_ID));
+    expect(vpsDesktopConnection(vpsTargetKey(other, BOT_ID))).toBeUndefined();
+  });
+
+  it("keeps equal container names on different hosts separate", async () => {
+    const other = { instanceId: "other", sshAlias: "other-vps", revision: "rev-other" };
+    await vpsComputerStatus(TARGET, BOT_ID, fixture().runner);
+    const seen: string[][] = [];
+    const failing: VpsCommandRunner = async (args) => {
+      seen.push(args);
+      throw new Error("ssh connection timed out");
+    };
+    const status = await vpsComputerStatus(other, BOT_ID, failing);
+    expect(seen).toHaveLength(2);
+    expect(status.ready).toBe(false);
+    expect(status.sshAlias).toBe("other-vps");
+  });
+
+  it("drops a stale status result after target invalidation", async () => {
+    const other = { instanceId: "other", sshAlias: "other-vps", revision: "rev-other" };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const slow: VpsCommandRunner = async () => { await gate; throw new Error("ssh connection timed out"); };
+    const stale = vpsComputerStatus(TARGET, BOT_ID, slow);
+    const fresh = await vpsComputerStatus(other, BOT_ID, async () => { throw new Error("ssh connection timed out"); });
+    expect(fresh.ready).toBe(false);
+    release();
+    await stale;
   });
 });

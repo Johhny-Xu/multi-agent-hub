@@ -396,6 +396,15 @@ export function createInstanceRoutes(deps: InstanceRouteDeps): RouteHandler {
           if (body.hidden) entry.hidden = true;
           else delete entry.hidden;
         }
+        if (body.disabled !== undefined) {
+          if (body.disabled) entry.disabled = true;
+          else delete entry.disabled;
+        }
+        if (body.hiddenModels !== undefined) {
+          const hiddenModels = [...new Set(body.hiddenModels)];
+          if (hiddenModels.length) entry.hiddenModels = hiddenModels;
+          else delete entry.hiddenModels;
+        }
         if (body.tools !== undefined) {
           if (!["openai-compat", "grok", "minimax", "mistral", "cerebras", "groq", "greenference", "meta"].includes(entry.driver)) {
             return json(res, 400, { error: "The tools setting is available for OpenAI-compatible, Grok API, MiniMax API, Mistral API, Cerebras API, Groq API, Greenference API and Meta API instances only." });

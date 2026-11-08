@@ -15,6 +15,8 @@ import {
   resolveSurface,
   surfaceOfComputerKind,
   surfacePrompt,
+  hostToolsNote,
+  surfaceLabel,
 } from "./surface.ts";
 
 describe("browserIsThePlace", () => {
@@ -445,5 +447,48 @@ describe("a connected app before any screen", () => {
   });
   it("is not said where nothing on a screen can be done", () => {
     expect(surfacePrompt({ computer: null, browser: false })).not.toContain(RULE);
+  });
+});
+
+describe("hostToolsNote (E15)", () => {
+  it("tells a bot on a remote computer that its own shell runs on the host", () => {
+    const text = surfacePrompt({ computer: "cloud", browser: false });
+    expect(text).toContain(hostToolsNote(surfaceLabel("cloud")));
+    expect(text).toContain("exec tool");
+    expect(text).toContain("any other MCP server");
+    expect(surfacePrompt({ computer: "cloud", browser: true })).toContain(hostToolsNote(surfaceLabel("cloud")));
+  });
+  it("leaves this computer and browser-only turns alone", () => {
+    expect(surfacePrompt({ computer: "local", browser: false })).not.toContain("OpenMausBot host");
+    expect(surfacePrompt({ computer: null, browser: true })).not.toContain("OpenMausBot host");
+  });
+});
+
+describe("the computer surface description", () => {
+  const descriptor = (overrides: Record<string, unknown> = {}) => ({
+    name: "Studio box",
+    targetId: "boxed",
+    provider: "simular-box" as const,
+    serverName: "computer" as const,
+    tools: { shell: "computer.shell", readFile: "computer.read_file" },
+    sharedDesktop: false,
+    ...overrides,
+  });
+
+  it("describes the actually mounted simular computer", () => {
+    const text = surfacePrompt({ computer: "cloud", browser: false }, {
+      computerDescriptor: descriptor() as never,
+    });
+    expect(text).toContain("Studio box");
+    expect(text).toContain("simular-box");
+    expect(text).toContain("computer.shell");
+  });
+
+  it("does not promise exec or copy tools missing from the catalog", () => {
+    const text = surfacePrompt({ computer: "cloud", browser: false }, {
+      computerDescriptor: descriptor({ tools: { openUrl: "computer.open_url", screenshot: "computer.screenshot" } }) as never,
+    });
+    expect(text).toContain("computer.open_url");
+    expect(text).not.toMatch(/exec|copy_to_computer|copy_from_computer/);
   });
 });

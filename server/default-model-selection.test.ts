@@ -372,3 +372,18 @@ describe("a hidden provider", () => {
   });
 });
 
+describe("a disabled provider", () => {
+  it("stays listed but is not ready to run, so no new bot or default choice picks it", () => {
+    const instances = [
+      { instanceId: "claude", snapshot: { state: "available" }, models: { default: "m", options: [{ id: "m" }] } },
+      { instanceId: "zcode", snapshot: { state: "available" }, models: { default: "m", options: [{ id: "m" }] } },
+    ] as unknown as SelectableInstance[];
+    const configs = { zcode: { driver: "zcodeAgent", disabled: true } };
+    const listed = withInstanceConfig(instances, configs);
+    expect(listed.map((instance) => instance.instanceId)).toEqual(["claude", "zcode"]);
+    expect(listed.find((instance) => instance.instanceId === "zcode")?.enabled).toBe(false);
+    expect(listed.filter((instance) => readyToRun(instance))).toEqual([listed[0]]);
+    expect(selectDefaultModelSelection(listed, { instanceId: "zcode", model: "m" })).toEqual({ instanceId: "", model: "" });
+  });
+});
+

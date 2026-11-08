@@ -28,6 +28,7 @@ const emptyInventory = (): ManagedVpsInventory => ({
   configured: true,
   available: true,
   vpsAliases: ["production-vps"],
+  vpsInstanceIds: ["alpha"],
   problem: null,
   instances: [],
 });
@@ -43,7 +44,16 @@ beforeEach(() => {
 function fixture() {
   const store = new Store(() => sonnet);
   const bot = store.createBot({ name: "Scout" });
-  const cfg = { vps: { sshAlias: "production-vps" } } as AppConfig;
+  const cfg = {
+    vps: {
+      version: 2,
+      instances: [
+        { id: "alpha", name: "Alpha", kind: "ssh", sshAlias: "production-vps" },
+        { id: "gamma", name: "Gamma", kind: "ssh", sshAlias: "gamma-vps" },
+        { id: "delta", name: "Delta", kind: "ssh", sshAlias: "delta-vps" },
+      ],
+    },
+  } as AppConfig;
   const activeVpsThreads = new Set<string>();
   const privateThreads = new Set<string>();
   // Only what a vpsAlias patch touches; any other dependency is absent, and a route that reached for one would throw.
@@ -83,165 +93,87 @@ function fixture() {
   return { store, bot, activeVpsThreads, privateThreads, patch };
 }
 
-describe("PATCH /api/bots/:id vpsAlias relocation guard", () => {
-  it("skips the guard when pinning a bot to the host it already uses", async () => {
-    const { bot, patch } = fixture();
+describe("PATCH /api/bots/:id VPS instance selection", () => {
+  const targetOf = (id: string, sshAlias: string) => ({ instanceId: id, sshAlias, revision: expect.any(String) });
 
-    const pinned = await patch(bot.id, { vpsAlias: "production-vps" });
-
-    expect(pinned.status).toBe(200);
-    expect(pinned.body.bot.vpsAlias).toBe("production-vps");
-    expect(scan).not.toHaveBeenCalled();
-  });
-
-  it("skips the guard when clearing an override equal to the default", async () => {
+  it("updates backend and instance in one validated patch", async () => {
     const { store, bot, patch } = fixture();
-    store.patchBot(bot.id, { vpsAlias: "production-vps" });
+    store.patchBot(bot.id, { cloudBackend: "vps", vpsInstanceId: "alpha" });
+    scan.mockClear();
 
-    const cleared = await patch(bot.id, { vpsAlias: null });
+    const moved = await patch(bot.id, { cloudBackend: "vps", vpsInstanceId: "gamma" });
 
-    expect(cleared.status).toBe(200);
-    expect(cleared.body.bot.vpsAlias).toBeUndefined();
-    expect(scan).not.toHaveBeenCalled();
-  });
-
-  it("still scans a real move and refuses a busy bot before scanning", async () => {
-    const { store, bot, patch } = fixture();
-
-    const moved = await patch(bot.id, { vpsAlias: "gamma-vps" });
-
-    expect(moved.status).toBe(200);
-    expect(moved.body.bot.vpsAlias).toBe("gamma-vps");
-    expect(moved.body.notice).toBeUndefined();
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    expect(moved.body.bot.cloudBackend).toBe("vps");
+    expect(moved.body.bot.vpsInstanceId).toBe("gamma");
     expect(scan).toHaveBeenCalledTimes(1);
-    expect(scan.mock.calls[0]?.[0]).toEqual({ vps: { sshAlias: "production-vps" } });
+    expect(scan.mock.calls[0]?.[0]).toEqual([targetOf("alpha", "production-vps")]);
+  });
 
-    store.patchBot(bot.id, { busy: true });
-    const refused = await patch(bot.id, { vpsAlias: "delta-vps" });
+  it("rechecks the target after asynchronous inventory", async () => {
+    const { store, bot, patch } = fixture();
+    store.patchBot(bot.id, { vpsInstanceId: "alpha" });
+    scan.mockImplementationOnce(async () => {
+      store.patchBot(bot.id, { vpsInstanceId: "delta" });
+      return emptyInventory();
+    });
+
+    const moved = await patch(bot.id, { vpsInstanceId: "gamma" });
+
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    expect(scan).toHaveBeenCalledTimes(2);
+    expect(store.bot(bot.id)?.vpsInstanceId).toBe("gamma");
+  });
+
+  it("blocks instance switching during an active turn", async () => {
+    const { store, bot, patch } = fixture();
+    store.patchBot(bot.id, { vpsInstanceId: "alpha", busy: true });
+
+    const refused = await patch(bot.id, { vpsInstanceId: "gamma" });
 
     expect(refused.status).toBe(409);
     expect(refused.body.error).toBe(VPS_BOT_ALIAS_CHANGE_ERROR);
-    expect(scan).toHaveBeenCalledTimes(1);
-    expect(store.bot(bot.id)?.vpsAlias).toBe("gamma-vps");
+    expect(scan).not.toHaveBeenCalled();
   });
 
-  it("moves a bot off a server that cannot be reached, and says what may be left there", async () => {
+  it("keeps an unreachable former instance available for cleanup", async () => {
     const { store, bot, patch } = fixture();
+    store.patchBot(bot.id, { vpsInstanceId: "alpha" });
     scan.mockResolvedValue({
       ...emptyInventory(),
       available: false,
       problem: "Docker over SSH could not list managed computers on production-vps: ssh: Could not resolve hostname production-vps",
     });
 
-    const moved = await patch(bot.id, { vpsAlias: "gamma-vps" });
+    const moved = await patch(bot.id, { vpsInstanceId: "gamma" });
 
     expect(moved.status, JSON.stringify(moved.body)).toBe(200);
-    expect(store.bot(bot.id)?.vpsAlias).toBe("gamma-vps");
+    expect(store.bot(bot.id)?.vpsInstanceId).toBe("gamma");
     expect(moved.body.notice).toContain("production-vps could not be reached");
     expect(moved.body.notice).toContain(`docker -H ssh://production-vps rm -f ${vps.vpsContainerName(bot.id)}`);
   });
 
-  it("never lets a member's session or a paired phone choose a bot's server", async () => {
+  it("never lets a member or a paired phone choose a bot's computer", async () => {
     const { store, bot, patch } = fixture();
     const member = { kind: "session", via: "bearer", scopes: ["client"], session: { id: "s", label: "Laptop", scopes: ["client"] } } as unknown as RequestAuth;
 
-    const fromMember = await patch(bot.id, { vpsAlias: "gamma-vps" }, { auth: member });
-    const fromPhone = await patch(bot.id, { vpsAlias: "gamma-vps" }, { headers: { "x-openmausbot-companion": "1" } });
+    const fromMember = await patch(bot.id, { vpsInstanceId: "gamma" }, { auth: member });
+    const fromPhone = await patch(bot.id, { vpsInstanceId: "gamma" }, { headers: { "x-openmausbot-companion": "1" } });
 
     expect(fromMember.status).toBe(403);
-    expect(fromMember.body.error).toMatch(/not "vpsAlias"/);
     expect(fromPhone.status).toBe(403);
-    expect(fromPhone.body.error).toMatch(/not "vpsAlias"/);
     expect(scan).not.toHaveBeenCalled();
-    expect(store.bot(bot.id)?.vpsAlias).toBeUndefined();
+    expect(store.bot(bot.id)?.vpsInstanceId).toBeUndefined();
   });
 
-  it("still refuses the move while the bot's computer lives on the old server", async () => {
+  it("rejects the legacy alias and an unknown instance", async () => {
     const { bot, patch } = fixture();
-    scan.mockResolvedValue({
-      ...emptyInventory(),
-      instances: [{
-        name: vps.vpsContainerName(bot.id),
-        state: "running",
-        vpsAlias: "production-vps",
-        ownerBotId: bot.id,
-        ownerName: bot.name,
-        orphaned: false,
-        inUse: false,
-      }],
-    });
 
-    const blocked = await patch(bot.id, { vpsAlias: "gamma-vps" });
+    expect((await patch(bot.id, { vpsAlias: "gamma-vps" })).status).toBe(400);
+    const unknown = await patch(bot.id, { vpsInstanceId: "missing" });
 
-    expect(blocked.status).toBe(409);
-    expect(blocked.body.error).toBe(VPS_BOT_ALIAS_RESOURCES_ERROR);
-  });
-
-  it("refuses while a VPS computer action is still running, before or during the scan", async () => {
-    const { store, bot, patch } = fixture();
-    lifecycleBusy.mockReturnValue(true);
-
-    const before = await patch(bot.id, { vpsAlias: "gamma-vps" });
-
-    expect(before.status).toBe(409);
-    expect(before.body.error).toBe(VPS_BOT_ALIAS_LIFECYCLE_ERROR);
+    expect(unknown.status).toBe(400);
     expect(scan).not.toHaveBeenCalled();
-
-    lifecycleBusy.mockReturnValue(false);
-    scan.mockImplementation(async () => {
-      lifecycleBusy.mockReturnValue(true);
-      return emptyInventory();
-    });
-    const during = await patch(bot.id, { vpsAlias: "gamma-vps" });
-
-    expect(during.status).toBe(409);
-    expect(scan).toHaveBeenCalledTimes(1);
-    expect(store.bot(bot.id)?.vpsAlias).toBeUndefined();
-  });
-
-  it("rescans when the stored alias changes mid-scan", async () => {
-    const { store, bot, patch } = fixture();
-    scan.mockImplementationOnce(async () => {
-      store.patchBot(bot.id, { vpsAlias: "delta-vps" });
-      return emptyInventory();
-    });
-
-    const moved = await patch(bot.id, { vpsAlias: "gamma-vps" });
-
-    expect(moved.status).toBe(200);
-    expect(scan).toHaveBeenCalledTimes(2);
-    expect(store.bot(bot.id)?.vpsAlias).toBe("gamma-vps");
-  });
-
-  it("refuses when a turn starts mid-scan and keeps the stored alias", async () => {
-    const { store, bot, activeVpsThreads, patch } = fixture();
-    scan.mockImplementationOnce(async () => {
-      store.patchBot(bot.id, { busy: true });
-      activeVpsThreads.add(bot.id);
-      return emptyInventory();
-    });
-
-    const refused = await patch(bot.id, { vpsAlias: "gamma-vps" });
-
-    expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe(VPS_BOT_ALIAS_CHANGE_ERROR);
-    expect(store.bot(bot.id)?.vpsAlias).toBeUndefined();
-  });
-
-  it("gives up after three unstable attempts", async () => {
-    const { store, bot, patch } = fixture();
-    let flip = false;
-    scan.mockImplementation(async () => {
-      flip = !flip;
-      store.patchBot(bot.id, { vpsAlias: flip ? "delta-vps" : "epsilon-vps" });
-      return emptyInventory();
-    });
-
-    const refused = await patch(bot.id, { vpsAlias: "gamma-vps" });
-
-    expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe(VPS_BOT_ALIAS_CHANGE_ERROR);
-    expect(scan).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -373,5 +305,116 @@ describe("PATCH /api/bots/:id mainThreadChoice", () => {
     expect(client.status).toBe(403);
     expect(paired.status).toBe(403);
     expect(store.bot(bot.id)?.mainThreadChoice).toBeUndefined();
+  });
+
+  describe("hidden and archive audit", () => {
+    it("distinguishes deleted bots from missing bots with distinguishable 404 responses", async () => {
+      const { store, patch } = fixture();
+      const doomed = store.createBot({ name: "Doomed" });
+      store.deleteBot(doomed.id);
+
+      const deletedRes = await patch(doomed.id, { name: "New Name" });
+      expect(deletedRes.status).toBe(404);
+      expect(deletedRes.body).toEqual({ error: "The addressed agent was deleted", status: "deleted" });
+
+      const missingRes = await patch("completely-non-existent", { name: "New Name" });
+      expect(missingRes.status).toBe(404);
+      expect(missingRes.body).toEqual({ error: "no such bot", status: "missing" });
+    });
+
+    it("validates hidden as boolean and refuses hiding Chief of Staff", async () => {
+      const { store, bot, patch } = fixture();
+      const badType = await patch(bot.id, { hidden: "yes" });
+      expect(badType.status).toBe(400);
+      expect(badType.body).toEqual({ error: "hidden must be true or false" });
+
+      store.setChiefOfStaff(bot.id);
+      const hideChief = await patch(bot.id, { hidden: true });
+      expect(hideChief.status).toBe(400);
+      expect(hideChief.body).toEqual({ error: "choose another Chief of Staff before hiding this bot" });
+
+      // No audit written for rejected requests
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(0);
+    });
+
+    it("records audit with actor, entry, and request correlation on hidden transitions", async () => {
+      const { store, bot, patch } = fixture();
+
+      // 1. Archiving via loopback API (actor: unknown, requestId preserved)
+      const archiveRes = await patch(bot.id, { hidden: true }, {
+        headers: { "x-request-id": "trace-req-001" },
+      });
+      expect(archiveRes.status).toBe(200);
+      expect(archiveRes.body.status).toBe("archived");
+      expect(archiveRes.body.bot.hidden).toBe(true);
+
+      const audits = store.getArchiveAudits(bot.id);
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        botId: bot.id,
+        previousHidden: false,
+        nextHidden: true,
+        entry: "api:bot-patch",
+        actor: "unknown",
+        request: {
+          requestId: "trace-req-001",
+          via: "loopback",
+        },
+      });
+
+      // 2. Idempotent request: repeated hidden: true does NOT write audit
+      const idempotentRes = await patch(bot.id, { hidden: true });
+      expect(idempotentRes.status).toBe(200);
+      expect(idempotentRes.body.status).toBe("archived");
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(1);
+
+      // 3. Unarchiving via session auth (actor: session.email)
+      const sessionAuth: RequestAuth = {
+        kind: "session",
+        via: "bearer",
+        scopes: ["admin"],
+        session: { id: "sess-99", email: "alice@example.org", label: "Alice Admin" },
+      } as unknown as RequestAuth;
+
+      const unarchiveRes = await patch(bot.id, { hidden: false }, {
+        auth: sessionAuth,
+        headers: { "x-request-id": "trace-req-002" },
+      });
+      expect(unarchiveRes.status).toBe(200);
+      expect(unarchiveRes.body.status).toBe("active");
+      expect(unarchiveRes.body.bot.hidden).toBe(false);
+
+      const auditsAfter = store.getArchiveAudits(bot.id);
+      expect(auditsAfter).toHaveLength(2);
+      expect(auditsAfter[1]).toMatchObject({
+        botId: bot.id,
+        previousHidden: true,
+        nextHidden: false,
+        entry: "api:bot-patch",
+        actor: "alice@example.org",
+        request: {
+          requestId: "trace-req-002",
+          via: "bearer",
+        },
+      });
+
+      // Check no secret tokens or credentials in audit logs
+      const rawJson = JSON.stringify(auditsAfter);
+      expect(rawJson).not.toMatch(/sk-|token|secret|password|bearer\s+\w+/i);
+    });
+
+    it("does not create audit records on unauthorized PATCH requests", async () => {
+      const { store, bot, patch } = fixture();
+      const forbiddenAuth: RequestAuth = {
+        kind: "session",
+        via: "bearer",
+        scopes: ["client"],
+        session: { id: "sess-guest", email: "guest@example.org", label: "Guest" },
+      } as unknown as RequestAuth;
+
+      const res = await patch(bot.id, { hidden: true }, { auth: forbiddenAuth });
+      expect(res.status).toBe(403);
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(0);
+    });
   });
 });

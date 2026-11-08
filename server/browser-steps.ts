@@ -631,3 +631,41 @@ type SessionSpec = Pick<BrowserSpawnSpec, "command" | "env">;
 
 export const browserEvidence = new BrowserEvidence({ root: join(DATA_DIR, "evidence") });
 export const browserSteps = new BrowserSteps({ ports: relayPorts, evidence: browserEvidence });
+
+export interface AutomationStepFacts {
+  action: string;
+  kind?: string;
+  executionState: "completed" | "not-dispatched" | "unknown";
+  decisionMs?: number;
+  observeMs?: number;
+  guardMs?: number;
+  settleMs?: number;
+  candidateCount?: number;
+  staleCount?: number;
+  fallbackReason?: string;
+}
+
+export interface AutomationStepHandle {
+  readonly ctx?: StepContext;
+  readonly facts: AutomationStepFacts;
+  finished: boolean;
+}
+
+export function beginAutomationStep(ctx: StepContext | undefined, facts: AutomationStepFacts): AutomationStepHandle {
+  return { ctx, facts, finished: false };
+}
+
+export async function finishAutomationStep(
+  handle: AutomationStepHandle,
+  result?: { ok: boolean; details?: string },
+): Promise<number | null> {
+  if (handle.finished) return null;
+  handle.finished = true;
+  const ctx = handle.ctx;
+  if (!ctx?.record) return null;
+  return browserSteps.note(ctx, {
+    tool: "agent_browser_run",
+    action: handle.facts.action,
+    ok: result?.ok ?? (handle.facts.executionState === "completed"),
+  });
+}

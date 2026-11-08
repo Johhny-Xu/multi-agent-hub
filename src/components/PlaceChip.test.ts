@@ -44,7 +44,7 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
   }),
 }));
 
-const { PlaceChip, usePlaceAvailability, usePlaceMenuItem } = await import("./PlaceChip");
+const { PlaceChip, usePlaceAvailability, usePlaceMenuItem, usePlaceViews } = await import("./PlaceChip");
 afterAll(() => vi.unstubAllGlobals());
 
 const bot = {
@@ -182,6 +182,39 @@ describe("the places a conversation can be pinned to", () => {
   it("never reaches them on an OMB Cloud home", () => {
     fixture.config = { cloudHome: true };
     expect(availability()).toMatchObject({ cloud: true, vm: false, local: false });
+  });
+});
+
+describe("the cloud desktop without a Boat key", () => {
+  const views = () => {
+    let seen: ReturnType<typeof usePlaceViews> | undefined;
+    function Probe() { seen = usePlaceViews(bot); return null; }
+    renderToStaticMarkup(createElement(Probe));
+    return seen!;
+  };
+  const vpsInstance = { id: "instabox", name: "instabox", kind: "ssh", configured: true, available: null, capabilities: { status: true, join: true, screenshot: true, start: true, stop: true, remove: true } };
+  afterEach(() => { fixture.config = null; });
+
+  it("still reaches the cloud desktop when a VPS computer is there", () => {
+    fixture.config = { cloudHome: false, vps: { revision: "r", instances: [vpsInstance] } };
+    expect(views().cloud.view.state).toBe("vps");
+    expect(views().cloud.reachable).toBe(true);
+  });
+
+  it("asks for a Boat key or a VPS only when there is neither", () => {
+    fixture.config = { cloudHome: false };
+    expect(views().cloud.view.state).toBe("cc-needs-key");
+    expect(views().cloud.view.short).toBe("Connect Boat or add a VPS");
+  });
+
+  it("keeps Boat and the VPS side by side when both are there", () => {
+    fixture.config = {
+      cloudHome: false,
+      box: { configured: true, included: false },
+      vps: { revision: "r", instances: [vpsInstance] },
+    };
+    expect(views().cloud.view.state).not.toBe("cc-needs-key");
+    expect(views().cloud.reachable).toBe(true);
   });
 });
 

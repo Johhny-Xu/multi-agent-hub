@@ -9,7 +9,7 @@ import { resolveClaudeConfigDir } from "./drivers/claude.ts";
 import { codexHome } from "./drivers/codex-identity.ts";
 import { harnessHome, sealedFixture } from "./env-path.ts";
 
-export type PlanDriver = "claude" | "codex" | "grok" | "opencode";
+export type PlanDriver = "claude" | "codex" | "grok" | "opencode" | "meoo";
 
 export interface PlanWindow {
   available: boolean;
@@ -33,6 +33,8 @@ export interface PlanExtra {
   resetsAt: string | null;
   /** The amounts behind the percent, on a budget in money. */
   spend?: PlanSpend;
+  /** The raw counts behind the percent, when the provider states them (credits etc.). */
+  amounts?: { used: number; total: number; unit?: string };
 }
 
 export interface PlanModelUsage {
@@ -128,6 +130,11 @@ const GROK_BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing";
 const GROK_SETTINGS_URL = "https://cli-chat-proxy.grok.com/v1/settings";
 // OpenCode Go's own allowance: the rolling window, the weekly one and the month's, as the CLI reads them.
 const OPENCODE_GO_USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
+// Meoo's account entitlement, read the way the official CLI does (@aliyun-meoo/cli
+// dist/commands/account.js): one GET with the agent key as the bearer.
+const MEOO_BASE_URL = "https://meoo.com/open/v1";
+const MEOO_ENTITLEMENT_PATH = "/cli-compat/account/entitlement";
+const MEOO_AUTH_ENV = join(".config", "agenthub-meoo", "meoo-auth.env");
 
 const FIVE_HOUR_MIN_SECONDS = 3 * 3600;
 const FIVE_HOUR_MAX_SECONDS = 8 * 3600;
@@ -141,6 +148,7 @@ const DRIVER_OF: Record<string, PlanDriver> = {
   codex: "codex",
   grokAgent: "grok",
   opencodeGo: "opencode",
+  meooAgent: "meoo",
 };
 
 const PRODUCT_NAME: Record<PlanDriver, string> = {
@@ -148,6 +156,7 @@ const PRODUCT_NAME: Record<PlanDriver, string> = {
   codex: "Codex",
   grok: "Grok",
   opencode: "OpenCode",
+  meoo: "Meoo",
 };
 
 export function planAccountsFromInstances(instances: InstanceConfigMap): PlanAccount[] {
@@ -260,6 +269,32 @@ function openCodeMeter(value: unknown): PlanWindow | null {
   return openWindow(used, isoOrNull(record?.resetsAt));
 }
 
+/** Meoo answers with its plan and one benefit per entitlement; only the model-credit quota is an allowance of this app's
+ * sends, so that is the one line. A benefit without both a positive quota and a used count states nothing. */
+export function parseMeooUsage(body: unknown): PlanWindows {
+  const root = asRecord(asRecord(body)?.data) ?? asRecord(body);
+  const extra: PlanExtra[] = [];
+  for (const item of Array.isArray(root?.benefits) ? root.benefits : []) {
+    const benefit = asRecord(item);
+    if (benefit?.typeCode !== "model_credits" || benefit.valueType !== "QUOTA") continue;
+    const total = finiteNumber(benefit.quota);
+    const used = finiteNumber(benefit.used);
+    if (total == null || total <= 0 || used == null) continue;
+    extra.push({
+      ...extraLine("Model credits", openWindow((used / total) * 100, isoOrNull(root?.currentPeriodEnd))),
+      amounts: { used, total },
+    });
+    break;
+  }
+  return {
+    plan: planLabel(root?.planName ?? root?.planCode),
+    fiveHour: closedWindow(),
+    weekly: closedWindow(),
+    extra,
+    models: [],
+  };
+}
+
 export function fileCredentialReader(source: CredentialSource): CredentialReader {
   const env = source.env ?? process.env;
   const now = source.now ?? Date.now;
@@ -270,6 +305,7 @@ export function fileCredentialReader(source: CredentialSource): CredentialReader
       if (account.driver === "claude") return readClaudeCredential(account, merged, source, at);
       if (account.driver === "codex") return readCodexCredential(merged, source.readText, at);
       if (account.driver === "opencode") return readOpenCodeCredential(merged, source.readText, at);
+      if (account.driver === "meoo") return readMeooCredential(merged, source.readText);
       return readGrokCredential(merged, source.readText, at);
     },
   };
@@ -862,6 +898,20 @@ function readGrokCredential(
   return sawExpired ? expiredCredential() : missingCredential();
 }
 
+/** The agent key, from `MEOO_AK` or the `meoo-auth.env` the CLI and the meoo-acp bridge read. The file carries no
+ * expiry, so the key is used until a request is refused. */
+function readMeooCredential(env: NodeJS.ProcessEnv, readText: (path: string) => string | null): PlanCredential {
+  const key = secretString(env.MEOO_AK) ?? meooAuthEnvKey(env, readText);
+  return key ? { token: key, accountId: null, expired: false } : missingCredential();
+}
+
+function meooAuthEnvKey(env: NodeJS.ProcessEnv, readText: (path: string) => string | null): string | null {
+  const home = env.HOME || env.USERPROFILE || homedir();
+  const text = readText(join(home, MEOO_AUTH_ENV));
+  const found = /^\s*MEOO_AK\s*=\s*(\S+)\s*$/m.exec(text ?? "");
+  return secretString(found?.[1] ?? null);
+}
+
 /** The key saved in Settings, or the login `opencode auth login` keeps. `auth.json` is where OpenCode v1 wrote one; v2 keeps credentials in its own database, so this path covers installs migrated from v1 (the saved key covers v2). */
 function readOpenCodeCredential(env: NodeJS.ProcessEnv, readText: (path: string) => string | null, now: number): PlanCredential {
   const key = secretString(env.OPENCODE_API_KEY);
@@ -931,6 +981,7 @@ async function fetchProvider(account: PlanAccount, deps: PlanUsageDeps): Promise
     if (account.driver === "claude") return await fetchClaude(account, credential.token, deps);
     if (account.driver === "codex") return await fetchCodex(account, credential.token, credential.accountId, deps);
     if (account.driver === "opencode") return await fetchOpenCode(account, credential.token, deps);
+    if (account.driver === "meoo") return await fetchMeoo(account, credential.token, deps);
     return await fetchGrok(account, credential.token, deps);
   } catch {
     return errorRow(account, couldNotReach(account.driver));
@@ -1043,4 +1094,17 @@ async function fetchOpenCode(account: PlanAccount, token: string, deps: PlanUsag
   const windows = parseOpenCodeUsage(result.body);
   // A 200 with no meter at all is not an allowance: it is an answer this row cannot read.
   return windows.plan ? okRow(account, windows) : errorRow(account, unexpectedUsage("opencode"));
+}
+
+async function fetchMeoo(account: PlanAccount, token: string, deps: PlanUsageDeps): Promise<PlanProviderRow> {
+  const base = (account.environment.MEOO_BASE_URL ?? MEOO_BASE_URL).trim().replace(/\/+$/, "");
+  const result = await fetchJson(deps.fetch, `${base}${MEOO_ENTITLEMENT_PATH}`, {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  }, deps.timeoutMs ?? PROVIDER_TIMEOUT_MS);
+  if (authRejected(result.status)) return errorRow(account, signInAgain("meoo"));
+  if (!result.ok || result.body === null || typeof result.body !== "object") {
+    return errorRow(account, result.status === 0 || result.status >= 500 ? couldNotReach("meoo") : unexpectedUsage("meoo"));
+  }
+  return okRow(account, parseMeooUsage(result.body));
 }

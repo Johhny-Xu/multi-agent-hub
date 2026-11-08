@@ -19,7 +19,10 @@ export function usePlaceViews(bot: Bot): Record<Place, { view: PlaceView; reacha
   const { state } = useStore();
   const { capabilities } = useDesktopCapabilities();
   const seat = usePlaceSeat(state.config, capabilities);
-  const backend = bot.cloudBackend === "vps" ? "vps" : "box";
+  const hasBoat = Boolean(state.config?.box?.configured || state.config?.box?.included);
+  const vpsInstances = state.config?.vps?.instances ?? [];
+  const hasVps = vpsInstances.length > 0 || Boolean(state.config?.vps?.configured);
+  const backend = bot.cloudBackend === "vps" || (!hasBoat && hasVps) ? "vps" : "box";
   const allowed = state.config?.managedPolicy?.computers ?? { thisComputer: true, localVm: true, box: true, vps: true };
   const providerSupportsLocal = instanceSupportsLocalComputer(state.instances, bot);
   const local = {

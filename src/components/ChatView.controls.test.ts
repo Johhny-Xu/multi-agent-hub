@@ -155,7 +155,10 @@ describe("the Simple header", () => {
       const simple = renderToStaticMarkup(createElement(ChatView, { bot: busyElsewhere }));
       const identity = simple.slice(simple.indexOf("data-chathead-identity"), simple.indexOf("data-chathead-controls"));
       const pill = identity.match(/<button[^>]*data-chathead-pill="true"[^>]*>([\s\S]*?)<\/button>/)!;
-      expect(identity.replace(pill[0], "").replace(/<span role="status"[^>]*>[^<]*<\/span>/, "")).not.toMatch(/<(button|a|span)[\s>]/);
+      // The work location badge is the one extra thing beside the pill, in Simple and Advanced alike.
+      const badge = identity.match(/<span data-testid="work-location"[\s\S]*?<\/span><\/span>/)!;
+      expect(badge[0]).toContain(">Auto<");
+      expect(identity.replace(pill[0], "").replace(badge[0], "").replace(/<span role="status"[^>]*>[^<]*<\/span>/, "")).not.toMatch(/<(button|a|span)[\s>]/);
       expect(pill[1]).toContain(">Pepper</span>");
       expect(pill[1]).toContain('data-chathead-elsewhere="true"');
       expect(pill[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-composer", "ring-[0.5px]", "py-[7.5px]", "pr-[13.5px]"]));
@@ -274,6 +277,22 @@ describe("header name", () => {
       bot: { ...bot, computer: undefined, busy: true, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: true, surface: "browser" as const })) },
     }));
     expect(button(pinned)).toContain('data-testid="computer-button-live"');
+  });
+
+  it("offers a Watch button only while a running tool uses the bot's screen", () => {
+    const working = (tool: string, busy = true, computer: Bot["computer"] | "auto" = "cloud", ok?: boolean) => renderToStaticMarkup(createElement(ChatView, {
+      bot: { ...bot, computer: computer === "auto" ? undefined : computer, busy, turnStartedAt: 1, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy, turnStartedAt: 1 })), messages: [
+        { id: "ask", role: "user", kind: "text", at: 1, text: "Check the site" },
+        { id: "tool", role: "bot", kind: "activity", at: 2, tool: { name: tool, ok } },
+      ] } as Bot,
+    }));
+    const watch = (markup: string) => markup.match(/<button[^>]*data-testid="watch-screen"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
+    expect(watch(working("mcp__computer__click"))).toContain(">Watch<");
+    expect(watch(working("mcp__browser__browser_snapshot", true, "auto"))).toContain(">Watch<");
+    expect(watch(working("mcp__computer__click", false))).toBe("");
+    expect(watch(working("Bash"))).toBe("");
+    expect(watch(working("screenshot", true, "auto"))).toBe("");
+    expect(watch(working("mcp__browser__browser_snapshot", true, "cloud", true))).toBe("");
   });
 
   it("centres the bot in the header's middle column, with the controls in the last", () => {

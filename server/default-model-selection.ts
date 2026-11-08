@@ -32,7 +32,8 @@ const best = (instances: readonly SelectableInstance[], context: DefaultSelectio
 export function withInstanceConfig<T extends SelectableInstance>(instances: readonly T[], configs: InstanceConfigMap): T[] {
   return instances.filter((instance) => configs[instance.instanceId]?.hidden !== true).map((instance) => ({
     ...instance,
-    enabled: configs[instance.instanceId]?.enabled ?? instance.enabled,
+    enabled: configs[instance.instanceId]?.disabled === true ? false
+      : configs[instance.instanceId]?.enabled ?? instance.enabled,
     ...(configs[instance.instanceId]?.access ? { access: configs[instance.instanceId].access } : {}),
   }));
 }

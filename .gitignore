@@ -21,7 +21,7 @@ credentials.yml
 .credentials.yml
 *.pem
 *.key
-state/
+/state/
 results/
 *.bak-*
 conversations.json

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
-import { api } from "@/state/store";
-import { t } from "@/lib/i18n";
+import { api, useStore, type InstanceInfo } from "@/state/store";
+import { t, intlLocale } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { Card, SIMPLE_CARD } from "./SettingsPrimitives";
 import { UsageSummaryCard } from "./CloudUsageMeter";
 import { formatPlanSpend, type PlanSpend } from "@/lib/plan-spend";
+import { engineReady } from "./EngineLibrary";
+import { sortEngines } from "@/lib/engine-sort";
 
 interface PlanWindow {
   available: boolean;
@@ -20,6 +22,7 @@ interface PlanExtra {
   usedPercent: number;
   resetsAt: string | null;
   spend?: PlanSpend;
+  amounts?: { used: number; total: number; unit?: string };
 }
 
 interface PlanModelUsage {
@@ -43,6 +46,144 @@ interface PlanProvider {
 interface PlanUsageReport {
   fetchedAt: string;
   providers: PlanProvider[];
+}
+
+export interface Quota {
+  name?: string;
+  displayName?: string;
+  used?: number;
+  total?: number;
+  remaining?: number;
+  remainingPercentage?: number;
+  resetAt?: string;
+  unlimited?: boolean;
+  recurring?: boolean;
+  isCreditBalance?: boolean;
+  unit?: string;
+}
+
+export interface QuotaWorker {
+  worker: string;
+  fetchedAt?: string;
+  account?: string;
+  plan?: string;
+  message?: string;
+  quotas?: Quota[];
+}
+
+export interface QuotaReport {
+  updatedAt?: string;
+  workers?: Record<string, QuotaWorker>;
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
+
+function amount(value: number | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "–";
+  return value.toLocaleString(intlLocale(), { maximumFractionDigits: 1 });
+}
+
+export function remainingShare(quota: Quota): number | null {
+  if (quota.unlimited) return null;
+  if (typeof quota.remainingPercentage === "number" && Number.isFinite(quota.remainingPercentage)) {
+    return clampPercent(quota.remainingPercentage);
+  }
+  const total = typeof quota.total === "number" ? quota.total : 0;
+  if (total <= 0) return null;
+  const remaining = typeof quota.remaining === "number" ? quota.remaining : total - (quota.used ?? 0);
+  return clampPercent((remaining / total) * 100);
+}
+
+export function quotaDetail(quota: Quota): string | undefined {
+  if (quota.unlimited) return t("planUsage.unlimited");
+  if (typeof quota.total === "number" && quota.total > 0) {
+    const used = quota.used ?? (typeof quota.remaining === "number" ? quota.total - quota.remaining : 0);
+    const unit = quota.unit ? ` ${quota.unit}` : "";
+    return `${amount(used)} / ${amount(quota.total)}${unit}`;
+  }
+  if (typeof quota.remaining === "number" && typeof quota.used === "number") {
+    const unit = quota.unit ? ` ${quota.unit}` : "";
+    return `${amount(quota.used)} (${amount(quota.remaining)} left${unit})`;
+  }
+  if (typeof quota.remaining === "number") {
+    const unit = quota.unit ? ` ${quota.unit}` : "";
+    return `${amount(quota.remaining)} left${unit}`;
+  }
+  if (typeof quota.used === "number") {
+    const unit = quota.unit ? ` ${quota.unit}` : "";
+    return `${amount(quota.used)} used${unit}`;
+  }
+  return undefined;
+}
+
+function folded(value: string | undefined): string {
+  if (!value) return "";
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+export function quotaWorkerForInstance(instance: InstanceInfo, workers: Record<string, QuotaWorker>): QuotaWorker | undefined {
+  const instanceKeys = [instance.instanceId, instance.displayName, instance.driverKind].map(folded).filter(Boolean);
+  for (const [key, worker] of Object.entries(workers)) {
+    const workerKeys = [key, worker.worker, worker.account].map(folded).filter(Boolean);
+    if (instanceKeys.some((ik) => workerKeys.includes(ik))) {
+      return worker;
+    }
+  }
+  return undefined;
+}
+
+export function groupAndSortInstances(instances: readonly InstanceInfo[]): InstanceInfo[] {
+  const visible = instances.filter((i) => !i.hidden);
+
+  const familyMap = new Map<string, { primary: InstanceInfo; secondaries: InstanceInfo[] }>();
+
+  for (const instance of visible) {
+    const id = instance.instanceId;
+    let familyKey = id;
+    if (id === "claudeApi" || id.startsWith("claude-")) {
+      familyKey = "claude";
+    } else if (id === "chatgpt" || id.startsWith("chatgpt-")) {
+      familyKey = "codex";
+    } else if (id === "xaiApi" || id.startsWith("xai-")) {
+      familyKey = "grok";
+    } else if (id.startsWith("antigravity-")) {
+      familyKey = "antigravity";
+    }
+
+    const hasPrimary = visible.some((inst) => inst.instanceId === familyKey);
+    const targetKey = hasPrimary ? familyKey : id;
+
+    if (!familyMap.has(targetKey)) {
+      familyMap.set(targetKey, { primary: instance, secondaries: [] });
+    } else {
+      const entry = familyMap.get(targetKey)!;
+      if (instance.instanceId === targetKey) {
+        entry.secondaries.unshift(entry.primary);
+        entry.primary = instance;
+      } else {
+        entry.secondaries.push(instance);
+      }
+    }
+  }
+
+  const sortableGroups = Array.from(familyMap.values()).map((group) => {
+    const allInGroup = [group.primary, ...group.secondaries];
+    const isReady = allInGroup.some((inst) => engineReady(inst));
+    const isSignedIn = allInGroup.some((inst) => inst.snapshot.authenticated === true);
+    return {
+      name: group.primary.displayName,
+      ready: isReady,
+      signedIn: isSignedIn,
+      group,
+    };
+  });
+
+  const sorted = sortEngines(sortableGroups);
+
+  return sorted.flatMap((item) => [item.group.primary, ...item.group.secondaries]);
 }
 
 function formatResetDistance(resetsAt: string | null, now: number): string | null {
@@ -88,7 +229,18 @@ function windowLabel(label: string): string {
   if (label === "5-hour") return t("planUsage.fiveHour");
   if (label === "Weekly") return t("planUsage.weekly");
   if (label === "Monthly spend") return t("planUsage.monthlySpend");
+  if (label === "Model credits") return t("planUsage.modelCredits");
   return label;
+}
+
+/** The numbers behind an extra line: a money budget's spend, or a credit allowance's counts. */
+function extraDetail(extra: PlanExtra): string | undefined {
+  if (extra.spend) return formatPlanSpend(extra.spend);
+  if (extra.amounts && extra.amounts.total > 0) {
+    const unit = extra.amounts.unit ? ` ${extra.amounts.unit}` : "";
+    return `${amount(extra.amounts.used)} / ${amount(extra.amounts.total)}${unit}`;
+  }
+  return undefined;
 }
 
 function providerLabel(provider: Pick<PlanProvider, "name">): string {
@@ -126,23 +278,25 @@ function WindowRow({
   return (
     <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
       <div className="text-[12px] text-ink-secondary">{label}</div>
-      {window.available && headline ? (
+      {window.available && (headline || detail) ? (
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-ink">
-            <span className="tabular-nums">{headline}</span>
+            {headline && <span className="tabular-nums">{headline}</span>}
             {detail && <span data-plan-spend className="text-[12px] tabular-nums text-ink-secondary">{detail}</span>}
             {when && <span className="text-[12px] text-ink-secondary">{t("planUsage.resetsIn", { when })}</span>}
           </div>
-          <div
-            className="mt-1 h-1.5 overflow-hidden rounded-full bg-inset"
-            role="meter"
-            aria-label={label}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(Math.min(100, Math.max(0, used)))}
-          >
-            <div className={cn("h-full rounded-full", usageTone(used))} style={{ width: `${Math.min(100, Math.max(0, used))}%` }} />
-          </div>
+          {window.remainingPercent !== null && window.usedPercent !== null && (
+            <div
+              className="mt-1 h-1.5 overflow-hidden rounded-full bg-inset"
+              role="meter"
+              aria-label={label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(Math.min(100, Math.max(0, used)))}
+            >
+              <div className={cn("h-full rounded-full", usageTone(used))} style={{ width: `${Math.min(100, Math.max(0, used))}%` }} />
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-[12px] text-ink-secondary">{t("planUsage.notReported")}</div>
@@ -153,6 +307,7 @@ function WindowRow({
 
 function usePlanUsage() {
   const [report, setReport] = useState<PlanUsageReport | null>(null);
+  const [quotaReport, setQuotaReport] = useState<QuotaReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -162,8 +317,12 @@ function usePlanUsage() {
     setLoading(true);
     setError("");
     try {
-      const data = await api<PlanUsageReport>(refresh ? "/api/plan-usage?refresh=1" : "/api/plan-usage");
+      const [data, hubData] = await Promise.all([
+        api<PlanUsageReport>(refresh ? "/api/plan-usage?refresh=1" : "/api/plan-usage"),
+        api<QuotaReport>("/hub/quota").catch(() => null),
+      ]);
       setReport(data);
+      setQuotaReport(hubData);
       setNow(Date.now());
     } catch (cause) {
       setError(cause instanceof Error && cause.message ? cause.message : t("planUsage.fetchError"));
@@ -189,7 +348,7 @@ function usePlanUsage() {
     void load(true);
   }, [report, now, load]);
 
-  return { report, loading, error, now, load };
+  return { report, quotaReport, loading, error, now, load };
 }
 
 /** The budget of a plan with no weekly window, to stand in for the weekly figure. */
@@ -233,8 +392,22 @@ export function PlanUsageSummary() {
   );
 }
 
-export function PlanUsage() {
-  const { report, loading, error, now, load } = usePlanUsage();
+export function PlanUsage({
+  instances: propInstances,
+  quotaReport: propQuotaReport,
+}: {
+  instances?: InstanceInfo[];
+  quotaReport?: QuotaReport;
+} = {}) {
+  const { report, quotaReport: fetchedQuota, loading, error, now, load } = usePlanUsage();
+  const quotaReport = propQuotaReport ?? fetchedQuota;
+
+  const store = typeof useStore === "function" ? useStore() : undefined;
+  const rawInstances: InstanceInfo[] = propInstances ?? store?.state?.instances ?? [];
+  const dispatch = store?.dispatch;
+
+  const instances = groupAndSortInstances(rawInstances);
+  const useInstanceMode = instances.length > 0;
 
   return (
     <Card title={t("planUsage.title")} subtitle={t("planUsage.subtitle")}>
@@ -252,10 +425,142 @@ export function PlanUsage() {
       </div>
       {loading && !report && <p role="status" className="text-[13px] text-ink-secondary">{t("planUsage.loading")}</p>}
       {error && <p role="alert" className="mb-3 text-[13px] text-danger">{error}</p>}
-      {report && report.providers.length === 0 && (
+      {!useInstanceMode && report && report.providers.length === 0 && (
         <p className="text-[13px] text-ink-secondary">{t("planUsage.empty")}</p>
       )}
-      {report && report.providers.length > 0 && (
+      {useInstanceMode && instances.length === 0 && (
+        <p className="text-[13px] text-ink-secondary">{t("planUsage.empty")}</p>
+      )}
+
+      {/* Instance-driven mode (shows all registered CLI engines sorted, with multiple plan rows grouped) */}
+      {useInstanceMode && instances.length > 0 && (
+        <div className="flex flex-col gap-4">
+          {instances.map((instance) => {
+            const provider = report?.providers.find((p) => p.id === instance.instanceId);
+            const worker = quotaReport?.workers ? quotaWorkerForInstance(instance, quotaReport.workers) : undefined;
+            const hasProviderWindows = provider?.ok && (provider.fiveHour.available || provider.weekly.available || provider.extra.length > 0 || (provider.models && provider.models.length > 0));
+            const hasWorkerQuotas = Boolean(worker?.quotas && worker.quotas.length > 0);
+            const plan = provider?.plan || worker?.plan || null;
+            const isInstalled = instance.snapshot.state === "available";
+            const isSignedIn = isInstalled && (instance.snapshot.authenticated === true || instance.access === "custom" || instance.snapshot.authenticated !== false);
+            const isNotSignedIn = isInstalled && instance.snapshot.authenticated === false;
+
+            return (
+              <div
+                key={instance.instanceId}
+                data-plan-provider={instance.instanceId}
+                className={cn(
+                  "border-t border-hairline/30 pt-3 first:border-t-0 first:pt-0",
+                  instance.disabled && "opacity-60",
+                )}
+              >
+                <div className="mb-2 flex min-w-0 items-baseline gap-2">
+                  <span className="truncate text-[14px] font-medium text-ink">
+                    {providerLabel({ name: instance.displayName })}
+                  </span>
+                  {plan && <span className="truncate text-[12px] text-ink-secondary">{plan}</span>}
+                  {instance.disabled && (
+                    <span className="rounded bg-inset px-1.5 py-0.5 text-[11px] text-ink-tertiary">
+                      {t("planUsage.disabled")}
+                    </span>
+                  )}
+                </div>
+
+                {provider && !provider.ok ? (
+                  <p className="text-[13px] text-danger">{providerError(provider)}</p>
+                ) : hasProviderWindows ? (
+                  <div className="flex flex-col gap-2">
+                    <WindowRow label={t("planUsage.fiveHour")} window={provider.fiveHour} now={now} />
+                    <WindowRow label={t("planUsage.weekly")} window={provider.weekly} now={now} />
+                    {provider.extra.map((extra, index) => (
+                      <WindowRow
+                        key={`${extra.label}-${index}`}
+                        label={windowLabel(extra.label)}
+                        now={now}
+                        usedHeadline={Boolean(extra.spend)}
+                        detail={extraDetail(extra)}
+                        window={{
+                          available: true,
+                          remainingPercent: extra.remainingPercent,
+                          usedPercent: extra.usedPercent,
+                          resetsAt: extra.resetsAt,
+                        }}
+                      />
+                    ))}
+                    {(provider.models ?? []).length > 0 && (
+                      <div className="mt-1 flex flex-col gap-2">
+                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-secondary">
+                          {t("planUsage.byModel")}
+                        </div>
+                        {(provider.models ?? []).map((model) => (
+                          <div key={model.name} className="flex flex-col gap-1">
+                            <div className="truncate text-[13px] font-medium text-ink">{model.name}</div>
+                            {model.windows.map((entry, index) => (
+                              <WindowRow
+                                key={`${model.name}-${entry.label}-${index}`}
+                                label={windowLabel(entry.label)}
+                                now={now}
+                                usedHeadline
+                                window={{
+                                  available: true,
+                                  remainingPercent: entry.remainingPercent,
+                                  usedPercent: entry.usedPercent,
+                                  resetsAt: entry.resetsAt,
+                                }}
+                              />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : hasWorkerQuotas ? (
+                  <div className="flex flex-col gap-2">
+                    {worker!.quotas!.map((quota, index) => {
+                      const remShare = remainingShare(quota);
+                      const remainingPercent = remShare;
+                      const usedPercent = remShare !== null ? clampPercent(100 - remShare) : null;
+                      const detail = quotaDetail(quota);
+                      return (
+                        <WindowRow
+                          key={`${quota.name || quota.displayName || index}-${index}`}
+                          label={quota.displayName || quota.name || t("planUsage.quota")}
+                          now={now}
+                          detail={detail}
+                          window={{
+                            available: true,
+                            remainingPercent,
+                            usedPercent,
+                            resetsAt: quota.resetAt ?? null,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : !isInstalled ? (
+                  <p className="text-[13px] text-ink-secondary">{t("planUsage.notInstalled")}</p>
+                ) : isNotSignedIn ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] text-ink-secondary">{t("planUsage.notSignedIn")}</span>
+                    <button
+                      type="button"
+                      onClick={() => dispatch?.({ type: "toggleAppSettings", open: true, section: "engines" })}
+                      className="cursor-pointer text-[12px] text-accent hover:underline"
+                    >
+                      {t("planUsage.goToSignIn")}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-ink-secondary">{t("planUsage.signedInNoQuota")}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Fallback report-only mode (when instances store is not available) */}
+      {!useInstanceMode && report && report.providers.length > 0 && (
         <div className="flex flex-col gap-4">
           {report.providers.map((provider) => (
             <div key={provider.id} className="border-t border-hairline/30 pt-3 first:border-t-0 first:pt-0">
@@ -273,7 +578,7 @@ export function PlanUsage() {
                       label={windowLabel(extra.label)}
                       now={now}
                       usedHeadline={Boolean(extra.spend)}
-                      detail={extra.spend ? formatPlanSpend(extra.spend) : undefined}
+                      detail={extraDetail(extra)}
                       window={{
                         available: true,
                         remainingPercent: extra.remainingPercent,

@@ -4,6 +4,7 @@ import type { NeedsYouItem } from "../../../shared/today";
 import { liveCardKind } from "../../../shared/live-approval";
 import { t } from "@/lib/i18n";
 import { dismissResponse, type CardResponse } from "@/lib/card-answer";
+import { isDebugBotId, isDebugInboxRow, type DebugZoneBot } from "@/lib/debug-zone";
 import { accessRequestWords, cardAnswerFor } from "../bot-access/access-card";
 
 /** The Needs you lines the inbox's card in the chat shows, the newest first. */
@@ -24,9 +25,31 @@ export function tabCounts(view: InboxView | null): Record<InboxTab, number> {
 /** What the Inbox row counts: every line waiting on the person, and news they have not read. */
 export const waitingCount = (view: InboxView | null): number => (view?.rows ?? []).filter((row) => row.tab === "needs-you" || (row.tab === "info" && row.unread)).length;
 
+export function filterInboxView(
+  view: InboxView | null,
+  options?: { advanced: boolean; bots?: ReadonlyArray<DebugZoneBot & { id?: string }> },
+): InboxView | null {
+  if (!view || !options || options.advanced) return view;
+  return {
+    ...view,
+    rows: view.rows.filter((row) => !isDebugInboxRow(row, options.bots)),
+  };
+}
+
 /** What a team's person is told needs them beyond the inbox's lines: something to fix, or a question in their own chat. */
-export const inboxFixes = (items: readonly NeedsYouItem[] | undefined, view: InboxView | null): NeedsYouItem[] =>
-  (items ?? []).filter((item) => item.kind !== "message" && !(item.kind === "question" && view?.rows.some((row) => row.tab === "needs-you" && row.origin?.threadId === item.threadId)));
+export const inboxFixes = (
+  items: readonly NeedsYouItem[] | undefined,
+  view: InboxView | null,
+  options?: { advanced?: boolean; bots?: ReadonlyArray<DebugZoneBot & { id?: string }> },
+): NeedsYouItem[] =>
+  (items ?? []).filter((item) => {
+    if (item.kind === "message") return false;
+    if (item.kind === "question" && view?.rows.some((row) => row.tab === "needs-you" && row.origin?.threadId === item.threadId)) return false;
+    if (options && !options.advanced && options.bots && item.botIds?.length) {
+      if (item.botIds.every((id) => isDebugBotId(id, options.bots!))) return false;
+    }
+    return true;
+  });
 
 /** The conversation an answer to this line goes to: a team's copy, in the inbox's own, or where it was asked anywhere else. */
 export const answerThread = (view: Pick<InboxView, "threadId"> | null, row: Pick<InboxRow, "origin">): string | null => view?.threadId ?? row.origin?.threadId ?? null;

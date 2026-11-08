@@ -121,6 +121,23 @@ describe("placeState", () => {
     expect(placeState(facts({ backend: "vps" })).state).toBe("vps");
   });
 
+  it("offers the VPS when there is no Boat key but a VPS computer is there", () => {
+    // No Boat, but a VPS computer: the cloud desktop is reachable, so it must not ask for a key.
+    expect(placeState(facts({ server: "pc", boat: "none", hasVps: true })).state).toBe("vps");
+    expect(placeView(facts({ server: "pc", boat: "none", hasVps: true })).line).not.toMatch(/Boat/);
+  });
+
+  it("coexists Boat and VPS without blocking when both are configured", () => {
+    // When Boat is configured and VPS is also available, backend determines state
+    expect(placeState(facts({ server: "pc", boat: "included", hasVps: true, backend: "vps" })).state).toBe("vps");
+    expect(placeState(facts({ server: "pc", boat: "included", hasVps: true, computer: "on" })).state).toBe("cc-on");
+  });
+
+  it("asks for a Boat key or a VPS only when there is neither", () => {
+    expect(placeState(facts({ server: "pc", boat: "none", hasVps: false })).state).toBe("cc-needs-key");
+    expect(placeView(facts({ server: "pc", boat: "none", hasVps: false })).short).toBe("Connect Boat or add a VPS");
+  });
+
   it("reads Auto, Off, the browser, this computer and a Local VM", () => {
     expect(placeState(facts({ place: "auto" })).state).toBe("auto");
     expect(placeState(facts({ place: "auto", teamComputer: "Team desk" }))).toEqual({ state: "auto-team", params: { bot: "Scout", computer: "Team desk" } });

@@ -8,12 +8,14 @@ import type { InboxRow, InboxView } from "../../../shared/inbox";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { openInbox, readInboxRow, useInboxView } from "@/state/inbox";
+import { useAdvancedMode } from "@/lib/interface-mode";
+import { useStore } from "@/state/store";
 import { pendingApprovals, PendingApprovalActions } from "../PendingApproval";
 import { ASK_QUIET_ANSWER, ASK_QUIET_BUTTON, AskChoices, AskError } from "../AskCard";
 import { ELEVATED_CARD } from "../elevated";
 import { InboxRowItem } from "./InboxRow";
 import { asMessage } from "./inbox-answer";
-import { askOf, CARD_ROWS, choiceResponse, choicesOf, rowsIn, tabCounts } from "./inbox-view";
+import { askOf, CARD_ROWS, choiceResponse, choicesOf, filterInboxView, rowsIn, tabCounts } from "./inbox-view";
 import { accessRequestWords } from "../bot-access/access-card";
 import { useInboxActions } from "./use-inbox-actions";
 
@@ -22,7 +24,10 @@ const CARD_CHOICES = 3;
 
 /** The card goes under one line of the inbox conversation only: the line the inbox says it sits under. */
 export function InboxCardSlot({ threadId, messageId }: { threadId: string; messageId: string }) {
-  const view = useInboxView();
+  const rawView = useInboxView();
+  const advanced = useAdvancedMode();
+  const { state } = useStore();
+  const view = filterInboxView(rawView, { advanced, bots: state.bots });
   if (!view || view.threadId !== threadId || view.anchor !== messageId) return null;
   return <InboxCard view={view} />;
 }

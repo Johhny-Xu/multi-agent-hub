@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Globe, Hand, Loader2, LockKeyhole, Moon, X } from "lucide-react";
+import { Globe, Hand, Loader2, LockKeyhole, Moon, Power, X } from "lucide-react";
 import { browserUnavailableReason } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import { usePageVisible } from "@/lib/page-visible";
@@ -53,6 +53,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const [starting, setStarting] = useState(false);
   const [gone, setGone] = useState(false);
   const [asleep, setAsleep] = useState<"" | "asleep" | "waking">("");
+  const [unstarted, setUnstarted] = useState(false);
   const [kept, setKept] = useState(false);
   const [showProfiles, setShowProfiles] = useState(false);
   const [showTyping, setShowTyping] = useState(false);
@@ -104,6 +105,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
     setStarting(false);
     setGone(false);
     setAsleep("");
+    setUnstarted(false);
     pageNow.current = null;
   }, [bot.id, bot.browserProfile, scopedThread, attempt, stream]);
 
@@ -180,8 +182,12 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
       if (typeof message.zoom === "number") setZoom(message.zoom);
     } else if (message.type === "starting") {
       setStarting(true);
+    } else if (message.type === "unstarted") {
+      setStarting(false);
+      setUnstarted(true);
     } else if (message.type === "asleep" || message.type === "awake") {
       setAsleep(message.type === "asleep" ? "asleep" : "");
+      if (message.type === "awake") setUnstarted(false);
     }
   }, []);
 
@@ -203,16 +209,19 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
     latest.current.openSignInPage();
   }, [signIn, connected]);
 
-  // A new tab, so whatever the bot has open stays as it was; a sleeping browser is woken first.
+  // A new tab, so whatever the bot has open stays as it was; a sleeping or unstarted browser is woken first.
   useEffect(() => {
     if (!page || !connected || pageHandled.current === page.nonce) return;
-    if (asleep) {
-      if (asleep === "asleep" && clientRef.current?.send({ type: "wake" })) setAsleep("waking");
+    if (asleep || unstarted) {
+      if ((asleep === "asleep" || unstarted) && clientRef.current?.send({ type: "wake" })) {
+        if (asleep === "asleep") setAsleep("waking");
+        if (unstarted) { setUnstarted(false); setStarting(true); }
+      }
       return;
     }
     pageHandled.current = page.nonce;
     interact({ type: "tabNew", url: page.url });
-  }, [page, connected, asleep, interact]);
+  }, [page, connected, asleep, unstarted, interact]);
 
   // On macOS a full-screen element takes the window into native full screen, where minimize is disabled.
   useEffect(() => {
@@ -258,6 +267,11 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const wake = () => {
     if (connected && clientRef.current?.send({ type: "wake" })) setAsleep("waking");
     else reconnect();
+  };
+  const start = () => {
+    setUnstarted(false);
+    setStarting(true);
+    if (!(connected && clientRef.current?.send({ type: "wake" }))) reconnect();
   };
   const togglePip = () => {
     if (floating === bot.id) { closeBrowserPictureInPicture(); return; }
@@ -343,11 +357,12 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
           onLeave={() => address.current?.focus()}
         />
       ) : null}
-      {asleep || heldElsewhere || gone || !connected || starting ? (
+      {asleep || unstarted || heldElsewhere || gone || !connected || starting ? (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/95 p-6 text-center text-[13px] text-ink-secondary">
-          {asleep ? <Moon size={24} /> : heldElsewhere ? <Hand size={24} /> : gone ? <Globe size={24} /> : <Loader2 size={24} className="animate-spin" />}
-          <span>{asleep ? t("browser.panel.asleep") : heldElsewhere ? BROWSER_HELD_ELSEWHERE : gone ? t("browser.panel.disconnected") : !starting ? t("browser.panel.opening") : stream ? t("browser.panel.starting") : t("browser.live.botBusy", { name: bot.name })}</span>
+          {asleep ? <Moon size={24} /> : unstarted ? <Power size={24} /> : heldElsewhere ? <Hand size={24} /> : gone ? <Globe size={24} /> : <Loader2 size={24} className="animate-spin" />}
+          <span>{asleep ? t("browser.panel.asleep") : unstarted ? t("browser.panel.notStarted") : heldElsewhere ? BROWSER_HELD_ELSEWHERE : gone ? t("browser.panel.disconnected") : !starting ? t("browser.panel.opening") : stream ? t("browser.panel.starting") : t("browser.live.botBusy", { name: bot.name })}</span>
           {asleep ? <button type="button" disabled={asleep === "waking"} className="rounded-lg border border-hairline px-3 py-1.5 text-[12px] text-ink hover:bg-inset disabled:opacity-60" onClick={wake}>{t(asleep === "waking" ? "browser.panel.waking" : "browser.panel.wake")}</button>
+            : unstarted ? <button type="button" className="rounded-lg border border-hairline px-3 py-1.5 text-[12px] text-ink hover:bg-inset" onClick={start}>{t("browser.panel.start")}</button>
             : gone ? <button type="button" className="rounded-lg border border-hairline px-3 py-1.5 text-[12px] text-ink hover:bg-inset" onClick={reconnect}>{t("browser.panel.reconnect")}</button> : null}
         </div>
       ) : null}

@@ -1,3 +1,6 @@
+import { boatConfigured } from "./boat.ts";
+import { vpsSshAlias, type AppConfig } from "./config.ts";
+
 export const CLOUD_BACKEND_CHANGE_ERROR = "stop the active turn before changing the cloud backend";
 export const BOAT_ACCOUNT_RESOURCES_ERROR =
   "remove this installation's cloud computers before changing or clearing the Boat account";
@@ -47,4 +50,32 @@ export function boatAccountResourceChangeError(
 
 export function vpsAliasResourceChangeError(instanceCount: number): string | null {
   return instanceCount > 0 ? VPS_ALIAS_RESOURCES_ERROR : null;
+}
+
+export function vpsConfigured(cfg: Readonly<AppConfig>): boolean {
+  const vps = cfg.vps;
+  if (Array.isArray(vps?.instances) && vps.instances.length > 0) return true;
+  if ((vps as { configured?: boolean })?.configured === true) return true;
+  return Boolean(vpsSshAlias(cfg));
+}
+
+export function resolveCloudBackendFacts(input: {
+  hasBoat: boolean;
+  hasVps: boolean;
+  cloudBackend?: "box" | "vps" | string | null;
+}): "box" | "vps" {
+  if (input.cloudBackend === "vps") return "vps";
+  if (!input.hasBoat && input.hasVps) return "vps";
+  return "box";
+}
+
+export function resolveCloudBackend(
+  cfg: Readonly<AppConfig>,
+  bot?: { cloudBackend?: "box" | "vps" | string | null } | null,
+): "box" | "vps" {
+  return resolveCloudBackendFacts({
+    hasBoat: boatConfigured(cfg) || (cfg.box as { configured?: boolean })?.configured === true,
+    hasVps: vpsConfigured(cfg),
+    cloudBackend: bot?.cloudBackend,
+  });
 }

@@ -21,7 +21,6 @@ import { BotApiCard } from "./BotApiCard";
 import { ToolBudgetLine } from "./ToolBudgetLine";
 import { useCloudPlan } from "../ProIntroduction";
 import { xResearchAction } from "@/lib/cloud-plan";
-import { HIGHLEVEL_SLUG } from "@/lib/highlevel-sign-in";
 import { useBotApps } from "./useBotApps";
 import {
   classifyConnectorTool,
@@ -530,70 +529,6 @@ export function cloudPreferenceShown(bot: Pick<Bot, "computer">, config: { cloud
   return (!bot.computer || bot.computer === "cloud") && !config?.cloudHome;
 }
 
-/**
- * A bot's own VPS server. PATCHed directly, not via updateBot: the server refuses
- * a move while the bot's computer still lives on the old host.
- */
-export function VpsAliasField({ bot }: { bot: Bot }) {
-  const { request: api } = useBotEditor();
-  const { state } = useStore();
-  const defaultAlias = state.config?.vps?.sshAlias ?? "";
-  const [draft, setDraft] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // Set when the old server could not be reached: the move went ahead, and this says what may be left there.
-  const [notice, setNotice] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const save = async (alias: string | null) => {
-    setSaving(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const saved = await api<{ notice?: string }>(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ vpsAlias: alias }) });
-      setNotice(saved?.notice ?? null);
-      setDraft(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-  const value = draft ?? bot.vpsAlias ?? "";
-  return (
-    <div className="mt-3 rounded-lg bg-inset p-3">
-      <div className="text-[13px] text-ink">{t("botAccess.cloud.server")}</div>
-      <div className="mt-0.5 text-[12px] text-ink-secondary">
-        {defaultAlias
-          ? t("botAccess.cloud.serverDefault", { alias: defaultAlias })
-          : t("botAccess.cloud.serverNoDefault")} <KeysLink id="vps" />
-      </div>
-      <form
-        className="mt-2 flex items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save(value.trim() || null);
-        }}
-      >
-        <input
-          className={cn(inputCls, "font-mono text-[13px]")}
-          placeholder={defaultAlias || t("botAccess.cloud.serverPlaceholder")}
-          value={value}
-          aria-label={t("botAccess.cloud.server")}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <button
-          type="submit"
-          disabled={saving || draft === null}
-          className="shrink-0 rounded-lg bg-control px-3 py-2 text-[13px] text-ink hover:bg-raised-hover disabled:opacity-50"
-        >
-          {t("botAccess.cloud.serverSave")}
-        </button>
-      </form>
-      {error && <div className="mt-2 text-[12px] text-danger">{error}</div>}
-      {notice && <div role="status" className="mt-2 break-words text-[12px] text-ink-secondary">{notice}</div>}
-    </div>
-  );
-}
-
 export function CloudPreference({ bot, patch }: { bot: Bot; patch: ReturnType<typeof useBotSettingsDerived>["patch"] }) {
   const { state } = useStore();
   const { draft } = useBotEditor();
@@ -608,11 +543,16 @@ export function CloudPreference({ bot, patch }: { bot: Bot; patch: ReturnType<ty
       )}
       <CloudBackendPicker
         value={bot.cloudBackend ?? "box"}
-        onChange={(backend) => patch({ cloudBackend: backend })}
+        instanceId={bot.vpsInstanceId}
+        onChange={({ backend, instanceId }) => patch({ cloudBackend: backend, ...(instanceId !== undefined ? { vpsInstanceId: instanceId } : {}) })}
       />
-      {/* A saved bot only: a new bot starts on the default server, and new-bot defaults never name one. */}
-      {bot.cloudBackend === "vps" && !draft && <VpsAliasField bot={bot} />}
-      {!bot.computer && bot.cloudBackend === "vps" && (
+      {bot.cloudBackend === "vps" && !draft && !state.config?.vps?.instances?.some((instance) => instance.id === bot.vpsInstanceId) && (
+        <div className="mt-2 text-[12px] leading-4 text-warning">{t("botAccess.cloud.missingInstance")}</div>
+      )}
+      {bot.cloudBackend === "vps" && state.config?.vps?.instances?.find((instance) => instance.id === bot.vpsInstanceId)?.kind === "mcp" && (
+        <div className="mt-2 text-[12px] leading-4 text-ink-secondary">{t("botAccess.cloud.sharedBox")}</div>
+      )}
+      {!bot.computer && bot.cloudBackend === "vps" && state.config?.vps?.instances?.find((instance) => instance.id === bot.vpsInstanceId)?.kind !== "mcp" && (
         <div className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-inset px-3 py-2.5">
           <div className="min-w-0">
             <div className="text-[13px] text-ink">{t("botAccess.cloud.startVps")}</div>
@@ -663,7 +603,7 @@ export function AccessSection({
   const worksOn = placeViewFor(placeFacts({
     bot, place: bot.computer ?? "auto", seat: placeSeat, config: state.config, instances: state.instances,
   }));
-  // The same list the Vault tab shows: Composio's connected accounts plus the native HighLevel connection.
+  // The same list the Vault tab shows: Composio's connected accounts plus the native Email connection.
   const apps = useBotApps(bot);
   const inventoryReady = apps.phase === "ready";
   const connectedSlugs = apps.connectedSlugs;
@@ -732,8 +672,7 @@ export function AccessSection({
         {connectedAppsEnabled && inventoryReady && (
           <>
             {!draft && <ConnectorScopesControl connectedSlugs={connectedSlugs} labels={appLabels} scopes={bot.connectorScopes} onChange={(connectorScopes) => patch({ connectorScopes })} />}
-            {/* Tool-level grants list Composio's tools; HighLevel's tools are scoped by read/write above. */}
-            <ConnectorToolsGrants bot={bot} patch={patch} slugs={connectedSlugs.filter((slug) => slug !== HIGHLEVEL_SLUG)} />
+            <ConnectorToolsGrants bot={bot} patch={patch} slugs={connectedSlugs} />
           </>
         )}
         {connectedAppsEnabled && connectedAppsConfigured && (

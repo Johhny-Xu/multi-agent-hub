@@ -15,8 +15,8 @@ protocols:
 # stranded on its installed version.
 publish:
   - provider: github
-    owner: milind-soni
-    repo: OpenMausBot
+    owner: Johhny-Xu
+    repo: multi-agent-hub
 
 directories:
   buildResources: build

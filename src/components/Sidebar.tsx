@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { Archive, Bot as BotIcon, Check, ChevronRight, ClipboardCopy, Crown, FolderPlus, Library, Loader2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Pin, Plus, Search, TextQuote, Trash2, Users, X } from "lucide-react";
 import { api, useStore, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type BotProject, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { approvalModeFor } from "../../shared/approval-mode";
-import { liveActivityLabel } from "@/lib/live-activity";
+import { liveActivityLabel, sidebarMessage } from "@/lib/live-activity";
 import { SidebarWorkingStep } from "./SidebarWorkingStep";
 import { openBotRow } from "@/state/thread-navigation";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
@@ -74,6 +74,8 @@ import { GlassBar, GlassScrollFrame, GlassScroller } from "./GlassScrollFrame";
 import { DesktopWorkspaceSwitcher, endCloudHowTo } from "./DesktopWorkspaceSwitcher"; import { PlaceTint } from "./PlaceTint"; import { ChromeRailToggle } from "./ChromeRailToggle";
 import { useCloudOwner } from "./CloudOwner";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
+import { SidebarDebugSection } from "./SidebarDebugSection";
+import { DEBUG_ZONE_SECTION_ID, isDebugBot } from "@/lib/debug-zone";
 import { NeedsYouButton, OwnerPickerHost, pickOwnerOf } from "./TeamOwner"; import { SidebarPeople } from "./SidebarPeople"; import { SidebarInboxRow } from "./SidebarInboxRow"; import { SidebarActiveThreads } from "./SidebarActiveThreads"; import { setAttentionPinned, useAttentionPinned } from "./inbox/attention-pinned"; import { useInboxSupport } from "@/state/inbox";
 import { showWhoReportsToWhom, TeamMenuItems } from "./SidebarTeamMenu";
 import { MENU_ITEM, MENU_SHEET } from "./menu-recipe";
@@ -912,7 +914,7 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
       )}
     </div>
     {advanced && !iconOnly && threadsOpen && hasThreadList && <BotThreadList {...props} hidden={!showThreads}
-      activityLabel={liveActivityLabel(last)}
+      activityLabel={liveActivityLabel(sidebarMessage(last))}
       query={bot.name.toLowerCase().includes(query.toLowerCase()) || bot.title.toLowerCase().includes(query.toLowerCase()) ? "" : query} />}
     {(advanced || (!iconOnly && (waiting || unread || bot.tasks?.some(runningRoutineRun)))) && <SidebarBotActivity bot={bot} rowThreadId={selected ? bot.threadId : botOpensTo(bot, showThreads)} density={density} pendingQueued={pendingQueued} dispatch={dispatch} waitingOnly={!advanced} runsOnly={expanded} />}
     {showThreads && creatingProject && <BotProjectDialog bot={bot} onClose={() => setCreatingProject(false)} />}
@@ -1088,17 +1090,16 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const botDrag = useSidebarBotDrag({ dispatch, announce: sections.announce, onNamed: sections.focusHeader, onRenamed: sections.renamed,
     onError: (text) => setTeamFeedback({ error: true, text }), onCancelled: () => sidebarRef.current?.focus() });
 
-  const matchingBots = state.bots
-    .filter((b) => !b.hidden)
-    .filter(
-      (b) =>
-        !q ||
-        b.name.toLowerCase().includes(q) ||
-        (b.title ?? "").toLowerCase().includes(q) ||
-        botPreview(b, visibleMessages(b), state.instances, advanced).toLowerCase().includes(q) ||
-        b.tasks?.some((task) => !task.routineRunId && task.title.toLowerCase().includes(q)) ||
-        b.projects?.some((folder) => folder.name.toLowerCase().includes(q)),
-    );
+  const everydayBots = state.bots.filter((bot) => !isDebugBot(bot));
+  const matchesBot = (b: Bot) =>
+    !q ||
+    b.name.toLowerCase().includes(q) ||
+    (b.title ?? "").toLowerCase().includes(q) ||
+    botPreview(b, visibleMessages(b), state.instances, advanced).toLowerCase().includes(q) ||
+    b.tasks?.some((task) => !task.routineRunId && task.title.toLowerCase().includes(q)) ||
+    b.projects?.some((folder) => folder.name.toLowerCase().includes(q));
+  const matchingBots = everydayBots.filter((b) => !b.hidden && matchesBot(b));
+  const debugBots = advanced ? state.bots.filter((b) => !b.hidden && isDebugBot(b) && matchesBot(b)) : [];
   const visibleGroups = state.groups.filter((g) => !q || g.name.toLowerCase().includes(q) || g.tasks?.some((task) => task.title.toLowerCase().includes(q)));
   const viewerEmail = useViewerEmail();
   const parts = partitionSidebarBots(botDrag.preview(matchingBots), { universalPins, viewerEmail, welcoming: useWelcomingBot() });
@@ -1133,12 +1134,13 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const showPinnedCircleThreads = !simpleDesk && pinnedCircleThreadListVisible(pinnedCircles, density, pinnedBots.length);
   const tiles = simpleDesk && (primary !== null || pinnedBots.length > 0);
   const { interactive: layoutInteractive, collapsed: sectionCollapsed, toggle: toggleSection } = sections;
-  const archivedBots = state.bots.filter((bot) => bot.hidden && !bot.movedTo);
+  const archivedBots = everydayBots.filter((bot) => bot.hidden && !bot.movedTo);
   const archivedEntry = remoteClient ? undefined : { count: archivedBots.length, open: () => setArchivedBotsOpen(true) };
-  const attention = crossBotAttentionThreads(state.bots, state.pendingQueued, undefined, state.groups);
-  const pinnedThreads = crossBotPinnedThreads(state.bots, state.groups, state.pendingQueued);
+  const attention = crossBotAttentionThreads(everydayBots, state.pendingQueued, undefined, state.groups);
+  const pinnedThreads = crossBotPinnedThreads(everydayBots, state.groups, state.pendingQueued);
   const pendingBotUndo = teamFeedback?.restoreBot;
   const botRow = (bot: Bot) => botRowProps(state, dispatch, bot, { density, query: q, onMenu: setMenu, renameRequest: renameRequest?.botId === bot.id ? renameRequest.nonce : 0, ...drops.row(bot.id) });
+  const debugRow = (bot: Bot) => botRowProps(state, dispatch, bot, { density, query: q, onMenu: setMenu, renameRequest: renameRequest?.botId === bot.id ? renameRequest.nonce : 0 });
   const railSearch = () => {
     if (collapseToIcons) return openCommandPalette();
     setSearchOpen(true);
@@ -1435,7 +1437,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
                 {density !== "icons" && !headless && (
                   <SidebarSectionHeader
                     name={sectionLabel(id)}
-                    line={simple}
+                    line={simple} reserveMenu={simple && !remoteClient}
                     count={simple ? sectionChiefItems.length + sectionBotItems.length + sectionGroupItems.length : undefined}
                     onMenu={simple && !remoteClient && sectionName ? (button) => {
                       const rect = button.getBoundingClientRect();
@@ -1490,6 +1492,16 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
               </div>
             );
           })}
+          {advanced && debugBots.length > 0 && (
+            <SidebarDebugSection
+              count={debugBots.length}
+              collapsed={sectionCollapsed(DEBUG_ZONE_SECTION_ID)}
+              onToggle={layoutInteractive ? () => toggleSection(DEBUG_ZONE_SECTION_ID) : undefined}
+              showHeader={density !== "icons"}
+            >
+              {debugBots.map((bot) => <BotListItem key={bot.id} {...debugRow(bot)} />)}
+            </SidebarDebugSection>
+          )}
           <MovedBotRows bots={state.bots} /><SearchResults query={query} onLanded={() => { setQuery(""); setSearchOpen(false); }} />
           {showPinnedCircleThreads && (
             <PinnedCircleThreadSection

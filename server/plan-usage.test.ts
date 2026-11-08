@@ -10,6 +10,7 @@ import {
   parseClaudeUsage,
   parseCodexUsage,
   parseGrokUsage,
+  parseMeooUsage,
   parseOpenCodeUsage,
   planAccountsFromInstances,
   type PlanAccount,
@@ -269,6 +270,55 @@ describe("an OpenCode Go allowance", () => {
   });
 });
 
+/** Meoo's entitlement as its endpoint sent it for the fixture account. */
+describe("a Meoo entitlement", () => {
+  const entitlement = {
+    data: {
+      planCode: "free",
+      planName: "Free 免费版",
+      currentPeriodStart: "2026-10-21T21:18:54.918",
+      currentPeriodEnd: "2026-11-21T00:00:00",
+      benefits: [
+        { typeCode: "model_credits", typeName: "构建使用的模型消耗", valueType: "QUOTA", quota: 45_000, used: 22_000 },
+        { typeCode: "daily_login", typeName: "每日登录赠送积分", valueType: "QUOTA", quota: 2_000, used: 0 },
+        { typeCode: "supabase_count", typeName: "云服务 (AI数据库等) 数量", valueType: "QUOTA", quota: 1, used: 0, unit: "个" },
+        { typeCode: "cloud_function", typeName: "云函数 (每项目上限)", valueType: "LIMIT", quota: 1, used: null },
+      ],
+      userPointInfo: { account: { availableBalance: 23_000, totalGranted: 45_000, totalConsumed: 13_170, totalExpired: 8_830 } },
+    },
+  };
+
+  it("reads the model-credit allowance with its period and counts, and nothing else", () => {
+    const parsed = parseMeooUsage(entitlement);
+    expect(parsed.plan).toBe("Free 免费版");
+    expect(parsed.fiveHour.available).toBe(false);
+    expect(parsed.weekly.available).toBe(false);
+    expect(parsed.models).toEqual([]);
+    expect(parsed.extra).toEqual([{
+      label: "Model credits",
+      usedPercent: expect.closeTo((22_000 / 45_000) * 100, 2),
+      remainingPercent: expect.closeTo(100 - (22_000 / 45_000) * 100, 2),
+      resetsAt: "2026-11-21T00:00:00.000Z",
+      amounts: { used: 22_000, total: 45_000 },
+    }]);
+  });
+
+  it("answers the same without the data envelope", () => {
+    expect(parseMeooUsage(entitlement.data).extra).toEqual(parseMeooUsage(entitlement).extra);
+  });
+
+  it("shows nothing it was not given", () => {
+    const noCredits = { ...entitlement, data: { ...entitlement.data, benefits: entitlement.data.benefits.slice(1) } };
+    expect(parseMeooUsage(noCredits)).toMatchObject({ plan: "Free 免费版", extra: [] });
+    const spentOut = { ...entitlement, data: { ...entitlement.data, benefits: [{ typeCode: "model_credits", valueType: "QUOTA", quota: 0, used: 0 }] } };
+    expect(parseMeooUsage(spentOut).extra).toEqual([]);
+    const uncounted = { ...entitlement, data: { ...entitlement.data, benefits: [{ typeCode: "model_credits", valueType: "QUOTA", quota: 45_000, used: null }] } };
+    expect(parseMeooUsage(uncounted).extra).toEqual([]);
+    expect(parseMeooUsage({}).plan).toBeNull();
+    expect(parseMeooUsage(null).extra).toEqual([]);
+  });
+});
+
 describe("plan usage fetcher", () => {
   it("does not call fetch when the Claude token is expired", async () => {
     const fetchImpl = vi.fn<PlanFetch>();
@@ -494,10 +544,12 @@ describe("plan usage fetcher", () => {
       grok: { driver: "grokAgent", environment: { GROK_HOME: "/tmp/grok" } },
       cursor: { driver: "cursorAgent", displayName: "Cursor" },
       api: { driver: "grok", displayName: "Grok API" },
+      meoo: { driver: "meooAgent", displayName: "Meoo" },
     })).toEqual([
       { id: "claude", name: "Personal Claude", driver: "claude", environment: {}, configDir: "/tmp/claude" },
       { id: "codex", name: "Codex", driver: "codex", environment: {} },
       { id: "grok", name: "Grok", driver: "grok", environment: { GROK_HOME: "/tmp/grok" } },
+      { id: "meoo", name: "Meoo", driver: "meoo", environment: {} },
     ]);
   });
 
@@ -592,6 +644,74 @@ describe("plan usage fetcher", () => {
       credentials,
     });
     expect(refused.providers[0]).toMatchObject({ ok: false, error: "OpenCode refused the saved credentials" });
+  });
+
+  /** The entitlement is read with the agent key as the bearer, at the base the account's environment names. */
+  it("reads Meoo's entitlement with the agent key saved on the instance", async () => {
+    const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse({
+      data: {
+        planCode: "free",
+        planName: "Free 免费版",
+        currentPeriodEnd: "2026-11-21T00:00:00",
+        benefits: [{ typeCode: "model_credits", valueType: "QUOTA", quota: 45_000, used: 22_000 }],
+      },
+    }));
+    const report = await fetchPlanUsage(
+      [account("meoo", { name: "Meoo", environment: { MEOO_AK: SECRET, MEOO_BASE_URL: "https://meoo.example/open/v1/" } })],
+      {
+        fetch: fetchImpl,
+        now: () => NOW,
+        credentials: fileCredentialReader({ now: () => NOW, env: {}, readText: () => null }),
+      },
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://meoo.example/open/v1/cli-compat/account/entitlement");
+    expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe(`Bearer ${SECRET}`);
+    expect(report.providers[0]).toMatchObject({
+      driver: "meoo",
+      ok: true,
+      error: null,
+      plan: "Free 免费版",
+      extra: [{ label: "Model credits", usedPercent: expect.closeTo((22_000 / 45_000) * 100, 2), amounts: { used: 22_000, total: 45_000 } }],
+    });
+    expect(JSON.stringify(report)).not.toContain(SECRET);
+  });
+
+  /** With no key on the instance, the CLI's own meoo-auth.env is read, and nothing is written anywhere. */
+  it("takes Meoo's key from the CLI's meoo-auth.env when the instance has none", async () => {
+    const envKey = "meoo-env-file-fixture-key";
+    const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse({ data: { planName: "Free 免费版", benefits: [] } }));
+    const report = await fetchPlanUsage([account("meoo", { name: "Meoo" })], {
+      fetch: fetchImpl,
+      now: () => NOW,
+      credentials: fileCredentialReader({
+        now: () => NOW,
+        env: { HOME: tmpdir() },
+        readText: (path) => (path === join(tmpdir(), ".config", "agenthub-meoo", "meoo-auth.env") ? `# comment\nMEOO_AK=${envKey}\n` : null),
+      }),
+    });
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://meoo.com/open/v1/cli-compat/account/entitlement");
+    expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe(`Bearer ${envKey}`);
+    expect(report.providers[0]).toMatchObject({ ok: true, plan: "Free 免费版", extra: [] });
+    expect(JSON.stringify(report)).not.toContain(envKey);
+  });
+
+  it("names Meoo as signed out when no key exists, and a refused key as an error", async () => {
+    const fetchImpl = vi.fn<PlanFetch>();
+    const missing = await fetchPlanUsage([account("meoo", { name: "Meoo" })], {
+      fetch: fetchImpl,
+      now: () => NOW,
+      credentials: fileCredentialReader({ now: () => NOW, env: {}, readText: () => null }),
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(missing.providers[0]).toMatchObject({ ok: false, error: "Sign in again in Meoo" });
+
+    const refused = await fetchPlanUsage([account("meoo", { name: "Meoo", environment: { MEOO_AK: SECRET } })], {
+      fetch: async () => jsonResponse({ error: "forbidden" }, 403),
+      now: () => NOW,
+      credentials: fileCredentialReader({ now: () => NOW, env: {}, readText: () => null }),
+    });
+    expect(refused.providers[0]).toMatchObject({ ok: false, error: "Sign in again in Meoo" });
   });
 
   it("reads no usage for a ChatGPT-plan provider, whose sign-in is not the shared Codex login", async () => {

@@ -40,10 +40,10 @@ describe("what a duplicated bot is created with", () => {
     const source = {
       id: "src", threadId: "t", name: "Rio", title: "", description: "", notifications: true, color: "green", unread: false,
       modelSelection: { instanceId: "codex", model: "default" }, messages: [],
-      computer: "cloud", cloudBackend: "vps", autoStartVps: true, vpsAlias: "alpha-vps",
+      computer: "cloud", cloudBackend: "vps", autoStartVps: true, vpsInstanceId: "alpha",
     } as Bot;
-    expect(duplicateBotProfile(source)).toMatchObject({ name: "Rio copy", computer: "cloud", cloudBackend: "vps", autoStartVps: true, vpsAlias: "alpha-vps" });
-    const { vpsAlias: _alias, ...onDefault } = source;
-    expect(duplicateBotProfile(onDefault as Bot).vpsAlias).toBeUndefined();
+    expect(duplicateBotProfile(source)).toMatchObject({ name: "Rio copy", computer: "cloud", cloudBackend: "vps", autoStartVps: true, vpsInstanceId: "alpha" });
+    const { vpsInstanceId: _instance, ...onDefault } = source;
+    expect(duplicateBotProfile(onDefault as Bot).vpsInstanceId).toBeUndefined();
   });
 });

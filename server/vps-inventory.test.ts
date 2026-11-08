@@ -14,6 +14,8 @@ import {
 } from "./vps-computer.ts";
 
 const CONFIG: AppConfig = { vps: { sshAlias: "production-vps" } };
+const TARGET = { instanceId: "primary", sshAlias: "production-vps", revision: "rev-1" };
+const targets = (aliases: string[]) => aliases.map((sshAlias, index) => ({ instanceId: `host-${index}`, sshAlias, revision: `rev-${index}` }));
 const OWNER: ManagedVpsOwner = { botId: "bot-current", name: "Research", inUse: false };
 const LOCAL_ENVIRONMENT_ID = loadEnvironmentId(DATA_DIR);
 
@@ -82,10 +84,11 @@ describe("managed VPS inventory", () => {
   it("does nothing when no SSH alias is configured", async () => {
     const fake = inventoryRunner([]);
 
-    await expect(listManagedVpsComputers({}, [OWNER], fake.runner)).resolves.toEqual({
+    await expect(listManagedVpsComputers([], [OWNER], fake.runner)).resolves.toEqual({
       configured: false,
       available: false,
       vpsAliases: [],
+      vpsInstanceIds: [],
       problem: null,
       instances: [],
     });
@@ -100,16 +103,19 @@ describe("managed VPS inventory", () => {
       { id: "b".repeat(64), name: ownedName, state: "running", running: true },
     ]);
 
-    const inventory = await listManagedVpsComputers(CONFIG, [OWNER], fake.runner);
+    const inventory = await listManagedVpsComputers([TARGET], [OWNER], fake.runner);
 
     expect(inventory).toEqual({
       configured: true,
       available: true,
       vpsAliases: ["production-vps"],
+      vpsInstanceIds: ["primary"],
       problem: null,
       instances: [
         {
           name: ownedName,
+          instanceId: "primary",
+          containerId: "b".repeat(64),
           state: "running",
           vpsAlias: "production-vps",
           ownerBotId: OWNER.botId,
@@ -119,6 +125,8 @@ describe("managed VPS inventory", () => {
         },
         {
           name: orphanName,
+          instanceId: "primary",
+          containerId: "a".repeat(64),
           state: "exited",
           vpsAlias: "production-vps",
           ownerBotId: null,
@@ -133,7 +141,7 @@ describe("managed VPS inventory", () => {
       ["container", "inspect"],
     ]);
     expect(fake.calls.some((call) => ["run", "start", "stop", "exec"].includes(call[0]!))).toBe(false);
-    expect(JSON.stringify(inventory)).not.toMatch(/\b[ab]{64}\b|VNC_PW|172\.17\.0\.9/);
+    expect(JSON.stringify(inventory)).not.toMatch(/VNC_PW|172\.17\.0\.9/);
   });
 
   it("keeps local legacy owners but excludes foreign and ownerless legacy rows", async () => {
@@ -151,11 +159,13 @@ describe("managed VPS inventory", () => {
       { id: "4".repeat(64), name: foreignOrphanName, labels: labels(foreignOrphanName, foreignEnvironmentId) },
     ]);
 
-    const inventory = await listManagedVpsComputers(CONFIG, [legacyOwner, foreignOwner], fake.runner);
+    const inventory = await listManagedVpsComputers([TARGET], [legacyOwner, foreignOwner], fake.runner);
 
     expect(inventory.available).toBe(true);
     expect(inventory.instances).toEqual([{
       name: legacyName,
+      instanceId: "primary",
+      containerId: "1".repeat(64),
       state: "running",
       vpsAlias: "production-vps",
       ownerBotId: legacyOwner.botId,
@@ -164,9 +174,9 @@ describe("managed VPS inventory", () => {
       inUse: false,
     }]);
 
-    await expect(removeManagedVpsComputer(CONFIG, [legacyOwner, foreignOwner], foreignName, foreignName, fake.runner))
+    await expect(removeManagedVpsComputer(TARGET, [legacyOwner, foreignOwner], { containerName: foreignName, containerId: "foreignName.id" }, foreignName, fake.runner))
       .rejects.toMatchObject({ status: 404 });
-    await expect(removeManagedVpsComputer(CONFIG, [legacyOwner, foreignOwner], legacyOrphanName, legacyOrphanName, fake.runner))
+    await expect(removeManagedVpsComputer(TARGET, [legacyOwner, foreignOwner], { containerName: legacyOrphanName, containerId: "legacyOrphanName.id" }, legacyOrphanName, fake.runner))
       .rejects.toMatchObject({ status: 404 });
     expect(fake.calls.some((call) => call[0] === "rm")).toBe(false);
   });
@@ -204,7 +214,7 @@ describe("managed VPS inventory", () => {
       throw new Error(`unexpected command: ${command.join(" ")}`);
     };
 
-    const inventory = await listManagedVpsComputers(CONFIG, [OWNER, second], runner, ["alpha-vps", "beta-vps"]);
+    const inventory = await listManagedVpsComputers(targets(["alpha-vps", "beta-vps"]), [OWNER, second], runner);
     expect(inventory.vpsAliases).toEqual(["alpha-vps", "beta-vps"]);
     expect(inventory.available).toBe(true);
     expect(inventory.instances.map((instance) => [instance.vpsAlias, instance.name, instance.ownerBotId]))
@@ -214,13 +224,13 @@ describe("managed VPS inventory", () => {
       ]);
 
     // One unreachable server names itself in the problem and does not hide the reachable one.
-    const partial = await listManagedVpsComputers(CONFIG, [OWNER], runner, ["alpha-vps", "missing-vps"]);
+    const partial = await listManagedVpsComputers(targets(["alpha-vps", "missing-vps"]), [OWNER], runner);
     expect(partial.available).toBe(false);
     expect(partial.problem).toMatch(/missing-vps/);
     expect(partial.instances.map((instance) => instance.vpsAlias)).toEqual(["alpha-vps"]);
 
     // Invalid aliases are never scanned.
-    const filtered = await listManagedVpsComputers(CONFIG, [OWNER], runner, ["bad alias", "-alpha"]);
+    const filtered = await listManagedVpsComputers(targets(["bad alias", "-alpha"]), [OWNER], runner);
     expect(filtered.configured).toBe(false);
     expect(filtered.instances).toEqual([]);
   });
@@ -239,7 +249,7 @@ describe("managed VPS inventory", () => {
     };
 
     const inventory = await Promise.race([
-      listManagedVpsComputers(CONFIG, [OWNER], runner, ["alpha-vps", "beta-vps"]),
+      listManagedVpsComputers(targets(["alpha-vps", "beta-vps"]), [OWNER], runner),
       new Promise<never>((_resolve, reject) => {
         setTimeout(() => reject(new Error("aliases were scanned serially: alpha never overlapped beta")), 5_000).unref?.();
       }),
@@ -253,7 +263,7 @@ describe("managed VPS inventory", () => {
     const transport: VpsCommandRunner = async () => {
       throw new Error("ssh connection timed out");
     };
-    const unavailable = await listManagedVpsComputers(CONFIG, [OWNER], transport);
+    const unavailable = await listManagedVpsComputers([TARGET], [OWNER], transport);
     expect(unavailable.available).toBe(false);
     expect(unavailable.instances).toEqual([]);
     expect(unavailable.problem).toMatch(/ssh connection timed out/);
@@ -263,7 +273,7 @@ describe("managed VPS inventory", () => {
       name: vpsContainerName(OWNER.botId),
       labels: { [VPS_MANAGED_LABEL]: "1", [VPS_CONTAINER_LABEL]: "different-name" },
     }]);
-    const rejected = await listManagedVpsComputers(CONFIG, [OWNER], bad.runner);
+    const rejected = await listManagedVpsComputers([TARGET], [OWNER], bad.runner);
     expect(rejected.available).toBe(false);
     expect(rejected.instances).toEqual([]);
 
@@ -271,22 +281,22 @@ describe("managed VPS inventory", () => {
       id: "f".repeat(12),
       name: vpsContainerName(OWNER.botId),
     }]);
-    expect((await listManagedVpsComputers(CONFIG, [OWNER], truncatedId.runner)).available).toBe(false);
+    expect((await listManagedVpsComputers([TARGET], [OWNER], truncatedId.runner)).available).toBe(false);
   });
 
   it("freshly revalidates identity and confirmation before explicit removal", async () => {
     const name = vpsContainerName(OWNER.botId);
     const fake = inventoryRunner([{ id: "d".repeat(64), name }]);
 
-    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, "stale-name", fake.runner))
+    await expect(removeManagedVpsComputer(TARGET, [OWNER], { containerName: name, containerId: "d".repeat(64) }, "stale-name", fake.runner))
       .rejects.toMatchObject({ status: 400 });
     expect(fake.calls.some((call) => call[0] === "rm")).toBe(false);
 
-    await expect(removeManagedVpsComputer(CONFIG, [{ ...OWNER, inUse: true }], name, name, fake.runner))
+    await expect(removeManagedVpsComputer(TARGET, [{ ...OWNER, inUse: true }], { containerName: name, containerId: "d".repeat(64) }, name, fake.runner))
       .rejects.toMatchObject({ status: 409 });
     expect(fake.calls.some((call) => call[0] === "rm")).toBe(false);
 
-    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, fake.runner)).resolves.toEqual({
+    await expect(removeManagedVpsComputer(TARGET, [OWNER], { containerName: name, containerId: "d".repeat(64) }, name, fake.runner)).resolves.toEqual({
       removed: true,
       name,
     });
@@ -298,11 +308,11 @@ describe("managed VPS inventory", () => {
     const fake = inventoryRunner([{ id: "e".repeat(64), name }]);
     fake.failRemove(new Error("remote daemon refused the request"));
 
-    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, fake.runner)).rejects.toMatchObject({
+    await expect(removeManagedVpsComputer(TARGET, [OWNER], { containerName: name, containerId: "e".repeat(64) }, name, fake.runner)).rejects.toMatchObject({
       status: 502,
       message: expect.stringContaining("remote daemon refused the request"),
     });
-    const after = await listManagedVpsComputers(CONFIG, [OWNER], fake.runner);
+    const after = await listManagedVpsComputers([TARGET], [OWNER], fake.runner);
     expect(after.instances).toHaveLength(1);
   });
 });

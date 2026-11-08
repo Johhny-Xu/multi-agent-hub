@@ -22,6 +22,7 @@ import {
   saveConfig,
   syncCredentialEnv,
   vpsSshAlias,
+  LEGACY_VPS_ALIAS_ERROR,
   type AppConfig,
 } from "../config.ts";
 import type { InstanceConfigMap, ModelSelection } from "../contracts.ts";
@@ -232,6 +233,9 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
       const currentBoatToken = cfg.box?.token?.trim() ?? "";
       const nextBoatToken = patch.box?.token === undefined ? currentBoatToken : patch.box.token;
       const changingBoatToken = patch.box?.token !== undefined && nextBoatToken !== currentBoatToken;
+      if (patch.vps && "sshAlias" in patch.vps && cfg.vps?.version === 2) {
+        return json(res, 400, { error: LEGACY_VPS_ALIAS_ERROR });
+      }
       const currentVpsAlias = vpsSshAlias(cfg);
       const nextVpsAlias = patch.vps === undefined
         ? currentVpsAlias
@@ -253,7 +257,7 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
 
         if (changingVpsAlias && currentVpsAlias) {
           const inventory = await vps.listManagedVpsComputers(
-            { vps: { sshAlias: currentVpsAlias } },
+            [{ instanceId: currentVpsAlias, sshAlias: currentVpsAlias, revision: "" }],
             managedBoatOwners(),
           );
           if (!inventory.available) {

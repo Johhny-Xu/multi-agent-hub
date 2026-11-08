@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { approvalRow, inboxView, messageRow, questionRow, reportRow, settledRow } from "@/testing/inbox-fixture";
-import { askOf, choiceResponse, choicesOf, closeResponse, listedRows, quickActions, rowsIn, subjectOf, tabCounts } from "./inbox-view";
+import { askOf, choiceResponse, choicesOf, closeResponse, filterInboxView, inboxFixes, listedRows, quickActions, rowsIn, subjectOf, tabCounts } from "./inbox-view";
 
 describe("the inbox's lines", () => {
   it("lists what waits on the person and their news as one list, newest first, and leaves settled lines out", () => {
@@ -48,5 +48,27 @@ describe("a row's actions", () => {
     expect(closeResponse(questionRow)).toMatchObject({ behavior: "answer", dismiss: true });
     expect(closeResponse(approvalRow), "an approval closes as a deny").toMatchObject({ behavior: "deny" });
     expect(choicesOf(approvalRow)).toEqual([]);
+  });
+
+  it("filters debug bot rows when advanced mode is off", () => {
+    const bots = [{ id: "debug-1", name: "hub·traecode" }, { id: "normal-1", name: "Atlas" }];
+    const debugRow = { ...messageRow, id: "r-debug", from: { name: "hub·traecode", botId: "debug-1" } };
+    const view = inboxView([debugRow, messageRow]);
+
+    const filtered = filterInboxView(view, { advanced: false, bots });
+    expect(filtered?.rows.map((r) => r.id)).toEqual([messageRow.id]);
+
+    const kept = filterInboxView(view, { advanced: true, bots });
+    expect(kept?.rows.map((r) => r.id)).toEqual(["r-debug", messageRow.id]);
+  });
+
+  it("filters needs-you fixes when associated exclusively with debug bots in simple mode", () => {
+    const bots = [{ id: "debug-1", name: "hub·traecode" }, { id: "normal-1", name: "Atlas" }];
+    const items = [
+      { kind: "signed-out" as const, id: "fix-1", at: 100, instanceId: "i1", botIds: ["debug-1"] },
+      { kind: "signed-out" as const, id: "fix-2", at: 101, instanceId: "i2", botIds: ["normal-1"] },
+    ];
+    expect(inboxFixes(items, null, { advanced: false, bots }).map((i) => i.id)).toEqual(["fix-2"]);
+    expect(inboxFixes(items, null, { advanced: true, bots }).map((i) => i.id)).toEqual(["fix-1", "fix-2"]);
   });
 });

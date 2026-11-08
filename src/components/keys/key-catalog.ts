@@ -39,7 +39,7 @@ export interface KeyTarget {
 }
 
 export type KeyId =
-  | "openai" | "anthropic" | "xai" | "openrouter" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "opencodeGo" | "opencodeProviders"
+  | "openai" | "anthropic" | "gemini" | "zhipu" | "xai" | "openrouter" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "opencodeGo" | "opencodeProviders"
   | "lmStudio" | "openaiCompat" | "liveCalls" | "liveKey" | "elevenlabs" | "fishAudio" | "geminiTts" | "box" | "vps" | "onePassword" | "composio" | "treg" | "postiz"
   | "jev" | "openrouterHelper" | "workersAi" | "imageOpenai" | "imageGemini" | "imageCustom";
 
@@ -83,6 +83,14 @@ export const KEY_CATALOG: readonly KeyEntry[] = [
     words: ["anthropic", "claude"], mark: provider("claudeAgent", "anthropic"), kind: "key",
     target: { patch: (value, firstKey) => ({ anthropic: { key: value, ...(firstKey && value ? { everyClaudeBot: false } : {}) } }), saved: (config) => flag(config.anthropic),
       placeholder: "sk-ant-…", href: "https://console.anthropic.com/settings/keys", test: "anthropic", analytics: "anthropic", shape: /^sk-ant-/ } },
+  { id: "gemini", section: "ai", labelKey: "keys.gemini.label", purposeKey: "keys.purpose.gemini", name: "Gemini", env: [],
+    words: ["gemini", "google", "google ai studio", "models", "cli"], mark: provider("geminiAgent", "google"), kind: "key",
+    target: { patch: (value) => ({ gemini: { key: value } }), saved: (config) => flag(config.gemini),
+      placeholder: "AIza…", href: "https://aistudio.google.com/api-keys", analytics: "gemini", shape: /^AIza/ } },
+  { id: "zhipu", section: "ai", labelKey: "keys.zhipu.label", purposeKey: "keys.purpose.zhipu", name: "Zhipu", env: [],
+    words: ["zhipu", "bigmodel", "z.ai", "glm", "zcode", "models"], mark: { icon: Server }, kind: "key",
+    target: { patch: (value) => ({ zhipu: { key: value } }), saved: (config) => flag(config.zhipu),
+      placeholder: "…", placeholderKey: "keys.zhipu.placeholder", href: "https://open.bigmodel.cn/usercenter/apikeys", analytics: "zhipu" } },
   { id: "xai", section: "ai", labelKey: "keys.xai.label", purposeKey: "keys.purpose.xai", name: "xAI", env: ["XAI_API_KEY"],
     words: ["xai", "grok", "pictures", "images"], mark: provider("grok", "xai"), kind: "key",
     target: providerKey("xai", { slot: "xaiApiKey", placeholder: "xai-…", href: "https://console.x.ai", test: "xai", analytics: "xai", shape: /^xai-/ }) },

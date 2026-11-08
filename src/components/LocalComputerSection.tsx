@@ -22,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { localizeComputerProblem } from "@/lib/computer-messages";
 import { computerInventoryRequest, jsonPostRequest, type ComputerApiRequest } from "@/lib/computer-requests";
 import { useStore } from "@/state/store";
-import { VpsComputersCard } from "./VpsComputersCard"; import { KeysLink } from "./keys/KeysLink";
+import { VpsComputersCard, type VpsInstanceSection } from "./VpsComputersCard"; import { KeysLink } from "./keys/KeysLink";
 
 type Action = "pull" | "run" | "start" | "stop" | "remove" | "recreate";
 
@@ -112,6 +112,8 @@ function waitForCloudDeleteRefresh(delayMs: number): Promise<void> {
 
 export interface VpsComputerInventoryInstance {
   name: string;
+  instanceId: string;
+  containerId: string;
   state: "created" | "restarting" | "running" | "removing" | "paused" | "exited" | "dead" | "unknown";
   /** The SSH alias whose host holds this computer. */
   vpsAlias: string;
@@ -311,9 +313,10 @@ export function vpsComputerRemovePlan(instance: VpsComputerInventoryInstance): C
         ? t("vm.confirm.orphanVps", { id: shortId })
         : t("vm.confirm.ownedVps", { name: instance.ownerName ?? "" }),
     }),
-    request: jsonPostRequest(`/api/computers/vps/${encodeURIComponent(instance.name)}/remove`, {
+    request: jsonPostRequest(`/api/computers/vps/${encodeURIComponent(instance.instanceId)}/remove`, {
       confirmName: instance.name,
-      alias: instance.vpsAlias,
+      containerName: instance.name,
+      containerId: instance.containerId,
     }),
   };
 }
@@ -783,6 +786,7 @@ export function LocalComputerSection() {
   const cloudInventoryRef = useRef<CloudComputerInventoryInstance[]>([]);
   const cloudOverridesRef = useRef<CloudPostActionOverrides>({});
   const [vpsInventory, setVpsInventory] = useState<VpsComputerInventoryInstance[]>([]);
+  const [vpsSections, setVpsSections] = useState<VpsInstanceSection[]>([]);
   const [vpsConfigured, setVpsConfigured] = useState<boolean | null>(null);
   const [vpsAliases, setVpsAliases] = useState<string[]>([]);
   const [vpsLoading, setVpsLoading] = useState(true);
@@ -839,8 +843,9 @@ export function LocalComputerSection() {
     const response = await fetch(...computerInventoryRequest("vps", signal));
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error ?? t("vm.err.vpsInventory", { code: response.status }));
-    const payload = body as VpsComputerInventoryPayload;
+    const payload = body as VpsComputerInventoryPayload & { sections?: VpsInstanceSection[] };
     setVpsInventory(Array.isArray(payload.instances) ? payload.instances : []);
+    setVpsSections(Array.isArray(payload.sections) ? payload.sections : []);
     setVpsConfigured(payload.configured === true);
     setVpsAliases(Array.isArray(payload.vpsAliases) ? payload.vpsAliases : []);
     setVpsUnavailableReason(
@@ -1198,6 +1203,7 @@ export function LocalComputerSection() {
 
       <VpsComputersCard
         instances={vpsInventory}
+        sections={vpsSections}
         configured={vpsConfigured}
         aliases={vpsAliases}
         loading={vpsLoading}

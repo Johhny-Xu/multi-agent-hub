@@ -11,9 +11,19 @@ export type Destination = Surface | "off" | undefined;
 
 export type ComputerWant = "cloud" | "vm" | "local" | "off" | undefined;
 
+export interface MountedComputerDescriptor {
+  name: string;
+  targetId: string;
+  provider: "boat" | "vps-ssh" | "simular-box";
+  serverName: "computer";
+  tools: { shell?: string; readFile?: string; writeFile?: string; openUrl?: string; screenshot?: string; copyIn?: string; copyOut?: string };
+  sharedDesktop: boolean;
+}
+
 export interface MountedSurfaces {
   computer: Surface | null;
   browser: boolean;
+  computerDescriptor?: MountedComputerDescriptor;
 }
 
 export interface SurfacePlan {
@@ -212,10 +222,21 @@ function ownComputerSentence(lent: ReadonlyArray<{ name: string; platform: LentP
 
 /** Built from what was actually mounted, never from the setting, so the model is only told about tools it can call.
  * `ownComputer`: on a Cloud home, the person's lent computers (newest first) when this turn has the shared-computer tools. */
+/** Native shell and file tools run where OpenMausBot runs, never on a remote computer. */
+export function hostToolsNote(computer: string, descriptor?: MountedComputerDescriptor): string {
+  if (!descriptor) {
+    return ` Only the computer server's tools reach ${computer}. Your own built-in shell, file and code tools run on the OpenMausBot host, and shell or computer tools from any other MCP server (another provider's cloud desktop, for example) run on that provider's machine — neither is ${computer}. Run anything the user wants done on ${computer} with the computer server's exec tool (copy_to_computer / copy_from_computer move files), and never present output from any other tool as coming from ${computer}.`;
+  }
+  const owned = Object.values(descriptor.tools).filter((name): name is string => typeof name === "string");
+  const list = owned.length ? ` (${owned.join(", ")})` : "";
+  return ` Only the computer server's tools${list} reach ${computer}, this turn's ${descriptor.provider === "simular-box" ? "simular-box" : descriptor.provider === "vps-ssh" ? "self-hosted VPS" : "cloud"} computer. Your own built-in bash, file and code tools run on the OpenMausBot host, and tools from any other MCP server run on that server, not on ${computer}; never present their output as coming from ${computer}.`;
+}
+
 export function surfacePrompt(
   mounted: MountedSurfaces,
   opts: { pinned?: Surface | null; note?: string; canSelect?: boolean; cloudHome?: boolean; botOpened?: boolean;
-    ownComputer?: ReadonlyArray<{ name: string; platform: LentPlatform | null }> } = {},
+    ownComputer?: ReadonlyArray<{ name: string; platform: LentPlatform | null }>;
+    computerDescriptor?: MountedComputerDescriptor } = {},
 ): string {
   const reportBack = opts.botOpened && !opts.canSelect;
   const computer = mounted.computer ? surfaceLabel(mounted.computer) : null;
@@ -234,6 +255,11 @@ export function surfacePrompt(
     text =
       " Everything you do on screen happens in the built-in browser tab; there is no desktop computer this turn, but your own shell and file tools still work for ordinary code and file tasks, if you have them. If you need the user to sign in, tell them it is in the Browser tab of the Screen panel.";
   }
+  if (computer && opts.computerDescriptor?.provider === "simular-box") {
+    text += ` This turn's cloud computer is ${opts.computerDescriptor.name}, provided by simular-box${opts.computerDescriptor.sharedDesktop ? " (it may be shared with another bot)" : ""}.`;
+  }
+  // E15: a bot told to work on a remote place used its own Bash, which runs on the host, and reported the host's output as that place's.
+  if (computer && mounted.computer !== "local") text += hostToolsNote(computer, opts.computerDescriptor);
   if (text) text += RESTATE_SENTENCE + (opts.canSelect
     ? SURFACE_AUTHORITY.replace(ASK_TO_SWITCH, "inspect connected choices with select_computer and select the requested available place; on a pending result end this turn so OpenMausBot can reconnect the correct tools and continue the original request")
     : reportBack ? SURFACE_AUTHORITY.replace(ASK_TO_SWITCH, REPORT_BACK) : SURFACE_AUTHORITY);

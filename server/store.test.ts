@@ -2796,4 +2796,128 @@ describe("soul", () => {
       rmSync(folder, { force: true });
     }
   });
+
+  describe("archive and deletion lifecycle and audit", () => {
+    it("distinguishes active, archived, deleted, and missing bots", () => {
+      const store = new Store(selection);
+      const active = store.createBot({ name: "Active Bot" });
+      const archived = store.createBot({ name: "Archived Bot" });
+      store.patchBot(archived.id, { hidden: true });
+      const doomed = store.createBot({ name: "Doomed Bot" });
+      store.deleteBot(doomed.id);
+
+      expect(store.botStatus(active.id)).toBe("active");
+      expect(store.isArchived(active.id)).toBe(false);
+      expect(store.isDeleted(active.id)).toBe(false);
+      expect(store.botAvailability(active.id)).toEqual({ ok: true, bot: active });
+
+      expect(store.botStatus(archived.id)).toBe("archived");
+      expect(store.isArchived(archived.id)).toBe(true);
+      expect(store.isDeleted(archived.id)).toBe(false);
+      expect(store.botAvailability(archived.id)).toEqual({ ok: false, status: "archived", error: "The addressed agent is archived" });
+
+      expect(store.botStatus(doomed.id)).toBe("deleted");
+      expect(store.isArchived(doomed.id)).toBe(false);
+      expect(store.isDeleted(doomed.id)).toBe(true);
+      expect(store.botAvailability(doomed.id)).toEqual({ ok: false, status: "deleted", error: "The addressed agent was deleted" });
+
+      expect(store.botStatus("missing-bot-id")).toBe("missing");
+      expect(store.isArchived("missing-bot-id")).toBe(false);
+      expect(store.isDeleted("missing-bot-id")).toBe(false);
+      expect(store.botAvailability("missing-bot-id")).toEqual({ ok: false, status: "missing", error: "The addressed agent does not exist" });
+    });
+
+    it("persists deleted bot identifiers across Store reload", () => {
+      const store = new Store(selection);
+      const bot = store.createBot({ name: "Temporary" });
+      store.deleteBot(bot.id);
+      expect(store.botStatus(bot.id)).toBe("deleted");
+
+      const reloaded = new Store(selection);
+      expect(reloaded.botStatus(bot.id)).toBe("deleted");
+      expect(reloaded.isDeleted(bot.id)).toBe(true);
+    });
+
+    it("records archive audit on hidden transitions and ignores idempotent or unrelated changes", () => {
+      const store = new Store(selection);
+      const bot = store.createBot({ name: "Audited Bot" });
+      const events: any[] = [];
+      store.onChange((e) => { if (e.type === "bot.archive_audit") events.push(e.record); });
+
+      // 1. Archiving: false -> true
+      const beforeTime = Date.now();
+      store.patchBot(bot.id, { hidden: true });
+      expect(store.isArchived(bot.id)).toBe(true);
+
+      const audits = store.getArchiveAudits(bot.id);
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        botId: bot.id,
+        previousHidden: false,
+        nextHidden: true,
+        entry: "internal:store",
+        actor: "internal",
+      });
+      expect(audits[0].at).toBeGreaterThanOrEqual(beforeTime);
+      expect(events).toHaveLength(1);
+
+      // 2. Idempotent archive: true -> true (no new audit)
+      store.patchBot(bot.id, { hidden: true });
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(1);
+
+      // 3. Unrelated field change: no hidden in patch (no new audit)
+      store.patchBot(bot.id, { name: "Renamed Bot" });
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(1);
+
+      // 4. Unarchiving: true -> false
+      store.patchBot(bot.id, { hidden: false }, { entry: "manual", actor: "admin@example.com", request: { requestId: "req-123" } });
+      expect(store.isArchived(bot.id)).toBe(false);
+      const unarchivedAudits = store.getArchiveAudits(bot.id);
+      expect(unarchivedAudits).toHaveLength(2);
+      expect(unarchivedAudits[1]).toMatchObject({
+        botId: bot.id,
+        previousHidden: true,
+        nextHidden: false,
+        entry: "manual",
+        actor: "admin@example.com",
+        request: { requestId: "req-123" },
+      });
+
+      // 5. Audit records persist across Store reload
+      const reloaded = new Store(selection);
+      expect(reloaded.getArchiveAudits(bot.id)).toHaveLength(2);
+    });
+
+    it("does not write audit record when durable save fails", () => {
+      const store = new Store(selection);
+      const bot = store.createBot({ name: "Save Failure Bot" });
+      const saveSpy = vi.spyOn(store as any, "saveBots").mockImplementationOnce(() => {
+        throw new Error("disk failure");
+      });
+      expect(() => store.patchBot(bot.id, { hidden: true })).toThrow("disk failure");
+      saveSpy.mockRestore();
+
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(0);
+    });
+
+    it("audits unarchiving when an archived bot is promoted to Chief of Staff", () => {
+      const store = new Store(selection);
+      const bot = store.createBot({ name: "Specialist" });
+      store.patchBot(bot.id, { hidden: true });
+      expect(store.getArchiveAudits(bot.id)).toHaveLength(1);
+
+      // Promoting to chief of staff unhides the bot and audits it
+      store.setChiefOfStaff(bot.id);
+      expect(store.bot(bot.id)?.hidden).toBe(false);
+      const audits = store.getArchiveAudits(bot.id);
+      expect(audits).toHaveLength(2);
+      expect(audits[1]).toMatchObject({
+        botId: bot.id,
+        previousHidden: true,
+        nextHidden: false,
+        entry: "internal:setChiefOfStaff",
+        actor: "internal",
+      });
+    });
+  });
 });

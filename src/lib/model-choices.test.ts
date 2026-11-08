@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { InstanceInfo, ModelSelection } from "@/state/store";
-import { choiceIsSelected, modelChoices, withTypedModels } from "./model-choices";
+import { choiceIsSelected, modelChoices, pickableModels, withTypedModels } from "./model-choices";
 import { simpleModelMenu } from "./simple-model-menu";
 
 vi.hoisted(() => {
@@ -27,6 +27,39 @@ describe("Antigravity model choices", () => {
       "Gemini 3.8 Flash · Low", "Gemini 3.8 Flash · Medium", "Gemini 3.8 Flash · High",
     ]);
     expect(choiceIsSelected(choices[1]!, { instanceId: "google", model: "gemini-3.8-flash", variant: "medium" })).toBe(true);
+  });
+});
+
+describe("models hidden from the pickers", () => {
+  const engine = {
+    instanceId: "zcode", driverKind: "zcodeAgent", displayName: "ZCode",
+    snapshot: { state: "available", authenticated: true },
+    models: { default: "glm-5.3-flash", options: [
+      { id: "glm-5.3-flash", label: "GLM-5.3-Flash" },
+      { id: "glm-5.3", label: "GLM-5.3", hidden: true },
+      { id: "stealth", label: "stealth" },
+    ] },
+  } as InstanceInfo;
+
+  it("leaves a hidden model out, unless it is already selected", () => {
+    expect(pickableModels(engine).map((model) => model.id)).toEqual(["glm-5.3-flash", "stealth"]);
+    expect(pickableModels(engine, ["glm-5.3"]).map((model) => model.id))
+      .toEqual(["glm-5.3-flash", "glm-5.3", "stealth"]);
+  });
+
+  it("the simple menu keeps the current and the bot's model visible", () => {
+    const selection: ModelSelection = { instanceId: "zcode", model: "glm-5.3" };
+    const menu = simpleModelMenu({ instances: [engine], listed: [engine], selection,
+      bot: { name: "Pepper", selection, follows: false }, query: "", expanded: new Set(), probing: new Set(), loading: false });
+    expect(menu.groups[0]!.body.kind === "models" ? menu.groups[0]!.body.total : 0).toBe(3);
+
+    const other = simpleModelMenu({ instances: [engine], listed: [engine], selection: { instanceId: "zcode", model: "stealth" },
+      bot: { name: "Pepper", selection: { instanceId: "zcode", model: "stealth" }, follows: false }, query: "",
+      expanded: new Set(["zcode"]), probing: new Set(), loading: false });
+    const otherRows = other.groups[0]!.body.kind === "models" ? other.groups[0]!.body.rows.map((row) => row.option.id) : [];
+    expect(otherRows).not.toContain("glm-5.3");
+    expect(otherRows).toContain("glm-5.3-flash");
+    expect(other.groups[0]!.body.kind === "models" ? other.groups[0]!.body.total : 0).toBe(2);
   });
 });
 

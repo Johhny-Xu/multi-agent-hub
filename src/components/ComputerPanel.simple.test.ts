@@ -431,7 +431,7 @@ describe("Where the bot works", () => {
   it("offers the one next action for the chosen place, and a User is told to ask an Admin", () => {
     fixture.config = { ...fixture.config, box: { configured: false } };
     const rendered = render(makeBot({ computer: "cloud" }));
-    expect(placeLine(rendered)).toBe("Bots here can get their own cloud desktops from Boat, a paid service.Connect Boat");
+    expect(placeLine(rendered)).toBe("Bots here can get their own cloud desktops from Boat, a paid service, or an added VPS.Connect Boat");
     (rendered.nodes.find((node) => node.props["data-testid"] === "place-action")!.props.onClick as () => void)();
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "connections" });
 
@@ -439,7 +439,7 @@ describe("Where the bot works", () => {
     fixture.values = [];
     phaseIndex = -1;
     const user = render(makeBot({ computer: "cloud" }));
-    expect(placeLine(user)).toBe("Bots here can get their own cloud desktops from Boat, a paid service. Ask an Admin to change it.");
+    expect(placeLine(user)).toBe("Bots here can get their own cloud desktops from Boat, a paid service, or an added VPS. Ask an Admin to change it.");
     expect(user.nodes.some((node) => node.props["data-testid"] === "place-action")).toBe(false);
   });
 

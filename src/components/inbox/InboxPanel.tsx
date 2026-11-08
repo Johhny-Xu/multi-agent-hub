@@ -6,17 +6,22 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
 import { closeInbox, readInboxLine, readInboxRow, useInboxPanel, useInboxView, widenInbox } from "@/state/inbox";
+import { useAdvancedMode } from "@/lib/interface-mode";
+import { useStore } from "@/state/store";
 import { InboxActive } from "./InboxActive";
 import { InboxReading } from "./InboxReading";
 import { InboxRowItem } from "./InboxRow";
 import { matchesSearch, nextAfter } from "./inbox-answer";
-import { listedRows, waitingCount } from "./inbox-view";
+import { filterInboxView, listedRows, waitingCount } from "./inbox-view";
 import { useInboxActions } from "./use-inbox-actions";
 
 const BAR_BUTTON = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink pointer-coarse:size-9";
 
 export function InboxPanel() {
-  const view = useInboxView();
+  const rawView = useInboxView();
+  const advanced = useAdvancedMode();
+  const { state } = useStore();
+  const view = filterInboxView(rawView, { advanced, bots: state.bots });
   const panel = useInboxPanel();
   const phone = useMediaQuery(PHONE_LAYOUT);
   const { run } = useInboxActions(view);

@@ -9,6 +9,8 @@ export interface BoatOffer {
   body: string;
   /** From this time (epoch ms) the offer shows nowhere; null while Boat has named no end date. */
   until: number | null;
+  /** multi-agent-hub: the owner turned the Boat credit promotion off everywhere (2026-11-08). */
+  hidden?: boolean;
 }
 
 export const BOAT_OFFER: BoatOffer = {
@@ -17,9 +19,11 @@ export const BOAT_OFFER: BoatOffer = {
   subject: "MausBot introduced me: $50 Boat credit",
   body: "Hi Boat team,\n\nMausBot introduced me to Boat. I'm on the $___ plan.\nMy Boat account email: ___\n\nThanks!",
   until: null,
+  hidden: true,
 };
 
 export function boatOfferRuns(now: number, offer: BoatOffer = BOAT_OFFER): boolean {
+  if (offer.hidden) return false;
   return offer.until === null || now < offer.until;
 }
 

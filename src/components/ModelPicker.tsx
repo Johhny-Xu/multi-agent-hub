@@ -8,7 +8,7 @@ import type { EffortLevel } from "../../shared/wire";
 import { filterCustomModels, partitionCustomModels, suggestedModels } from "@/lib/custom-models";
 import { configuredModelInstances, isClaudeAccount, isCustomOnly, modelsAwaitEngine, SIGN_IN_FAMILY_LABEL, signInFamily } from "@/lib/engine-rail";
 import { modelName, simpleModelMenu, variantSuffix } from "@/lib/simple-model-menu";
-import { choiceIsSelected, modelChoices, modelSelectionForPick, takesTypedModels, withTypedModels, type ModelChoice } from "@/lib/model-choices";
+import { choiceIsSelected, modelChoices, modelSelectionForPick, pickableModels, takesTypedModels, withTypedModels, type ModelChoice } from "@/lib/model-choices";
 export { modelSelectionForPick } from "@/lib/model-choices";
 import { pickerPlacement, type PickerPlacement } from "@/lib/picker-placement";
 import type { Typeahead } from "@/lib/menu-keys";
@@ -364,7 +364,9 @@ export function ModelPicker({
   };
 
   const openFor = (instance: InstanceInfo | undefined) => {
-    const official = instance?.models.options.filter((option) => !option.custom) ?? [];
+    const official = instance
+      ? pickableModels(instance, [selection.instanceId === instance.instanceId ? selection.model : undefined]).filter((option) => !option.custom)
+      : [];
     const selectedIsCustom = instance?.models.options.some(
       (option) => option.id === selection.model && option.custom,
     );
@@ -404,7 +406,7 @@ export function ModelPicker({
     if (isClaudeAccount(instance)) lastClaudeIdRef.current = instance.instanceId;
     if (signInFamily(instance) === "openai") lastOpenaiIdRef.current = instance.instanceId;
     setRailId(instance.instanceId);
-    const official = instance.models.options.filter((option) => !option.custom);
+    const official = pickableModels(instance, [selection.instanceId === instance.instanceId ? selection.model : undefined]).filter((option) => !option.custom);
     setPane(isCustomOnly(instance) || (official.length === 0 && !instance.snapshot.chatgptPlan) ? "custom" : "main");
     resetList();
   };
@@ -496,8 +498,12 @@ export function ModelPicker({
     close(true);
   } : undefined;
 
-  const official = railInstance ? modelChoices(railInstance, railInstance.models.options.filter((option) => !option.custom)) : [];
-  const custom = railInstance?.models.options.filter((option) => option.custom) ?? [];
+  const pickableForRail = railInstance ? pickableModels(railInstance, [
+    selection.instanceId === railInstance.instanceId ? selection.model : undefined,
+    profile.modelSelection.instanceId === railInstance.instanceId ? profile.modelSelection.model : undefined,
+  ]) : [];
+  const official = railInstance ? modelChoices(railInstance, pickableForRail.filter((option) => !option.custom)) : [];
+  const custom = pickableForRail.filter((option) => option.custom);
   const currentModel = selection.instanceId === railInstance?.instanceId
     ? official.find((option) => choiceIsSelected(option, selection))?.id : undefined;
   const filteredOfficial = filterCustomModels(official, query);

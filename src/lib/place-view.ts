@@ -48,7 +48,7 @@ export function placeFacts(input: {
   bot: Pick<Bot, "name" | "modelSelection" | "toolScope" | "cloudBackend">;
   place: PlaceFacts["place"];
   seat: PlaceSeat;
-  config: (FeatureFlagConfig & Pick<ConfigStatus, "box">) | null | undefined;
+  config: (FeatureFlagConfig & Pick<ConfigStatus, "box" | "vps">) | null | undefined;
   instances: InstanceInfo[];
   local?: PlaceFacts["local"];
   computer?: PlaceFacts["computer"];
@@ -56,13 +56,16 @@ export function placeFacts(input: {
 }): PlaceFacts {
   const { bot, config, seat } = input;
   const instance = input.instances.find((candidate) => candidate.instanceId === bot.modelSelection.instanceId);
+  const hasBoat = Boolean(config?.box?.configured || config?.box?.included);
+  const hasVps = Boolean((config?.vps?.instances?.length ?? 0) > 0 || config?.vps?.configured);
   return {
     place: input.place,
     server: seat.server,
     bot: bot.name,
     plan: seat.plan,
     boat: config?.box?.configured ? (config.box.included ? "included" : "own-key") : "none",
-    backend: bot.cloudBackend === "vps" ? "vps" : "box",
+    backend: bot.cloudBackend === "vps" || (!hasBoat && hasVps) ? "vps" : "box",
+    hasVps,
     engine: engineFacts(instance, bot.modelSelection.model),
     toolsAllowComputer: canUseMcpServer(bot.toolScope, "computer"),
     browserOn: builtInBrowserEnabled(config) && browserAvailable(config),

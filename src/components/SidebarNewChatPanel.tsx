@@ -3,6 +3,8 @@ import { Plus, Users, X } from "lucide-react";
 import { openBot, useStore, type Bot } from "@/state/store";
 import { rankByName } from "@/lib/palette-rank";
 import { useShowThreads } from "@/lib/thread-preferences";
+import { useAdvancedMode } from "@/lib/interface-mode";
+import { isDebugBot } from "@/lib/debug-zone";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -82,7 +84,8 @@ export function SidebarNewChatPanel({
     selectedRef.current?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
-  const bots = rankByName(state.bots.filter((bot) => !bot.hidden), query);
+  const advanced = useAdvancedMode();
+  const bots = rankByName(state.bots.filter((bot) => !bot.hidden && (advanced || !isDebugBot(bot))), query);
   const actions = [
     ...(onNewBot ? [{ key: "bot", icon: <Plus size={16} />, label: t("sidebar.newChat.createBot"), run: onNewBot }] : []),
     { key: "group", icon: <Users size={16} />, label: t("sidebar.newChat.createGroup"), run: onNewGroup },

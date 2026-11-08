@@ -79,8 +79,8 @@ export function FallbackChain({ bot, onChange }: { bot: Bot; onChange: (fallback
     (bot.modelSelection.instanceId === instanceId && bot.modelSelection.model === model)
     || chain.some((entry, at) => at !== except && entry.instanceId === instanceId && entry.model === model);
   const offeredBy = (instance: InstanceInfo | undefined) =>
-    instance?.models.options.filter((model) => !model.orgBlocked && (instance.snapshot.authenticated !== false || model.custom)) ?? [];
-  // The default too must be one the account offers now: not blocked, and signed in unless it is a custom model.
+    instance?.models.options.filter((model) => !model.orgBlocked && model.hidden !== true && (instance.snapshot.authenticated !== false || model.custom)) ?? [];
+  // The default too must be one the account offers now: not blocked or hidden, and signed in unless it is a custom model.
   const defaultOffered = (instance: InstanceInfo) => {
     const listed = instance.models.options.find((model) => model.id === instance.models.default);
     return listed ? offeredBy(instance).includes(listed) : instance.snapshot.authenticated !== false;

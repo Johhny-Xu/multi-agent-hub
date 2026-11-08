@@ -102,7 +102,7 @@ describe("Settings rail groups", () => {
     expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(["you", "ai", "computers", "account"]);
     const ids = SECTIONS.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toHaveLength(21); // 16 + the shared Skills library (AI group) + Image generation (AI) + Logins (Devices) + Import and a team's Bot access (Account)
+    expect(ids).toHaveLength(22); // 16 + the shared Skills library (AI group) + Image generation (AI) + Logins (Devices) + Import and a team's Bot access (Account)
     for (const entry of SECTIONS) expect(SETTINGS_GROUPS.map((group) => group.id)).toContain(entry.group);
   });
 
@@ -114,7 +114,7 @@ describe("Settings rail groups", () => {
     expect(rail(html)).toEqual({
       you: ["general", "appearance", "companion"],
       ai: ["engines", "connections", "decisionModel", "imageGeneration"],
-      computers: ["desktopWorkspaces", "computer", "logins"],
+      computers: ["desktopWorkspaces", "computer", "logins", "hub"],
       account: ["cloudAccount", "organization", "usage", "backups", "import", "experimental"],
     });
     expect(html).toContain('<optgroup label="AI">');
@@ -144,9 +144,11 @@ describe("Settings rail groups", () => {
     expect(rail(render())).toEqual({ you: ["appearance", "companion"], computers: ["desktopWorkspaces"] });
   });
 
-  it("keeps the old deep links landing on the same page", () => {
+  it("lands the old deep links where their cards now live", () => {
     vi.stubGlobal("window", { ogb: { environments: {} } });
     fixture.section = "remote" as AppSettingsSection;
+    expect(render()).toContain('data-settings-section="desktopWorkspaces" aria-current="page"');
+    vi.stubGlobal("window", { ogb: {} });
     expect(render()).toContain('data-settings-section="companion" aria-current="page"');
     fixture.section = "connections";
     expect(render()).toContain('data-settings-section="connections" aria-current="page"');

@@ -91,7 +91,7 @@ export function deciderFailureText(result: { reason: string; status?: number }, 
   return key ? t(key) : t("decider.error.other");
 }
 
-const COMING_SOON: LocaleKey[] = ["decider.jobs.browserClicks", "decider.jobs.toolSelection", "decider.jobs.placement"];
+const COMING_SOON: LocaleKey[] = ["decider.jobs.toolSelection", "decider.jobs.placement"];
 
 export function DecisionModelSettings() {
   const { state, dispatch } = useStore();
@@ -105,6 +105,8 @@ export function DecisionModelSettings() {
   const ownKey = configured && !included && !usingShared;
   const enabled = decider?.enabled ?? false;
   const roomRouting = decider?.jobs.roomRouting ?? true;
+  const browserAutomation = decider?.jobs.browserAutomation ?? false;
+  const browserTextModel = decider?.jobs.browserTextModel ?? true;
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -112,6 +114,16 @@ export function DecisionModelSettings() {
   const [error, setError] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<{ ok: boolean; text: string } | null>(null);
   const [models, setModels] = useState<ModelList | null>(null);
+  const initialProxy = decider?.proxyUrl ?? "";
+  const [proxyUrl, setProxyUrl] = useState(initialProxy);
+  const [prevProxy, setPrevProxy] = useState(decider?.proxyUrl);
+  const [savingProxy, setSavingProxy] = useState(false);
+  const [proxyError, setProxyError] = useState<string | null>(null);
+
+  if (decider?.proxyUrl !== prevProxy) {
+    setPrevProxy(decider?.proxyUrl);
+    setProxyUrl(decider?.proxyUrl ?? "");
+  }
   const draft = value.trim();
   const clearing = !draft && ownKey;
   const keyHint: LocaleKey | null = !openrouter || included
@@ -170,6 +182,34 @@ export function DecisionModelSettings() {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveProxy = async () => {
+    if (savingProxy) return;
+    setSavingProxy(true);
+    setProxyError(null);
+    try {
+      const result = await api<{ ok: boolean; proxyUrl?: string }>("/api/decider/proxy", {
+        method: "PUT",
+        body: JSON.stringify({ proxyUrl }),
+      });
+      if (result.proxyUrl !== undefined) {
+        setProxyUrl(result.proxyUrl);
+      }
+      if (state.config?.decider) {
+        dispatch({
+          type: "config",
+          config: {
+            ...state.config,
+            decider: { ...state.config.decider, proxyUrl: result.proxyUrl },
+          },
+        });
+      }
+    } catch (cause) {
+      setProxyError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSavingProxy(false);
     }
   };
 
@@ -341,6 +381,38 @@ export function DecisionModelSettings() {
         )}
       </Card>
 
+      {!openrouter && (
+        <Card title={t("decider.jev.proxy.title")}>
+          <p className="mb-2 text-[12px] leading-relaxed text-ink-secondary">
+            {t("decider.jev.proxy.help")}
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={proxyUrl}
+              onChange={(event) => { setProxyError(null); setProxyUrl(event.target.value); }}
+              onKeyDown={(event) => event.key === "Enter" && void saveProxy()}
+              disabled={savingProxy}
+              placeholder="http://127.0.0.1:7890"
+              aria-label={t("decider.jev.proxy.title")}
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
+            />
+            <button
+              type="button"
+              data-testid="decider-proxy-save"
+              onClick={() => void saveProxy()}
+              disabled={savingProxy || proxyUrl === initialProxy}
+              className="flex w-[72px] shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-control py-2 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingProxy ? <Loader2 size={13} className="animate-spin" /> : <><Check size={13} />{t("common.save")}</>}
+            </button>
+          </div>
+          {proxyError && <p role="alert" className="mt-1 text-[12px] text-danger">{proxyError}</p>}
+        </Card>
+      )}
+
       <Card title={t("decider.jobs.title")}>
         <ul className="flex flex-col">
           <li className="flex items-start justify-between gap-4 py-2">
@@ -354,6 +426,40 @@ export function DecisionModelSettings() {
               checked={enabled && roomRouting}
               disabled={!enabled || switching}
               onClick={() => void patch({ jobs: { roomRouting: !roomRouting } })}
+              className="cursor-pointer"
+            />
+          </li>
+          <li className="flex items-start justify-between gap-4 border-t border-hairline/40 py-2">
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium text-ink">{t("decider.jobs.browserAutomation")}</div>
+              <div className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("decider.jobs.browserAutomationDetail")}</div>
+              {!openrouter && !configured && (
+                <div className="mt-1 text-[11px] text-ink-secondary">{t("decider.jobs.browserAutomationMissingJev")}</div>
+              )}
+              {openrouter && (
+                <div className="mt-1 text-[11px] text-ink-secondary">{t("decider.jobs.browserAutomationJevOnly")}</div>
+              )}
+            </div>
+            <Switch
+              data-testid="decider-job-browserAutomation"
+              aria-label={t("decider.jobs.browserAutomation")}
+              checked={enabled && browserAutomation}
+              disabled={!enabled || switching || openrouter}
+              onClick={() => void patch({ jobs: { browserAutomation: !browserAutomation } })}
+              className="cursor-pointer"
+            />
+          </li>
+          <li className="flex items-start justify-between gap-4 border-t border-hairline/40 py-2">
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium text-ink">{t("decider.jobs.browserTextModel")}</div>
+              <div className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("decider.jobs.browserTextModelDetail")}</div>
+            </div>
+            <Switch
+              data-testid="decider-job-browserTextModel"
+              aria-label={t("decider.jobs.browserTextModel")}
+              checked={enabled && browserTextModel}
+              disabled={!enabled || switching || openrouter}
+              onClick={() => void patch({ jobs: { browserTextModel: !browserTextModel } })}
               className="cursor-pointer"
             />
           </li>

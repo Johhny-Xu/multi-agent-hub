@@ -96,6 +96,8 @@ describe("computer inventory request wiring", () => {
     const vpsName = "openmausbot-vps-current-123456abcdef";
     const vps = confirmComputerAction(vpsComputerRemovePlan({
       name: vpsName,
+      instanceId: "alpha",
+      containerId: "a".repeat(64),
       state: "running",
       vpsAlias: "alpha-vps",
       ownerBotId: "current-owner",
@@ -129,11 +131,11 @@ describe("computer inventory request wiring", () => {
       },
     ]);
     expect(vps).toEqual([
-      `/api/computers/vps/${vpsName}/remove`,
+      "/api/computers/vps/alpha/remove",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ confirmName: vpsName, alias: "alpha-vps" }),
+        body: JSON.stringify({ confirmName: vpsName, containerName: vpsName, containerId: "a".repeat(64) }),
       },
     ]);
     expect(confirm).toHaveBeenCalledTimes(3);
@@ -442,6 +444,8 @@ describe("cloud computer inventory UI", () => {
 describe("VPS computer inventory UI", () => {
   const ownedVps: VpsComputerInventoryInstance = {
     name: "openmausbot-vps-current-123456abcdef",
+    instanceId: "production",
+    containerId: "b".repeat(64),
     state: "running",
     vpsAlias: "production-vps",
     ownerBotId: "current-owner",
@@ -470,6 +474,8 @@ describe("VPS computer inventory UI", () => {
         ownedVps,
         {
           name: orphanName,
+          instanceId: "production",
+          containerId: "c".repeat(64),
           state: "exited",
           vpsAlias: "production-vps",
           ownerBotId: null,
@@ -515,7 +521,7 @@ describe("VPS computer inventory UI", () => {
     expect(disconnected.match(/No VPS is set up yet/g)).toHaveLength(1);
     expect(disconnected).not.toContain("aria-busy");
     expect(renderCard({ unavailableReason: "SSH host cannot be reached" })).toContain("SSH host cannot be reached");
-    expect(renderCard()).toContain("No MausBot desktops found on your VPS");
+    expect(renderCard()).toContain("No desktop on this SSH host yet.");
   });
 
   it("tags computers on more than one server and keeps reachable rows beside the warning", () => {

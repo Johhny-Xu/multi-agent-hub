@@ -109,6 +109,10 @@ export interface InstanceConfig {
   enabled?: boolean;
   /** Left out of every model list, picker and automatic choice; the engine itself (its CLI and sign-in) is untouched. */
   hidden?: boolean;
+  /** Refuses new bots and hub dispatch to this engine; bots already on it keep working. */
+  disabled?: boolean;
+  /** Model ids kept out of the pickers. A model selected before it was hidden still shows as the current one. */
+  hiddenModels?: string[];
   /** Picker group over the driver's default: an `openai-compat` instance on a provider's own key is "api". */
   access?: EngineAccess;
   config?: unknown;
@@ -180,6 +184,8 @@ export interface SendTurnInput {
       platform?: "darwin" | "linux" | "win32";
       generation?: string;
       scope?: "local-computer";
+      /** The computer is a saved external MCP connection, so it never inherits the host CUA's preapproval. */
+      origin?: { kind: "external-mcp"; server: string };
     };
     /** Loopback URL and turn-scoped bearer for the engine's hook helper; hooks observe and inject context, never decide state. */
     hooks?: { url: string; token: string };
@@ -191,8 +197,6 @@ export interface SendTurnInput {
     browser?: { command: string; args: string[]; env: Record<string, string> };
     /** The Data tools' MCP proxy: DuckDB on this bot's own database. */
     data?: { command: string; args: string[]; env: Record<string, string> };
-    /** The HighLevel CRM tools' MCP proxy: the harness holds the tokens and the per-bot verdict. */
-    highlevel?: { command: string; args: string[]; env: Record<string, string> };
     /** The Email tools' MCP proxy: the harness holds the passwords and the per-bot verdict. */
     email?: { command: string; args: string[]; env: Record<string, string> };
     /** The paired phone's app tools' MCP proxy: the harness holds the jobs and the per-bot verdict. */
@@ -262,8 +266,8 @@ export interface ProviderAdapter {
     browserMcp?: boolean;
     /** The driver can mount the Data tools MCP. */
     dataMcp?: boolean;
-    /** The driver can mount the HighLevel CRM tools MCP, and the Email tools the same way. */
-    highlevelMcp?: boolean;
+    /** The driver can mount the Email tools MCP. */
+    emailMcp?: boolean;
     /** The driver can mount the phone apps MCP. */
     deviceMcp?: boolean;
     /** The engine accepts images in the prompt (gates composer paste). */
@@ -319,6 +323,10 @@ export interface ProviderAdapter {
   /** The local process running this thread's engine, while there is one: a long tool call's own processes are under it. */
   enginePid?(threadId: ThreadId): number | undefined;
   stopAll(): Promise<void>;
+  /** Closes every engine process that is between turns, and one that is running a turn as soon as that turn ends. A
+   * CLI reads its sign-in when it starts, so a process started before an account switch keeps the old account until
+   * it exits. Returns how many closed at once. */
+  closeIdleSessions?(): number;
   onEvent(listener: RuntimeEventListener): () => void;
   /** `ping` sends one tool-less forked request without touching the thread's session; `hold` keeps the live session open until
    * `until` (epoch ms; null releases) and says whether one exists. `compact` summarizes the conversation with the engine's own

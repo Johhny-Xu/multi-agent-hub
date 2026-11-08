@@ -151,3 +151,26 @@ it("a package runner's first check waits for its download; any other program's k
   for (const command of ["uvx", "npx", "/opt/homebrew/bin/uvx", "npx.cmd"]) expect(startCheckTimeout(command), command).toBe(120_000);
   for (const command of ["node", "python3", "/usr/local/bin/my-server"]) expect(startCheckTimeout(command), command).toBeUndefined();
 });
+
+it("excludes computer sources from ordinary custom mounts", async () => {
+  const { cfg, host } = setup();
+  cfg.vps = {
+    version: 2,
+    instances: [{ id: "boxed", name: "Boxed", kind: "mcp", adapter: "simular-box", mcpServer: "notes", boxId: "box-1" }],
+  };
+  host.boot();
+  await host.health.settled();
+  expect(host.mounted(PAUL)).not.toHaveProperty("notes");
+  expect(Object.keys(host.mounted(IRIS))).not.toContain("notes");
+});
+
+it("keeps an unavailable computer source excluded", async () => {
+  const { cfg, host } = setup();
+  cfg.vps = {
+    version: 2,
+    instances: [{ id: "boxed", name: "Boxed", kind: "mcp", adapter: "simular-box", mcpServer: "missing", boxId: "box-1" }],
+  };
+  host.boot();
+  await host.health.settled();
+  expect(Object.keys(host.mounted(IRIS))).not.toContain("missing");
+});

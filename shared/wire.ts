@@ -195,6 +195,9 @@ export interface WireTask extends InboxTask {
    * select_computer), not a person, so the next Works on change moves it.
    * Derived at projection, never stored. */
   surfaceAuto?: true;
+  /** Why Auto put this conversation here: "本机 CPU 92%，转云端 VPS instabox". Present only
+   * with an Auto pin. Derived at projection, never stored on the wire. */
+  placementReason?: string;
   usage?: TaskUsage;
   /** Prompt-cache keep-warm status for this thread, derived at projection;
    * absent when no window is open. */
@@ -325,6 +328,8 @@ export interface WireBot extends DefaultBotFields, BotAccessFields {
   /** This bot's own SSH config alias for its managed VPS computer; absent
    * means the default server from Settings → API keys. */
   vpsAlias?: string;
+  /** The managed VPS instance this bot uses on the cloud surface. */
+  vpsInstanceId?: string;
   /** where its tasks run their tools; absent = each task's own folder. Its .claude/settings.json (else the bot folder's) applies in all. */
   cwd?: string;
   /** Auto mode: the bot approves its own tool permissions. */
@@ -381,7 +386,7 @@ export interface WireBot extends DefaultBotFields, BotAccessFields {
    * none. Grants never travel in shareable exports. */
   connectorTools?: Record<string, ConnectorToolGrant>;
   connectorScopes?: { apps: Record<string, "read" | "write"> };
-  outbound?: { policy: "ask" | "allow"; dailyCap: number };
+  outbound?: { policy: "ask" | "allow" };
   /** Which of a paired phone's apps this bot may use; absent: every bot may use what the phone allows (shared/phone-apps.ts). */
   phoneApps?: import("./phone-apps.ts").PhoneApps;
   /** Ordered backups used only by opt-in, pre-prompt startup recovery. */
@@ -738,6 +743,8 @@ export interface SecretRequestCardData {
   helpUrl: string;
   /** A custom secret's use: "ref", OpenMausBot's own tools only; "file", the bot's commands; "email", the Email connector, never a bot. */ delivery?: SecretDelivery | "email";
   /** An email card: the mailbox it is for, when known; off a phone the person can change it on the card. */ address?: string;
+  /** An email card: the incoming server that took the password, once it did, while sending is still being checked. */
+  emailReading?: string;
   /** A custom secret: the bot's own words on why; `description` adds what the bot may do with it, and helpUrl is empty. */
   reason?: string;
   /** A file secret's Local VM target key, when the asking turn ran in one. */

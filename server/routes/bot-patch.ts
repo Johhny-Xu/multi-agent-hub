@@ -1,3 +1,4 @@
+import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import { approvalModeFor, isApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";
@@ -15,12 +16,13 @@ import type { BrowserRuntime } from "../browser-runtime.ts";
 import type { CacheKeepWarm } from "../cache-keepwarm.ts";
 import { cloudBackendChangeError, vpsBotAliasChangeError, vpsLeftBehindNotice, VPS_BOT_ALIAS_CHANGE_ERROR, VPS_BOT_ALIAS_LIFECYCLE_ERROR, VPS_BOT_ALIAS_RESOURCES_ERROR } from "../cloud-backend.ts";
 import * as composio from "../composio.ts";
-import { isValidSshAlias, type AppConfig } from "../config.ts";
+import { LEGACY_VPS_ALIAS_ERROR, type AppConfig } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import type { createApprovalModeSupport } from "../harness-capabilities.ts";
 import type { ProviderRegistry } from "../harness/registry.ts";
 import type { hostedModelPolicy } from "../hosted-models.ts";
 import { MAX_MCP_SERVERS, mcpServerNameError } from "../mcp-registry.ts";
+import { isVpsInstanceId, vpsInstanceById } from "../../shared/vps.ts";
 import type { MemoryUpkeep } from "../memory-upkeep.ts";
 import { phoneAppsFor } from "../phones/access.ts";
 import { profileSnapshot } from "../profile-revision.ts";
@@ -29,9 +31,9 @@ import { memberBotPatchViolation, requestSource, type RequestAuth } from "../req
 import type { RoutineManager } from "../routines.ts";
 import type { SessionRegistry } from "../sessions.ts";
 import { parseConnectorTools } from "../connector-tools.ts";
-import { sectionKey, type BotRecord, type GroupRecord, type Store, type TaskRecord } from "../store.ts";
+import { sectionKey, type BotRecord, type GroupRecord, type Store, type TaskRecord, type BotArchiveAuditContext } from "../store.ts";
 import * as vps from "../vps-computer.ts";
-import { vpsSshAliasForBot } from "../vps-hosts.ts";
+import { resolveVpsTarget, vpsSshAliasForBot } from "../vps-hosts.ts";
 import { refusalBody, userError } from "../user-errors.ts";
 import { pinnedClientThreadGuard } from "./pinned-client-thread.ts";
 import type { ModelSelectionCheck } from "./bots-create.ts";
@@ -125,7 +127,18 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       if (body.pinned !== undefined && typeof body.pinned !== "boolean") {
         return json(res, 400, { error: "pinned must be true or false" });
       }
-      const existingBot = store.bot(m[1]); const defaultBotRefused = defaultBotPatchRefusal(existingBot, body);
+      if (body.hidden !== undefined && typeof body.hidden !== "boolean") {
+        return json(res, 400, { error: "hidden must be true or false" });
+      }
+      const existingBot = store.bot(m[1]);
+      if (!existingBot) {
+        const status = store.botStatus ? store.botStatus(m[1]) : "missing";
+        if (status === "deleted") {
+          return json(res, 404, { error: "The addressed agent was deleted", status: "deleted" });
+        }
+        return json(res, 404, { error: "no such bot", status: "missing" });
+      }
+      const defaultBotRefused = defaultBotPatchRefusal(existingBot, body);
       if (defaultBotRefused) return json(res, 400, { error: defaultBotRefused });
       const rawSelection = (body as Record<string, unknown>).modelSelection;
       if (body.threadId !== undefined && rawSelection === undefined) {
@@ -263,7 +276,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       }
       if (body.outbound !== undefined) {
         const policy = normalizeOutboundPolicy(body.outbound);
-        if (!policy) return json(res, 400, { error: "outbound must be { policy: ask | allow, dailyCap: 1..1000 }" });
+        if (!policy) return json(res, 400, { error: "outbound must be { policy: ask | allow }" });
         patch.outbound = policy;
       }
       if (body.composio !== undefined) {
@@ -385,14 +398,18 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         patch.autoStartVps = body.autoStartVps;
       }
       if (body.vpsAlias !== undefined) {
-        if (body.vpsAlias === null || body.vpsAlias === "") {
-          patch.vpsAlias = undefined;
-        } else if (isValidSshAlias(body.vpsAlias)) {
-          patch.vpsAlias = body.vpsAlias;
+        if (cfg.vps?.version === 2) return json(res, 400, { error: LEGACY_VPS_ALIAS_ERROR });
+        if (body.vpsAlias === null || body.vpsAlias === "") patch.vpsAlias = undefined;
+        else if (typeof body.vpsAlias === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(body.vpsAlias)) patch.vpsAlias = body.vpsAlias;
+        else return json(res, 400, { error: "vpsAlias must be a simple SSH config alias" });
+      }
+      if (body.vpsInstanceId !== undefined) {
+        if (body.vpsInstanceId === null || body.vpsInstanceId === "") {
+          patch.vpsInstanceId = undefined;
+        } else if (isVpsInstanceId(body.vpsInstanceId) && vpsInstanceById(cfg.vps, body.vpsInstanceId)) {
+          patch.vpsInstanceId = body.vpsInstanceId;
         } else {
-          return json(res, 400, {
-            error: "vpsAlias must be a simple SSH config alias (letters, numbers, dot, dash, or underscore), or null to use the default server",
-          });
+          return json(res, 400, { error: "vpsInstanceId must name an existing VPS computer, or be null" });
         }
       }
       if (body.chiefOfStaff !== undefined && typeof body.chiefOfStaff !== "boolean") {
@@ -402,43 +419,55 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         const backendError = cloudBackendChangeError(Boolean(existingBot?.busy), activeVpsThreads.has(m[1]));
         if (backendError) return json(res, 409, { error: backendError });
       }
-      // Moving a bot to another server is refused while its own computer still lives on the old one.
-      // Resolved hosts, not raw text: pinning a bot to the server it already uses moves nothing.
       let vpsLeftOn: string | null = null;
-      if (body.vpsAlias !== undefined && existingBot &&
-          vpsSshAliasForBot(cfg, { ...existingBot, vpsAlias: patch.vpsAlias as string | undefined }) !== vpsSshAliasForBot(cfg, existingBot)) {
-        // The scan awaits on SSH; a turn can start or another PATCH can land mid-scan, so every attempt
-        // re-reads the bot first and the scan only counts when the re-read after it is unchanged.
-        const VPS_ALIAS_MOVE_ATTEMPTS = 3;
-        for (let attempt = 1; attempt <= VPS_ALIAS_MOVE_ATTEMPTS; attempt++) {
+      if (body.vpsAlias !== undefined && existingBot && cfg.vps?.version !== 2) {
+        const nextAlias = vpsSshAliasForBot(cfg, { ...existingBot, vpsAlias: patch.vpsAlias as string | undefined });
+        if (nextAlias !== vpsSshAliasForBot(cfg, existingBot)) {
           const current = store.bot(m[1]);
           if (!current) return json(res, 404, { error: "no such bot" });
-          // A concurrent PATCH may have already made this move; persisting the same host moves nothing.
-          if (vpsSshAliasForBot(cfg, { ...current, vpsAlias: patch.vpsAlias as string | undefined }) === vpsSshAliasForBot(cfg, current)) break;
           const aliasError = vpsBotAliasChangeError(Boolean(current.busy), activeVpsThreads.has(m[1]));
           if (aliasError) return json(res, 409, { error: aliasError });
-          // A Start or Remove still running on the old host would land after the scan, like the default alias's guard.
           if (vps.vpsLifecycleBusy()) return json(res, 409, { error: VPS_BOT_ALIAS_LIFECYCLE_ERROR });
-          // Primitives, not the record: the store hands out its live object and patchBot mutates it in place.
-          const scannedVpsAlias = current.vpsAlias;
+          const previousAlias = vpsSshAliasForBot(cfg, current);
+          const inventory = previousAlias ? await vps.listManagedVpsComputers(
+            [{ instanceId: previousAlias, sshAlias: previousAlias, revision: "" }],
+            [{ botId: current.id, name: current.name, inUse: false }],
+          ) : null;
+          if (inventory && !inventory.available) {
+            vpsLeftOn = previousAlias;
+          } else if (inventory?.instances.some((instance) => instance.name === vps.vpsContainerName(current.id))) {
+            return json(res, 409, { error: VPS_BOT_ALIAS_RESOURCES_ERROR });
+          }
+        }
+      }
+      if (body.vpsInstanceId !== undefined && existingBot && patch.vpsInstanceId !== existingBot.vpsInstanceId) {
+        const VPS_INSTANCE_MOVE_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= VPS_INSTANCE_MOVE_ATTEMPTS; attempt++) {
+          const current = store.bot(m[1]);
+          if (!current) return json(res, 404, { error: "no such bot" });
+          if (patch.vpsInstanceId === current.vpsInstanceId) break;
+          const aliasError = vpsBotAliasChangeError(Boolean(current.busy), activeVpsThreads.has(m[1]));
+          if (aliasError) return json(res, 409, { error: aliasError });
+          if (vps.vpsLifecycleBusy()) return json(res, 409, { error: VPS_BOT_ALIAS_LIFECYCLE_ERROR });
+          const scannedInstanceId = current.vpsInstanceId;
           const scannedBusy = current.busy;
           const scannedName = current.name;
-          const currentAlias = vpsSshAliasForBot(cfg, current);
-          // Scanned with this bot as the only owner: the guard only ever cares about its own container,
-          // and naming the owner keeps a legacy unlabeled container visible to the check.
-          const inventory = currentAlias ? await vps.listManagedVpsComputers(
-            { vps: { sshAlias: currentAlias } },
-            [{ botId: current.id, name: scannedName, inUse: false }],
-          ) : null;
+          const previous = resolveVpsTarget(cfg, current);
+          const inventory = previous.ok && previous.target.instance.kind === "ssh"
+            ? await vps.listManagedVpsComputers([{
+              instanceId: previous.target.instance.id,
+              sshAlias: previous.target.instance.sshAlias,
+              revision: previous.target.revision,
+            }], [{ botId: current.id, name: scannedName, inUse: false }])
+            : null;
           const settled = store.bot(m[1]);
           if (!settled) return json(res, 404, { error: "no such bot" });
-          if (settled.vpsAlias !== scannedVpsAlias || settled.busy !== scannedBusy || activeVpsThreads.has(m[1]) || vps.vpsLifecycleBusy()) {
-            if (attempt === VPS_ALIAS_MOVE_ATTEMPTS) return json(res, 409, { error: VPS_BOT_ALIAS_CHANGE_ERROR });
+          if (settled.vpsInstanceId !== scannedInstanceId || settled.busy !== scannedBusy || activeVpsThreads.has(m[1]) || vps.vpsLifecycleBusy()) {
+            if (attempt === VPS_INSTANCE_MOVE_ATTEMPTS) return json(res, 409, { error: VPS_BOT_ALIAS_CHANGE_ERROR });
             continue;
           }
           if (!inventory) break;
-          // A server that cannot answer never keeps the bot: it moves, and the answer says what may be left there.
-          if (!inventory.available) vpsLeftOn = currentAlias;
+          if (!inventory.available) vpsLeftOn = previous.ok && previous.target.instance.kind === "ssh" ? previous.target.instance.sshAlias : null;
           else if (inventory.instances.some((instance) => instance.name === vps.vpsContainerName(current.id))) {
             return json(res, 409, { error: VPS_BOT_ALIAS_RESOURCES_ERROR });
           }
@@ -600,8 +629,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       // the bot they constrain. An originless, session-less loopback caller may loosen only while every bot is idle.
       const loosened: string[] = [];
       const trustPatch = patch as Pick<Partial<BotRecord>, "outbound" | "connectorScopes" | "fallback">;
-      if (body.outbound !== undefined && trustPatch.outbound?.policy === "allow" &&
-          (existingBot?.outbound?.policy !== "allow" || trustPatch.outbound.dailyCap > existingBot.outbound.dailyCap)) loosened.push("outbound");
+      if (body.outbound !== undefined && trustPatch.outbound?.policy === "allow" && existingBot?.outbound?.policy !== "allow") loosened.push("outbound");
       if (body.connectorScopes !== undefined && existingBot?.connectorScopes &&
           (!trustPatch.connectorScopes || Object.entries(trustPatch.connectorScopes.apps).some(([slug, scope]) =>
             !existingBot.connectorScopes!.apps[slug] || (scope === "write" && existingBot.connectorScopes!.apps[slug] === "read")))) loosened.push("connectorScopes");
@@ -713,16 +741,39 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
           (freshBrowserBot.busy || browserRuntime.heldBy(currentBrowserSession(freshBrowserBot.id, freshBrowserBot.browserProfile)))) {
         return json(res, 409, { error: "Stop the bot and release browser control before changing its profile." });
       }
+      let actor = "unknown";
+      if (auth.kind === "session") {
+        actor = auth.session?.email || (auth.session?.id ? `session:${auth.session.id}` : "user");
+      } else if (auth.kind === "loopback") {
+        if (auth.companionDevice) actor = `companion:${auth.companionDevice}`;
+        else actor = "unknown";
+      }
+      const requestId = typeof req.headers["x-request-id"] === "string"
+        ? req.headers["x-request-id"]
+        : typeof req.headers["x-correlation-id"] === "string"
+          ? req.headers["x-correlation-id"]
+          : undefined;
+      const via = auth.kind === "session" ? auth.via : "loopback";
+      const remoteAddress = req.socket?.remoteAddress;
+      const auditContext: BotArchiveAuditContext = {
+        entry: "api:bot-patch",
+        actor,
+        request: {
+          ...(requestId ? { requestId } : {}),
+          via,
+          ...(remoteAddress ? { remoteAddress } : {}),
+        },
+      };
       if (profile.patch.soul !== undefined) {
         if (freshBrowserBot) assertTeamComputerChangeIdle(freshBrowserBot, { ...freshBrowserBot, ...patch } as BotRecord);
       // Runtime fields keep their fail-closed order; only the profile fields commit atomically.
         const runtimePatch = { ...patch };
         for (const field of Object.keys(profile.patch)) delete runtimePatch[field];
-        if (Object.keys(runtimePatch).length) store.patchBot(m[1], runtimePatch);
+        if (Object.keys(runtimePatch).length) store.patchBot(m[1], runtimePatch, auditContext);
         bot = store.patchBotProfile(m[1], profile.patch);
       } else {
         if (freshBrowserBot) assertTeamComputerChangeIdle(freshBrowserBot, { ...freshBrowserBot, ...patch } as BotRecord);
-        bot = store.patchBot(m[1], patch);
+        bot = store.patchBot(m[1], patch, auditContext);
       }
       if (!bot) return json(res, 404, { error: "no such bot" });
       if (body.applyToAllThreads === true && requestedApprovalMode !== "custom") store.setAllThreadApprovalMode(bot.id, requestedApprovalMode);
@@ -753,7 +804,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         broadcast({ kind: "sections", sections: store.sections });
         audienceChanged();
       }
-      return json(res, 200, { bot: wireBot(store.bot(bot.id)!),
+      return json(res, 200, { bot: wireBot(store.bot(bot.id)!), status: bot.hidden ? "archived" : "active",
         ...(vpsLeftOn ? { notice: vpsLeftBehindNotice("Moved", vpsLeftOn, vps.vpsContainerName(bot.id)) } : {}) });
     }
     return PASS;

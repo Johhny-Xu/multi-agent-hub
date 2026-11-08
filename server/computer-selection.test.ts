@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pickComputer, type ComputerOption } from "./computer-selection.ts";
+import { chosenPlace, pickComputer, type ComputerOption } from "./computer-selection.ts";
 
 const option = (surface: ComputerOption["surface"], state: "ready" | "asleep" | "missing" | "off"): ComputerOption => ({
   surface,
@@ -47,5 +47,73 @@ describe("which computer select_computer picks", () => {
     expect(pickComputer([option("cloud", "missing"), option("vm", "asleep")], "auto", "off", false).option?.surface).toBe("vm");
     expect(pickComputer([option("cloud", "missing"), option("vm", "missing")], "auto", "off", false).option?.surface).toBe("vm");
     expect(pickComputer([option("cloud", "off")], "auto", "off", false).option).toBeUndefined();
+  });
+
+  it("on Auto starts a stopped private desktop before waking or creating a cloud computer", () => {
+    // A stopped or recreatable private desktop reads as canCreate; a sleeping cloud computer as canStart.
+    expect(pickComputer([option("cloud", "asleep"), option("vm", "missing")], "auto", "off", false).option?.surface).toBe("vm");
+    expect(pickComputer([option("cloud", "asleep"), option("vm", "off")], "auto", "off", false).option?.surface).toBe("cloud");
+  });
+
+  it("on Auto keeps the place the person chose while it can be had, even when another computer is up, and moves only when asked", () => {
+    const options = [option("cloud", "ready"), option("vm", "missing"), option("browser", "ready")];
+    expect(pickComputer(options, "auto", "off", false, "vm")).toMatchObject({ option: { surface: "vm" }, current: false });
+    expect(pickComputer([option("cloud", "asleep"), option("vm", "ready")], "auto", "off", false, "cloud").option?.surface).toBe("cloud");
+    expect(pickComputer(options, "cloud", "off", false, "vm").option?.surface).toBe("cloud");
+    // A chosen place that cannot be had at all leaves Auto its usual pick.
+    expect(pickComputer([option("cloud", "missing"), option("browser", "off")], "auto", "off", false, "browser").option?.surface).toBe("cloud");
+    expect(pickComputer(options, "auto", "vm", true, "vm")).toMatchObject({ option: { surface: "vm" }, current: true });
+  });
+});
+
+describe("Auto placement by the host's load", () => {
+  const low = { pressure: "low" as const, reason: "本机 CPU 12%，可用内存 70%" };
+  const high = { pressure: "high" as const, reason: "本机 CPU 92%", cloudName: "VPS instabox" };
+
+  it("keeps a calm machine's work here, over a ready cloud computer", () => {
+    const picked = pickComputer([option("cloud", "ready"), option("local", "ready")], "auto", "cloud", false, undefined, low);
+    expect(picked.option?.surface).toBe("local");
+    expect(picked.placementReason).toBe("本机 CPU 12%，可用内存 70%，留在本地");
+  });
+
+  it("sends a busy machine's work to a ready or creatable cloud computer", () => {
+    for (const cloud of ["ready", "missing"] as const) {
+      const picked = pickComputer([option("cloud", cloud), option("local", "ready")], "auto", "local", false, undefined, high);
+      expect(picked.option?.surface).toBe("cloud");
+      expect(picked.placementReason).toBe("本机 CPU 92%，转云端 VPS instabox");
+    }
+  });
+
+  it("stays here when the cloud cannot be had, and says so", () => {
+    const picked = pickComputer([option("cloud", "off"), option("local", "ready")], "auto", "off", false, undefined, high);
+    expect(picked.option?.surface).toBe("local");
+    expect(picked.placementReason).toBe("本机 CPU 92%，云端不可用，留在本地");
+  });
+
+  it("never overrides a place the person chose", () => {
+    const options = [option("cloud", "ready"), option("local", "ready")];
+    const pinnedCloud = pickComputer(options, "auto", "local", false, "cloud", low);
+    expect(pinnedCloud.option?.surface).toBe("cloud");
+    expect(pinnedCloud.placementReason).toBeUndefined();
+    const pinnedLocal = pickComputer(options, "auto", "cloud", false, "local", high);
+    expect(pinnedLocal.option?.surface).toBe("local");
+    expect(pinnedLocal.placementReason).toBeUndefined();
+  });
+
+  it("only speaks for Auto: a named place ignores the load", () => {
+    const picked = pickComputer([option("cloud", "ready"), option("local", "ready")], "local", "cloud", false, undefined, high);
+    expect(picked.option?.surface).toBe("local");
+    expect(picked.placementReason).toBeUndefined();
+  });
+});
+
+describe("the place a person chose", () => {
+  it("is their pin in the conversation, else the bot's Works on, and never a pin a turn made or Auto/Off", () => {
+    expect(chosenPlace({ surface: "vm", surfaceSource: "user" }, "cloud")).toBe("vm");
+    expect(chosenPlace({ surface: "vm" }, undefined)).toBe("vm");
+    expect(chosenPlace({ surface: "cloud", surfaceSource: "auto" }, "vm")).toBe("vm");
+    expect(chosenPlace({ surface: "cloud", surfaceSource: "auto" }, undefined)).toBeUndefined();
+    expect(chosenPlace(undefined, "off")).toBeUndefined();
+    expect(chosenPlace(undefined, "browser")).toBe("browser");
   });
 });

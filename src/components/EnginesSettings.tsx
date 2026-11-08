@@ -4,12 +4,14 @@ import { Check, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { api, useStore, type InstanceInfo } from "@/state/store";
 import { EngineCard, EngineSections, RefreshEngines, engineReady } from "./EngineLibrary";
 import { cn } from "@/lib/cn";
+import { sortEngines } from "@/lib/engine-sort";
 import { useMenuMotion } from "./MenuMotion";
 import { t } from "@/lib/i18n";
 import { ApiKeyEngineManage, EngineSetup, EngineUpdateNotice, EngineWarningNotice, isApiKeyEngine } from "./EngineSetup";
 import { AppCopyNotice } from "./EngineAppCopy";
 import { forgetAppCopySwitches } from "@/state/engine-install";
 import { AccountsCard, AddAccount, accountGroupOf, accountsReady, type AccountGroup } from "./EngineAccounts";
+import { ServiceAccounts } from "./ServiceAccounts";
 import { ClaudeEndpoints } from "./ClaudeEndpoints";
 import { DEVICE_SIGN_IN_COPY, deviceSignInProvider } from "./DeviceSignIn";
 import { AntigravityFreeSpace } from "./AntigravityFreeSpace";
@@ -183,6 +185,44 @@ function CustomPicker({ instance, cliDefault, onClose, onSaved }: {
   );
 }
 
+/** Which of an engine's models every picker offers. A model already chosen still shows as the current one. */
+export function ModelVisibility({ instance }: { instance: InstanceInfo }) {
+  const { refreshInstances } = useStore();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const official = instance.models.options.filter((option) => !option.custom);
+  if (official.length === 0) return null;
+  const toggle = (id: string, show: boolean) => {
+    if (saving) return;
+    const hidden = new Set(official.filter((option) => option.hidden === true).map((option) => option.id));
+    if (show) hidden.delete(id);
+    else hidden.add(id);
+    setSaving(true);
+    setError(null);
+    api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "PATCH", body: JSON.stringify({ hiddenModels: [...hidden] }) })
+      .then(() => Promise.resolve(refreshInstances()).catch(() => {}))
+      .catch((e) => setError(e.message))
+      .finally(() => setSaving(false));
+  };
+  return (
+    <details data-model-visibility={instance.instanceId} className="mt-4 border-t border-hairline/40 pt-3">
+      <summary className="cursor-pointer rounded-md py-1 text-[12px] font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.modelsShown")}</summary>
+      <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.modelsShownHint")}</p>
+      <div className="mt-2 flex flex-col gap-1">
+        {official.map((option) => (
+          <label key={option.id} className="flex items-center gap-2 text-[12px] text-ink">
+            <input type="checkbox" checked={option.hidden !== true} disabled={saving}
+              data-model-shown={`${instance.instanceId}/${option.id}`}
+              onChange={(event) => toggle(option.id, event.target.checked)} />
+            <span className="min-w-0 truncate">{option.label}</span>
+          </label>
+        ))}
+      </div>
+      {error && <div role="alert" className="mt-1 text-[12px] text-danger">{error}</div>}
+    </details>
+  );
+}
+
 /** The executable behind an engine: its path, Claude's self-update, and a reset to the default. */
 function EngineAdvanced({ instance }: { instance: InstanceInfo }) {
   const { refreshInstances } = useStore();
@@ -220,6 +260,17 @@ function EngineAdvanced({ instance }: { instance: InstanceInfo }) {
     setSwitching(true);
     setError(null);
     api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) })
+      .then(() => Promise.resolve(refreshInstances()).catch(() => {}))
+      .catch((e) => setError(e.message))
+      .finally(() => setSwitching(false));
+  };
+
+  /** New bots and hub dispatch skip a disabled engine; bots already on it keep working. */
+  const setDisabled = (disabled: boolean) => {
+    if (switching || updating) return;
+    setSwitching(true);
+    setError(null);
+    api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "PATCH", body: JSON.stringify({ disabled }) })
       .then(() => Promise.resolve(refreshInstances()).catch(() => {}))
       .catch((e) => setError(e.message))
       .finally(() => setSwitching(false));
@@ -292,6 +343,16 @@ function EngineAdvanced({ instance }: { instance: InstanceInfo }) {
             {t("engines.hide")}
           </button>
           <button
+            type="button"
+            data-disable-engine={instance.instanceId}
+            onClick={() => setDisabled(instance.disabled !== true)}
+            disabled={switching || updating}
+            title={t("engines.disableHint")}
+            className={cn("shrink-0 text-[12px] disabled:opacity-50", instance.disabled === true ? "font-medium text-accent hover:underline" : "text-ink-secondary hover:text-ink")}
+          >
+            {instance.disabled === true ? t("engines.enable") : t("engines.disable")}
+          </button>
+          <button
             onClick={() => setOpen((v) => !v)}
             disabled={updating}
             aria-expanded={open}
@@ -318,6 +379,7 @@ function EngineAdvanced({ instance }: { instance: InstanceInfo }) {
             />
           </div>
         )}
+        <ModelVisibility instance={instance} />
       </details>
   );
 }
@@ -386,6 +448,7 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
 
   return (
     <EngineCard instance={instance} bare={bare}>
+      {instance.disabled === true && <p data-engine-disabled={instance.instanceId} className="mb-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.disableHint")}</p>}
       {policyNote}
       {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed />}
       {engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
@@ -400,6 +463,7 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
             <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
           )
       )}
+      <ServiceAccounts instance={instance} />
       {instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
       {instance.driverKind === "antigravityAgent" && (
         <div className="mt-3 space-y-3">
@@ -426,8 +490,16 @@ function SimpleEngines({ rows, isReady, renderEngine, more }: {
   more: { id: string; open: boolean; onToggle: () => void };
 }) {
   const [opened, setOpened] = useState<string | null>(null);
-  const featured = rows.filter((instance) => isReady(instance) || instance.authentication !== undefined);
-  const others = rows.filter((instance) => !featured.includes(instance));
+  // The order the rest of the app uses: ready first, then signed in, then by name. No per-engine timestamp reaches
+  // the window, so both time keys are left out and each group falls back to its name.
+  const ordered = sortEngines(rows.map((instance) => ({
+    instance,
+    name: instance.displayName,
+    ready: isReady(instance),
+    signedIn: instance.snapshot.authenticated === true,
+  }))).map((entry) => entry.instance);
+  const featured = ordered.filter((instance) => isReady(instance) || instance.authentication !== undefined);
+  const others = ordered.filter((instance) => !featured.includes(instance));
   return (
     <>
       <SettingsGroup label={t("settings.simple.ai.yours")} actions={<RefreshEngines />}>

@@ -1,10 +1,10 @@
-import { chmodSync, existsSync, readFileSync, mkdirSync, rmSync, statSync, unlinkSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, readFileSync, mkdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path"; import { isDeepStrictEqual } from "node:util";
 
 import { OwnedFile, writeFileAtomic } from "./atomic.ts"; import { saveSoon } from "./save-batch.ts"; import { discardNativeLog } from "./drivers/native.ts";
 import { commitRegistryChange, keptRevocation, saveRegistryFor, touchesPermissions } from "./registry-save.ts";
-import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts"; import { grantScopedApps } from "../shared/connector-scopes.ts";
-import { reorderStable } from "../shared/bot-order.ts";
+import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts"; import { grantScopedApps } from "../shared/connector-scopes.ts"; import { dropRetiredApps } from "./retired-apps.ts";
+import { reorderStable } from "../shared/bot-order.ts"; import { trimOutboundPolicy } from "../shared/outbound.ts";
 import { botOwner, chiefConflict, chiefScope, ownerEmail } from "../shared/bot-owner.ts";
 import { ensureSections, readSections, changeEmptySection } from "./section-context.ts";
 import type { TeamComputers } from "./team-computers.ts";
@@ -78,12 +78,14 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
   lastContextModel?: string;
   /** Absent (legacy) may be a person's choice: only an "auto" pin yields to a Works on change. */
   surfaceSource?: "user" | "auto";
+  /** Why an Auto turn put this conversation where it is: "本机 CPU 92%，转云端 VPS instabox". */
+  placementReason?: string;
   /** Epoch ms a person last wrote here: never a teammate, routine, webhook, the bot itself or a Slack relay. */
   askedAt?: number;
 }
 
-export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt";
-export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel";
+export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextFloor" | "lastContextModel" | "surfaceSource" | "placementReason" | "askedAt";
+export type TaskWireDerivedKeys = "surfaceAuto" | "placementReason" | "followsBotModel";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
 type AssertExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 type AssertSameKeys<A, B> = [keyof A] extends [keyof B] ? ([keyof B] extends [keyof A] ? true : never) : never;
@@ -94,9 +96,10 @@ export const taskWireProjectionIsExact: TaskWireProjectionIsExact = true;
 export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask {
   const { resumeCursors: _resumeCursors, lastInstanceId: _lastInstanceId, handedMessages: _handedMessages,
     appliedCompactionId: _appliedCompactionId, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
-    surfaceSource, askedAt: _askedAt, ...stored } = task;
+    surfaceSource, placementReason, askedAt: _askedAt, ...stored } = task;
   const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined };
-  return surfaceSource === "auto" && wire.surface !== undefined ? { ...wire, surfaceAuto: true } : wire;
+  if (surfaceSource !== "auto" || wire.surface === undefined) return wire;
+  return { ...wire, surfaceAuto: true, ...(placementReason ? { placementReason } : {}) };
 }
 
 const ASK_NOW = { approvalMode: "ask" as const, autoApprove: false, alwaysAllow: [] as string[] };
@@ -104,7 +107,7 @@ const ASK_NOW = { approvalMode: "ask" as const, autoApprove: false, alwaysAllow:
 const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
-  "routineRunId", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "setupRequest", "botApi", "outside",
+  "routineRunId", "surface", "surfaceSource", "placementReason", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "setupRequest", "botApi", "outside",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 
@@ -123,6 +126,32 @@ function persistedPin<T extends { pinned?: boolean }>(task: T): T {
 
 export const ACTIVITY_BUSY: ReadonlySet<BotActivity> = new Set(["working", "waiting-on-you", "no-signal"]);
 
+export interface BotArchiveAuditRecord {
+  botId: string;
+  at: number;
+  previousHidden: boolean;
+  nextHidden: boolean;
+  entry: string;
+  actor: string;
+  request?: {
+    requestId?: string;
+    correlationId?: string;
+    via?: string;
+    remoteAddress?: string;
+  };
+}
+
+export interface BotArchiveAuditContext {
+  entry?: string;
+  actor?: string;
+  request?: {
+    requestId?: string;
+    correlationId?: string;
+    via?: string;
+    remoteAddress?: string;
+  };
+}
+
 export type StoreChange =
   | { type: "sections" }
   | { type: "message"; threadId: string; message: Message }
@@ -131,6 +160,7 @@ export type StoreChange =
   | { type: "thread.deleted"; threadId: string }
   | { type: "bot"; botId: string }
   | { type: "bot.deleted"; botId: string }
+  | { type: "bot.archive_audit"; record: BotArchiveAuditRecord }
   /** The fleet was reordered as a whole; the broadcast carries every id in its new place. */
   | { type: "bots.order" }
   | { type: "group"; groupId: string }
@@ -192,6 +222,8 @@ export const botWireProjectionIsExact: BotWireProjectionIsExact = true;
 
 const BOTS_FILE = join(DATA_DIR, "bots.json");
 const GROUPS_FILE = join(DATA_DIR, "groups.json");
+const DELETED_BOTS_FILE = join(DATA_DIR, "deleted-bots.json");
+const BOT_ARCHIVE_AUDIT_FILE = join(DATA_DIR, "bot-archive-audit.jsonl");
 const THREAD_MODEL_COPIES_CLEARED = join(DATA_DIR, "thread-model-copies-cleared");
 const ASKED_AT_FILLED = join(DATA_DIR, "asked-at-filled");
 
@@ -298,6 +330,8 @@ export class Store {
   private readonly botsFile = new OwnedFile(BOTS_FILE, { mode: 0o600 }); private readonly groupsFile = new OwnedFile(GROUPS_FILE, { mode: 0o600 });
   /** Clearing this slot must not clear a concurrently running task's activity. */
   private legacyActivities = new Map<string, BotActivity>();
+  private deletedBotIds = new Set<string>();
+  private archiveAudits: BotArchiveAuditRecord[] = [];
 
   constructor(
     defaultSelection: () => ModelSelection,
@@ -328,6 +362,19 @@ export class Store {
     } catch {
       this.groups = [];
     }
+    try {
+      const text = readFileSync(DELETED_BOTS_FILE, "utf8");
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) this.deletedBotIds = new Set(parsed);
+    } catch {
+      this.deletedBotIds = new Set();
+    }
+    try {
+      const text = readFileSync(BOT_ARCHIVE_AUDIT_FILE, "utf8");
+      this.archiveAudits = text.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    } catch {
+      this.archiveAudits = [];
+    }
     this.rememberSections([...this.bots, ...this.groups].map((record) => record.section));
     let botsMigrated = false;
     const browserProfileAliases = loadBrowserProfileIdAliases();
@@ -336,7 +383,7 @@ export class Store {
     for (const b of this.bots) {
       if (b.busy || (b.activity !== undefined && b.activity !== "idle")) botsMigrated = true;
       b.busy = false;
-      b.activity = "idle"; if (grantScopedApps(b)) botsMigrated = true;
+      b.activity = "idle"; if (dropRetiredApps(b)) botsMigrated = true; if (grantScopedApps(b)) botsMigrated = true; if (trimOutboundPolicy(b)) botsMigrated = true;
       if (typeof b.soul !== "string") {
         b.soul = "";
         botsMigrated = true;
@@ -359,6 +406,10 @@ export class Store {
       }
       if (b.cloudBackend !== undefined && b.cloudBackend !== "box" && b.cloudBackend !== "vps") {
         delete b.cloudBackend;
+        botsMigrated = true;
+      }
+      if (b.vpsInstanceId !== undefined && (typeof b.vpsInstanceId !== "string" || b.vpsInstanceId.length > 64)) {
+        delete b.vpsInstanceId;
         botsMigrated = true;
       }
       if (b.autoStartVps !== undefined && b.autoStartVps !== true && b.autoStartVps !== false) {
@@ -1358,6 +1409,10 @@ export class Store {
     // Persist before publishing or greeting, so an interrupted creation cannot inherit tools.
     this.saveBots([bot, ...this.bots]);
     this.bots.unshift(bot);
+    if (this.deletedBotIds.has(bot.id)) {
+      this.deletedBotIds.delete(bot.id);
+      this.saveDeletedBotIds();
+    }
     try {
       writeSoulMirror(bot.id, bot.soul ?? "");
     } catch (e) {
@@ -1478,6 +1533,8 @@ export class Store {
     // Persist removal before deleting data: a failed save must leave the bot recoverable.
     this.saveBots(nextBots);
     this.bots = nextBots;
+    this.deletedBotIds.add(id);
+    this.saveDeletedBotIds();
     this.legacyActivities.delete(id);
     const rooms = this.groups.filter((g) => !g.dm && g.memberIds.includes(id));
     for (const g of rooms) {
@@ -1508,9 +1565,11 @@ export class Store {
     return true;
   }
 
-  patchBot(id: string, patch: Partial<BotRecord>): BotRecord | null {
+  patchBot(id: string, patch: Partial<BotRecord>, auditContext?: BotArchiveAuditContext): BotRecord | null {
     const bot = this.bot(id);
     if (!bot) return null;
+    const previousHidden = Boolean(bot.hidden);
+    const hiddenChanging = patch.hidden !== undefined && Boolean(patch.hidden) !== previousHidden;
     if (patch.connectorTools !== undefined) {
       const parsed = parseConnectorTools(patch.connectorTools);
       if (!parsed.ok) throw new Error(parsed.error);
@@ -1546,8 +1605,65 @@ export class Store {
       this.saveBots(this.bots.map((candidate) => candidate === bot ? { ...bot, toolScope: nextToolScope } : candidate));
       bot.toolScope = nextToolScope;
     } else this.saveBots();
+    if (hiddenChanging) {
+      const nextHidden = Boolean(patch.hidden);
+      this.recordArchiveAudit({
+        botId: id,
+        at: Date.now(),
+        previousHidden,
+        nextHidden,
+        entry: auditContext?.entry ?? "internal:store",
+        actor: auditContext?.actor ?? "internal",
+        ...(auditContext?.request ? { request: auditContext.request } : {}),
+      });
+    }
     this.emit({ type: "bot", botId: id });
     return bot;
+  }
+
+  botStatus(id: string): "active" | "archived" | "deleted" | "missing" {
+    const b = this.bots.find((candidate) => candidate.id === id);
+    if (b) return b.hidden ? "archived" : "active";
+    if (this.deletedBotIds.has(id)) return "deleted";
+    return "missing";
+  }
+
+  isArchived(id: string): boolean {
+    return this.botStatus(id) === "archived";
+  }
+
+  isDeleted(id: string): boolean {
+    return this.botStatus(id) === "deleted";
+  }
+
+  botAvailability(id: string): { ok: true; bot: BotRecord } | { ok: false; status: "archived" | "deleted" | "missing"; error: string } {
+    const b = this.bots.find((candidate) => candidate.id === id);
+    if (b) {
+      if (b.hidden) return { ok: false, status: "archived", error: "The addressed agent is archived" };
+      return { ok: true, bot: b };
+    }
+    if (this.deletedBotIds.has(id)) {
+      return { ok: false, status: "deleted", error: "The addressed agent was deleted" };
+    }
+    return { ok: false, status: "missing", error: "The addressed agent does not exist" };
+  }
+
+  getArchiveAudits(botId?: string): readonly BotArchiveAuditRecord[] {
+    return botId ? this.archiveAudits.filter((a) => a.botId === botId) : [...this.archiveAudits];
+  }
+
+  recordArchiveAudit(record: BotArchiveAuditRecord): void {
+    this.archiveAudits.push(record);
+    try {
+      appendFileSync(BOT_ARCHIVE_AUDIT_FILE, JSON.stringify(record) + "\n", { mode: 0o600 });
+    } catch {}
+    this.emit({ type: "bot.archive_audit", record });
+  }
+
+  private saveDeletedBotIds(): void {
+    try {
+      writeFileAtomic(DELETED_BOTS_FILE, JSON.stringify([...this.deletedBotIds]));
+    } catch {}
   }
 
   clearVoiceSelections(): BotRecord[] {
@@ -1693,6 +1809,7 @@ export class Store {
       if (chiefScope(bot) !== scope) continue;
       const next = bot.id === id;
       if (Boolean(bot.chiefOfStaff) === next && !(next && bot.hidden)) continue;
+      const wasHidden = Boolean(bot.hidden);
       if (next) {
         bot.chiefOfStaff = true;
         bot.hidden = false;
@@ -1701,6 +1818,16 @@ export class Store {
         delete bot.managedSections;
       }
       changed.push(bot);
+      if (next && wasHidden) {
+        this.recordArchiveAudit({
+          botId: bot.id,
+          at: Date.now(),
+          previousHidden: true,
+          nextHidden: false,
+          entry: "internal:setChiefOfStaff",
+          actor: "internal",
+        });
+      }
     }
     if (changed.length) this.saveBots();
     for (const bot of changed) this.emit({ type: "bot", botId: bot.id });
@@ -1796,6 +1923,7 @@ export class Store {
           if (!options.canWorkOnCloud && task.surface === "cloud" && task.surfaceSource === "auto") {
             taskPatch.surface = undefined;
             taskPatch.surfaceSource = undefined;
+            taskPatch.placementReason = undefined;
           }
           const ask = needsAsk(before);
           if (ask) Object.assign(taskPatch, structuredClone(askNow));
@@ -2066,6 +2194,8 @@ export class Store {
         }
       }
       if (task.snoozedUntil === 0 && patch.unread === true) task.snoozedUntil = undefined;
+      if ((Object.prototype.hasOwnProperty.call(patch, "surface") || Object.prototype.hasOwnProperty.call(patch, "surfaceSource"))
+        && (task.surface === undefined || task.surfaceSource !== "auto")) delete task.placementReason;
       if (typeof patch.title === "string") task.title = patch.title.trim().slice(0, 80) || UNTITLED_THREAD;
       if (Object.prototype.hasOwnProperty.call(patch, "pinned") && task.pinned !== true) delete task.pinned;
       if (task.routineRunId) task.unread = false;
@@ -2091,6 +2221,7 @@ export class Store {
       for (const task of stale) {
         task.surface = undefined;
         task.surfaceSource = undefined;
+        delete task.placementReason;
       }
     });
     this.emit({ type: "bot", botId });
