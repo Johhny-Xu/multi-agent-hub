@@ -359,9 +359,9 @@ export class CdpPage implements ActionContext, WaitContext {
     return actions.hover(this, target, options);
   }
 
-  async fill(target: Exclude<Target, Point>, text: string): Promise<void> {
+  async fill(target: Exclude<Target, Point>, text: string, options: { timeoutMs?: number; guard?: import("../jev-types.ts").AutomationActionGuard } = {}): Promise<void> {
     this.#ready();
-    return actions.fill(this, target, text);
+    return actions.fill(this, target, text, options);
   }
 
   /** A saved secret: typed with Input.insertText only, and screenshots and evaluation stay refused while it is on the page. */
@@ -381,9 +381,9 @@ export class CdpPage implements ActionContext, WaitContext {
     return actions.press(this, chord);
   }
 
-  async select(target: Exclude<Target, Point>, values: readonly string[]): Promise<{ selected: string[] }> {
+  async select(target: Exclude<Target, Point>, values: readonly string[], options: { guard?: import("../jev-types.ts").AutomationActionGuard } = {}): Promise<{ selected: string[] }> {
     this.#ready();
-    return actions.select(this, target, values);
+    return actions.select(this, target, values, options);
   }
 
   async check(target: Exclude<Target, Point>, checked = true, options: { timeoutMs?: number } = {}): Promise<{ checked: boolean; changed: boolean }> {

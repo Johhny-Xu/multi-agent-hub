@@ -1,12 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
-import { browserDaemonFile, browserProfilesRoot, closeBrowserSession, runningBrowserSessionNames } from "./browser-engine.ts";
+import {
+  browserDaemonFile,
+  browserProfileDirectory,
+  browserProfilesRoot,
+  browserSessionId,
+  browserSessionsDirectory,
+  closeBrowserSession,
+  runningBrowserSessionNames,
+} from "./browser-engine.ts";
+import { browserRoot, profileDir, profileHash, workspaceId } from "./browser/chrome/profile.ts";
 import { orphanedBrowsers, stopBrowserProcesses } from "./browser-processes.ts";
 import { browserRuntimeEnv } from "./browser-runtime.ts";
+import { DATA_DIR } from "./config.ts";
 
 const BOT_ID = /^[A-Za-z0-9_-]{1,120}$/;
 const PROFILE_ID = /^[a-z0-9_-]{1,40}$/;
@@ -139,6 +149,7 @@ export class BrowserCleanupCoordinator {
   readonly #timeoutMs: number;
   readonly #retryMs: readonly number[];
   readonly #write: CleanupJournalWriter;
+  readonly #dataDir: string;
   readonly #pending = new Map<string, BrowserCleanupRequest>();
   readonly #waiters = new Map<string, Waiter>();
   readonly #inflight = new Map<string, Promise<boolean>>();
@@ -151,12 +162,14 @@ export class BrowserCleanupCoordinator {
     timeoutMs?: number;
     retryMs?: readonly number[];
     write?: CleanupJournalWriter;
+    dataDir?: string;
   }) {
     this.#file = options.file;
     this.#send = options.send;
     this.#timeoutMs = Math.max(10, options.timeoutMs ?? 10_000);
     this.#retryMs = options.retryMs?.length ? options.retryMs : [1_000, 5_000, 30_000, 120_000];
     this.#write = options.write ?? writeFileAtomic;
+    this.#dataDir = options.dataDir ?? DATA_DIR;
     this.#load();
   }
 
@@ -297,11 +310,58 @@ export class BrowserCleanupCoordinator {
     return true;
   }
 
+  /** True only when every place the erase would have written is verifiably absent — the agent-browser state files (base
+   * and audience-suffixed names), its Chrome profile folder, and the chrome engine's profile, downloads and screenshots;
+   * a path that exists or cannot be read counts as still there, so an unclearable wipe keeps retrying instead of being
+   * declared done. */
+  #targetDataErased(request: BrowserCleanupRequest): boolean {
+    const stillThere = (path: string): boolean => {
+      try {
+        statSync(path);
+        return true;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== "ENOENT";
+      }
+    };
+    try {
+      const session = request.kind === "bot"
+        ? browserSessionId(request.id, "")
+        : browserSessionId("", request.partitionId);
+      const stateForm = new RegExp(`^(${session}(?:--(?:room|member)-[0-9a-f]{16})?)(?:-\\1|-omb-[0-9a-f]{64})?$`);
+      const directory = browserSessionsDirectory(browserRuntimeEnv({}));
+      for (const folder of [directory, join(directory, ".tmp")]) {
+        let entries: string[];
+        try {
+          entries = readdirSync(folder);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+          continue;
+        }
+        for (const entry of entries) {
+          const core = entry.replace(/\.json(?:\.enc)?(?:\.previous)?$/, "").replace(/-candidate-[0-9]+$/, "");
+          if (stateForm.test(core)) return false;
+        }
+      }
+      if (stillThere(browserProfileDirectory(session, this.#dataDir))) return false;
+      const root = browserRoot(this.#dataDir);
+      if (stillThere(root)) {
+        const key = request.kind === "bot" ? `bot:${request.id}` : `shared:${request.partitionId}`;
+        const hash = profileHash(workspaceId(this.#dataDir), key);
+        if (stillThere(profileDir(this.#dataDir, key)) || stillThere(join(root, "downloads", hash)) || stillThere(join(root, "screenshots", hash))) {
+          return false;
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async #attempt(request: BrowserCleanupRequest): Promise<boolean> {
     const current = this.#pending.get(request.requestId);
     if (!current) return true;
     if (current.phase !== "committed") return false;
-    const result = new Promise<boolean>((resolve) => {
+    const acknowledged = new Promise<boolean>((resolve) => {
       const prior = this.#waiters.get(request.requestId);
       if (prior) {
         clearTimeout(prior.timer);
@@ -330,7 +390,9 @@ export class BrowserCleanupCoordinator {
         waiter.resolve(false);
       }
     }
-    return result;
+    const ok = await acknowledged;
+    if (!ok && this.#targetDataErased(current)) return this.#finish(request.requestId);
+    return ok;
   }
 
   async ensure(request: BrowserCleanupRequest): Promise<boolean> {

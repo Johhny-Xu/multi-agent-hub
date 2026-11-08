@@ -124,7 +124,7 @@ export async function callOnNode<T>(
   handle: NodeHandle,
   fn: string,
   args: readonly unknown[] = [],
-  { awaitPromise = false }: { awaitPromise?: boolean } = {},
+  { awaitPromise = false, retryOnContextLoss }: { awaitPromise?: boolean; retryOnContextLoss?: boolean } = {},
 ): Promise<T> {
   return frames.inWorld(handle.frameId, async (session, contextId) => {
     const objectId = await resolveInWorld(session, handle.backendNodeId, contextId);
@@ -141,7 +141,7 @@ export async function callOnNode<T>(
     } finally {
       void session.send("Runtime.releaseObject", { objectId }).catch(() => {});
     }
-  });
+  }, { retryOnContextLoss });
 }
 
 export async function resolveInWorld(session: CdpSession, backendNodeId: number, contextId: number, objectGroup?: string): Promise<string> {

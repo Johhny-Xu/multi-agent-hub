@@ -12,6 +12,7 @@ import type { MouseButton, Mouse, Point } from "./input.ts";
 import type { Keyboard } from "./keyboard.ts";
 import type { NodeHandle, RefTable } from "./refs.ts";
 import { resolveElement } from "./selectors.ts";
+import type { AutomationActionGuard } from "../jev-types.ts";
 
 export const DEFAULT_ACTION_TIMEOUT_MS = 15_000;
 const POLL_MS = 100;
@@ -210,6 +211,7 @@ export interface ClickOptions {
   clickCount?: number;
   timeoutMs?: number;
   pointer?: PointerReporter;
+  guard?: AutomationActionGuard;
 }
 
 export interface PointerResult extends Point {
@@ -217,10 +219,12 @@ export interface PointerResult extends Point {
   dialog: boolean;
 }
 
-export async function click(context: ActionContext, target: Target, { button = "left", clickCount = 1, timeoutMs = DEFAULT_ACTION_TIMEOUT_MS, pointer }: ClickOptions = {}): Promise<PointerResult> {
+export async function click(context: ActionContext, target: Target, { button = "left", clickCount = 1, timeoutMs = DEFAULT_ACTION_TIMEOUT_MS, pointer, guard }: ClickOptions = {}): Promise<PointerResult> {
   await context.bringToFront();
   refuseErrorPage(context);
   const point = await pointAfterShowing(context, isPoint(target) ? target : await element(context, target), Date.now() + timeoutMs, "click", pointer);
+  if (guard) await guard.beforeInput();
+  guard?.onInputStart();
   const dialog = await untilDialog(context, context.mouse.click(point.x, point.y, { button, clickCount }));
   return { x: point.x, y: point.y, dialog };
 }
@@ -272,14 +276,25 @@ async function focusEditable(context: ActionContext, handle: NodeHandle & { ref?
 }
 
 /** Clears the field and inserts the text in one input event, as a paste would. */
-export async function fill(context: ActionContext, target: Exclude<Target, Point>, text: string): Promise<void> {
+export async function fill(
+  context: ActionContext,
+  target: Exclude<Target, Point>,
+  text: string,
+  options: { timeoutMs?: number; guard?: AutomationActionGuard } = {},
+): Promise<void> {
   await context.bringToFront();
   refuseErrorPage(context);
   const handle = await element(context, target);
+  if (options.guard) {
+    const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS);
+    await actionablePoint(context, handle, deadline, { hitTest: true, wantEnabled: true });
+  }
   const kind = await focusEditable(context, handle);
+  if (options.guard) await options.guard.beforeInput();
+  options.guard?.onInputStart();
   // Date and time fields take no typed text: set them like a picker would (the events are untrusted).
   if (kind === "value") {
-    await callOnNode(context.frames, handle, SET_VALUE, [text]);
+    await callOnNode(context.frames, handle, SET_VALUE, [text], { retryOnContextLoss: !options.guard });
     return;
   }
   await context.keyboard.press("ControlOrMeta+A");
@@ -332,7 +347,12 @@ interface SelectInfo {
 }
 
 /** Each entry matches an option by value first, then by its visible label. A single choice is typed, as a person would. */
-export async function select(context: ActionContext, target: Exclude<Target, Point>, values: readonly string[]): Promise<{ selected: string[] }> {
+export async function select(
+  context: ActionContext,
+  target: Exclude<Target, Point>,
+  values: readonly string[],
+  options: { guard?: AutomationActionGuard } = {},
+): Promise<{ selected: string[] }> {
   await context.bringToFront();
   refuseErrorPage(context);
   const handle = await element(context, target);
@@ -349,6 +369,14 @@ export async function select(context: ActionContext, target: Exclude<Target, Poi
     return option;
   });
   if (!info.multiple && chosen.length !== 1) throw new DriverError("refused", "This list takes exactly one option.");
+
+  if (options.guard) {
+    await options.guard.beforeInput();
+    options.guard.onInputStart();
+    const selected = await callOnNode<string[]>(context.frames, handle, SELECT_VALUES, [chosen.map((c) => c.value)], { retryOnContextLoss: false });
+    return { selected };
+  }
+
   if (!info.multiple) {
     const option = chosen[0]!;
     if (info.value === option.value) return { selected: [option.value] };

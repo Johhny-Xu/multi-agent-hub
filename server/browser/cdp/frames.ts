@@ -197,8 +197,13 @@ export class FrameTree {
     return world;
   }
 
-  /** Runs `work` in the frame's isolated world, once more on a fresh world if a navigation replaced the document. */
-  async inWorld<T>(frameId: string, work: (session: CdpSession, contextId: number) => Promise<T>): Promise<T> {
+  /** Runs `work` in the frame's isolated world, once more on a fresh world if a navigation replaced the document (unless retryOnContextLoss is false). */
+  async inWorld<T>(
+    frameId: string,
+    work: (session: CdpSession, contextId: number) => Promise<T>,
+    options?: { retryOnContextLoss?: boolean },
+  ): Promise<T> {
+    const retry = options?.retryOnContextLoss ?? true;
     for (let attempt = 0; ; attempt++) {
       const frame = this.#frames.get(frameId);
       if (!frame) throw new Error(`Frame with the given id was not found: ${frameId}`);
@@ -206,7 +211,7 @@ export class FrameTree {
       try {
         return await work(frame.session, contextId);
       } catch (error) {
-        if (attempt > 0 || !isMissingContext(error)) throw error;
+        if (!retry || attempt > 0 || !isMissingContext(error)) throw error;
         this.#worlds.delete(frameId);
       }
     }

@@ -685,6 +685,7 @@ export class BrowserService {
       tabs: () => profile.tabs.list(),
       tab: (id: string) => profile.tabs.get(id),
       running: async () => { await this.running(profile); },
+      awake: () => Boolean(profile.starting) || Boolean(profile.run && !profile.run.closing && profile.run.browser.connected),
       used: () => { profile.lastUsed = Date.now(); },
       pageLimit: () => (profile.run && !profile.run.closing ? profile.run.opened.pageLimit ?? null : null),
       take: async (owner: string): Promise<TakeResult> => {

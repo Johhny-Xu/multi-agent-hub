@@ -291,6 +291,8 @@ export class StreamV2 {
     const size = requestedSize(Number(params.get("width")), Number(params.get("height")));
     const options: ViewerOptions = {
       owner: request.owner,
+      // A stream never starts the browser it shows: the person starts it from the panel, or a bot call does.
+      mayStart: false,
       ...(request.person ? { person: request.person } : {}),
       canOperate: request.canOperate,
       maxWidth: intParam(params, "maxWidth", 1280, FRAME_CAP_LIMITS.maxWidth),

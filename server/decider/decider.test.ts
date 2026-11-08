@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config.ts";
-import { createDecider, deciderPatchKey, deciderReady, deciderSavePatch, describeDecider } from "./index.ts";
+import { createDecider, deciderAccount, deciderJobOn, deciderPatchKey, deciderReady, deciderSavePatch, describeDecider } from "./index.ts";
 import { DECIDER_LOG_DIR, flushDeciderLog } from "./log.ts";
 import { jevEndpoint, parseJevResponse } from "./jev.ts";
 import { KEY_CHECK_QUESTION, KEY_CHECK_STATE, RELAY_MAX_STATE_BYTES, relayAccepts } from "./relay.ts";
@@ -294,6 +294,47 @@ describe("settings rules", () => {
     expect(deciderReady(ON, "roomRouting")).toBe(true);
     expect(deciderReady({ decider: { ...ON.decider, jobs: { roomRouting: false } } }, "roomRouting")).toBe(false);
     expect(deciderReady({ decider: { enabled: true } }, "roomRouting")).toBe(false);
+  });
+
+  it("keeps browser automation off when the job is absent", () => {
+    expect(deciderJobOn(ON, "browserAutomation")).toBe(false);
+    expect(deciderReady(ON, "browserAutomation")).toBe(false);
+    expect(deciderReady({ decider: { ...ON.decider, jobs: { roomRouting: true, browserAutomation: true } } }, "browserAutomation")).toBe(true);
+  });
+
+  it("uses only Jev for the browser seam", () => {
+    const orConfig: AppConfig = { decider: { enabled: true, provider: "openrouter", openrouterKey: "sk-or-test-key", jobs: { browserAutomation: true } } };
+    expect(deciderAccount(orConfig, "browserAutomation")).toBeNull();
+    expect(deciderReady(orConfig, "browserAutomation")).toBe(false);
+    expect(deciderAccount(ON, "browserAutomation")).toMatchObject({ provider: "jev" });
+  });
+
+  it("does not enable browser automation when saving a key", () => {
+    const patch = deciderSavePatch({ key: "tsk_new" }, undefined);
+    expect(patch.ok).toBe(true);
+    if (patch.ok) {
+      expect(patch.patch.jobs?.browserAutomation).toBeUndefined();
+    }
+  });
+
+  it("refuses browser automation on an unsupported included relay", () => {
+    vi.stubEnv("OMB_CLOUD_DECIDER_URL", "https://cloud.example.test/api/cloud/services/decider");
+    vi.stubEnv("OMB_CLOUD_DECIDER_TOKEN", "omb_decide_unit_included_token_0123456789");
+    try {
+      const relayConfig: AppConfig = { decider: { enabled: true, jobs: { browserAutomation: true } } };
+      expect(deciderAccount(relayConfig, "browserAutomation")).toBeNull();
+      expect(deciderReady(relayConfig, "browserAutomation")).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("with no key yet, status keeps the provider the person chose, so OpenRouter's key field shows", () => {
+    expect(describeDecider({ decider: { provider: "openrouter" } })).toMatchObject({ provider: "openrouter", configured: false, enabled: false });
+    expect(describeDecider({ decider: { provider: "jev" } })).toMatchObject({ provider: "jev", configured: false });
+    expect(describeDecider({ decider: { provider: "off" } })).toMatchObject({ provider: "jev", configured: false });
+    // A key on file still reports the account in use, whatever was chosen.
+    expect(describeDecider({ decider: { ...ON.decider, provider: "openrouter" } })).toMatchObject({ provider: "jev", configured: true });
   });
 });
 

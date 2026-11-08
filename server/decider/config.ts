@@ -20,7 +20,9 @@ const optionalText = z.string().optional();
  * `openrouterModel` is an OpenRouter model id and `openrouterApi` says
  * whether it is a chat model or one of OpenRouter's decisions models
  * (`chat` when absent); `jobs` switches each
- * decision on or off. Not `decisions`: that section is the authorization
+ * decision on or off. `proxyUrl` is a proxy only the Jev backend's requests
+ * go through (or `JEV_PROXY` when absent); empty is direct. Not
+ * `decisions`: that section is the authorization
  * log's retention. */
 export const deciderConfigSchema = z.object({
   enabled: z.boolean().optional(),
@@ -48,13 +50,34 @@ export const deciderConfigSchema = z.object({
     .max(2048)
     .refine((value) => !value || /^https?:\/\//i.test(value), "the decision model address must start with http:// or https://")
     .optional(),
+  proxyUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine((value) => {
+      if (!value) return true;
+      if (!/^(https?):\/\//i.test(value)) return false;
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "the Jev proxy address must start with http:// or https:// (SOCKS is not supported by the Jev proxy agent)")
+    .optional(),
   openrouterBaseUrl: z
     .string()
     .trim()
     .max(2048)
     .refine((value) => !value || /^https?:\/\//i.test(value), "the OpenRouter address must start with http:// or https://")
     .optional(),
-  jobs: z.object({ roomRouting: z.boolean().optional(), inboxTriage: z.boolean().optional() }).optional(),
+  browserTextModel: z.boolean().optional(),
+  jobs: z.object({
+    roomRouting: z.boolean().optional(),
+    inboxTriage: z.boolean().optional(),
+    browserAutomation: z.boolean().optional(),
+    browserTextModel: z.boolean().optional(),
+  }).optional(),
 });
 
 /** The decision model; see `deciderConfigSchema`. */
@@ -63,6 +86,8 @@ export interface DeciderConfig {
   provider?: "jev" | "openrouter" | "off";
   key?: string;
   baseUrl?: string;
+  /** A proxy only Jev's requests go through, like `http://127.0.0.1:7890`; absent or empty is direct. */
+  proxyUrl?: string;
   openrouterKey?: string;
   openrouterModel?: string;
   /** Which OpenRouter API `openrouterModel` is served by: absent is `chat`. */
@@ -72,5 +97,6 @@ export interface DeciderConfig {
   workersAiAccountId?: string;
   /** An operator setting with no UI, like `baseUrl`: Workers AI's REST root, `/client/v4` included. */
   workersAiBaseUrl?: string;
-  jobs?: { roomRouting?: boolean; inboxTriage?: boolean };
+  browserTextModel?: boolean;
+  jobs?: { roomRouting?: boolean; inboxTriage?: boolean; browserAutomation?: boolean; browserTextModel?: boolean };
 }

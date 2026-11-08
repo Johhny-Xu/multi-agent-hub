@@ -500,3 +500,56 @@ describe("browsers on one computer", () => {
     expect(dataDir).toBeTruthy();
   });
 });
+
+describe("a view of a browser that is not running", () => {
+  it("opens onto no browser at all, and the person's start, not the view, launches one", async () => {
+    const { service, target, backend } = setup();
+    const outputs: string[] = [];
+    const viewer = await service.attachViewer(target, { owner: "local-owner", canOperate: true, maxWidth: 1280, maxHeight: 1280, mayStart: false }, (output) => {
+      outputs.push(output.type);
+      if (output.type === "frame") output.ack();
+    });
+    await sleep(20);
+    expect(backend.chromes).toHaveLength(0);
+    expect(outputs).toContain("unstarted");
+    expect(outputs).not.toContain("frame");
+    await viewer.input({ type: "wake" });
+    for (let waited = 0; (!outputs.includes("frame") || backend.chromes.length < 1) && waited < 1_000; waited += 10) await sleep(10);
+    expect(backend.chromes).toHaveLength(1);
+    expect(outputs.slice(outputs.indexOf("unstarted"))).toContain("awake");
+    expect(outputs).toContain("frame");
+    await viewer.close();
+  });
+
+  it("follows the browser the bot's first call starts, with no wake of its own", async () => {
+    const { service, call, text, target, backend } = setup();
+    const outputs: string[] = [];
+    const viewer = await service.attachViewer(target, { owner: "local-owner", canOperate: true, maxWidth: 1280, maxHeight: 1280, mayStart: false }, (output) => {
+      outputs.push(output.type);
+      if (output.type === "frame") output.ack();
+    });
+    expect(backend.chromes).toHaveLength(0);
+    expect(text(await call("agent_browser_status"))).toContain(`"tab":"t1"`);
+    expect(backend.chromes).toHaveLength(1);
+    for (let waited = 0; !outputs.includes("frame") && waited < 1_000; waited += 10) await sleep(10);
+    expect(outputs).toContain("awake");
+    expect(outputs).toContain("frame");
+    await viewer.close();
+  });
+
+  it("connects straight to the browser a bot already runs", async () => {
+    const { service, call, target, backend } = setup();
+    await call("agent_browser_open", { url: "https://example.com/form" });
+    expect(backend.chromes).toHaveLength(1);
+    const outputs: string[] = [];
+    const viewer = await service.attachViewer(target, { owner: "local-owner", canOperate: true, maxWidth: 1280, maxHeight: 1280, mayStart: false }, (output) => {
+      outputs.push(output.type);
+      if (output.type === "frame") output.ack();
+    });
+    expect(backend.chromes).toHaveLength(1);
+    expect(outputs).not.toContain("unstarted");
+    for (let waited = 0; !outputs.includes("frame") && waited < 1_000; waited += 10) await sleep(10);
+    expect(outputs).toContain("frame");
+    await viewer.close();
+  });
+});

@@ -5,6 +5,7 @@
 // third_party/t3-code/LICENSE); modified: zod schemas under OpenMausBot's tool names, refs instead of Playwright
 // locators, and the names agent-browser advertised accepted as aliases.
 import { z } from "zod";
+import { browserRunInputSchema } from "../../shared/browser-automation.ts";
 
 export const RESTART_TOOL = "restart_browser";
 
@@ -164,6 +165,23 @@ export const TOOL_LIST: ReadonlyArray<{ name: ToolName; description: string; inp
   (Object.keys(TOOL_INPUTS) as ToolName[]).map((name) => ({ name, description: DESCRIPTIONS[name], inputSchema: jsonSchema(TOOL_INPUTS[name].strict()) }));
 
 export const TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(TOOL_INPUTS));
+
+export function browserToolList(
+  base: ReadonlyArray<{ name: string; description: string; inputSchema: Record<string, unknown> }>,
+  options: { automationReady: boolean; capabilities?: { mode: "dom-fast" | "guarded" | "passthrough" } },
+): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
+  if (options.automationReady && options.capabilities?.mode === "dom-fast") {
+    return [
+      ...base,
+      {
+        name: "agent_browser_run",
+        description: "Execute a goal-driven multi-step browser task autonomously via fast DOM observation and Jev decision model.",
+        inputSchema: jsonSchema(browserRunInputSchema),
+      },
+    ];
+  }
+  return [...base];
+}
 
 /** A tool call after alias translation: `as` names what an old name asked for, when its answer differs. */
 export type ToolCall = { [N in ToolName]: { name: N; input: ToolInput<N>; as?: "url" | "title" } }[ToolName];

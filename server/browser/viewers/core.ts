@@ -72,6 +72,8 @@ export type ViewerOutput =
   | { type: "authPrompt"; tabId: string; id: string; origin: string; realm: string }
   | { type: "authPromptClosed"; id: string }
   | { type: "starting" }
+  /** The browser is not running and this view started none: it begins on the person's wake or a bot call. */
+  | { type: "unstarted" }
   /** The browser closed unused and the view stays; "awake" when it starts again. */
   | { type: "asleep" | "awake" }
   | { type: "gone"; reason: string };
@@ -95,6 +97,9 @@ export interface ViewerOptions {
   pagePopups?: boolean;
   /** The viewer draws the agent's pointer, which the agent's actions wait for; false for the v1 view, which draws none. */
   pointer?: boolean;
+  /** A view whose attach starts the browser when it is not running; the desktop panel's stream waits for the person's
+   * start or a bot call instead, so only looking at the panel launches nothing. */
+  mayStart?: boolean;
 }
 
 /** What a hub needs from the browser service. */
@@ -106,6 +111,8 @@ export interface HubHost {
   tabs(): Tab[];
   tab(id: string): Tab | undefined;
   running(): Promise<void>;
+  /** Whether the browser runs now or is starting, without starting it. */
+  awake(): boolean;
   /** A person used the browser: its idle time starts again. */
   used(): void;
   /** The largest page the browser's windows may show on its screen; null when nothing limits it. */
@@ -171,6 +178,7 @@ export class Viewer {
       authPrompts: options.authPrompts === true,
       pagePopups: options.pagePopups === true,
       pointer: options.pointer !== false,
+      mayStart: options.mayStart !== false,
     };
   }
 
@@ -533,6 +541,15 @@ export class ViewerHub {
     this.#hold.opened(viewer);
     try {
       viewer.push({ type: "starting" });
+      // A view that may not start the browser opens onto one nobody has begun: it shows the person that, and no browser
+      // is launched until they wake it here or the bot's first call does.
+      if (!viewer.options.mayStart && !this.host.awake()) {
+        await this.#hold.carryOn(viewer);
+        await viewer.hide(this.#hold.hides(viewer));
+        viewer.push(this.controlFor(viewer));
+        viewer.push({ type: "unstarted" });
+        return viewer;
+      }
       await this.host.running();
       if (viewer.closed) return viewer;
       await this.#hold.carryOn(viewer);

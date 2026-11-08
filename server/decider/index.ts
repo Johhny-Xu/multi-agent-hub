@@ -8,6 +8,7 @@ import {
 } from "./accounts.ts";
 import { jevBackend } from "./jev.ts";
 import { appendDeciderLog, stateHash } from "./log.ts";
+import { jevProxyUrl, maskProxyUrl, withJevProxy } from "./proxy.ts";
 import { OPENROUTER_DEFAULT_API, OPENROUTER_DEFAULT_MODEL, openrouterBackend } from "./openrouter.ts";
 import { KEY_CHECK_QUESTION, KEY_CHECK_STATE, relayAccepts, relaySeam } from "./relay.ts";
 import type {
@@ -47,6 +48,11 @@ export function deciderApi(cfg: AppConfig): OpenRouterApi {
  * accepts), the OpenRouter LLM fallback, nothing. */
 export function deciderAccount(cfg: AppConfig, seam?: DeciderSeam): HelperAccount | null {
   const jev = jevAccount(cfg);
+  if (seam === "browserAutomation") {
+    if (!jev) return null;
+    if (jev.included && !relaySeam(seam)) return null;
+    return jev;
+  }
   const candidates = [jev, workersAiAccount(cfg), jev?.included ? null : includedAccount(), openrouterAccount(cfg)];
   return candidates.find((account): account is HelperAccount => Boolean(account) && !(account!.included && seam && !relaySeam(seam))) ?? null;
 }
@@ -63,9 +69,17 @@ export function deciderEnabled(cfg: AppConfig): boolean {
   return helpersOn(cfg, deciderAccount(cfg));
 }
 
-/** Absent means on. */
+/** Absent means on for roomRouting/inboxTriage, but default off (false) for browserAutomation. */
 export function deciderJobOn(cfg: AppConfig, job: DeciderJob): boolean {
+  if (job === "browserAutomation") return cfg.decider?.jobs?.browserAutomation === true;
   return cfg.decider?.jobs?.[job] !== false;
+}
+
+/** 9router gpt-oss:120b text model helper for browser automation; default on (true). */
+export function deciderBrowserTextModelOn(cfg: AppConfig): boolean {
+  if (cfg.decider?.jobs?.browserTextModel !== undefined) return cfg.decider.jobs.browserTextModel;
+  if (cfg.decider?.browserTextModel !== undefined) return cfg.decider.browserTextModel;
+  return true;
 }
 
 export function deciderReady(cfg: AppConfig, job: DeciderJob): boolean {
@@ -77,11 +91,12 @@ export function deciderSharedKeyUsable(cfg: AppConfig): boolean {
   return Boolean(sharedOpenRouterKey(cfg));
 }
 
-/** Never a key, nor a base URL (operator settings with no UI). `provider` is the one in use; `keySource` and
- * `sharedKey` are OpenRouter's, while it is in use. Which own keys are on file is `describeHelpers`'s. */
+/** Never a key, nor a base URL (operator settings with no UI). `provider` is the one in use, else the one chosen
+ * (so Settings shows its key field); `keySource` and `sharedKey` are OpenRouter's, while it is in use. Which own
+ * keys are on file is `describeHelpers`'s. */
 export function describeDecider(cfg: AppConfig) {
   const account = deciderAccount(cfg);
-  const provider = account?.provider ?? "jev";
+  const provider = account?.provider ?? draftProvider(cfg);
   return {
     provider,
     ...(provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
@@ -90,7 +105,12 @@ export function describeDecider(cfg: AppConfig) {
     ...(provider === "openrouter" && deciderSharedKeyUsable(cfg) ? { sharedKey: true as const } : {}),
     ...(account?.included ? { included: true as const } : {}),
     enabled: deciderEnabled(cfg),
-    jobs: { roomRouting: deciderJobOn(cfg, "roomRouting") },
+    jobs: {
+      roomRouting: deciderJobOn(cfg, "roomRouting"),
+      ...(cfg.decider?.jobs?.browserAutomation !== undefined ? { browserAutomation: cfg.decider.jobs.browserAutomation } : {}),
+      ...(cfg.decider?.jobs?.browserTextModel !== undefined ? { browserTextModel: cfg.decider.jobs.browserTextModel } : {}),
+    },
+    ...(cfg.decider?.proxyUrl !== undefined ? { proxyUrl: maskProxyUrl(cfg.decider.proxyUrl) } : {}),
   };
 }
 
@@ -230,12 +250,16 @@ export function createDecider(deps: DeciderDeps): Decider {
   }
 
   async function call<Qs extends Record<string, DeciderQuestion>>(
+    cfg: AppConfig,
     seam: DeciderSeam,
     account: HelperAccount,
     request: { model?: string; api?: OpenRouterApi; state: unknown; questions: Qs },
     options: AskOptions,
   ): Promise<DeciderResult<Answers<Qs>>> {
     const provider = account.provider;
+    if (seam === "browserAutomation" && provider !== "jev") {
+      return { ok: false, provider, reason: "misconfigured" };
+    }
     const backend = BACKENDS[provider];
     if (options.signal?.aborted) return { ok: false, provider, reason: "cancelled" };
     const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, options.timeoutMs ?? DEFAULT_DECIDER_TIMEOUT_MS));
@@ -262,7 +286,7 @@ export function createDecider(deps: DeciderDeps): Decider {
           ...(account.included ? { relaySeam: seam } : {}),
           ...request,
           signal: controller.signal,
-          fetch: fetchImpl,
+          fetch: provider === "jev" ? withJevProxy(fetchImpl, jevProxyUrl(cfg.decider?.proxyUrl)) : fetchImpl,
         }))
         .catch((): BackendResult => ({ ok: false, reason: "malformed" }));
       outcome = await Promise.race([decided, timedOut]);
@@ -318,7 +342,7 @@ export function createDecider(deps: DeciderDeps): Decider {
       const account = deciderAccount(cfg, seam)!;
       // Through the included token, only the exact requests the relay takes.
       if (account.included && !relayAccepts(seam, state, questions)) return { ok: false, reason: "misconfigured" };
-      return await call(seam, account, { ...openrouterRequest(cfg, account), state, questions }, options);
+      return await call(cfg, seam, account, { ...openrouterRequest(cfg, account), state, questions }, options);
     } catch {
       return { ok: false, reason: "malformed" };
     }
@@ -351,7 +375,7 @@ export function createDecider(deps: DeciderDeps): Decider {
         if (!account) return { ok: false, reason: "no_key" };
         const questions = { answer: { type: "yesno" as const, instructions: KEY_CHECK_QUESTION } };
         if (account.included && !relayAccepts("keyCheck", KEY_CHECK_STATE, questions)) return { ok: false, reason: "misconfigured" };
-        return single(await call("keyCheck", account, { ...openrouterRequest(cfg, account, input), state: KEY_CHECK_STATE, questions }, { timeoutMs: KEY_CHECK_TIMEOUT_MS, ...options }));
+        return single(await call(cfg, "keyCheck", account, { ...openrouterRequest(cfg, account, input), state: KEY_CHECK_STATE, questions }, { timeoutMs: KEY_CHECK_TIMEOUT_MS, ...options }));
       } catch {
         return { ok: false, reason: "malformed" };
       }

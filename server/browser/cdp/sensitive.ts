@@ -12,3 +12,10 @@ export function isSensitiveInput(type: string, hints: ReadonlyArray<string | nul
     .toLowerCase();
   return SENSITIVE_FIELD.test(raw) || /(?:^| )(pin|security code)(?: |$)/.test(words);
 }
+
+export function getSensitiveInputRuleData(): { sensitiveFieldRegexSource: string; sensitiveFieldRegexFlags: string } {
+  return {
+    sensitiveFieldRegexSource: SENSITIVE_FIELD.source,
+    sensitiveFieldRegexFlags: SENSITIVE_FIELD.flags,
+  };
+}

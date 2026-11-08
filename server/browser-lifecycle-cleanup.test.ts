@@ -12,6 +12,7 @@ import {
   requireBrowserCleanupAcknowledged,
 } from "./browser-lifecycle-cleanup.ts";
 import { closeBrowserSession, runningBrowserSessionNames } from "./browser-engine.ts";
+import { profileDir } from "./browser/chrome/profile.ts";
 import { orphanedBrowsers, stopBrowserProcesses, type BrowserProcessTree } from "./browser-processes.ts";
 
 vi.mock("./browser-engine.ts", async (original) => ({
@@ -31,8 +32,18 @@ const journal = () => {
   folders.push(folder);
   return join(folder, "browser-cleanups.json");
 };
+/** A HOME whose agent-browser sessions dir the coordinator reads at call time, and the data dir handed to it. */
+const stubbedHome = () => {
+  const folder = mkdtempSync(join(tmpdir(), "openmaus-browser-cleanup-home-"));
+  folders.push(folder);
+  vi.stubEnv("HOME", folder);
+  return folder;
+};
+const savedState = (home: string, session: string) =>
+  join(home, ".agent-browser", "sessions", `${session}-${session}.json`);
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
@@ -65,8 +76,12 @@ describe("durable browser lifecycle cleanup", () => {
 
   it("does not report completion without an ACK and blocks profile-id reuse across restart", async () => {
     const file = journal();
+    const home = stubbedHome();
+    mkdirSync(join(home, ".agent-browser", "sessions"), { recursive: true });
+    writeFileSync(savedState(home, "client_1"), "{}");
     const coordinator = new BrowserCleanupCoordinator({
       file,
+      dataDir: join(home, "data"),
       timeoutMs: 10,
       retryMs: [60_000],
       send: () => true,
@@ -87,6 +102,134 @@ describe("durable browser lifecycle cleanup", () => {
     });
     expect(afterRestart.hasPendingProfile("client_1")).toBe(true);
     expect(afterRestart.pending()).toEqual([request]);
+  });
+
+  it("treats a bot whose browser data is already gone as erased without any ack", async () => {
+    const file = journal();
+    const home = stubbedHome();
+    const coordinator = new BrowserCleanupCoordinator({
+      file,
+      dataDir: join(home, "data"),
+      timeoutMs: 50,
+      retryMs: [60_000],
+      send: () => false,
+    });
+    const request = coordinator.commit(coordinator.prepare("bot", "copilot-test"));
+
+    await expect(coordinator.ensure(request)).resolves.toBe(true);
+    expect(() => requireBrowserCleanupAcknowledged(true, "Browser data for Copilot test")).not.toThrow();
+    expect(coordinator.pending()).toEqual([]);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([]);
+  });
+
+  it("treats browser data an earlier erase already removed as erased", async () => {
+    const file = journal();
+    const home = stubbedHome();
+    mkdirSync(join(home, ".agent-browser", "sessions"), { recursive: true });
+    writeFileSync(savedState(home, "bot-copilot-test"), "{}");
+    rmSync(savedState(home, "bot-copilot-test"));
+    let coordinator!: BrowserCleanupCoordinator;
+    coordinator = new BrowserCleanupCoordinator({
+      file,
+      dataDir: join(home, "data"),
+      timeoutMs: 50,
+      retryMs: [60_000],
+      send(message) {
+        queueMicrotask(() => coordinator.receive({
+          type: "openmausbot:browser-lifecycle-result",
+          requestId: message.requestId,
+          ok: false,
+        }));
+        return true;
+      },
+    });
+    const request = coordinator.commit(coordinator.prepare("bot", "copilot-test"));
+
+    await expect(coordinator.ensure(request)).resolves.toBe(true);
+    expect(coordinator.pending()).toEqual([]);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([]);
+  });
+
+  it("still reports an erase it cannot confirm while the bot's saved state remains", async () => {
+    const file = journal();
+    const home = stubbedHome();
+    mkdirSync(join(home, ".agent-browser", "sessions"), { recursive: true });
+    writeFileSync(savedState(home, "bot-copilot-test"), "{}");
+    let coordinator!: BrowserCleanupCoordinator;
+    coordinator = new BrowserCleanupCoordinator({
+      file,
+      dataDir: join(home, "data"),
+      timeoutMs: 50,
+      retryMs: [60_000],
+      send(message) {
+        queueMicrotask(() => coordinator.receive({
+          type: "openmausbot:browser-lifecycle-result",
+          requestId: message.requestId,
+          ok: false,
+        }));
+        return true;
+      },
+    });
+    const request = coordinator.commit(coordinator.prepare("bot", "copilot-test"));
+
+    const acknowledged = await coordinator.ensure(request);
+    expect(acknowledged).toBe(false);
+    expect(() => requireBrowserCleanupAcknowledged(acknowledged, "Browser data for Copilot test"))
+      .toThrow(expect.objectContaining({ status: 503 }));
+    expect(coordinator.pending()).toEqual([request]);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([request]);
+  });
+
+  it("does not settle while an audience's own browser state remains", async () => {
+    const file = journal();
+    const home = stubbedHome();
+    mkdirSync(join(home, ".agent-browser", "sessions"), { recursive: true });
+    writeFileSync(savedState(home, "bot-copilot-test--member-0123456789abcdef"), "{}");
+    let coordinator!: BrowserCleanupCoordinator;
+    coordinator = new BrowserCleanupCoordinator({
+      file,
+      dataDir: join(home, "data"),
+      timeoutMs: 50,
+      retryMs: [60_000],
+      send(message) {
+        queueMicrotask(() => coordinator.receive({
+          type: "openmausbot:browser-lifecycle-result",
+          requestId: message.requestId,
+          ok: false,
+        }));
+        return true;
+      },
+    });
+    const request = coordinator.commit(coordinator.prepare("bot", "copilot-test"));
+
+    await expect(coordinator.ensure(request)).resolves.toBe(false);
+    expect(coordinator.pending()).toEqual([request]);
+  });
+
+  it("does not settle while the chrome engine still keeps the bot's profile", async () => {
+    const file = journal();
+    const home = stubbedHome();
+    const dataDir = join(home, "data");
+    mkdirSync(profileDir(dataDir, "bot:copilot-test"), { recursive: true });
+    let coordinator!: BrowserCleanupCoordinator;
+    coordinator = new BrowserCleanupCoordinator({
+      file,
+      dataDir,
+      timeoutMs: 50,
+      retryMs: [60_000],
+      send(message) {
+        queueMicrotask(() => coordinator.receive({
+          type: "openmausbot:browser-lifecycle-result",
+          requestId: message.requestId,
+          ok: false,
+        }));
+        return true;
+      },
+    });
+    const request = coordinator.commit(coordinator.prepare("bot", "copilot-test"));
+
+    await expect(coordinator.ensure(request)).resolves.toBe(false);
+    expect(coordinator.pending()).toEqual([request]);
   });
 
   it("locks the canonical profile id while wiping its exact legacy partition", async () => {
