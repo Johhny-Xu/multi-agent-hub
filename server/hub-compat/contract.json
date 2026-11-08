@@ -1,0 +1,652 @@
+{
+ "initialize": {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+   "protocolVersion": "2024-11-05",
+   "capabilities": {
+    "tools": {}
+   },
+   "serverInfo": {
+    "name": "agent-hub",
+    "version": "1.0.21"
+   }
+  }
+ },
+ "tools": [
+  {
+   "name": "hub_heartbeat",
+   "description": "代理上线时登记心跳, 声明自己的角色和能力。定期调用可保持'在线'状态。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string",
+      "description": "代理名, 如 workbuddy/zcode/trae/qwen-work"
+     },
+     "role": {
+      "type": "string",
+      "description": "角色描述, 如 总控/编程"
+     },
+     "capabilities": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "能力列表"
+     }
+    },
+    "required": [
+     "agent"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_list_agents",
+   "description": "查看已注册代理及在线状态。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_post_task",
+   "description": "发布任务到共享队列。不指定 to_agent 则任意代理可认领。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "from_agent": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string",
+      "description": "一句话任务标题"
+     },
+     "detail": {
+      "type": "string",
+      "description": "完整任务说明/上下文"
+     },
+     "to_agent": {
+      "type": "string",
+      "description": "指派给某代理, 留空则公开认领"
+     },
+     "priority": {
+      "type": "string",
+      "enum": [
+       "low",
+       "normal",
+       "high"
+      ]
+     },
+     "cwd": {
+      "type": "string",
+      "description": "建议工作目录"
+     }
+    },
+    "required": [
+     "from_agent",
+     "title"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_list_tasks",
+   "description": "查看任务队列, 可按状态/代理过滤。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "open",
+       "in_progress",
+       "done",
+       "failed"
+      ]
+     },
+     "agent": {
+      "type": "string",
+      "description": "只看与自己相关的任务"
+     }
+    },
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_claim_task",
+   "description": "认领一个 open 状态的任务, 认领后状态变为 in_progress。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string"
+     },
+     "agent": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_id",
+     "agent"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_complete_task",
+   "description": "完成任务并回传结果, 结果会自动发到发起方的收件箱。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string"
+     },
+     "agent": {
+      "type": "string"
+     },
+     "result": {
+      "type": "string"
+     },
+     "success": {
+      "type": "boolean",
+      "default": true
+     }
+    },
+    "required": [
+     "task_id",
+     "agent"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_send_message",
+   "description": "给另一个代理的发件箱投递消息(异步, 对方下次调用 hub_read_messages 时读到)。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "from_agent": {
+      "type": "string"
+     },
+     "to_agent": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "from_agent",
+     "to_agent",
+     "text"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_read_messages",
+   "description": "读取自己的收件箱未读消息(默认读后标记已读)。建议每次会话开始时调用。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string"
+     },
+     "mark_read": {
+      "type": "boolean",
+      "default": true
+     }
+    },
+    "required": [
+     "agent"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_note_set",
+   "description": "写共享笔记(跨代理共享记忆), 如项目约定、进度、账号上下文。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "value": {
+      "type": "string"
+     },
+     "agent": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "key",
+     "value"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_note_get",
+   "description": "读共享笔记。key 留空则列出全部键名。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_dispatch_cli",
+   "description": "无头派发任务；模型、思考、流式与附件能力按 worker 配置校验，不支持的组合在执行前拒绝。timeout_s 是「无进展超时」：长任务只要还在产出就会续期，不会被总时长一刀切断。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string"
+     },
+     "task": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string",
+      "description": "模型别名或模型ID, 见 hub_list_models"
+     },
+     "extra_args": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "追加到命令尾部的额外参数列表"
+     },
+     "cwd": {
+      "type": "string"
+     },
+     "timeout_s": {
+      "type": "number",
+      "description": "无进展超时秒数：连续这么久没有任何新输出才判定卡死并回收；仍在输出则自动续期。默认 900"
+     },
+     "hard_timeout_s": {
+      "type": "number",
+      "description": "单任务绝对上限秒数，默认 21600 (6 小时)，只用于兜住永远有输出却永不结束的死循环"
+     },
+     "thinking": {
+      "type": "string",
+      "enum": [
+       "default",
+       "on",
+       "off"
+      ],
+      "default": "default"
+     },
+     "effort": {
+      "type": "string",
+      "enum": [
+       "low",
+       "medium",
+       "high",
+       "max"
+      ]
+     },
+     "permission": {
+      "type": "string",
+      "enum": [
+       "default",
+       "readonly",
+       "edit",
+       "full"
+      ]
+     },
+     "stream": {
+      "type": "boolean",
+      "default": false
+     },
+     "attachments": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "mime_type": {
+         "type": "string"
+        },
+        "data_base64": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "mime_type",
+        "data_base64"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    "required": [
+     "agent",
+     "task"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_capabilities",
+   "description": "查询 worker 已配置的模型与思考、流式、附件能力；不返回运行环境或凭据。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string"
+     },
+     "worker": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "refresh": {
+      "type": "boolean",
+      "description": "只清除本机最近失败状态；不登录、不执行推理"
+     }
+    },
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_list_models",
+   "description": "查看各 worker 可用的模型别名表和模型参数名。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string",
+      "description": "只看某个 worker"
+     }
+    },
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_login",
+   "description": "获取官方 worker CLI 登录链接、查看登录状态或取消本次等待；凭据由官方 CLI 保存到 Hub 主机，不回传密码、Token 或 API Key。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "start",
+       "status",
+       "cancel"
+      ],
+      "default": "status"
+     }
+    },
+    "required": [
+     "agent"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_result",
+   "description": "查询异步受理任务的结果 (zcode 等长任务 worker 派活时自动返回 ref)。即时返回, 不等待。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_result_json",
+   "description": "查询结构化任务状态和增量进度，不包含私有执行参数。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_task_status",
+   "description": "查询子代理是否真的在工作：进程树存活、CPU 时间、输出字节、心跳/进度，并给出 verdict 与 action。running 时首次调用建立采样基线，10 秒后再查可看 CPU/输出增量；verdict=working/alive_waiting/gui_working 表示仍有存活证据，不应按墙钟截断。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     },
+     "json": {
+      "type": "boolean",
+      "default": false,
+      "description": "true 返回结构化 JSON，默认返回可读文本"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_wait_result",
+   "description": "阻塞等待异步任务完成 (服务端按 0/3/6/12/25/45/70/95秒 前置密集+递进回查)。快任务几秒命中秒回; 长任务预算尽返回进度快照。推荐代替反复 hub_result, 减少模型输入。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     },
+     "wait_s": {
+      "type": "number",
+      "default": 110,
+      "description": "本次阻塞等待预算(秒), 上限 115"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_reap",
+   "description": "扫描并回收陈旧任务: 把长期停留在 running 的记录判定为 timeout (默认 30 分钟无进展), 避免对着已死任务无限轮询。同时汇报仍在运行的任务。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "trae_status",
+   "description": "查看 TraeCode 桌面版(服务器上, 个人 Trae 账号)的连接与就绪状态。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "trae_delegate",
+   "description": "把任务派给 TraeCode 的 AI 执行(走 Trae 个人账号额度), 返回它的回答。默认延续当前对话; 传 new_chat=true 才新开对话。带 session_id 可延续同一会话。长任务建议 wait=false 异步派发后用 trae_result 轮询, 避免阻塞。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "type": "string",
+      "description": "要交给 Trae 的任务/提示词"
+     },
+     "session_id": {
+      "type": "string",
+      "description": "延续已有会话时传入"
+     },
+     "wait": {
+      "type": "boolean",
+      "default": true,
+      "description": "false=异步受理立即返回"
+     },
+     "new_chat": {
+      "type": "boolean",
+      "default": false,
+      "description": "true=新开一个对话; 默认 false 延续当前对话"
+     },
+     "timeout_s": {
+      "type": "number",
+      "default": 240
+     }
+    },
+    "required": [
+     "task"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "trae_result",
+   "description": "查询异步 Trae 任务的结果 (配合 trae_delegate wait=false)。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "trae_new_chat",
+   "description": "请求 Trae 切换/新建会话模式。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mode": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "zcode_delegate",
+   "description": "把任务派给 ZCode Linux 桌面版 (GLM-5.3-Flash, 体验套餐额度)。wait=false 异步受理。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "type": "string"
+     },
+     "wait": {
+      "type": "boolean",
+      "default": true
+     },
+     "timeout_s": {
+      "type": "number",
+      "default": 300
+     }
+    },
+    "required": [
+     "task"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "zcode_result",
+   "description": "查询异步 ZCode 任务的结果 (配合 zcode_delegate wait=false)。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_set_agent_status",
+   "description": "设置指定子代理的激活/禁用状态（写入 8801 实例设置并全端同步）。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "agent": {
+      "type": "string",
+      "description": "子代理名称 (如 zcode, codebuddy, antigravity 等)"
+     },
+     "enabled": {
+      "type": "boolean",
+      "description": "是否激活 (true 为激活，false 为禁用)"
+     }
+    },
+    "required": [
+     "agent",
+     "enabled"
+    ],
+    "additionalProperties": true
+   }
+  },
+  {
+   "name": "hub_events",
+   "description": "增量拉取某个任务的实时事件 (accepted/started/progress/done/error/timeout)，取代整包轮询状态。",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string",
+      "description": "派活回执里的 ref"
+     },
+     "since": {
+      "type": "number",
+      "description": "只返回 seq 大于它的新事件；首次省略即从头（最近 500 条）"
+     }
+    },
+    "required": [
+     "ref"
+    ],
+    "additionalProperties": true
+   }
+  }
+ ]
+}
