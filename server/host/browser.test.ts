@@ -21,6 +21,7 @@ import type { CdpSession, Params } from "../browser/cdp/connection.ts";
 import { FileChoosers } from "../browser/cdp/files.ts";
 import { uploadableFiles } from "../browser-upload.ts";
 import { createBrowserHost, type BrowserHostDeps } from "./browser.ts";
+import { getWorkbenchBotIdsForInstance } from "../drivers/web-chat/workbench-page.ts";
 
 vi.mock("../browser-engine.ts", async (original) => {
   const actual = await original<typeof import("../browser-engine.ts")>();
@@ -715,5 +716,37 @@ describe("a Team Cloud's boxed browsers and the files a turn uploads", () => {
     const plain = setup(undefined, { cloudHome: true }).host;
     expect(await plain.uploadPaths([{ file, name: null }], session, { command: "agent-browser", env: {} }), "unboxed, the file is given as it is").toEqual([file]);
     rmSync(work, { recursive: true, force: true });
+  });
+});
+
+describe("the workbench botIdsForInstance the browser host registers", () => {
+  it("lists the live bots whose model runs on the instance, skipping other instances' and archived ones", () => {
+    const { bots } = setup(undefined, { bots: ["one", "two", "other", "archived"] });
+    const on = (id: string, instanceId: string) => {
+      (bots.find((bot) => bot.id === id) as { modelSelection: unknown }).modelSelection = { instanceId, model: "m" };
+    };
+    on("one", "zcode");
+    on("two", "zcode");
+    on("other", "claude");
+    on("archived", "zcode");
+    (bots.find((bot) => bot.id === "archived") as { hidden?: boolean }).hidden = true;
+    const idsFor = getWorkbenchBotIdsForInstance();
+    expect(idsFor?.("zcode")).toEqual(["one", "two"]);
+    expect(idsFor?.("claude")).toEqual(["other"]);
+    expect(idsFor?.("unused")).toEqual([]);
+  });
+
+  it("answers [] while the store cannot be read", () => {
+    hosts.push(createBrowserHost({
+      cfg: { features: { browser: true } } as unknown as AppConfig,
+      store: () => { throw new Error("store is unreadable"); },
+      turnResources: { free: () => true, holder: () => undefined, onClaim: () => () => {} },
+      activeInternalGenerationByThread: new Map(),
+      mintInternalCapability: () => "capability-token",
+      DESKTOP_MANAGED: false,
+      CLOUD_HOME: null,
+      PORT: 4100,
+    }));
+    expect(getWorkbenchBotIdsForInstance()?.("zcode")).toEqual([]);
   });
 });

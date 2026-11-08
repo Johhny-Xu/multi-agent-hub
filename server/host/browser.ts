@@ -39,6 +39,8 @@ import type { HostKind } from "../browser/chrome/flags.ts";
 import { browserEngineKind, type BrowserEngineKind } from "../browser/config.ts";
 import { ChromeEngine, chromeTarget, LiveRouter, profileKey, RuntimeRouter } from "../browser/engines.ts";
 import { CHROME_BROWSER_SYSTEM_PROMPT } from "../browser/prompt.ts";
+import type { BrowserTarget } from "../browser/service.ts";
+import { setWorkbenchBrowserService, setWorkbenchBrowserTargetResolver, setWorkbenchBotIdsForInstance } from "../drivers/web-chat/workbench-page.ts";
 import { passkeyAnnotation } from "../browser/passkey-notice.ts";
 import { LentChromeDoors, lentChromeGuidance, type ChromeLender } from "../browser/lent-chrome.ts";
 import type { ChromeRoute } from "../device-links.ts";
@@ -127,6 +129,26 @@ export function createBrowserHost(deps: BrowserHostDeps) {
     idleMs,
     log: (line) => console.warn(line),
   });
+  setWorkbenchBrowserService(chromeEngine.service);
+  function resolveWorkbenchBrowserTarget(botId: string): BrowserTarget {
+    const bot = store.bot(botId);
+    const profile = bot?.browserProfile;
+    const { session, spec } = chromeSpec(botId, profile, "team");
+    const target = chromeTarget(session, spec);
+    if (!target) {
+      throw new Error(`Failed to resolve browser target for bot "${botId}"`);
+    }
+    return target;
+  }
+  setWorkbenchBrowserTargetResolver(resolveWorkbenchBrowserTarget);
+  function workbenchBotIdsForInstance(instanceId: string): string[] {
+    try {
+      return store.bots.filter((bot) => !bot.hidden && bot.modelSelection?.instanceId === instanceId).map((bot) => bot.id);
+    } catch {
+      return [];
+    }
+  }
+  setWorkbenchBotIdsForInstance(workbenchBotIdsForInstance);
   const lendRefusal = deps.lendRefusal ?? ((): LendRefusal => "unproven");
   const mayLend = (turn: TurnOwner) => lendRefusal(turn) === null;
   const lentChrome = deps.lentChrome;

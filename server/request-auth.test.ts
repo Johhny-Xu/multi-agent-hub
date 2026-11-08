@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  ADMIN_ALLOW,
   BROWSER_SIGN_IN,
   clearSessionCookie,
   fromBrowser,
@@ -412,6 +413,10 @@ describe("resolveRequestAuth", () => {
   it("never grants loopback trust to a request that came through a proxy, whatever Host it carries", () => {
     expect(isProxied(request({ host: "localhost", "x-forwarded-for": "203.0.113.9" }))).toBe(true);
     expect(isProxied(request({ host: "localhost", "x-forwarded-proto": "https" }))).toBe(true);
+    for (const name of ["x-real-ip", "cf-connecting-ip", "true-client-ip", "x-client-ip"]) {
+      expect(isProxied(request({ host: "localhost", [name]: "203.0.113.9" }))).toBe(true);
+      expect(resolve({ host: "localhost", [name]: "203.0.113.9" }).auth).toBeNull();
+    }
     expect(isProxied(request({ host: "localhost" }))).toBe(false);
     const viaProxy = resolve({ host: "localhost", "x-forwarded-for": "203.0.113.9" });
     expect(viaProxy.auth).toBeNull();
@@ -539,6 +544,28 @@ describe("resolveRequestAuth", () => {
     expect(remote.status).toBe(401);
     expect(remote.error).toMatch(/expired or was revoked; pair this device again/);
     expect(resolve({ host: "127.0.0.1:8799", cookie: `${cookieName}=${token}` })).toMatchObject({ auth: null, status: 401 });
+  });
+});
+
+describe("a listener on the local network (openmausbot serve --lan)", () => {
+  // SAFETY: only headers, method and the socket peer are read
+  const fromPeer = (remoteAddress: string, headers: Record<string, string>) => ({ headers, method: "GET", socket: { remoteAddress } }) as unknown as IncomingMessage;
+  const gate = (dir: string) => ({ sessions: new SessionRegistry({ file: join(dir, "sessions.json") }), cookieName: "omb_session_test", streamPath: "/api/events", url: new URL("/api/bots", "http://x") });
+
+  it("never makes another machine the owner, whatever Host it writes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-auth-lan-"));
+    try {
+      for (const peer of ["192.168.1.50", "::ffff:192.168.1.50", "100.101.102.103", "fd12::5"]) {
+        const spoofed = resolveRequestAuth(fromPeer(peer, { host: "127.0.0.1:8799" }), gate(dir));
+        expect([peer, spoofed.auth]).toEqual([peer, null]);
+        expect(isProxied(fromPeer(peer, { host: "localhost" }))).toBe(true);
+      }
+      for (const peer of ["127.0.0.1", "::1", "::ffff:127.0.0.1"]) {
+        expect(resolveRequestAuth(fromPeer(peer, { host: "127.0.0.1:8799" }), gate(dir)).auth?.kind, peer).toBe("loopback");
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -819,5 +846,38 @@ describe("a browser on this machine is not the owner", () => {
     expect(pick({ ...dev, OMB_LOOPBACK_TRUST: "service" }, { fromSource: true }).localBrowsers).toBe(false);
     expect(pick({ OMB_DEV_TRUST_LOCAL_BROWSER: "true" }, { fromSource: true })).toEqual({ trust: "owner", reason: "self-hosted default", localBrowsers: false });
     expect(resolveLoopbackTrust({ env: dev, desktopManaged: false, hostedWorkspace: false, cloudHome: true, fromSource: true }).localBrowsers).toBe(false);
+  });
+});
+
+describe("ZBOX-webchat-admin: /api/web-chat/connection scope", () => {
+  it("requiredScope keeps GET /api/web-chat/connection admin-only and /api/web-chat/ws at its original value", () => {
+    expect(requiredScope("GET", "/api/web-chat/connection")).toBe("admin");
+    // /api/web-chat/ws is the pre-gate branch with its own token check: assert its original value (admin default) unchanged.
+    expect(requiredScope("GET", "/api/web-chat/ws")).toBe("admin");
+    expect(requiredScope("POST", "/api/web-chat/connection")).toBe("admin");
+    // Explicit admin rule exists for GET /api/web-chat/connection
+    expect(ADMIN_ALLOW.some((rule) => rule.methods.includes("GET") && rule.path.test("/api/web-chat/connection"))).toBe(true);
+    // /api/web-chat/ws is not in ADMIN_ALLOW; retains its original handling
+    expect(ADMIN_ALLOW.some((rule) => rule.path.test("/api/web-chat/ws"))).toBe(false);
+  });
+
+  it("denies a client-scope session GET /api/web-chat/connection (request-auth layer)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-auth-wc-"));
+    try {
+      const local = new SessionRegistry({ file: join(dir, "sessions.json") });
+      const member = local.issue({ label: "member", scopes: ["client"] });
+      const denied = resolveRequestAuth(request({ authorization: `Bearer ${member.token}` }, "GET"), {
+        sessions: local, cookieName: "omb_session_test", streamPath: "/api/events", url: new URL("/api/web-chat/connection", "http://x"),
+      });
+      expect(denied.auth).toBeNull();
+      expect(denied.status).toBe(403);
+      const owner = local.issue({ label: "owner", scopes: ["admin", "client"] });
+      const ok = resolveRequestAuth(request({ authorization: `Bearer ${owner.token}` }, "GET"), {
+        sessions: local, cookieName: "omb_session_test", streamPath: "/api/events", url: new URL("/api/web-chat/connection", "http://x"),
+      });
+      expect(ok.auth?.kind).toBe("session");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

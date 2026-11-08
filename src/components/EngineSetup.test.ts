@@ -1,10 +1,14 @@
-import { createElement } from "react";
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EngineSetup, EngineUpdateNotice, installCommandFor, needsCli, needsSignIn } from "./EngineSetup";
+import { EngineSetup, EngineUpdateNotice, installCommandFor, isWebChatEngine, needsCli, needsSignIn } from "./EngineSetup";
+import { providerName } from "./EngineLibrary";
+import { HarkMark, ProviderMark } from "./ProviderIcons";
 import { engineStatus } from "./ModelPickerFull";
-import { StoreProvider, type InstanceInfo } from "@/state/store";
+import { BotEditorStore, initialState, StoreProvider, type InstanceInfo, type useStore } from "@/state/store";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -348,5 +352,135 @@ describe("API-key engine setup", () => {
 
   it("leaves CLI engines on their install card", () => {
     expect(render(instance({ state: "unavailable", reason: "`kimi` CLI not found" }))).not.toContain("data-engine-setup-api-key");
+  });
+});
+
+describe("web chat engine (harkWeb)", () => {
+  it("identifies web chat engines correctly", () => {
+    expect(isWebChatEngine({ driverKind: "harkWeb" } as InstanceInfo)).toBe(true);
+    expect(isWebChatEngine({ driverKind: "kimiAgent" } as InstanceInfo)).toBe(false);
+    expect(isWebChatEngine(undefined)).toBe(false);
+  });
+
+  it("names Hark provider in the engine library", () => {
+    expect(providerName({ driverKind: "harkWeb" } as InstanceInfo)).toBe("Hark");
+  });
+
+  it("renders web chat setup card with login prompt, copy buttons and viewer button for unauthenticated harkWeb", () => {
+    const harkEngine: InstanceInfo = {
+      instanceId: "harkWeb",
+      driverKind: "harkWeb",
+      displayName: "Hark",
+      models: { default: "hark-web", options: [] },
+      snapshot: {
+        state: "unavailable",
+        authenticated: false,
+        reason: "Login to Hark in the browser (https://hark.com)",
+      },
+    };
+    const html = renderToStaticMarkup(createElement(StoreProvider, null, createElement(EngineSetup, { instance: harkEngine })));
+    expect(html).toContain('data-web-chat-setup="harkWeb"');
+    expect(html).toContain("Login to Hark in the browser");
+    expect(html).toContain("Open browser viewer");
+    expect(html).toContain("Install Userscript");
+    expect(html).toContain("Copy connection URL");
+    expect(html).toContain("Copy token");
+    expect(html).toContain("chrome --remote-debugging-port=9222");
+  });
+
+  it("disables copy buttons when connection details are not loaded", () => {
+    const harkEngine: InstanceInfo = {
+      instanceId: "harkWeb",
+      driverKind: "harkWeb",
+      displayName: "Hark",
+      models: { default: "hark-web", options: [] },
+      snapshot: {
+        state: "unavailable",
+        authenticated: false,
+      },
+    };
+    const html = renderToStaticMarkup(createElement(StoreProvider, null, createElement(EngineSetup, { instance: harkEngine })));
+    expect(html).toContain("disabled");
+  });
+
+  it("draws appropriate marks for web chat engines", () => {
+    const harkMark = renderToStaticMarkup(createElement(HarkMark, { size: 16 }));
+    expect(harkMark).toContain("<svg");
+    expect(renderToStaticMarkup(createElement(ProviderMark, { driverKind: "harkWeb", size: 16 }))).toBe(harkMark);
+  });
+});
+
+describe("web chat connection fetch", () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  let host: HTMLDivElement;
+  let root: Root;
+
+  const harkEngine: InstanceInfo = {
+    instanceId: "harkWeb",
+    driverKind: "harkWeb",
+    displayName: "Hark",
+    models: { default: "hark-web", options: [] },
+    snapshot: { state: "unavailable", authenticated: false },
+  };
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  /** `/api/auth/session` answers with a live session so a refused request's recheck stays quiet. */
+  async function mountConnection(answer: (path: string) => Response): Promise<void> {
+    const store = {
+      state: initialState,
+      dispatch: vi.fn(),
+      refreshInstances: vi.fn(),
+      refreshModels: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ReturnType<typeof useStore>;
+    vi.stubGlobal("fetch", vi.fn(async (path: string) => answer(path)));
+    act(() => root.render(createElement(BotEditorStore, { value: store, children: createElement(EngineSetup, { instance: harkEngine }) })));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  const copyButton = (name: string) =>
+    Array.from(host.querySelectorAll("button")).find((node) => node.textContent?.includes(name))!;
+
+  it("shows the token UI once the connection answers 200", async () => {
+    await mountConnection((path) =>
+      path === "/api/web-chat/connection"
+        ? new Response(JSON.stringify({ wsUrl: "ws://fixture:9222/devtools/browser", token: "fixture-token" }))
+        : new Response(JSON.stringify({ kind: "session", id: "fixture" })));
+    expect(copyButton("Copy token").disabled).toBe(false);
+    expect(copyButton("Copy connection URL").disabled).toBe(false);
+    expect(copyButton("Copy token").title).toBe("");
+    expect(host.textContent).not.toContain("Admin access is required");
+    expect(host.textContent).not.toContain("Connection details unavailable");
+  });
+
+  it("says the connection token needs an admin when the answer is 403", async () => {
+    await mountConnection((path) =>
+      path === "/api/web-chat/connection"
+        ? new Response(JSON.stringify({ error: "forbidden" }), { status: 403 })
+        : new Response(JSON.stringify({ kind: "session", id: "fixture" })));
+    expect(host.textContent).toContain("Admin access is required to fetch the connection token.");
+    expect(copyButton("Copy token").disabled).toBe(true);
+    expect(copyButton("Copy token").title).toContain("Admin access is required");
+  });
+
+  it("keeps the plain failure copy for other refusals such as a 500", async () => {
+    await mountConnection((path) =>
+      path === "/api/web-chat/connection"
+        ? new Response(JSON.stringify({ error: "boom" }), { status: 500 })
+        : new Response(JSON.stringify({ kind: "session", id: "fixture" })));
+    expect(host.textContent).not.toContain("Admin access is required");
+    expect(copyButton("Copy token").disabled).toBe(true);
+    expect(copyButton("Copy token").title).toBe("Connection details unavailable");
   });
 });

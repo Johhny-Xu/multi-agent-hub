@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Check, Copy, Download, ExternalLink, KeyRound, Loader2, LogIn, TerminalSquare, X } from "lucide-react";
-import { api, type InstanceInfo, useStore } from "@/state/store";
+import { api, ApiError, type InstanceInfo, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { engineDisplayName } from "@/lib/engine-name";
@@ -497,6 +497,162 @@ function ApiKeyEngineSetup({ instance, className, unframed, configured = false }
   );
 }
 
+export function isWebChatEngine(instance: InstanceInfo | undefined): boolean {
+  return instance?.driverKind === "harkWeb";
+}
+
+function WebChatEngineSetup({ instance, className, unframed }: { instance: InstanceInfo; className?: string; unframed?: boolean }) {
+  const { dispatch } = useStore();
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [connection, setConnection] = useState<{ wsUrl: string; token: string } | null>(null);
+  const [connectionLoaded, setConnectionLoaded] = useState(false);
+  const [adminOnly, setAdminOnly] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api("/api/web-chat/connection")
+      .then((data) => {
+        if (!active) return;
+        if (data && typeof data.token === "string") setConnection(data);
+        setConnectionLoaded(true);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        if (cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) setAdminOnly(true);
+        setConnectionLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const name = engineDisplayName(instance);
+  const loggedIn = instance.snapshot.state === "available" && instance.snapshot.authenticated !== false;
+  const config = (instance.config ?? {}) as { transport?: string; cdpUrl?: string };
+  const cdpUrl = config.cdpUrl || "http://127.0.0.1:9222";
+
+  const wsUrl = connection?.wsUrl || "";
+  const token = connection?.token || "";
+
+  const handleCopyUrl = async () => {
+    if (!wsUrl) return;
+    const res = await copyText(wsUrl);
+    if (res === "copied") {
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    }
+  };
+
+  const handleCopyToken = async () => {
+    if (!token) return;
+    const res = await copyText(token);
+    if (res === "copied") {
+      setCopiedToken(true);
+      setTimeout(() => setCopiedToken(false), 2000);
+    }
+  };
+
+  const statusText = instance.snapshot.reason || (loggedIn ? t("engineSetup.webChatStatusConnected") : t("engineSetup.webChatStatusDisconnected"));
+  const urlUnavailable = !wsUrl;
+  const tokenUnavailable = !token;
+  const connectionNote = adminOnly
+    ? t("engineSetup.webChatConnectionAdminOnly")
+    : connectionLoaded
+      ? t("engineSetup.webChatConnectionFailed")
+      : t("engineSetup.webChatLoadingConnection");
+  const urlTitle = wsUrl || connectionNote;
+  const tokenTitle = token ? undefined : connectionNote;
+
+  return (
+    <div data-web-chat-setup={instance.instanceId} className={cn(!unframed && "rounded-xl border border-hairline/40 bg-control/30 p-3", className)}>
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-inset text-ink-secondary">
+          <LogIn size={14} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-ink">
+            {t("engineSetup.signInTitle", { name })}
+          </div>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">
+            {t("engineSetup.webChatSignInPrompt", { name })}
+          </p>
+
+          <div className="mt-2.5 space-y-2 rounded-lg border border-hairline/50 bg-inset/40 p-2.5 text-[12px]">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-ink">{t("engineSetup.webChatTransportUserscript")}</span>
+              <a
+                href="/harkweb.user.js"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent underline hover:brightness-110"
+              >
+                {t("engineSetup.webChatInstallUserscript")}
+              </a>
+            </div>
+            <div className="text-ink-secondary">
+              {t("engineSetup.webChatConnectionStatus", { status: statusText })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={handleCopyUrl}
+                disabled={urlUnavailable}
+                className={cn(
+                  "flex items-center gap-1 rounded bg-raised px-2 py-1 text-[11px] font-medium text-ink hover:bg-raised-hover",
+                  urlUnavailable && "opacity-50 cursor-not-allowed hover:bg-raised",
+                )}
+                title={urlTitle}
+              >
+                <Copy size={11} />
+                {copiedUrl ? t("engineSetup.webChatUrlCopied") : t("engineSetup.webChatCopyUrl")}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyToken}
+                disabled={tokenUnavailable}
+                className={cn(
+                  "flex items-center gap-1 rounded bg-raised px-2 py-1 text-[11px] font-medium text-ink hover:bg-raised-hover",
+                  tokenUnavailable && "opacity-50 cursor-not-allowed hover:bg-raised",
+                )}
+                title={tokenTitle}
+              >
+                <Copy size={11} />
+                {copiedToken ? t("engineSetup.webChatTokenCopied") : t("engineSetup.webChatCopyToken")}
+              </button>
+            </div>
+            {adminOnly && (
+              <p className="pt-1 text-[11px] leading-relaxed text-ink-secondary">
+                {t("engineSetup.webChatConnectionAdminOnly")}
+              </p>
+            )}
+            <div className="pt-1 text-[11px] text-ink-muted">
+              {t("engineSetup.webChatCdpFallback", { command: "chrome --remote-debugging-port=9222 --user-data-dir=<profile>", url: cdpUrl })}
+            </div>
+          </div>
+
+          {instance.snapshot.reason && !loggedIn && (
+            <p role="alert" className="mt-2 text-[12px] leading-relaxed text-ink-secondary">
+              {instance.snapshot.reason}
+            </p>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => dispatch?.({ type: "toggleComputer", open: true })}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-white hover:brightness-110"
+            >
+              <ExternalLink size={13} />
+              {t("engineSetup.openBrowserViewer")}
+            </button>
+            <RefreshEngines key={instance.instanceId} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ApiKeyEngineManage({ instance, className }: { instance: InstanceInfo; className?: string }) {
   if (!hasSavedApiKey(instance)) return null;
   return <ApiKeyEngineSetup instance={instance} className={className} unframed={false} configured />;
@@ -574,6 +730,10 @@ export function EngineSetup({
 
   if (intent === "cloud" && grokKeyInstead(instance, cloudHome)) {
     return <GrokKeyInstead className={className} unframed={unframed} />;
+  }
+
+  if (isWebChatEngine(instance)) {
+    return <WebChatEngineSetup instance={instance} className={className} unframed={unframed} />;
   }
 
   if (!install || instance.snapshot.authenticationUnavailableReason) {
