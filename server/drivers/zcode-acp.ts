@@ -48,6 +48,23 @@ function eventPollTimeoutMs(env: Record<string, string | undefined>): number {
   return Math.min(raw, 300_000);
 }
 
+/** The first backoff before a turn the plan's concurrency cap refused is resent in the same native
+ * session (E64); each retry doubles it. Node clamps an out-of-range setTimeout delay to 1 ms,
+ * which would retry in a tight loop, so the override has a 10 ms floor and a 5-minute ceiling. */
+function zcodeConcurrencyRetryMs(env: Record<string, string | undefined>): number {
+  const raw = Number(env.OMB_ZCODE_CONCURRENCY_RETRY_MS ?? "");
+  if (!Number.isFinite(raw) || raw < 10) return 20_000;
+  return Math.min(raw, 300_000);
+}
+
+/** How many times a concurrency-limited turn may be resent (E64). */
+function zcodeConcurrencyRetries(env: Record<string, string | undefined>): number {
+  const text = env.OMB_ZCODE_CONCURRENCY_RETRIES?.trim();
+  const raw = text ? Number(text) : NaN;
+  if (!Number.isInteger(raw) || raw < 0) return 3;
+  return raw;
+}
+
 /** The recycle quiet period, overridable with OMB_ZCODE_RECYCLE_IDLE_SEC (seconds). Node resets an
  * out-of-range setTimeout delay to 1 ms, which would tear a just-finished app server down at once,
  * so the override is capped at a day. */
@@ -180,7 +197,38 @@ export function classifyZcodeRpcRejection(error: unknown): string {
   if (/quota|credit|usage limit|entitlement|unusual activity|insufficient/i.test(text)) return "the provider plan or quota refused the request";
   if (/permission|denied|forbidden|unauthorized|invalid request/i.test(text)) return "rejected by permissions or authentication";
   if (/ZodError|not supported|unsupported/i.test(text)) return "the request was rejected as invalid";
+  if (isZcodeConcurrencyRejection(error)) return "the plan's concurrency limit was hit (429); try again shortly";
+  if (/\b1005\b|exceed(?:ed)? (?:the )?quota|quota (?:limit|exceeded)/i.test(nestedZcodeErrorText(error))) {
+    return "the plan's quota is used up (1005)";
+  }
   return "rejected by the app server";
+}
+
+/** Every string and number in an error object, however it is nested: the vendor buries its
+ * plan-quota business code inside turn.failed's error object (CLI 0.16.9 nests it as
+ * error.cause.context.providerCode), past the flat message checks above. Depth ≤ 4 and a visited
+ * set keep the walk bounded and cycle-safe. */
+function nestedZcodeErrorText(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  const walk = (value: unknown, depth: number): void => {
+    if (depth > 4 || !value || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    for (const entry of Object.values(value)) {
+      if (typeof entry === "string" || typeof entry === "number") parts.push(String(entry));
+      else walk(entry, depth + 1);
+    }
+  };
+  walk(error, 0);
+  return parts.join(" ");
+}
+
+/** The vendor's signals that a turn was refused by the plan's per-account concurrency cap (E64):
+ * the nested status wording, or a 429 beside any concurrency wording. */
+function isZcodeConcurrencyRejection(error: unknown): boolean {
+  const nested = nestedZcodeErrorText(error);
+  if (/concurrency limit|too many concurrent|concurrent (?:request|session)s? (?:limit|exceeded)/i.test(nested)) return true;
+  return /\b429\b/.test(nested) && /concurren/i.test(nested);
 }
 
 /** The vendor's wire signal that a turn died on the output-token cap: after its three output
@@ -231,6 +279,7 @@ interface BridgeSession {
   catalog?: ZcodeModel[];
   defaultModelId?: string;
   zcodeSessionId?: string;
+  zcodeSessionModel?: string;
   lastSeq: number;
   busy: boolean;
   cancelled: boolean;
@@ -970,7 +1019,8 @@ function levelLabel(value: string): string {
 
 /** Turns one `session/create` snapshot into the picker's model list. Provider/model ids are
  * preserved; duplicate bare model ids (two providers can offer the same name) become
- * `providerId/modelId` so every picker id is unique. */
+ * `providerId/modelId` so every picker id is unique, and the account's Start Plan entries are always
+ * qualified so saved Start Plan ids stay valid whatever else the session lists (E65). */
 export function catalogFromSnapshot(snapshot: any): CatalogSnapshot {
   const available = snapshot?.settings?.model?.available;
   if (!Array.isArray(available)) return { models: [] };
@@ -983,12 +1033,16 @@ export function catalogFromSnapshot(snapshot: any): CatalogSnapshot {
     const providerId = entry.ref.providerId as string;
     const modelId = entry.ref.modelId as string;
     const duplicate = (nameCounts.get(modelId) ?? 0) > 1;
+    // E65: the Start Plan entry is always provider-qualified, whether or not another provider offers the
+    // same name, so a bot saved on `account:bigmodel-start-plan/<model>` keeps matching the session's
+    // picker when the coding-plan key is not injected (policy 2026-11-09) and the plan stands alone.
+    const qualified = duplicate || isZcodeStartPlanProvider(providerId);
     const levels = Array.isArray(entry.reasoning?.levels)
       ? entry.reasoning.levels.flatMap((level: any) => typeof level?.value === "string" ? [level.value as string] : [])
       : [];
     const defaultLevel = typeof entry.reasoning?.defaultLevel === "string" ? entry.reasoning.defaultLevel : undefined;
     models.push({
-      pickerId: duplicate ? `${providerId}/${modelId}` : modelId,
+      pickerId: qualified ? `${providerId}/${modelId}` : modelId,
       providerId,
       modelId,
       label: duplicate && entry.providerLabel ? `${entry.label ?? modelId} — ${entry.providerLabel}` : (entry.label ?? modelId),
@@ -1254,12 +1308,27 @@ function startBridge(): void {
     }
   };
 
+  const sessionModel = (session: BridgeSession): ZcodeModel | undefined => {
+    const catalog = session.catalog ?? [];
+    return findModel(catalog, session.model)
+      ?? findModel(catalog, preferredZcodeModelId(catalog))
+      ?? findModel(catalog, session.defaultModelId);
+  };
+
   const ensureZcodeSession = async (session: BridgeSession): Promise<string> => {
-    if (session.zcodeSessionId) return session.zcodeSessionId;
+    if (session.zcodeSessionId) {
+      // The native session was created for one model; after a session/set_model it would keep
+      // serving the old provider until the app server restarts (E57), so close it and open a new
+      // native session on the model the session now carries.
+      const current = sessionModel(session);
+      if (!current || session.zcodeSessionModel === current.pickerId) return session.zcodeSessionId;
+      await session.app?.request("session/close", { sessionId: session.zcodeSessionId }, 5_000).catch(() => {});
+      session.zcodeSessionId = undefined;
+      session.lastSeq = 0;
+    }
     const app = await ensureApp(session);
-    const catalog = await ensureCatalog(session);
-    const preferred = preferredZcodeModelId(catalog);
-    const model = findModel(catalog, session.model) ?? findModel(catalog, preferred) ?? findModel(catalog, session.defaultModelId);
+    await ensureCatalog(session);
+    const model = sessionModel(session);
     if (!model) throw new ZcodeRpcError("MODEL_UNAVAILABLE");
     const level = session.thoughtLevel && model.levels.includes(session.thoughtLevel)
       ? session.thoughtLevel
@@ -1286,6 +1355,7 @@ function startBridge(): void {
       if (Number.isInteger(event?.seq)) seq = Math.max(seq, event.seq);
     }
     session.zcodeSessionId = sessionId;
+    session.zcodeSessionModel = model.pickerId;
     session.lastSeq = seq;
     return sessionId;
   };
@@ -1300,9 +1370,7 @@ function startBridge(): void {
     // The output cap in force for this turn's model: the bridge's own limit on a deployed-key
     // provider, unknown for the plan models the builtin config sizes.
     const byokProviderIds = new Set(byokProvidersFromEnv(process.env).map((provider) => provider.id));
-    const turnModel = findModel(session.catalog ?? [], session.model)
-      ?? findModel(session.catalog ?? [], preferredZcodeModelId(session.catalog ?? []))
-      ?? findModel(session.catalog ?? [], session.defaultModelId);
+    const turnModel = sessionModel(session);
     const outputLimit = turnModel && byokProviderIds.has(turnModel.providerId) ? byokMaxOutputTokens(process.env) : undefined;
     const inputId = randomUUID();
     // The send waits for acceptance on the turn's silence window, not a fixed limit: the app
@@ -1423,7 +1491,15 @@ function startBridge(): void {
           if (zcodeTurnHitOutputLimit(vendor)) {
             terminalError = new ZcodeRpcError("TURN_FAILED", { readableReason: zcodeOutputLimitReason(outputLimit) });
           } else {
-            terminalError = new ZcodeRpcError(typeof payload.code === "string" ? payload.code : "TURN_FAILED");
+            // The vendor error rides along so classifyZcodeRpcRejection can read the plan-quota
+            // code buried inside it (E58); the message it carries is never echoed back. A
+            // concurrency refusal before the turn showed anything may be resent in place (E64).
+            const concurrencyRetryable = isZcodeConcurrencyRejection(vendor)
+              && streamed.length === 0 && startedTools.size === 0;
+            terminalError = new ZcodeRpcError(typeof payload.code === "string" ? payload.code : "TURN_FAILED", {
+              error: vendor,
+              ...(concurrencyRetryable ? { concurrencyRetryable: true } : {}),
+            });
           }
           break;
         }
@@ -1499,6 +1575,31 @@ function startBridge(): void {
     }
   };
 
+  /** Resends a turn the plan's concurrency cap refused before it showed anything (E64): the same
+   * text in the same native session after a doubling backoff, at most
+   * OMB_ZCODE_CONCURRENCY_RETRIES times; a cancel during the wait ends the turn at once, and a
+   * turn that already streamed text or ran a tool keeps failing without a resend. */
+  const runTurnWithConcurrencyBackoff = async (session: BridgeSession, text: string): Promise<TurnTerminal> => {
+    const retries = zcodeConcurrencyRetries(process.env);
+    let waitMs = zcodeConcurrencyRetryMs(process.env);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await runTurn(session, text);
+      } catch (error) {
+        if (attempt >= retries
+          || (error as { detail?: { concurrencyRetryable?: unknown } }).detail?.concurrencyRetryable !== true) {
+          throw error;
+        }
+        const deadline = Date.now() + waitMs;
+        waitMs *= 2;
+        while (Date.now() < deadline) {
+          if (session.cancelled) throw new ZcodeRpcError("CANCELLED");
+          await sleep(Math.min(TURN_POLL_MS, deadline - Date.now()));
+        }
+      }
+    }
+  };
+
   const handlePrompt = async (id: unknown, params: Record<string, unknown>): Promise<void> => {
     const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
     const session = sessions.get(sessionId);
@@ -1508,7 +1609,7 @@ function startBridge(): void {
     if (!text.trim()) return fail(id, -32602, "ZCode bridge: the prompt carried no text.");
     cancelZcodeAppServerRecycle(session);
     try {
-      const result = await runTurn(session, text);
+      const result = await runTurnWithConcurrencyBackoff(session, text);
       for (let offset = 0; offset < result.text.length; offset += REPLY_CHUNK) {
         update(sessionId, {
           sessionUpdate: "agent_message_chunk",

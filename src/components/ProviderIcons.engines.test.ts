@@ -50,11 +50,14 @@ describe("the engine marks that used to fall back to a letter", () => {
     expect(html.match(/<path/g)).toHaveLength(1);
   });
 
-  it("draws QwenPaw's own icon instead of the first-letter placeholder", () => {
-    const html = render("qwenpawAgent");
-    expect(html).toContain('<img src="');
-    expect(html).toContain("qwenpaw");
-    expect(html).not.toContain("<span");
+  it("draws codebuddy and codebuddy-cn each an svg mark of their own with a viewBox", () => {
+    const [codebuddy, codebuddyCn] = ["codebuddyAgent", "codebuddyCnAgent"].map(render);
+    for (const html of [codebuddy, codebuddyCn]) {
+      expect(html.startsWith("<svg")).toBe(true);
+      expect(html).toContain('viewBox="');
+      expect(html).not.toContain("<span");
+    }
+    expect(codebuddyCn).toBe(codebuddy);
   });
 
   it("leaves no unrendered template text in Meoo's paths", () => {

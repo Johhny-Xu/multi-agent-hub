@@ -1,6 +1,6 @@
 import type { CdpPage } from "../../browser/cdp/page.ts";
 import type { ViewerHub } from "../../browser/viewers/core.ts";
-import type { BrowserService, BrowserTarget } from "../../browser/service.ts";
+import type { BrowserService, BrowserTarget, ProfileState } from "../../browser/service.ts";
 import type { WebChatPage } from "./types.ts";
 
 export type WorkbenchBrowserTargetResolver = (botId: string) => BrowserTarget;
@@ -52,11 +52,11 @@ export function getWorkbenchViewerHub(instanceId: string): ViewerHub | null {
 async function operateOnFirstVisible(
   cdpPage: CdpPage,
   selector: string,
-  action: (singleSelector: string) => Promise<void>,
+  action: (singleSelector: string) => Promise<unknown>,
   _timeoutMs?: number,
 ): Promise<void> {
   const marker = `wc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const marked = await cdpPage.evaluate<boolean>(`(() => {
+  const marked = (await cdpPage.evaluate(`(() => {
     // data-omb-webchat setAttribute
     const parts = ${JSON.stringify(selector)}.split(',').map(s => s.trim()).filter(Boolean);
     for (const part of parts) {
@@ -72,7 +72,7 @@ async function operateOnFirstVisible(
       }
     }
     return false;
-  })()`).catch(() => false);
+  })()`).catch(() => false)) as boolean;
 
   const targetSelector = marked ? `[data-omb-webchat="${marker}"]` : selector.split(",")[0]?.trim() ?? selector;
   try {
@@ -126,7 +126,7 @@ export function createWebChatPageFromCdp(cdpPage: CdpPage): WebChatPage {
     },
     async isVisible(selector: string): Promise<boolean> {
       try {
-        const visible = await cdpPage.evaluate<boolean>(`(() => {
+        const visible = (await cdpPage.evaluate(`(() => {
           // isElVisible
           const parts = ${JSON.stringify(selector)}.split(',').map(s => s.trim()).filter(Boolean);
           for (const part of parts) {
@@ -138,7 +138,7 @@ export function createWebChatPageFromCdp(cdpPage: CdpPage): WebChatPage {
             if (rect.width > 0 && rect.height > 0) return true;
           }
           return false;
-        })()`).catch(() => false);
+        })()`).catch(() => false)) as boolean;
         return Boolean(visible);
       } catch {
         return false;
@@ -146,7 +146,7 @@ export function createWebChatPageFromCdp(cdpPage: CdpPage): WebChatPage {
     },
     async getText(selector: string): Promise<string> {
       // -b: 回复取最后一条，找不到时报错而不是返回整页文字。
-      const text = await cdpPage.evaluate<string>(`(() => {
+      const text = (await cdpPage.evaluate(`(() => {
         // lastNode assistantMessage
         const parts = ${JSON.stringify(selector)}.split(',').map(s => s.trim()).filter(Boolean);
         let lastNode = null;
@@ -168,7 +168,7 @@ export function createWebChatPageFromCdp(cdpPage: CdpPage): WebChatPage {
         }
         if (!lastNode) return '__NOT_FOUND__';
         return (lastNode.innerText || lastNode.textContent || '').trim();
-      })()`).catch(() => '__NOT_FOUND__');
+      })()`).catch(() => '__NOT_FOUND__')) as string;
 
       if (text === '__NOT_FOUND__') {
         throw new Error(`No assistant message found matching selector "${selector}"`);
@@ -202,8 +202,8 @@ export async function createWebChatPageFromViewerHub(
   let newlyCreatedTab: any = null;
 
   if (!chosenTab) {
-    newlyCreatedTab = await hub.host.openTab(null, "agent");
-    chosenTab = newlyCreatedTab;
+    chosenTab = await hub.host.openTab(null, "agent");
+    newlyCreatedTab = chosenTab;
     if (targetUrl) {
       await chosenTab.page.navigate(targetUrl).catch(() => {});
     }
@@ -256,7 +256,10 @@ export function createDefaultWorkbenchPageFactory(
     if (service) {
       const resolver = deps?.resolveBrowserTarget ?? getWorkbenchBrowserTargetResolver();
       const targetBotId = botId || "harkWeb";
-      const browserTarget = resolver ? resolver(targetBotId) : service.profiles()[0]?.target;
+      // ProfileState carries no target field, so this fallback answers undefined and the caller throws.
+      const browserTarget = resolver
+        ? resolver(targetBotId)
+        : (service.profiles()[0] as (ProfileState & { target?: BrowserTarget }) | undefined)?.target;
       if (!browserTarget) {
         throw new Error(`Failed to resolve browser target for bot "${targetBotId}"`);
       }

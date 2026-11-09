@@ -9,6 +9,13 @@ export const DEBUG_ZONE_SECTION_ID = "builtin:debug";
 
 const HUB_BOT_PREFIX = "hub·";
 
+/** Departments that only show in advanced mode: 「临时」 holds throwaway test bots (zcode-n1… etc.). */
+export const ADVANCED_ONLY_SECTIONS: ReadonlySet<string> = new Set(["临时"]);
+
+export function isAdvancedOnlySection(section: string | null | undefined): boolean {
+  return !!section && ADVANCED_ONLY_SECTIONS.has(section);
+}
+
 /** hub-compat keeps one bot per worker named `hub·<agent>`; `debug`/`source` are the explicit markers for anything
  * else that should stay out of the everyday lists. */
 export function isDebugBot(bot: DebugZoneBot): boolean {

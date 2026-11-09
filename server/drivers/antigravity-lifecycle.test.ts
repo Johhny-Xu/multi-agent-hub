@@ -37,6 +37,8 @@ const runtime: AntigravityRuntime = {
   harnessPath: "/fixture/harness",
   source: "managed",
   version: "1.1.1",
+  spawnArgs: ["--uid="],
+  kind: "packaged",
 };
 const initialized = {
   protocolVersion: 1,

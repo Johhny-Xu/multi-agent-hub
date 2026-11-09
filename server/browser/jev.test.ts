@@ -47,14 +47,14 @@ describe("jev gateway", () => {
       observe: vi.fn(async () => createMockObservation()),
       verify: vi.fn(async () => true),
       prepare: vi.fn(async () => ({ ticket: "tk_1", call: { name: "click", arguments: {} } })),
-      execute: vi.fn(async () => ({ state: "completed", result: {}, postObservation: "ok" })),
+      execute: vi.fn(async (): Promise<BrowserExecution> => ({ state: "completed", result: {}, postObservation: "ok" })),
     };
 
     const deps: BrowserGatewayDeps = {
       decider: {} as Decider,
       config: () => ({ decider: { enabled: false } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
@@ -80,7 +80,7 @@ describe("jev gateway", () => {
       decider: { ask: deciderAsk } as unknown as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
@@ -119,11 +119,11 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    await gateway.run(createMockScope(), { goal: "Find shoes", expect: { all: [{ kind: "visible-text", text: "Results" }] } });
+    await gateway.run(createMockScope(), { goal: "Find shoes", maxSteps: 4, expect: { all: [{ kind: "visible-text", text: "Results" }] } });
 
     expect(capturedState).toBeDefined();
     expect(capturedState.goal.length).toBeLessThanOrEqual(2000);
@@ -154,11 +154,11 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Goal" });
+    const result = await gateway.run(createMockScope(), { goal: "Goal", maxSteps: 4 });
 
     expect(result.status).toBe("needs-agent");
     expect(result.reason).toBe("low-confidence");
@@ -200,7 +200,7 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
@@ -233,11 +233,11 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Type name" });
+    const result = await gateway.run(createMockScope(), { goal: "Type name", maxSteps: 4 });
 
     // Handoff to active bot with status needs-input
     expect(result.status).toBe("needs-input");
@@ -267,19 +267,19 @@ describe("jev gateway", () => {
       }),
       verify: vi.fn(async () => true),
       prepare: vi.fn(async () => ({ ticket: "tk_1", call: { name: "click", arguments: {} } })),
-      execute: vi.fn(async () => ({ state: "completed", result: {}, postObservation: "ok" })),
+      execute: vi.fn(async (): Promise<BrowserExecution> => ({ state: "completed", result: {}, postObservation: "ok" })),
     };
 
     const deps: BrowserGatewayDeps = {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       now: () => nowTime,
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Run" });
+    const result = await gateway.run(createMockScope(), { goal: "Run", maxSteps: 4 });
 
     expect(result.status).toBe("needs-agent");
   });
@@ -313,7 +313,7 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
@@ -353,11 +353,11 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope({ signal: controller.signal }), { goal: "Run" });
+    const result = await gateway.run(createMockScope({ signal: controller.signal }), { goal: "Run", maxSteps: 4 });
 
     expect(result.status).toBe("interrupted");
     expect(result.reason).toBe("cancelled");
@@ -389,20 +389,21 @@ describe("jev gateway", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
     // When expect is provided and verification fails, it returns expectation-unmet, NOT completed!
     const resultWithExpect = await gateway.run(createMockScope(), {
       goal: "Search",
+      maxSteps: 4,
       expect: { all: [{ kind: "visible-text", text: "Welcome" }] },
     });
     expect(resultWithExpect.status).toBe("needs-agent");
     expect(resultWithExpect.reason).toBe("expectation-unmet");
 
     // Without expect, DONE returns needs-agent with done-unverified
-    const resultNoExpect = await gateway.run(createMockScope(), { goal: "Search" });
+    const resultNoExpect = await gateway.run(createMockScope(), { goal: "Search", maxSteps: 4 });
     expect(resultNoExpect.status).toBe("needs-agent");
     expect(resultNoExpect.reason).toBe("done-unverified");
   });
@@ -418,7 +419,7 @@ describe("jev gateway", () => {
         typedText = text;
         return { ticket: "tk_1", call: { name: "type", arguments: { text } } };
       }),
-      execute: vi.fn(async () => ({ state: "completed", result: {}, postObservation: "ok" })),
+      execute: vi.fn(async (): Promise<BrowserExecution> => ({ state: "completed", result: {}, postObservation: "ok" })),
     };
 
     const decider: Partial<Decider> = {
@@ -458,7 +459,7 @@ describe("jev gateway", () => {
           },
         }) as AppConfig,
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       fetch: mockFetch as unknown as typeof fetch,
     };
 
@@ -508,12 +509,12 @@ describe("jev gateway", () => {
           },
         }) as AppConfig,
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       fetch: mockFetch as unknown as typeof fetch,
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Search for books" });
+    const result = await gateway.run(createMockScope(), { goal: "Search for books", maxSteps: 4 });
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(result.status).toBe("needs-input");
@@ -552,11 +553,11 @@ describe("jev gateway", () => {
           decider: { enabled: true, key: "key", jobs: { browserAutomation: true, browserTextModel: true } },
         }) as AppConfig,
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       fetch: vi.fn(async () => ({ ok: false, status: 401 }) as Response) as any,
     };
 
-    const res401 = await createBrowserGateway(deps401).run(createMockScope(), { goal: "Search" });
+    const res401 = await createBrowserGateway(deps401).run(createMockScope(), { goal: "Search", maxSteps: 4 });
     expect(res401.status).toBe("needs-input");
     expect(res401.reason).toBe("text-model-failed");
     expect(res401.pendingField).toBeDefined();
@@ -570,7 +571,7 @@ describe("jev gateway", () => {
           decider: { enabled: true, key: "key", jobs: { browserAutomation: true, browserTextModel: true } },
         }) as AppConfig,
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       fetch: vi.fn(async () => {
         const err = new Error("timeout");
         err.name = "AbortError";
@@ -578,7 +579,7 @@ describe("jev gateway", () => {
       }) as any,
     };
 
-    const resTimeout = await createBrowserGateway(depsTimeout).run(createMockScope(), { goal: "Search" });
+    const resTimeout = await createBrowserGateway(depsTimeout).run(createMockScope(), { goal: "Search", maxSteps: 4 });
     expect(resTimeout.status).toBe("needs-input");
     expect(resTimeout.reason).toBe("text-model-failed");
 
@@ -591,14 +592,14 @@ describe("jev gateway", () => {
           decider: { enabled: true, key: "key", jobs: { browserAutomation: true, browserTextModel: true } },
         }) as AppConfig,
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       fetch: vi.fn(async () => ({
         ok: true,
         json: async () => ({ choices: [{ message: { content: "invalid json string" } }] }),
       }) as Response) as any,
     };
 
-    const resNonJson = await createBrowserGateway(depsNonJson).run(createMockScope(), { goal: "Search" });
+    const resNonJson = await createBrowserGateway(depsNonJson).run(createMockScope(), { goal: "Search", maxSteps: 4 });
     expect(resNonJson.status).toBe("needs-input");
     expect(resNonJson.reason).toBe("text-model-failed");
   });
@@ -635,7 +636,7 @@ describe("jev gateway", () => {
           decider: { enabled: true, key: "key", jobs: { browserAutomation: true, browserTextModel: true } },
         }) as AppConfig,
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
       fetch: vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
         capturedAuthHeader = String((init?.headers as any)?.Authorization);
         return { ok: false, status: 500 } as Response;
@@ -643,7 +644,7 @@ describe("jev gateway", () => {
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Confidential search" });
+    const result = await gateway.run(createMockScope(), { goal: "Confidential search", maxSteps: 4 });
 
     // Key was indeed used to authorize the request
     expect(capturedAuthHeader).toBe(`Bearer ${SECRET_KEY}`);

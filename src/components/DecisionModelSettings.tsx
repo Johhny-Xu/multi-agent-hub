@@ -199,7 +199,7 @@ export function DecisionModelSettings() {
       }
       if (state.config?.decider) {
         dispatch({
-          type: "config",
+          type: "configStatus",
           config: {
             ...state.config,
             decider: { ...state.config.decider, proxyUrl: result.proxyUrl },

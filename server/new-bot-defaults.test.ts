@@ -1,30 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { newBotDefaultsSchema, resolveBotCreationDefaults } from "./new-bot-defaults.ts";
+import { DEFAULT_NEW_BOT_BROWSER_PROFILE, newBotDefaultsSchema, resolveBotCreationDefaults } from "./new-bot-defaults.ts";
 import { parseConfigPatch } from "./config.ts";
 
 describe("new-bot templates", () => {
   it("preserves restricted and empty tool defaults while allowing an explicit owner reset", () => {
     const defaults = newBotDefaultsSchema.parse({ profile: { toolScope: { allow: ["native:read", "native:read"] } } });
     expect(defaults.profile).toEqual({ toolScope: { allow: ["native:read"] } });
-    expect(resolveBotCreationDefaults(defaults, {}).profile).toEqual({ toolScope: { allow: ["native:read"] } });
-    expect(resolveBotCreationDefaults(defaults, { settings: { toolScope: { allow: [] } } }).profile).toEqual({ toolScope: { allow: [] } });
-    expect(resolveBotCreationDefaults(defaults, { settings: { toolScope: null } }).profile).toEqual({ toolScope: null });
+    expect(resolveBotCreationDefaults(defaults, {}).profile).toEqual({ browserProfile: "mychrome", toolScope: { allow: ["native:read"] } });
+    expect(resolveBotCreationDefaults(defaults, { settings: { toolScope: { allow: [] } } }).profile).toEqual({ browserProfile: "mychrome", toolScope: { allow: [] } });
+    expect(resolveBotCreationDefaults(defaults, { settings: { toolScope: null } }).profile).toEqual({ browserProfile: "mychrome", toolScope: null });
     expect(newBotDefaultsSchema.safeParse({ profile: { toolScope: { deny: ["mcp:*:read"] } } }).success).toBe(false);
   });
   it("stores Full as a plain preference, with no consent field, and creates new bots with it", () => {
     const defaults = newBotDefaultsSchema.parse({ profile: { name: "", approvalMode: "full" } });
     expect(defaults.profile).toEqual({ name: "", approvalMode: "full" });
-    expect(resolveBotCreationDefaults(defaults, { name: "Ada" }).profile).toEqual({ name: "Ada", approvalMode: "full" });
-    expect(resolveBotCreationDefaults(defaults, { settings: { approvalMode: "ask" } }).profile).toEqual({ approvalMode: "ask" });
+    expect(resolveBotCreationDefaults(defaults, { name: "Ada" }).profile).toEqual({ browserProfile: "mychrome", name: "Ada", approvalMode: "full" });
+    expect(resolveBotCreationDefaults(defaults, { settings: { approvalMode: "ask" } }).profile).toEqual({ browserProfile: "mychrome", approvalMode: "ask" });
     for (const field of ["id", "threadId", "approvalGrant", "acknowledgeLocalAuto", "acknowledgePeerScope", "busy"]) {
       expect(newBotDefaultsSchema.safeParse({ profile: { [field]: true } }).success, field).toBe(false);
     }
   });
 
   it("takes the helper-model switch in the request that creates a bot, as a boolean and nothing else", () => {
-    expect(resolveBotCreationDefaults(undefined, { settings: { helperModel: false } }).profile).toEqual({ helperModel: false });
+    expect(resolveBotCreationDefaults(undefined, { settings: { helperModel: false } }).profile).toEqual({ browserProfile: "mychrome", helperModel: false });
     // beside a tool selection, as the sidebar's Duplicate sends them
-    expect(resolveBotCreationDefaults(undefined, { settings: { toolScope: { allow: [] }, helperModel: false } }).profile).toEqual({ toolScope: { allow: [] }, helperModel: false });
+    expect(resolveBotCreationDefaults(undefined, { settings: { toolScope: { allow: [] }, helperModel: false } }).profile).toEqual({ browserProfile: "mychrome", toolScope: { allow: [] }, helperModel: false });
     for (const wrong of ["false", 0, null]) {
       expect(() => resolveBotCreationDefaults(undefined, { settings: { helperModel: wrong } }), JSON.stringify(wrong)).toThrow();
     }
@@ -33,11 +33,44 @@ describe("new-bot templates", () => {
   it("saves the voice-note switches as defaults and gives them to new bots", () => {
     const profile = { voiceNotes: false, voiceNoteEveryReply: true };
     expect(parseConfigPatch({ newBotDefaults: { profile } }).newBotDefaults?.profile).toEqual(profile);
-    expect(resolveBotCreationDefaults(newBotDefaultsSchema.parse({ profile }), { name: "Ada" }).profile).toEqual({ name: "Ada", ...profile });
+    expect(resolveBotCreationDefaults(newBotDefaultsSchema.parse({ profile }), { name: "Ada" }).profile).toEqual({ browserProfile: "mychrome", name: "Ada", ...profile });
     expect(newBotDefaultsSchema.parse({ profile: { voiceNoteEveryReply: null } }).profile).toEqual({ voiceNoteEveryReply: null });
     for (const wrong of [{ voiceNotes: "false" }, { voiceNotes: null }, { voiceNoteEveryReply: 1 }]) {
       expect(newBotDefaultsSchema.safeParse({ profile: wrong }).success, JSON.stringify(wrong)).toBe(false);
     }
+  });
+
+  it("defaults browserProfile to mychrome when creating a bot without one", () => {
+    expect(DEFAULT_NEW_BOT_BROWSER_PROFILE).toBe("mychrome");
+    expect(resolveBotCreationDefaults(undefined, { name: "Fresh Bot" }).profile).toEqual({
+      name: "Fresh Bot",
+      browserProfile: "mychrome",
+    });
+    expect(parseConfigPatch({ newBots: { browserProfile: "mychrome" } }).newBots?.browserProfile).toBe("mychrome");
+  });
+
+  it("preserves an explicit browserProfile when creating a bot or clearing it", () => {
+    expect(resolveBotCreationDefaults(undefined, { name: "Custom Bot", settings: { browserProfile: "work-profile" } }).profile).toEqual({
+      name: "Custom Bot",
+      browserProfile: "work-profile",
+    });
+    expect(resolveBotCreationDefaults(undefined, { name: "Top-Level Custom", browserProfile: "guest" }).profile).toEqual({
+      name: "Top-Level Custom",
+      browserProfile: "guest",
+    });
+    expect(resolveBotCreationDefaults(undefined, { name: "No Profile Bot", settings: { browserProfile: null } }).profile).toEqual({
+      name: "No Profile Bot",
+      browserProfile: null,
+    });
+    const savedTemplate = newBotDefaultsSchema.parse({ profile: { browserProfile: "team-chrome" } });
+    expect(resolveBotCreationDefaults(savedTemplate, { name: "Template Bot" }).profile).toEqual({
+      name: "Template Bot",
+      browserProfile: "team-chrome",
+    });
+    expect(resolveBotCreationDefaults(savedTemplate, { name: "Override Template", settings: { browserProfile: "personal-chrome" } }).profile).toEqual({
+      name: "Override Template",
+      browserProfile: "personal-chrome",
+    });
   });
 
   it("accepts bounded settings and rejects coercion and invalid model combinations", () => {

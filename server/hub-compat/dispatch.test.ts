@@ -12,6 +12,14 @@ import { randomUUID } from "node:crypto";
 
 import { createDispatchTools, qualifyDefaultModel } from "./dispatch.ts";
 
+/** mcp/hub.mjs is plain JS with no type declarations; importing it by URL keeps tsc from requiring one. */
+interface HubClient {
+  ask(worker: string, task: string, timeoutS?: number, options?: Record<string, unknown>): Promise<Record<string, any>>;
+  fetchRef(ref: string): Promise<Record<string, any>>;
+  taskStatus(ref: string): Promise<Record<string, any>>;
+}
+const importHubClient = async (): Promise<HubClient> => import(new URL("../../mcp/hub.mjs", import.meta.url).href);
+
 // 本机 shell 可能带着老部署的 HUB_AGENTS_FILE；测试必须只看自己的临时 stateDir，
 // 否则会读到真实 agents.json 的停用标记（并可能写坏它）。
 const savedAgentsFile = process.env.HUB_AGENTS_FILE;
@@ -25,14 +33,14 @@ afterAll(() => {
 
 // ---------------------------------------------------------------- 假 8801
 
-interface FakeBot { id: string; name: string; threadId: string; modelSelection: Record<string, string>; hidden?: boolean }
+interface FakeBot { id: string; name: string; threadId: string; modelSelection: Record<string, string>; hidden?: boolean; movedTo?: unknown }
 /** 8801 的消息行带回合标记：requestMessageId 指明属于哪次请求，turnId 指明属于哪一轮。 */
 interface FakeMessage {
   role: string; kind: string; text: string; at: number;
   id?: string; turnId?: string; requestMessageId?: string;
   turnSucceeded?: boolean; turnTerminal?: boolean;
   requestCancelled?: boolean; requestPending?: boolean;
-  tool?: { name: string; ok: boolean };
+  tool?: { name: string; ok?: boolean | null };
   digest?: { reply?: string; [k: string]: unknown };
 }
 
@@ -42,12 +50,18 @@ async function startFakeOm(config: {
   followupReplyText?: string;
   /** The workbench refuses the write-back when this is set. */
   originPostStatus?: number;
+  /** E3：GET /hub/quota 的响应体；不设则 404（额度未知）。 */
+  hubQuota?: unknown;
+  /** E3：GET /api/plan-usage 的响应体；不设则 404。 */
+  planUsage?: unknown;
 } = {}): Promise<{
   server: Server; url: string; calls: string[]; bots: FakeBot[];
   /** Every write-back the hub sent into an asking thread. */
   originPosts: Array<{ threadId: string; text: string }>;
   threads: Map<string, FakeMessage[]>; threadCwd: Map<string, string>;
   threadBusy: Map<string, boolean>;
+  /** E25：覆盖 job 视图的 state（不设时 busy→running，否则 idle）。 */
+  threadJobState: Map<string, string>;
   setThreadGone: (id: string) => void;
   setThreadBusy: (id: string, busy: boolean) => void;
   pushMessage: (id: string, message: FakeMessage) => void;
@@ -59,6 +73,7 @@ async function startFakeOm(config: {
     threads: new Map<string, FakeMessage[]>(),
     threadCwd: new Map<string, string>(),
     threadBusy: new Map<string, boolean>(),
+    threadJobState: new Map<string, string>(),
     turns: new Map<string, { turnId: string; requestMessageId: string }>(),
     goneThreads: new Set<string>(),
     instances: [...(config.instances ?? [
@@ -156,6 +171,7 @@ async function startFakeOm(config: {
           return json(400, { error: "modelSelection.model is not valid" });
         }
         bot.modelSelection = body.modelSelection ?? bot.modelSelection;
+        if (typeof body.hidden === "boolean") bot.hidden = body.hidden;
         return json(200, { ok: true });
       }
       const tasksMatch = /^\/api\/bots\/([\w-]+)\/tasks$/.exec(url);
@@ -194,7 +210,7 @@ async function startFakeOm(config: {
         const busy = state.threadBusy.get(threadId) ?? false;
         return json(200, {
           threadId,
-          state: busy ? "running" : "idle",
+          state: state.threadJobState.get(threadId) ?? (busy ? "running" : "idle"),
           conversation: { kind: "bot", busy, activity: busy ? "working" : "idle", queued: 0 },
         });
       }
@@ -205,6 +221,12 @@ async function startFakeOm(config: {
       }
       if (req.method === "GET" && url === "/api/instances") {
         return json(200, { instances: state.instances });
+      }
+      if (req.method === "GET" && url.split("?")[0] === "/hub/quota" && config.hubQuota !== undefined) {
+        return json(200, config.hubQuota);
+      }
+      if (req.method === "GET" && url.split("?")[0] === "/api/plan-usage" && config.planUsage !== undefined) {
+        return json(200, config.planUsage);
       }
       const patchInstance = /^\/api\/instances\/([\w.-]+)$/.exec(url);
       if (req.method === "PATCH" && patchInstance) {
@@ -553,7 +575,7 @@ describe("hub-compat dispatch", () => {
       body: JSON.stringify({ name: "bare", modelSelection: { instanceId: "codebuddyCn" } }),
     });
     expect(bare.status).toBe(400);
-    expect((await bare.json()).error).toContain("modelSelection.model");
+    expect(((await bare.json()) as { error: string }).error).toContain("modelSelection.model");
 
     const withDefault = await startFakeOm({ instances: [
       { instanceId: "codebuddyCn", displayName: "CodeBuddy CN",
@@ -851,7 +873,7 @@ describe("contract: mcp/hub.mjs ask/fetchRef/taskStatus over HTTP", () => {
   });
 
   it("ask(cb, …) 全链路：受理 → completed，answer/ok/ref 正确", async () => {
-    const hub = await import("../../mcp/hub.mjs");
+    const hub = await importHubClient();
     const result = await hub.ask("cb", "只回复两个字母:OK", 90);
     expect(result.ok).toBe(true);
     expect(result.status).toBe("completed");
@@ -861,7 +883,7 @@ describe("contract: mcp/hub.mjs ask/fetchRef/taskStatus over HTTP", () => {
   });
 
   it("fetchRef(ref) running→completed 两态；taskStatus(ref) verdict 正确", async () => {
-    const hub = await import("../../mcp/hub.mjs");
+    const hub = await importHubClient();
     const slow = await startFakeOm({ replyDelayMs: 6000 });
     try {
       const tools = freshTools(slow.url);
@@ -914,7 +936,7 @@ describe("hub-compat 事件流", () => {
       expect(all.next).toBe(all.events.at(-1).seq);
       // 序号严格递增，客户端可以只记 lastSeq
       expect(all.events.map((event: any) => event.seq)).toEqual(
-        all.events.map((event: any) => event.seq).sort((a, b) => a - b));
+        all.events.map((event: any) => event.seq).sort((a: number, b: number) => a - b));
 
       const incremental = JSON.parse(await tools.hub_events({ ref, since: all.next }));
       expect(incremental.events).toEqual([]);
@@ -975,10 +997,13 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
     status?: string; text?: string; errorCode?: string;
     idleTimeoutS?: number; hardTimeoutS?: number;
     busy?: boolean; gone?: boolean;
+    /** 额外写进结果记录的字段（status_history、partial_text、last_worker_progress_at…）。 */
+    extra?: Record<string, unknown>;
+    toolOpts?: { idleSettleS?: number; retryGraceS?: number };
   }): Promise<SeededTurn> {
     const om = await startFakeOm();
     const stateDir = freshStateDir();
-    const tools = createDispatchTools({ omBase: om.url, stateDir });
+    const tools = createDispatchTools({ omBase: om.url, stateDir, ...opts.toolOpts });
     const requestId = `req-${randomUUID()}`;
     const threadId = `thr-${randomUUID()}`;
     const at = Date.now();
@@ -998,6 +1023,7 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
       last_worker_progress_at: Date.now() / 1000, dispatch_count: 1, output_bytes: 0,
     };
     if (opts.errorCode) record.error_code = opts.errorCode;
+    Object.assign(record, opts.extra ?? {});
     writeFileSync(join(stateDir, "results", `${ref}.json`), JSON.stringify(record), "utf8");
     return { om, tools, stateDir, ref, requestId, threadId };
   }
@@ -1133,13 +1159,20 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
     } finally { om.server.close(); }
   });
 
-  it("7. 只有 Hub 心跳的静默 worker 仍会超时：心跳不续期", async () => {
+  it("7. 只有 Hub 心跳的静默 worker 仍会超时：心跳不续期（8801 也不说它在跑）", async () => {
     const om = await startFakeOm({ replyDelayMs: 999999 });
     try {
       const stateDir = freshStateDir();
       const tools = createDispatchTools({ omBase: om.url, stateDir });
       const receipt = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "silent worker", timeout_s: 1 });
       const ref = refOf(receipt);
+      let threadId = "";
+      for (let i = 0; i < 40 && !threadId; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        threadId = [...om.threadCwd.keys()].at(-1) ?? "";
+      }
+      // E6/E10 之后 busy 的 worker 不判静默超时；这里 worker 不忙、也没有任何产出。
+      om.threadBusy.set(threadId, false);
       await new Promise((r) => setTimeout(r, 3500));
       const record = JSON.parse(readFileSync(join(stateDir, "results", `${ref}.json`), "utf8"));
       expect(record.status).toBe("timeout");
@@ -1182,6 +1215,8 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
       const record = recordOf(turn);
       expect(record.idle_timeout_s).toBe(3);
       expect(record.hard_timeout_s).toBe(3600);
+      // E6/E10：busy 时不判静默超时；worker 不再忙且一直没产出，观察器按记录里的 3s 窗口收尾。
+      turn.om.threadBusy.set(turn.threadId, false);
       let settled = record;
       for (let i = 0; i < 40 && settled.status === "running"; i++) {
         await new Promise((r) => setTimeout(r, 250));
@@ -1296,11 +1331,11 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
     } finally { failed.om.server.close(); }
   });
 
-  it("13. 登记的 bot 被归档时明确拒绝，且不自动解归档", async () => {
+  it("13. E5：登记的 bot 被归档时派活前自动取消归档；迁走的 bot 明确拒绝", async () => {
     const om = await startFakeOm();
     try {
       const stateDir = freshStateDir();
-      const tools = createDispatchTools({ omBase: om.url, stateDir });
+      const tools = createDispatchTools({ omBase: om.url, stateDir, retryGraceS: 0 });
       const botId = "bot-archived-1";
       om.bots.push({ id: botId, name: "hub·codebuddy", threadId: "thr-archived",
         modelSelection: { instanceId: "codebuddy", model: "deepseek-v4.1-flash" }, hidden: true });
@@ -1308,11 +1343,26 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
         JSON.stringify({ bots: { codebuddy: { botId } } }), "utf8");
 
       const receipt = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "archived", timeout_s: 60 });
-      expect(receipt).toContain("worker_archived");
-      // 不重建同名 bot，也不去解归档。
+      expect(receipt).toContain("已异步受理");
+      // 不重建同名 bot，而是把原来那个取消归档。
       expect(om.calls).not.toContain("POST /api/bots");
-      expect(om.calls.filter((c) => c.startsWith("PATCH /api/bots/"))).toHaveLength(0);
-      expect(om.bots.find((b) => b.id === botId)?.hidden).toBe(true);
+      expect(om.calls).toContain(`PATCH /api/bots/${botId}`);
+      expect(om.bots.find((b) => b.id === botId)?.hidden).toBe(false);
+      const ref = refOf(receipt);
+      const evs = await tools.hub_events({ ref });
+      expect(evs).toContain("已自动取消归档");
+      expect(await waitFor(ref, tools)).toContain("status=completed");
+
+      // 迁移到别的电脑的 bot 不在这台机器上了：拒绝，不解归档。
+      const moved = "bot-moved-1";
+      om.bots.push({ id: moved, name: "hub·codebuddy-cn", threadId: "thr-moved", hidden: true,
+        movedTo: { state: "moved" }, modelSelection: { instanceId: "codebuddyCn", model: "deepseek-v4.1-flash" } });
+      writeFileSync(join(stateDir, "dispatch-bots.json"),
+        JSON.stringify({ bots: { codebuddy: { botId }, "codebuddy-cn": { botId: moved } } }), "utf8");
+      const refused = await tools.hub_dispatch_cli({ agent: "codebuddy-cn", task: "moved", timeout_s: 60 });
+      expect(refused).toContain("worker_archived");
+      expect(refused).toContain("迁移");
+      expect(om.bots.find((b) => b.id === moved)?.hidden).toBe(true);
     } finally { om.server.close(); }
   });
 
@@ -1336,7 +1386,7 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
 
   it("GUI 受控端大量工具调用后由 digest 终结：成功转 completed 且提取最终文本", async () => {
     const turn = await seedTurn({
-      messages: (requestId, at) => {
+      messages: (_requestId, at) => {
         const msgs: FakeMessage[] = [];
         for (let i = 0; i < 60; i++) {
           msgs.push({ role: "bot", kind: "activity", text: "", at: at + (i + 1) * 100, tool: { name: "shell", ok: true } });
@@ -1410,6 +1460,299 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
       turn.om.server.close();
     }
   });
+  // ------------------------------------------------------------ U8：hub-compat 禁区修复（2026-11-10）
+
+  it("E2. 零工具调用且本轮无回复：记 WORKER_EMPTY_RESULT，不拿上一轮 partial_text 冒充交付；有回复的零工具回合照常 completed", async () => {
+    const empty = await seedTurn({
+      extra: { partial_text: "上一轮的旧文本" },
+      messages: (requestId, at) => [
+        { role: "user", kind: "text", text: "task", at, id: requestId },
+        { role: "bot", kind: "digest", text: "[digest] · no tool activity observed in this turn · files: none changed",
+          at: at + 1000, requestMessageId: requestId, turnSucceeded: true, digest: {} },
+      ],
+    });
+    try {
+      const status = JSON.parse(await empty.tools.hub_task_status({ ref: empty.ref, json: true }));
+      expect(status.status).toBe("error");
+      const record = recordOf(empty);
+      expect(record.error_code).toBe("WORKER_EMPTY_RESULT");
+      expect(record.text).not.toContain("上一轮的旧文本");
+    } finally { empty.om.server.close(); }
+
+    const ok = await seedTurn({ messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "text", text: "OK", at: at + 1000, requestMessageId: requestId, turnSucceeded: true, turnTerminal: true },
+    ] });
+    try {
+      await ok.tools.hub_task_status({ ref: ok.ref, json: true });
+      expect(recordOf(ok).status).toBe("completed");
+      expect(recordOf(ok).text).toBe("OK");
+    } finally { ok.om.server.close(); }
+  });
+
+  it("E3. 额度源说用完：派活前拒绝并报可读错误，不建线程；force:true 可硬派", async () => {
+    const om = await startFakeOm({ hubQuota: { updatedAt: "x", workers: {
+      codebuddy: { plan: "Free", quotas: [{ name: "credits", displayName: "积分", remaining: 0, total: 100, remainingPercentage: 0 }] },
+      "codebuddy-cn": { plan: "Pro", quotas: [{ name: "credits", remaining: 40, total: 100, remainingPercentage: 40 }] },
+    } } });
+    try {
+      const stateDir = freshStateDir();
+      const tools = createDispatchTools({ omBase: om.url, stateDir, retryGraceS: 0 });
+      await expect(tools.hub_dispatch_cli({ agent: "codebuddy", task: "no quota", timeout_s: 60 }))
+        .rejects.toThrow(/quota_exhausted: codebuddy 额度已用完.*积分 剩余 0/);
+      expect(om.calls.filter((c) => c.endsWith("/tasks"))).toHaveLength(0);
+      // 有额度的 worker 照常派。
+      const okReceipt = await tools.hub_dispatch_cli({ agent: "codebuddy-cn", task: "has quota", timeout_s: 60 });
+      expect(okReceipt).toContain("已异步受理");
+      // 确需硬派：force:true 绕过额度闸。
+      const forced = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "forced", timeout_s: 60, force: true });
+      expect(forced).toContain("已异步受理");
+      await waitFor(refOf(forced), tools);
+      await waitFor(refOf(okReceipt), tools);
+    } finally { om.server.close(); }
+  });
+
+  it("E3. 8801 套餐用量窗口为 0 也拒派", async () => {
+    const om = await startFakeOm({ planUsage: { fetchedAt: "x", providers: [
+      { id: "zcode", ok: true, fiveHour: { available: true, remainingPercent: 0, usedPercent: 100, resetsAt: "02:00" },
+        weekly: { available: true, remainingPercent: 30, usedPercent: 70, resetsAt: null }, extra: [], models: [] },
+    ] } });
+    try {
+      const tools = createDispatchTools({ omBase: om.url, stateDir: freshStateDir(), retryGraceS: 0 });
+      await expect(tools.hub_dispatch_cli({ agent: "zcode", task: "plan empty", timeout_s: 60 }))
+        .rejects.toThrow(/quota_exhausted: zcode 额度已用完（8801 套餐用量: 剩余 0%，02:00 重置）/);
+    } finally { om.server.close(); }
+  });
+
+  it("E3. 回合因额度用完失败：记 WORKER_QUOTA_EXHAUSTED，随后同一 worker 的派活被拒，别的 worker 不受影响", async () => {
+    const om = await startFakeOm({ replyDelayMs: 999999 });
+    try {
+      const stateDir = freshStateDir();
+      const tools = createDispatchTools({ omBase: om.url, stateDir, retryGraceS: 0 });
+      const receipt = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "will hit quota", timeout_s: 60 });
+      const ref = refOf(receipt);
+      let threadId = "";
+      for (let i = 0; i < 40 && !threadId; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        threadId = [...om.threadCwd.keys()].at(-1) ?? "";
+      }
+      om.pushMessage(threadId, { role: "bot", kind: "activity", text: "error: the plan's quota is used up (1005)",
+        at: Date.now(), tool: { name: "error: the plan's quota is used up (1005)", ok: false } });
+      om.pushMessage(threadId, { role: "bot", kind: "text", text: "", at: Date.now(), turnSucceeded: false, turnTerminal: true });
+      om.threadBusy.set(threadId, false);
+      const res = await waitFor(ref, tools, 15);
+      expect(res).toContain("status=error");
+      expect(res).toContain("error_code=WORKER_QUOTA_EXHAUSTED");
+      expect(res).toContain("额度");
+      await expect(tools.hub_dispatch_cli({ agent: "codebuddy", task: "again", timeout_s: 60 }))
+        .rejects.toThrow(new RegExp(`quota_exhausted: codebuddy 上一个任务 \\(${ref}\\)因额度用完失败`));
+      const other = await tools.hub_dispatch_cli({ agent: "codebuddy-cn", task: "other worker", timeout_s: 60 });
+      expect(other).toContain("已异步受理");
+    } finally { om.server.close(); }
+  });
+
+  it("E6/E10. worker 仍在跑（job.busy）且长时间无新消息：后台轮询与查询都不判静默超时", async () => {
+    const om = await startFakeOm({ replyDelayMs: 999999 });
+    try {
+      const stateDir = freshStateDir();
+      const tools = createDispatchTools({ omBase: om.url, stateDir });
+      const receipt = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "long silent build", timeout_s: 1 });
+      const ref = refOf(receipt);
+      await new Promise((r) => setTimeout(r, 4500));
+      const live = JSON.parse(await tools.hub_task_status({ ref, json: true }));
+      expect(live.status).toBe("running");
+      const record = JSON.parse(readFileSync(join(stateDir, "results", `${ref}.json`), "utf8"));
+      expect(record.status).toBe("running");
+      expect(record.worker_busy_at).toBeGreaterThan(record.started_at);
+    } finally { om.server.close(); }
+
+    // 恢复路径（重启后首个查询）：静默早已超窗，但 8801 说 busy，不判超时。
+    const turn = await seedTurn({ busy: true, idleTimeoutS: 1, extra: { last_worker_progress_at: Date.now() / 1000 - 600 } });
+    try {
+      const status = JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true }));
+      expect(status.status).toBe("running");
+      expect(recordOf(turn).status).toBe("running");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E6/E10. 8801 判引擎 no-signal 时 busy 不再算在跑的证据", async () => {
+    const turn = await seedTurn({ busy: true, idleTimeoutS: 3600 });
+    turn.om.threadJobState.set(turn.threadId, "stalled");
+    try {
+      const status = JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true }));
+      expect(status.status).toBe("error");
+      expect(recordOf(turn).error_code).toBe("WORKER_FAILED");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E11. 中途 refusal 而 worker 仍在跑：保持 running；同一回合随后成功收尾记 completed", async () => {
+    const turn = await seedTurn({ busy: true, messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "text", text: "先读任务书", at: at + 500, requestMessageId: requestId, turnSucceeded: false, turnTerminal: true },
+      { role: "bot", kind: "activity", text: "", at: at + 900, requestMessageId: requestId,
+        tool: { name: "error: CodeBuddy refused to go on with this request (stop reason: refusal).", ok: false } },
+    ] });
+    try {
+      const mid = JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true }));
+      expect(mid.status).toBe("running");
+      // 种子消息的时间戳在 at+500/+900，新消息要排在它们之后。
+      turn.om.pushMessage(turn.threadId, { role: "bot", kind: "activity", text: "", at: Date.now() + 5000,
+        requestMessageId: turn.requestId, tool: { name: "edit", ok: true } });
+      turn.om.pushMessage(turn.threadId, { role: "bot", kind: "text", text: "R6-D 已交付，测试全过", at: Date.now() + 5001,
+        requestMessageId: turn.requestId, turnSucceeded: true, turnTerminal: true });
+      turn.om.threadBusy.set(turn.threadId, false);
+      const final = await turn.tools.hub_wait_result({ ref: turn.ref, wait_s: 15 });
+      expect(final).toContain("status=completed");
+      expect(final).toContain("R6-D 已交付");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E11. 已记 WORKER_REFUSED/FAILED 的记录：同一回合（无 8801 续跑）后来成功收尾也补结算；终态是拒答时错误码为 WORKER_REFUSED", async () => {
+    const healed = await seedTurn({ status: "error", errorCode: "WORKER_REFUSED", text: "任务失败: refusal", messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "activity", text: "", at: at + 500, requestMessageId: requestId, tool: { name: "error: stop reason: refusal", ok: false } },
+      { role: "bot", kind: "text", text: "做完了，汇报已写", at: at + 3000, requestMessageId: requestId, turnSucceeded: true, turnTerminal: true },
+    ] });
+    try {
+      await healed.tools.hub_task_status({ ref: healed.ref, json: true });
+      expect(recordOf(healed).status).toBe("completed");
+      expect(recordOf(healed).text).toBe("做完了，汇报已写");
+    } finally { healed.om.server.close(); }
+
+    const refused = await seedTurn({ messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "text", text: "读任务", at: at + 500, requestMessageId: requestId, turnSucceeded: false, turnTerminal: true },
+      { role: "bot", kind: "activity", text: "", at: at + 900, requestMessageId: requestId,
+        tool: { name: "error: CodeBuddy refused to go on with this request (stop reason: refusal).", ok: false } },
+    ] });
+    try {
+      await refused.tools.hub_task_status({ ref: refused.ref, json: true });
+      expect(recordOf(refused).status).toBe("error");
+      expect(recordOf(refused).error_code).toBe("WORKER_REFUSED");
+    } finally { refused.om.server.close(); }
+  });
+
+  it("E25 残余. 没有 turnTerminal/digest：job 视图 completed 即按完成结算；job 仅 idle 时安静够久且有回复才结算", async () => {
+    const byJob = await seedTurn({ messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "activity", text: "", at: at + 300, requestMessageId: requestId, tool: { name: "edit", ok: true } },
+      { role: "bot", kind: "text", text: "GUI 回合完成", at: at + 600, requestMessageId: requestId },
+    ] });
+    byJob.om.threadJobState.set(byJob.threadId, "completed");
+    try {
+      await byJob.tools.hub_task_status({ ref: byJob.ref, json: true });
+      expect(recordOf(byJob).status).toBe("completed");
+      expect(recordOf(byJob).text).toBe("GUI 回合完成");
+    } finally { byJob.om.server.close(); }
+
+    const quiet = await seedTurn({ toolOpts: { idleSettleS: 1 }, messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at: at - 5000, id: requestId },
+      { role: "bot", kind: "text", text: "界面空闲后的最终回复", at: at - 4000, requestMessageId: requestId },
+    ] });
+    try {
+      await quiet.tools.hub_task_status({ ref: quiet.ref, json: true });
+      expect(recordOf(quiet).status).toBe("completed");
+      expect(recordOf(quiet).text).toBe("界面空闲后的最终回复");
+    } finally { quiet.om.server.close(); }
+  });
+
+  it("E40. 取消是终态：worker 仍 busy 也不在 error/running 间来回翻", async () => {
+    const turn = await seedTurn({ busy: true, status: "error", errorCode: "WORKER_CANCELLED", text: "任务失败: 任务被取消",
+      extra: { status_history: [{ from: null, to: "running", at: Date.now() / 1000 - 10 }, { from: "running", to: "error", at: Date.now() / 1000 - 5 }] },
+      messages: (requestId, at) => [
+        { role: "user", kind: "text", text: "task", at, id: requestId, requestCancelled: true },
+        { role: "bot", kind: "activity", text: "", at: Date.now(), requestMessageId: requestId, tool: { name: "bash", ok: true } },
+      ] });
+    try {
+      for (let i = 0; i < 3; i++) {
+        const status = JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true }));
+        expect(status.status).toBe("error");
+      }
+      const record = recordOf(turn);
+      expect(record.error_code).toBe("WORKER_CANCELLED");
+      expect(record.status_history).toHaveLength(2);
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E40. 失败记录在 busy 但没有新产出时保持终态；终态之后有新产出才单向恢复 running", async () => {
+    const terminalAt = Date.now() / 1000 - 5;
+    const turn = await seedTurn({ busy: true, status: "error", errorCode: "WORKER_FAILED", text: "任务失败: x",
+      extra: { status_history: [{ from: null, to: "running", at: terminalAt - 10 }, { from: "running", to: "error", at: terminalAt }] },
+      messages: (requestId, at) => [
+        { role: "user", kind: "text", text: "task", at: at - 20000, id: requestId },
+        { role: "bot", kind: "activity", text: "", at: (terminalAt - 3) * 1000, requestMessageId: requestId, tool: { name: "bash", ok: false } },
+      ] });
+    try {
+      for (let i = 0; i < 2; i++) {
+        expect(JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true })).status).toBe("error");
+      }
+      expect(recordOf(turn).status_history).toHaveLength(2);
+      // 终态之后 worker 又有了新产出：明确「仍在跑」，恢复一次 running。
+      turn.om.pushMessage(turn.threadId, { role: "bot", kind: "text", text: "继续修", at: Date.now(), requestMessageId: turn.requestId });
+      expect(JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true })).status).toBe("running");
+      expect(JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true })).status).toBe("running");
+      const history = recordOf(turn).status_history;
+      expect(history).toHaveLength(3);
+      expect(history.at(-1).to).toBe("running");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E51. 8801 重启把过程叙述打成终态、之后的工具没收尾：已记 completed 的重算为 WORKER_INTERRUPTED", async () => {
+    const turn = await seedTurn({ status: "completed", text: "Now core.ts — the snapshot fallback…", messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "activity", text: "", at: at + 200, requestMessageId: requestId, tool: { name: "edit", ok: true } },
+      { role: "bot", kind: "text", text: "Now core.ts — the snapshot fallback…", at: at + 400, requestMessageId: requestId,
+        turnSucceeded: true, turnTerminal: true },
+      { role: "bot", kind: "activity", text: "", at: at + 600, requestMessageId: requestId, tool: { name: "read", ok: true } },
+      { role: "bot", kind: "activity", text: "", at: at + 800, requestMessageId: requestId, tool: { name: "edit" } },
+      { role: "bot", kind: "digest", text: "[digest] · tools: edit ×2 · reply: Now core.ts", at: at + 900, requestMessageId: requestId,
+        turnSucceeded: true, digest: { reply: "Now core.ts — the snapshot fallback…" } },
+    ] });
+    try {
+      const status = JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true }));
+      expect(status.status).toBe("error");
+      const record = recordOf(turn);
+      expect(record.error_code).toBe("WORKER_INTERRUPTED");
+      expect(record.partial_text).toContain("Now core.ts");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E51. 轮询中发现回合被打断：自动追问续跑一次，用续跑后的汇报收尾", async () => {
+    const om = await startFakeOm({ replyDelayMs: 999999 });
+    try {
+      const stateDir = freshStateDir();
+      const tools = createDispatchTools({ omBase: om.url, stateDir, retryGraceS: 0 });
+      const receipt = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "will be cut", timeout_s: 60 });
+      const ref = refOf(receipt);
+      let threadId = "";
+      for (let i = 0; i < 40 && !threadId; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        threadId = [...om.threadCwd.keys()].at(-1) ?? "";
+      }
+      const t = Date.now();
+      om.pushMessage(threadId, { role: "bot", kind: "text", text: "Now core.ts —", at: t, turnSucceeded: true, turnTerminal: true });
+      om.pushMessage(threadId, { role: "bot", kind: "activity", text: "", at: t + 1, tool: { name: "edit" } });
+      om.threadBusy.set(threadId, false);
+      // 等轮询器发出续跑追问，再由「worker」回汇报并收尾。
+      let asked = false;
+      for (let i = 0; i < 60 && !asked; i++) {
+        await new Promise((r) => setTimeout(r, 200));
+        asked = (om.threads.get(threadId) ?? []).some((m) => m.role === "user" && String(m.text).includes("被打断"));
+      }
+      expect(asked).toBe(true);
+      om.pushMessage(threadId, { role: "bot", kind: "text", text: "# 汇报\n\n续跑完成，测试通过。", at: Date.now(),
+        turnSucceeded: true, turnTerminal: true });
+      om.threadBusy.set(threadId, false);
+      const final = await waitFor(ref, tools, 20);
+      expect(final).toContain("status=completed");
+      expect(final).toContain("续跑完成，测试通过。");
+      const record = JSON.parse(readFileSync(join(stateDir, "results", `${ref}.json`), "utf8"));
+      expect(record.interrupted).toBe(true);
+      const asks = (om.threads.get(threadId) ?? []).filter((m) => m.role === "user" && String(m.text).includes("被打断"));
+      expect(asks).toHaveLength(1);
+    } finally { om.server.close(); }
+  });
+
 });
 
 describe("E19：回合在长命令期间收尾时追问一次汇报", () => {

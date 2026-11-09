@@ -7,7 +7,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /** 造一个带 mcode 登录态的临时 HOME，返回 { home, dir } */
-async function makeHome({ records, state } = {}) {
+async function makeHome({ records, state }: {
+  records?: Record<string, Record<string, unknown>>;
+  state?: Record<string, unknown>;
+} = {}) {
   const home = await mkdtemp(join(tmpdir(), 'mmx-checkin-'));
   const dir = join(home, '.minimax', 'auth', 'prod', 'cn', 'mcode-public');
   await mkdir(dir, { recursive: true });
@@ -17,15 +20,15 @@ async function makeHome({ records, state } = {}) {
 }
 
 /** 每次都拿一份全新的模块实例，好让 AGENTHUB_HOME 在 import 时生效 */
-async function loadModule(home) {
+async function loadModule(home: string) {
   process.env.AGENTHUB_HOME = home;
   vi.resetModules();
   return import('./minimax-checkin.mjs');
 }
 
-function stubFetch(handler) {
+function stubFetch(handler: (url: Parameters<typeof fetch>[0], opts?: RequestInit) => Promise<unknown>) {
   const original = globalThis.fetch;
-  globalThis.fetch = handler;
+  globalThis.fetch = handler as typeof globalThis.fetch;
   return () => { globalThis.fetch = original; };
 }
 
@@ -40,7 +43,7 @@ test('readMinimaxCredential 取 expiresAtMs 最晚的一条，region 来自 auth
     state: { status: 'authenticated', region: 'cn' },
   });
   const mod = await loadModule(home);
-  const cred = await mod.readMinimaxCredential(home, 'cn');
+  const cred = (await mod.readMinimaxCredential(home, 'cn'))!;
   assert.equal(cred.token, 'tok-new');
   assert.equal(cred.refreshToken, 'ref-new');
   assert.equal(cred.region, 'cn');
@@ -69,9 +72,9 @@ test('可领取时发 POST /signin/claim，签名头齐全，返回 success 与�
     records: { r: { accessToken: 'tok', refreshToken: 'ref', expiresAtMs: Date.now() + 3600_000 } },
     state: { status: 'authenticated', region: 'cn' },
   });
-  const calls = [];
+  const calls: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
   const restore = stubFetch(async (url, opts = {}) => {
-    calls.push({ url: String(url), method: opts.method || 'GET', headers: opts.headers || {} });
+    calls.push({ url: String(url), method: opts.method || 'GET', headers: (opts.headers || {}) as Record<string, string> });
     const body = String(url).includes('/signin/claim')
       ? { data: { claim_result: 1, day_no: 3, points: 400, bonus_points: 100 } }
       : { data: { days: [{ day_no: 3, status: 2, points: 400, bonus_points: 100, is_today: true }] } };
@@ -105,7 +108,7 @@ test('今日已领取（status=3）时只查不领', async () => {
     records: { r: { accessToken: 'tok', expiresAtMs: Date.now() + 3600_000 } },
     state: { status: 'authenticated', region: 'cn' },
   });
-  const calls = [];
+  const calls: string[] = [];
   const restore = stubFetch(async (url) => {
     calls.push(String(url));
     return {
@@ -165,8 +168,10 @@ test('401 用 refresh_token 续期后重试，并把新 token 写回 auth.json',
     const r = await mod.checkinMiniMax('cn');
     assert.equal(r.status, 'already');
     assert.match(r.source, /自动续期/);
-    const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(dir, 'auth.json'), 'utf-8'));
-    const record = Object.values(saved.records)[0];
+    const saved = JSON.parse(await (await import('node:fs/promises')).readFile(join(dir, 'auth.json'), 'utf-8')) as {
+      records: Record<string, { accessToken?: string; refreshToken?: string; [key: string]: unknown }>;
+    };
+    const record = Object.values(saved.records)[0]!;
     assert.equal(record.accessToken, 'fresh');
     assert.equal(record.refreshToken, 'ref-2');
   } finally {
@@ -184,7 +189,7 @@ for (const useProfile of [false, true]) {
     });
     t.after(() => rm(home, { recursive: true, force: true }));
     let refreshes = 0;
-    t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    t.mock.method(globalThis, 'fetch', async (url: Parameters<typeof fetch>[0], opts: { body: URLSearchParams; headers: Record<string, string | undefined> }) => {
       if (String(url).includes('/oauth2/token')) {
         refreshes++;
         assert.equal(opts.body.get('refresh_token'), 'refresh-selected');
@@ -216,7 +221,7 @@ test('MiniMax 刷新期间新登录写入的 OAuth 不被旧会话覆盖', async
   });
   t.after(() => rm(home, { recursive: true, force: true }));
   const newLogin = { accessToken: 'new-login', refreshToken: 'new-login-refresh', expiresAtMs: 9999999999999 };
-  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+  t.mock.method(globalThis, 'fetch', async (url: Parameters<typeof fetch>[0], opts: { body: URLSearchParams; headers: Record<string, string | undefined> }) => {
     if (String(url).includes('/oauth2/token')) {
       await writeFile(join(dir, 'auth.json'), JSON.stringify({ records: { same: newLogin } }));
       await writeFile(join(dir, 'auth-state.json'), JSON.stringify({ status: 'authenticated', region: 'cn', generation: 99 }));

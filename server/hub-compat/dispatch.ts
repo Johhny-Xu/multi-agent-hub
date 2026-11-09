@@ -75,6 +75,28 @@ function errorMessage(error: unknown): string {
 export const REPORT_FOLLOWUP_TEXT =
   "你上一轮只回了进度，没有写汇报。请等命令/测试跑完，把结果写进汇报文件，最后一条消息必须是汇报摘要。把汇报写完再结束。";
 
+/** E51：回合被中途打断（8801 重启、工具调用没收尾），续跑一次时发的话。含「把汇报写完」以便与 E19 共用追问通道。 */
+export const INTERRUPTED_FOLLOWUP_TEXT =
+  "你上一轮在中途被打断了（OpenMausBot 重启或工具调用没有完成），任务没有做完。先检查上一轮已经做了什么（改过的文件、跑过的测试、写过的汇报），不要重复做；然后把剩下的做完，把汇报写完再结束，最后一条消息必须是汇报摘要。";
+
+/** E25 残余：8801 的 job 只说「空闲」（没有 completed 也没有 digest）时，安静这么久且已有本轮回复才按完成结算。 */
+export const IDLE_SETTLE_S = 180;
+
+/** E3：回合因额度耗尽失败后，这么久内再派同一个 worker 先拒绝（除非额度源说已恢复，或 force:true）。 */
+export const QUOTA_BLOCK_S = 1800;
+
+/** E3：额度/套餐耗尽类报错。并发上限（429 concurrency）是暂时的，不算额度耗尽。 */
+const QUOTA_ERROR = /quota|额度|配额|余额不足|积分(?:不足|已用完)|insufficient (?:balance|credit|quota)|credits? (?:exhausted|used up|depleted)|out of credits|usage limit|plan limit|limit (?:reached|exceeded)|exceed(?:ed)? (?:the )?(?:quota|limit)|\b1005\b|\b1113\b|resource[_ ]exhausted/i;
+const NOT_QUOTA = /concurrency|并发/i;
+export function isQuotaError(text: string): boolean {
+  const t = String(text ?? "");
+  return QUOTA_ERROR.test(t) && !NOT_QUOTA.test(t);
+}
+/** E11：引擎中途拒答（stop reason: refusal）——可恢复，worker 可能续跑完成。 */
+export function isRefusalError(text: string): boolean {
+  return /stop reason:\s*refusal|refused to go on|\brefusal\b|拒答|拒绝继续/i.test(String(text ?? ""));
+}
+
 /** 最后一条只是「还在进行」的进度叙述：短、且以进行中的说法开头或省略号收尾。真正的交付不会这样开头。 */
 const PROGRESS_END = /^(?:正在|仍在|还在|等待|请稍等|稍等|running\b|still (?:running|working|going)\b|waiting\b|an asynchronous command\b|the command is still running\b)/i;
 export function endedWithoutReport(text: string): boolean {
@@ -145,10 +167,16 @@ interface ResultRecord {
 /** Per-call channel the transport hands to a long tool: `notifications/progress` when the client asked for it. */
 export interface DispatchCallContext {
   progress?: (message: string) => void;
+  /** The thread that asked for the work, when the transport knows it (origin write-back). */
+  originThreadId?: string;
 }
 
-export function createDispatchTools(opts: { omBase: string; stateDir: string; retryGraceS?: number }) {
-  const retryGraceS = opts.retryGraceS ?? RETRY_GRACE_S;  const resultsDir = join(opts.stateDir, "results");
+export function createDispatchTools(opts: { omBase: string; stateDir: string; retryGraceS?: number;
+  /** E25 残余：job 仅「空闲」时的安静结算窗口（秒）。 */ idleSettleS?: number;
+  /** E3：额度失败后的拒派窗口（秒）。 */ quotaBlockS?: number }) {
+  const retryGraceS = opts.retryGraceS ?? RETRY_GRACE_S;
+  const idleSettleS = opts.idleSettleS ?? IDLE_SETTLE_S;
+  const quotaBlockS = opts.quotaBlockS ?? QUOTA_BLOCK_S;  const resultsDir = join(opts.stateDir, "results");
   const botsFile = join(opts.stateDir, "dispatch-bots.json");
   const events = hubEventLog(opts.stateDir);
   /** Progress goes back into the thread that asked for the work, when that thread is known. */
@@ -208,7 +236,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     void origin.terminal(record.ref, record.agent, record.status, record.text || record.error_code || fallback, elapsedS);
   }
 
-  function reapResult(d: ResultRecord | null): ResultRecord | null {
+  /** busy=true：8801 明说 worker 仍在跑（job.busy），静默窗口不判超时，只剩硬上限（E6/E10）。 */
+  function reapResult(d: ResultRecord | null, busy = false): ResultRecord | null {
     if (!d || d.status !== "running") return d;
     // 两道闸：静默窗口按 worker 的真实进展算，硬上限按派发起算。
     const idleS = Number(d.idle_timeout_s ?? DEFAULT_TASK_TIMEOUT_S) || DEFAULT_TASK_TIMEOUT_S;
@@ -217,7 +246,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     const progressedAt = Number(d.last_worker_progress_at ?? d.progress_at ?? d.last_output_at ?? startedAt);
     const idleAge = now() - progressedAt;
     const hardAge = now() - startedAt;
-    if (idleAge < idleS && hardAge < hardS) return d;
+    if (hardAge < hardS && (busy || idleAge < idleS)) return d;
     // OM 通道没有 CLI PID 树可探活；线程若还能取到新消息，refresh 会先落盘。
     const why = hardAge >= hardS
       ? `已达硬上限 ${hardS}s`
@@ -243,7 +272,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     return { status: resp.status, json };
   }
 
-  interface BotEntry { botId: string; model?: string }
+  interface BotEntry { botId: string; model?: string; /** E5：这次派活前自动取消了归档（不落盘）。 */ unarchived?: boolean }
 
   function readBots(): Record<string, BotEntry> {
     try {
@@ -315,11 +344,29 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     return model;
   }
 
-  /** 归档与删除是两件事：归档要人自己取消归档，Hub 不替他解；删除可以重建。 */
-  function archivedError(agent: string): Error {
+  /**
+   * E5：hub·<agent> 被归档（hidden:true）时派活前自动取消归档。
+   * 归档来源（8801 源码）：工作台「归档」按钮/批量归档（bot-archive.ts PATCH hidden:true）、
+   * 迁移到别的电脑（bot-moves.ts 置 movedTo+hidden）、默认 bot 种子（default-bot.ts）。
+   * 只有迁走的 bot 不能解（它已经不在这台电脑上），其余一律 PATCH hidden:false 后继续派活。
+   */
+  function archivedError(agent: string, why: string): Error {
     return Object.assign(
-      new Error(`UNAVAILABLE: worker_archived: ${agent} 常驻 bot (hub·${agent}) 已被归档，请在工作台取消归档后再派活。`),
+      new Error(`UNAVAILABLE: worker_archived: ${agent} 常驻 bot (hub·${agent}) 已被归档且${why}，请在工作台处理后再派活。`),
       { code: "WORKER_ARCHIVED" });
+  }
+
+  async function unarchiveBot(agent: string, bot: any): Promise<void> {
+    if (bot?.movedTo) throw archivedError(agent, "已迁移到别的电脑，无法自动取消归档");
+    let patched: { status: number; json: any };
+    try {
+      patched = await om(`/api/bots/${bot.id}`, { method: "PATCH", body: { hidden: false } });
+    } catch (error) {
+      throw archivedError(agent, `自动取消归档失败（${errorMessage(error)}）`);
+    }
+    if (patched.status < 200 || patched.status >= 300) {
+      throw archivedError(agent, `自动取消归档失败（HTTP ${patched.status}）`);
+    }
   }
 
   /** 8801 当前的 bot 列表。 */
@@ -342,10 +389,11 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       const live = await liveBots();
       const bot = live.find((b) => String(b?.id ?? "") === registered);
       if (bot) {
-        if (bot.hidden === true) throw archivedError(agent);
-        const entry = { botId: registered, model: bot.modelSelection?.model ?? bots[agent]?.model };
+        let unarchived = false;
+        if (bot.hidden === true) { await unarchiveBot(agent, bot); unarchived = true; }
+        const entry: BotEntry = { botId: registered, model: bot.modelSelection?.model ?? bots[agent]?.model };
         bots[agent] = entry; writeBots(bots);
-        return entry;
+        return unarchived ? { ...entry, unarchived: true } : entry;
       }
       // 登记的 bot 已被删除：重建，不去接管任何别的同名 bot。
       delete bots[agent]; writeBots(bots);
@@ -379,7 +427,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
   interface Turn { threadId: string; sentAt: number; requestMessageId?: string; requestAtMs?: number }
 
   /** 派一次活：开新任务线程（cwd 缺省 $HOME）→ 发任务文本。 */
-  async function startTurn(agent: string, entry: BotEntry, task: string, cwd?: unknown): Promise<Turn> {
+  async function startTurn(_agent: string, entry: BotEntry, task: string, cwd?: unknown): Promise<Turn> {
     const workdir = expandDir(typeof cwd === "string" && cwd.trim() ? cwd : "$HOME");
     const opened = await om(`/api/bots/${entry.botId}/tasks`, { method: "POST", body: { cwd: workdir } });
     if (opened.status === 404) throw Object.assign(new Error("BOT_GONE"), { code: "BOT_GONE" });
@@ -402,8 +450,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
   }
 
   /** E19：同一线程里再发一条「把汇报写完」，把同一回合的锚换成这条新请求。 */
-  async function askForReport(entry: BotEntry, threadId: string): Promise<Turn | null> {
-    const sent = await om(`/api/bots/${entry.botId}/messages`, { method: "POST", body: { text: REPORT_FOLLOWUP_TEXT, threadId } });
+  async function askForReport(entry: BotEntry, threadId: string, text = REPORT_FOLLOWUP_TEXT): Promise<Turn | null> {
+    const sent = await om(`/api/bots/${entry.botId}/messages`, { method: "POST", body: { text, threadId } });
     if (sent.status < 200 || sent.status >= 300) return null;
     const requestMessageId = String(sent.json?.message?.id ?? "") || undefined;
     const atMs = Number(sent.json?.message?.at ?? NaN);
@@ -442,6 +490,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     turnId: string | null;
     /** 回合锚点是否找到：找不到就只能按时间窗看，绝不跨回合。 */
     bound: boolean;
+    /** E51：终态文本之后还有工具调用、且最后一个工具没收尾（ok 为空）——回合是被打断的，不是做完了。 */
+    interrupted: boolean;
   }
 
   /** 这一回合的锚：8801 用 requestMessageId / turnId 标出每条消息属于哪一轮。 */
@@ -527,11 +577,13 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       succeeded: false,
       failed: false,
       terminal: false,
+      settled: false,
       pending: false,
       toolCount: 0,
       lastProgressAt: null,
       turnId: null,
       bound: false,
+      interrupted: false,
     };
     let fetched: { status: number; json: any };
     try { fetched = await om(`/api/threads/${threadId}/messages?limit=200`); }
@@ -545,6 +597,9 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     view.bound = selected.bound;
     view.turnId = selected.turnId;
     let lastTextSucceeded = false;
+    let lastTerminalTextAt: number | null = null;
+    let lastAnyTextAt: number | null = null;
+    let lastActivity: { at: number; ok: unknown } | null = null;
     for (const m of selected.mine) {
       const at = Number(m?.at ?? 0) / 1000;
       // 锚点已经把范围定在本轮；有锚就不再靠墙钟筛，免得时钟偏差把本轮消息筛掉。
@@ -555,6 +610,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
         view.failed = false; view.succeeded = false; view.terminal = false; view.settled = false;
         view.errors = [];
         lastTextSucceeded = false;
+        lastTerminalTextAt = null; lastActivity = null;
         continue;
       }
       // 本轮请求行（用户发的那条）只用来读取消/排队标记，不算 worker 输出。
@@ -566,6 +622,10 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       if (m?.turnTerminal === true) { view.terminal = true; view.settled = true; }
       if (m?.requestCancelled === true) view.cancelled = true;
       if (m?.requestPending === true) view.pending = true;
+      if (m?.role === "bot" && m?.kind === "text") {
+        if (m?.turnTerminal === true && (lastTerminalTextAt === null || at >= lastTerminalTextAt)) lastTerminalTextAt = at;
+        if (lastAnyTextAt === null || at >= lastAnyTextAt) lastAnyTextAt = at;
+      }
       if (m?.role === "bot" && m?.kind === "text" && typeof m?.text === "string" && m.text.trim()) {
         if (view.lastBotTextAt === null || at >= view.lastBotTextAt) {
           view.lastBotTextAt = at;
@@ -594,6 +654,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       }
       if (m?.kind === "activity") {
         view.toolCount += 1;
+        if (lastActivity === null || at >= lastActivity.at) lastActivity = { at, ok: m?.tool?.ok };
         if (view.lastActivityAt === null || at >= view.lastActivityAt) {
           view.lastActivityAt = at;
         }
@@ -622,6 +683,12 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     }
     // 只有最后一条 bot 文本自己的成功标记才算成功：中间的过程叙述不算交付。
     view.succeeded = view.terminal || (view.succeeded && lastTextSucceeded);
+    // E51：8801 重启时把当时最后一句过程叙述打成 turnTerminal/turnSucceeded，之后的工具调用没有结果（ok 空）。
+    // 终态文本之后还有工具、最后一个工具没收尾、且其后没有任何文本：这是被打断的回合。
+    view.interrupted = lastTerminalTextAt !== null && lastActivity !== null
+      && lastActivity.at > lastTerminalTextAt
+      && (lastActivity.ok === null || lastActivity.ok === undefined)
+      && (lastAnyTextAt === null || lastAnyTextAt <= lastTerminalTextAt);
     return view;
   }
 
@@ -651,7 +718,9 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
         const state = String(json.state ?? "");
         const activity = String(json.conversation?.activity ?? "");
         const reason = String(json.reason ?? "");
-        const running = busy || state === "running";
+        // 8801 判引擎已死/无信号时，busy 不再算「仍在跑」的证据（E6/E10 只信活着的 busy）。
+        const hung = activity === "dead" || activity === "no-signal" || state === "stalled" || state === "failed";
+        const running = (busy || state === "running") && !hung;
         let error: string | undefined;
         if (!running) {
           if (state === "failed" || state === "stalled" || activity === "dead" || activity === "no-signal") {
@@ -690,7 +759,29 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
   type Settlement =
     | { kind: "running" }
     | { kind: "completed"; text: string }
+    /** E51：回合被打断（8801 重启/工具没收尾）。轮询器追问续跑一次，再断就记 WORKER_INTERRUPTED。 */
+    | { kind: "interrupted"; text: string }
     | { kind: "error"; code: string; message: string };
+
+  /** 失败原因分类：额度耗尽（E3）、中途拒答（E11，可恢复）、其余为一般失败。 */
+  function failure(message: string): { kind: "error"; code: string; message: string } {
+    if (isQuotaError(message)) return { kind: "error", code: "WORKER_QUOTA_EXHAUSTED", message: `额度/套餐已用完: ${message}` };
+    if (isRefusalError(message)) return { kind: "error", code: "WORKER_REFUSED", message };
+    return { kind: "error", code: "WORKER_FAILED", message };
+  }
+
+  /** 「明确成功」之后的交付物判定（E2/E51 共用）。 */
+  function deliverable(view: ThreadView, fallbackText?: string): Settlement {
+    // E2：零工具调用、本轮也没有任何回复文本——空转回合，不能拿上一轮的 partial_text 冒充交付。
+    if (view.toolCount === 0 && !view.lastBotText) {
+      return { kind: "error", code: "WORKER_EMPTY_RESULT", message: "回合结束但没有任何工具调用也没有回复（空转回合）" };
+    }
+    const text = view.lastBotText || (view.toolCount > 0 ? fallbackText || "" : "");
+    if (view.interrupted) return { kind: "interrupted", text };
+    if (text) return { kind: "completed", text };
+    if (view.toolCount > 0) return { kind: "completed", text: "" };
+    return { kind: "error", code: "WORKER_EMPTY_RESULT", message: "回合结束但没有任何交付内容" };
+  }
 
   /**
    * 一次派发的唯一结算口径，优先级：取消 > 失败 > 明确成功。
@@ -702,23 +793,20 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     if (view.cancelled) {
       return { kind: "error", code: "WORKER_CANCELLED", message: "任务被取消" };
     }
-    if (view.failed) {
-      return { kind: "error", code: "WORKER_FAILED", message: view.errors[0] ?? "回合以失败结束" };
-    }
-    if (turnStatus.error) {
-      return { kind: "error", code: "WORKER_FAILED", message: turnStatus.error };
-    }
-    // E14：单个工具调用失败（grep 无匹配 exit 1、测试红了再修）是回合里的正常过程，不是回合失败；
-    // 回合还在跑就继续等，回合成功收尾就算成功，只有回合结束且没成功时才拿工具错误当失败原因。
+    // E11/E6/E10：8801 明说回合还在跑（job.busy）就继续等。中途的失败标记（一次 refusal、一次工具报错、
+    // 被重试覆盖的失败）都不是终态，以 worker 实际收尾为准。
     if (turnStatus.running) return { kind: "running" };
-    const text = view.lastBotText || fallbackText || "";
-    if (view.succeeded) {
-      if (text) return { kind: "completed", text };
-      if (view.toolCount > 0) return { kind: "completed", text: "" };
-      return { kind: "error", code: "WORKER_EMPTY_RESULT", message: "回合结束但没有任何交付内容" };
-    }
-    if (view.errors.length) {
-      return { kind: "error", code: "WORKER_FAILED", message: view.errors.join("; ") };
+    if (view.failed) return failure(view.errors[0] ?? "回合以失败结束");
+    if (turnStatus.error) return failure(turnStatus.error);
+    // E14：单个工具调用失败是回合里的正常过程；只有回合结束且没成功时才拿工具错误当失败原因。
+    if (view.succeeded) return deliverable(view, fallbackText);
+    // E25 残余：没有 turnTerminal/digest，但 8801 的 job 视图（since=本次请求）明说这一轮 completed。
+    if (turnStatus.state === "completed" && view.bound && !view.errors.length) return deliverable(view, fallbackText);
+    if (view.errors.length) return failure(view.errors.join("; "));
+    // E25 残余：job 只说空闲（既无 completed 也无 digest），已有本轮回复且安静够久，才按完成结算。
+    if (turnStatus.state === "idle" && view.bound && view.lastBotText && view.lastProgressAt !== null
+      && now() - view.lastProgressAt >= idleSettleS) {
+      return deliverable(view, fallbackText);
     }
     return { kind: "running" };
   }
@@ -840,20 +928,24 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
             text: `任务超时: 已达硬上限 ${hardS}s`, ...(lastText ? { partial_text: lastText } : {}) });
           return;
         }
-        // 静默窗口：只认 worker 的真实进展（新的 bot 文本/工具/digest），Hub 自己的心跳不续期。
-        const progressedAt = Number(record.last_worker_progress_at ?? record.started_at ?? now());
-        if (now() - progressedAt >= idleS) {
-          updateResult(ref, { status: "timeout", progress: null,
-            text: `任务超时: 已 ${Math.round((now() - progressedAt) / 60)} 分钟没有任何进展`,
-            ...(lastText ? { partial_text: lastText } : {}) });
-          return;
-        }
         const after = Math.max(Number(record.dispatch_message_at ?? turn.sentAt), 0);
         const [view, turnStatus] = await Promise.all([
           readThread(turn.threadId, after, binding),
           checkTurnStatus(turn.threadId, entry.botId, turn.requestAtMs),
         ]);
+        // 静默窗口：只认 worker 的真实进展（新的 bot 文本/工具/digest），Hub 自己的心跳不续期。
+        // E6/E10：8801 明说 worker 仍在跑（job.busy，且引擎没被判 dead/no-signal）时不判静默超时——
+        // 一个长工具调用（编译、长测试）可以十几分钟没有新消息；真卡死由 8801 的 no-signal 与硬上限兜底。
+        const progressedAt = Math.max(Number(record.last_worker_progress_at ?? record.started_at ?? now()),
+          view.lastProgressAt ?? 0);
+        if (!turnStatus.running && now() - progressedAt >= idleS) {
+          updateResult(ref, { status: "timeout", progress: null,
+            text: `任务超时: 已 ${Math.round((now() - progressedAt) / 60)} 分钟没有任何进展`,
+            ...(lastText ? { partial_text: lastText } : {}) });
+          return;
+        }
         const patch: Partial<ResultRecord> = { heartbeat: now() };
+        if (turnStatus.running) patch.worker_busy_at = now();
         const latestTime = view.lastMessageAt ?? view.lastBotTextAt ?? view.lastActivityAt;
         if (latestTime !== null) {
           patch.last_output_at = latestTime;
@@ -881,16 +973,44 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
         const settled = settleTurn(view, turnStatus, lastText || record.partial_text);
         if (settled.kind === "running") { failedSince = null; continue; }
         if (!readResult(ref) || readResult(ref)!.status !== "running") return;
-        // E11/E6/E10：失败（取消除外）先观察一段，8801 自动续跑了就跟着续跑的结果走。
-        if (settled.kind === "error" && settled.code === "WORKER_FAILED") {
+        // E11/E6/E10：失败（取消、额度除外）先观察一段，8801 自动续跑了就跟着续跑的结果走。
+        if (settled.kind === "error" && (settled.code === "WORKER_FAILED" || settled.code === "WORKER_REFUSED")) {
           failedSince ??= now();
           if (now() - failedSince < retryGraceS) continue;
         }
         if (settled.kind === "error") {
+          if (settled.code === "WORKER_QUOTA_EXHAUSTED") noteQuotaBlock(agent, settled.message, ref);
           updateResult(ref, {
             status: "error", worker_status: "error", error_code: settled.code,
             failure_stage: "worker_execution", text: `任务失败: ${settled.message}`, exit_code: 1,
             progress: null, ...(lastText ? { partial_text: lastText } : {}),
+          });
+          return;
+        }
+        // E51：回合被打断（8801 重启、工具没收尾）——追问续跑一次；已经追问过还被打断，就如实记失败。
+        if (settled.kind === "interrupted") {
+          const before = readResult(ref);
+          if (!before?.followup_sent) {
+            const asked = await askForReport(entry, turn.threadId, INTERRUPTED_FOLLOWUP_TEXT);
+            if (asked) {
+              binding.requestMessageId = asked.requestMessageId;
+              binding.requestAtMs = asked.requestAtMs;
+              turn.requestAtMs = asked.requestAtMs;
+              updateResult(ref, {
+                interrupted: true, followup_sent: true, followup_at: now(),
+                request_message_id: asked.requestMessageId, request_message_at_ms: asked.requestAtMs,
+                dispatch_message_at: asked.sentAt, last_worker_progress_at: now(),
+              });
+              events.emit(ref, agent, "progress", "回合被中途打断，已自动追问续跑");
+              failedSince = null;
+              continue;
+            }
+          }
+          updateResult(ref, {
+            status: "error", worker_status: "error", error_code: "WORKER_INTERRUPTED",
+            failure_stage: "worker_execution",
+            text: "任务失败: 回合被中途打断（OpenMausBot 重启或工具调用没有完成），活没有做完",
+            exit_code: 1, progress: null, ...(settled.text ? { partial_text: settled.text } : {}),
           });
           return;
         }
@@ -902,6 +1022,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           if (asked) {
             binding.requestMessageId = asked.requestMessageId;
             binding.requestAtMs = asked.requestAtMs;
+            turn.requestAtMs = asked.requestAtMs;
             updateResult(ref, {
               followup_sent: true, followup_at: now(),
               request_message_id: asked.requestMessageId, request_message_at_ms: asked.requestAtMs,
@@ -912,6 +1033,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
             continue;
           }
         }
+        clearQuotaBlock(agent);
         updateResult(ref, {
           status: "completed", worker_status: "completed", text: settled.text,
           exit_code: 0, last_output_at: view.lastBotTextAt ?? latestTime ?? now(),
@@ -1154,10 +1276,22 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       };
 
       if (turnStatus.running) {
-        // 回合仍在进行中：如果已被错标为 completed，必须纠正回 running！
         let view: ThreadView;
         try { view = await readThread(d.thread_id, after, binding); }
-        catch { view = { reachable: false, lastBotTextAt: null, lastBotText: "", lastActivityAt: null, lastMessageAt: null, lastToolName: "", retries: 0, errors: [], cancelled: false, succeeded: false, failed: false, terminal: false, pending: false, toolCount: 0, lastProgressAt: null, turnId: null, bound: false }; }
+        catch { view = emptyView(); }
+
+        // E40：终态 → running 只在有「本轮仍在跑」的明确证据时单向恢复，不来回翻：
+        // - 取消是终态（人按了停），永不恢复；
+        // - 记录进入终态之后，本轮又有了新的 worker 产出（文本/工具/digest）才恢复；
+        // - 老记录没有状态历史时，只纠正被错标的 completed（回合未结束、无终态标记）。
+        if (d.status !== "running") {
+          const terminalAt = terminalSince(d);
+          const freshProgress = terminalAt !== null && view.lastProgressAt !== null && view.lastProgressAt > terminalAt;
+          const legacyMislabel = terminalAt === null && d.status === "completed" && !view.settled;
+          const revive = d.error_code !== "WORKER_CANCELLED" && !view.cancelled && view.reachable
+            && (freshProgress || legacyMislabel);
+          if (!revive) return d;
+        }
 
         const latestTime = view.lastMessageAt ?? view.lastBotTextAt ?? view.lastActivityAt;
         const patch: Partial<ResultRecord> = {
@@ -1165,6 +1299,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           worker_status: "running",
           exit_code: undefined,
           heartbeat: now(),
+          worker_busy_at: now(),
           thread_missing: !view.reachable,
         };
         if (latestTime !== null) {
@@ -1187,7 +1322,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           const idleS = Number(d.idle_timeout_s ?? DEFAULT_TASK_TIMEOUT_S) || DEFAULT_TASK_TIMEOUT_S;
           launchRun(d.ref, d.agent, String(d.task ?? ""), d.model, d.cwd, "om", idleS);
         }
-        return reapResult(d);
+        // E6/E10：worker 仍在跑，静默窗口不判超时，只看硬上限。
+        return reapResult(d, true);
       } else {
         // 回合已不在运行：
         let view: ThreadView | null = null;
@@ -1203,7 +1339,14 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
             updateResult(d.ref, { heartbeat: now() });
             return reapResult(readResult(d.ref));
           }
+          if (settled.kind === "interrupted") {
+            // E51 续跑追问在轮询器里做：查询本身不发消息。
+            const idleS = Number(d.idle_timeout_s ?? DEFAULT_TASK_TIMEOUT_S) || DEFAULT_TASK_TIMEOUT_S;
+            launchRun(d.ref, d.agent, String(d.task ?? ""), d.model, d.cwd, "om", idleS);
+            return reapResult(readResult(d.ref));
+          }
           if (settled.kind === "error") {
+            if (settled.code === "WORKER_QUOTA_EXHAUSTED") noteQuotaBlock(d.agent, settled.message, d.ref);
             return updateResult(d.ref, {
               status: "error", worker_status: "error", error_code: settled.code,
               failure_stage: "worker_execution", text: `任务失败: ${settled.message}`,
@@ -1211,6 +1354,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
               ...(view.lastBotText ? { partial_text: view.lastBotText } : {}),
             });
           }
+          clearQuotaBlock(d.agent);
           return updateResult(d.ref, {
             status: "completed", worker_status: "completed", text: settled.text, exit_code: 0,
             last_output_at: view.lastBotTextAt ?? view.lastMessageAt ?? now(),
@@ -1221,40 +1365,44 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           // 已标记为 completed：检查是否有更晚的最终 bot text（纠正过早取第一句的脏记录）
           try { view = await readThread(d.thread_id, after, binding); } catch { /* ignore */ }
           if (view) {
-            // 状态跟文本一起重算：终态变成失败/取消时，completed 不能留着。
+            // 状态跟文本一起重算：终态变成失败/取消/被打断时，completed 不能留着。
             const settled = settleTurn(view, turnStatus, d.text || d.partial_text);
-            const changed = settled.kind === "error"
-              || (settled.kind === "completed" && settled.text !== d.text);
-            if (changed) {
-              if (settled.kind === "error") {
-                d = updateResult(d.ref, {
-                  status: "error", worker_status: "error", error_code: settled.code,
-                  failure_stage: "worker_execution", text: `任务失败: ${settled.message}`,
-                  exit_code: 1, progress: null,
-                });
-              } else {
-                d = updateResult(d.ref, {
-                  status: "completed", worker_status: "completed", text: settled.text,
-                  output_bytes: Buffer.byteLength(settled.text, "utf8"),
-                  last_output_at: view.lastBotTextAt ?? d.last_output_at,
-                });
-              }
+            if (settled.kind === "error" || settled.kind === "interrupted") {
+              const code = settled.kind === "error" ? settled.code : "WORKER_INTERRUPTED";
+              const message = settled.kind === "error" ? settled.message
+                : "回合被中途打断（OpenMausBot 重启或工具调用没有完成），活没有做完";
+              d = updateResult(d.ref, {
+                status: "error", worker_status: "error", error_code: code,
+                failure_stage: "worker_execution", text: `任务失败: ${message}`,
+                exit_code: 1, progress: null,
+                ...(settled.kind === "interrupted" && settled.text ? { partial_text: settled.text } : {}),
+              });
+            } else if (settled.kind === "completed" && settled.text !== d.text) {
+              d = updateResult(d.ref, {
+                status: "completed", worker_status: "completed", text: settled.text,
+                output_bytes: Buffer.byteLength(settled.text, "utf8"),
+                last_output_at: view.lastBotTextAt ?? d.last_output_at,
+              });
             }
           }
-        } else if (d.status === "timeout" || (d.status === "error" && d.error_code === "WORKER_FAILED")) {
+        } else if (d.status === "timeout" || (d.status === "error"
+          && (d.error_code === "WORKER_FAILED" || d.error_code === "WORKER_REFUSED"))) {
           // 曾经超时：同一回合晚到的终态可以补结算；别的回合的成功不串进来。
-          // E11：记过失败的，8801 自动续跑后成功收尾，也补结算成 completed（失败不改写成另一个失败）。
+          // E11：记过失败/拒答的，以 worker 实际终态为准——8801 自动续跑或同一回合继续跑完并成功收尾，
+          // 都补结算成 completed（失败不改写成另一个失败）。
           const wasError = d.status === "error";
           try { view = await readThread(d.thread_id, after, binding); } catch { /* ignore */ }
-          if (view?.bound && (!wasError || view.retries > 0)) {
+          if (view?.bound && (!wasError || view.retries > 0 || view.succeeded)) {
             const settled = settleTurn(view, turnStatus, d.partial_text);
             if (settled.kind === "error" && !wasError) {
+              if (settled.code === "WORKER_QUOTA_EXHAUSTED") noteQuotaBlock(d.agent, settled.message, d.ref);
               d = updateResult(d.ref, {
                 status: "error", worker_status: "error", error_code: settled.code,
                 failure_stage: "worker_execution", text: `任务失败: ${settled.message}`,
                 exit_code: 1, progress: null,
               });
             } else if (settled.kind === "completed") {
+              clearQuotaBlock(d.agent);
               d = updateResult(d.ref, {
                 status: "completed", worker_status: "completed", text: settled.text,
                 exit_code: 0, output_bytes: Buffer.byteLength(settled.text, "utf8"),
@@ -1268,6 +1416,105 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
 
     if (d.status !== "running") return d;
     return reapResult(d);
+  }
+
+  function emptyView(): ThreadView {
+    return { reachable: false, lastBotTextAt: null, lastBotText: "", lastActivityAt: null, lastMessageAt: null,
+      lastToolName: "", retries: 0, errors: [], cancelled: false, succeeded: false, failed: false, terminal: false,
+      settled: false, pending: false, toolCount: 0, lastProgressAt: null, turnId: null, bound: false, interrupted: false };
+  }
+
+  /** 记录进入当前终态的时刻（状态历史里最后一次转入该状态）；老记录没有历史时为 null。 */
+  function terminalSince(d: ResultRecord): number | null {
+    const history = Array.isArray(d.status_history) ? d.status_history : [];
+    for (let i = history.length - 1; i >= 0; i--) {
+      const h = history[i] as { to?: unknown; at?: unknown };
+      if (h?.to === d.status && Number.isFinite(Number(h.at))) return Number(h.at);
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------- E3：额度闸
+
+  const quotaFile = join(opts.stateDir, "quota-blocks.json");
+  interface QuotaBlock { at: number; message: string; ref?: string }
+  function readQuotaBlocks(): Record<string, QuotaBlock> {
+    try {
+      const data = JSON.parse(readFileSync(quotaFile, "utf8"));
+      return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    } catch { return {}; }
+  }
+  function writeQuotaBlocks(blocks: Record<string, QuotaBlock>): void {
+    const tmp = quotaFile + ".tmp-" + randomUUID().slice(0, 8);
+    writeFileSync(tmp, JSON.stringify(blocks, null, 1));
+    renameSync(tmp, quotaFile);
+  }
+  function noteQuotaBlock(agent: string, message: string, ref?: string): void {
+    if (!agent) return;
+    try { const b = readQuotaBlocks(); b[agent] = { at: now(), message: message.slice(0, 300), ref }; writeQuotaBlocks(b); }
+    catch { /* 记不下来不影响结算 */ }
+  }
+  function clearQuotaBlock(agent: string): void {
+    if (!agent) return;
+    try { const b = readQuotaBlocks(); if (b[agent]) { delete b[agent]; writeQuotaBlocks(b); } } catch { /* ignore */ }
+  }
+
+  let hubQuotaCache: { at: number; workers: Record<string, any> | null } | null = null;
+  async function quickGet(path: string, timeoutMs: number): Promise<any | null> {
+    try {
+      const resp = await fetch(opts.omBase.replace(/\/+$/, "") + path, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch { return null; }
+  }
+
+  /** 额度源对这个 worker 的判断：exhausted / ok / unknown，附可读说明。 */
+  async function quotaVerdict(agent: string): Promise<{ state: "exhausted" | "ok" | "unknown"; detail: string }> {
+    // 1) 控制台口径 /hub/quota（vendor-quota：{ workers: { <agent>: { quotas: [{ remaining, remainingPercentage, unlimited }] } } }），缓存 5 分钟。
+    if (!hubQuotaCache || now() - hubQuotaCache.at > 300) {
+      const data = await quickGet("/hub/quota", 8000);
+      hubQuotaCache = { at: now(), workers: data && typeof data.workers === "object" ? data.workers : null };
+    }
+    const w = hubQuotaCache.workers?.[agent];
+    const quotas: any[] = Array.isArray(w?.quotas) ? w.quotas.filter((q: any) => q && typeof q === "object") : [];
+    if (quotas.length) {
+      const empty = (q: any) => q.unlimited !== true
+        && (Number(q.remaining) === 0 || Number(q.remainingPercentage) === 0);
+      if (quotas.every(empty)) {
+        return { state: "exhausted", detail: `额度源 /hub/quota: ${quotas.map((q) => q.displayName || q.name || "额度").join("、")} 剩余 0` };
+      }
+      return { state: "ok", detail: "" };
+    }
+    // 2) 8801 自带的套餐用量 /api/plan-usage（按引擎实例 id），5h/周窗口明确为 0 才算空。
+    const instanceId = WORKERS[agent];
+    const usage = await quickGet("/api/plan-usage", 8000);
+    const row = Array.isArray(usage?.providers) ? usage.providers.find((p: any) => p?.id === instanceId) : null;
+    if (row?.ok === true) {
+      const windows = [row.fiveHour, row.weekly].filter((x: any) => x?.available === true && typeof x.remainingPercent === "number");
+      if (windows.some((x: any) => x.remainingPercent <= 0)) {
+        const resets = windows.find((x: any) => x.remainingPercent <= 0)?.resetsAt;
+        return { state: "exhausted", detail: `8801 套餐用量: 剩余 0%${resets ? `，${resets} 重置` : ""}` };
+      }
+      if (windows.length) return { state: "ok", detail: "" };
+    }
+    return { state: "unknown", detail: "" };
+  }
+
+  /** E3：派活前查额度。额度明确用完、或刚因额度失败过且额度源没说已恢复，就拒派并给可读原因。 */
+  async function quotaGate(agent: string, force: boolean): Promise<void> {
+    if (force || process.env.HUB_QUOTA_GATE === "0") return;
+    const verdict = await quotaVerdict(agent);
+    if (verdict.state === "ok") { clearQuotaBlock(agent); return; }
+    if (verdict.state === "exhausted") {
+      throw Object.assign(new Error(`UNAVAILABLE: quota_exhausted: ${agent} 额度已用完（${verdict.detail}），已拒绝派活以免白跑。`
+        + `换一个 worker，或额度恢复后再派；确需硬派请带 force:true。`), { code: "QUOTA_EXHAUSTED" });
+    }
+    const block = readQuotaBlocks()[agent];
+    if (block && now() - Number(block.at ?? 0) < quotaBlockS) {
+      const mins = Math.max(1, Math.round((quotaBlockS - (now() - Number(block.at))) / 60));
+      throw Object.assign(new Error(`UNAVAILABLE: quota_exhausted: ${agent} 上一个任务${block.ref ? ` (${block.ref})` : ""}因额度用完失败：`
+        + `${block.message}。约 ${mins} 分钟内不再派给它；换一个 worker，或确认额度已恢复后带 force:true 再派。`), { code: "QUOTA_EXHAUSTED" });
+    }
   }
 
   // ---------------------------------------------------------------- GUI 通道参数校验（老 _check_gui_options 逐字）
@@ -1330,6 +1577,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     const requestedModel = String(args.model ?? "").trim();
     const model = ["", "default", "默认"].includes(requestedModel)
       ? DEFAULT_MODELS[agent] : requestedModel;
+    // E3：派活前查额度，额度空了就拒派并给可读原因，不静默吃光。
+    await quotaGate(agent, asBool(args.force));
     // 老 _dispatch_prepared_cli 在受理前完成 bot/模型准备：模型不被引擎接受 = 派发被拒。
     let entry: BotEntry;
     try {
@@ -1346,6 +1595,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       idle_timeout_s: timeout, hard_timeout_s: hardTimeout, last_worker_progress_at: now(),
       cwd: args.cwd ? expandDir(String(args.cwd)) : undefined, output_bytes: 0, heartbeat: now() });
     events.emit(ref, agent, "accepted", `任务已受理 (${model || "默认模型"})`);
+    if (entry.unarchived) events.emit(ref, agent, "progress", `常驻 bot hub·${agent} 曾被归档，已自动取消归档`);
     await origin.accepted(ref, agent, context?.originThreadId);
     launchRun(ref, agent, task, model, args.cwd, "om", timeout, entry);
     return dispatchReceipt(agent, ref);
@@ -1564,6 +1814,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     const task = String(args?.task ?? "").trim();
     if (!task) throw new Error("缺少 task");
     if (await agentDisabled("zcode")) throw disabledError();
+    await quotaGate("zcode", asBool(args?.force));
     const wait = asBool(args?.wait, true);
     const timeout = positiveTimeout(args?.timeout_s, 300);
     if (!wait) {

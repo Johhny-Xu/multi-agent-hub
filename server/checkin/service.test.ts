@@ -1,13 +1,44 @@
 // @ts-check
 import { test, assert } from './testing/testkit.ts';
-import {
-  OPEN_SOURCE_PROJECTS,
-  detectCredentials,
-  getCheckinOverview,
-  listCheckinAccounts,
-  runCheckin,
-  updateCheckinConfig
-} from './checkin.mjs';
+import * as checkinNs from './checkin.mjs';
+
+/** checkin.mjs 尚未在 checkin.d.mts 里声明的导出/更细的结果形状，按实现的真实行为就地补类型 */
+interface CheckinAccount {
+  identity?: string;
+  name?: string;
+  display?: string;
+  active?: boolean;
+  token?: string;
+  refreshToken?: string;
+  credentialSource?: string;
+  alternates: Array<{ token?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+type CheckinModule = Omit<typeof import('./checkin.mjs'), 'detectCredentials' | 'listCheckinAccounts' | 'runCheckin' | 'getCheckinOverview' | 'updateCheckinConfig' | 'OPEN_SOURCE_PROJECTS'> & {
+  OPEN_SOURCE_PROJECTS: Record<string, Array<{ name: string; [key: string]: unknown }>>;
+  detectCredentials(): Promise<Record<string, { available?: boolean; [key: string]: unknown }>>;
+  listCheckinAccounts(platform: string): Promise<CheckinAccount[]>;
+  runCheckin(target?: string): Promise<{
+    ok: boolean;
+    results: Record<string, { ok: boolean; [key: string]: unknown }>;
+    overview: import('./checkin.mjs').CheckinOverview;
+    due?: string[];
+    [key: string]: unknown;
+  }>;
+  getCheckinOverview(): Promise<{
+    ok: boolean;
+    today: string;
+    autoCheckin: boolean;
+    autoCheckinTime: string;
+    platforms: Record<string, { accounts: Array<{ display: string; status: string; [key: string]: unknown }>; [key: string]: unknown }>;
+    history: unknown[];
+    [key: string]: unknown;
+  }>;
+  updateCheckinConfig(config: Record<string, unknown>): Promise<{ ok: boolean; overview: import('./checkin.mjs').CheckinOverview; [key: string]: unknown }>;
+};
+
+const { OPEN_SOURCE_PROJECTS, detectCredentials, getCheckinOverview, listCheckinAccounts, runCheckin, updateCheckinConfig } = checkinNs as CheckinModule;
 
 test('checkin open source projects catalog covers all three platforms', () => {
   assert.ok(OPEN_SOURCE_PROJECTS.workbuddy.length >= 2, 'WorkBuddy has open source projects');

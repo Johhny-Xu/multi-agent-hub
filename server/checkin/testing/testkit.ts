@@ -3,7 +3,7 @@
 import { afterAll, expect, it, onTestFinished, vi } from "vitest";
 
 interface TestContext {
-  after(callback: () => unknown): void;
+  after(callback: () => void | Promise<void>): void;
   diagnostic(message: string): void;
   mock: {
     method(target: Record<string | symbol, unknown>, key: string, implementation: (...args: never[]) => unknown): unknown;
@@ -21,7 +21,9 @@ function run(name: string, body: TestBody): void {
         diagnostic: (message) => console.info(message),
         mock: {
           method(target, key, implementation) {
-            const spy = vi.spyOn(target as never, key as never).mockImplementation(implementation as never);
+            const spy = vi
+              .spyOn(target as Record<string | symbol, (...args: never[]) => unknown>, key as string | symbol)
+              .mockImplementation(implementation);
             spies.push(spy as unknown as { mockRestore(): void });
             return spy;
           },
@@ -39,7 +41,17 @@ export const test = Object.assign(run, {
 
 type Matcher = RegExp | string;
 
-export const assert = {
+// 显式标注让 assert.ok 成为可窄化的断言函数（TS2775 要求调用目标有显式类型）。
+interface Assert {
+  equal(actual: unknown, expected: unknown, message?: string): void;
+  notEqual(actual: unknown, expected: unknown, message?: string): void;
+  deepEqual(actual: unknown, expected: unknown, message?: string): void;
+  ok(value: unknown, message?: string): asserts value;
+  match(value: string, matcher: Matcher, message?: string): void;
+  throws(fn: () => unknown, matcher?: Matcher, message?: string): void;
+}
+
+export const assert: Assert = {
   equal(actual: unknown, expected: unknown, message?: string): void {
     expect(actual, message).toBe(expected);
   },
@@ -49,7 +61,7 @@ export const assert = {
   deepEqual(actual: unknown, expected: unknown, message?: string): void {
     expect(actual, message).toEqual(expected);
   },
-  ok(value: unknown, message?: string): void {
+  ok(value: unknown, message?: string): asserts value {
     expect(value, message).toBeTruthy();
   },
   match(value: string, matcher: Matcher, message?: string): void {

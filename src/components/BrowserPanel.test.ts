@@ -501,6 +501,58 @@ describe("a sign-in that stops at a passkey", () => {
   });
 });
 
+describe("a My Chrome bot's panel", () => {
+  const mine = { ...bot, browserProfile: "mine" } as Bot;
+  const useMyChrome = () => {
+    fixture.state.config.browserEngine = { kind: "engine", engine: "agent-browser", myChrome: true };
+    fixture.state.config.browserProfiles = [{ id: "mine", name: "Mine", browser: "chrome" }];
+  };
+
+  it("opens on a not-browsing placeholder without connecting, and connects only when the person asks", async () => {
+    useMyChrome();
+    await act(async () => root.render(createElement(LiveBrowser, { bot: mine })));
+    await flush();
+    expect(FixtureEventSource.instances).toHaveLength(0);
+    expect(FakeSocket.instances).toHaveLength(0);
+    expect(host.textContent).toContain(t("browser.panel.notBrowsing"));
+    await act(async () => button(t("browser.panel.start")).click());
+    await flush();
+    expect(FixtureEventSource.instances).toHaveLength(1);
+    expect(host.textContent).not.toContain(t("browser.panel.notBrowsing"));
+  });
+
+  it("connects by itself while the bot works, and covers a blank page until a real one opens", async () => {
+    useMyChrome();
+    await act(async () => root.render(createElement(LiveBrowser, { bot: { ...mine, busy: true } })));
+    await flush();
+    const live = FixtureEventSource.instances.at(-1)!;
+    await act(async () => live.emit("ready", { viewerId: "v1" }));
+    await act(async () => live.emit("url", { url: "about:blank" }));
+    await flush();
+    expect(host.textContent).toContain(t("browser.panel.notBrowsing"));
+    await act(async () => live.emit("url", { url: "https://example.com/" }));
+    await flush();
+    expect(host.textContent).not.toContain(t("browser.panel.notBrowsing"));
+  });
+
+  it("keeps the view once connected when the bot's turn ends, and covers the page again when only a blank tab is left", async () => {
+    useMyChrome();
+    await act(async () => root.render(createElement(LiveBrowser, { bot: { ...mine, busy: true } })));
+    await flush();
+    const live = FixtureEventSource.instances.at(-1)!;
+    await act(async () => live.emit("ready", { viewerId: "v1" }));
+    await act(async () => live.emit("url", { url: "https://example.com/" }));
+    await flush();
+    expect(host.textContent).not.toContain(t("browser.panel.notBrowsing"));
+    await act(async () => root.render(createElement(LiveBrowser, { bot: { ...mine, busy: false } })));
+    await flush();
+    expect(FixtureEventSource.instances).toHaveLength(1);
+    await act(async () => live.emit("tabs", { tabs: [{ tabId: "t1", title: "", url: "about:blank", active: true }] }));
+    await flush();
+    expect(host.textContent).toContain(t("browser.panel.notBrowsing"));
+  });
+});
+
 describe("the browser panel before the browser is installed", () => {
   async function renderUninstalled(scopes: string[]) {
     fixture.state = { config: { browserProfiles: [], browserEngine: { kind: "unavailable", installable: true } }, computerControl: {} };

@@ -92,7 +92,7 @@ function targetHeadName(op: TargetOperation): string {
 }
 
 export function buildBrowserQuestions(
-  goal: string,
+  _goal: string,
   space: BrowserActionSpace,
   _recentActions: readonly string[] = [],
 ): BrowserQuestionBatch {

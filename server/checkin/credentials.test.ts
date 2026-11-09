@@ -12,12 +12,45 @@ const root = await mkdtemp(join(tmpdir(), 'agenthub-checkin-'));
 process.env.AGENTHUB_HOME = root;
 process.env.AGENTHUB_CHECKIN_STATE = join(root, 'checkin-state.json');
 
-const mod = await import('./checkin.mjs');
+/** checkin.mjs 尚未在 checkin.d.mts 里声明的导出/更细的结果形状，按实现的真实行为就地补类型 */
+interface CheckinAccount {
+  identity?: string;
+  name?: string;
+  display?: string;
+  active?: boolean;
+  token?: string;
+  refreshToken?: string;
+  credentialSource: string;
+  alternates: Array<{ token?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface CheckinPlatformOutcome {
+  ok?: boolean;
+  status?: string;
+  credits?: number;
+  message: string;
+  [key: string]: unknown;
+}
+
+type CheckinModule = Omit<typeof import('./checkin.mjs'), 'listCheckinAccounts' | 'runCheckin' | 'clearCheckinHistory'> & {
+  listCheckinAccounts(platform: string): Promise<CheckinAccount[]>;
+  runCheckin(target?: string): Promise<{
+    ok: boolean;
+    results: Record<string, CheckinPlatformOutcome>;
+    overview: import('./checkin.mjs').CheckinOverview;
+    due?: string[];
+    [key: string]: unknown;
+  }>;
+  clearCheckinHistory(): Promise<{ ok: boolean; removed: number; overview: import('./checkin.mjs').CheckinOverview }>;
+};
+
+const mod = (await import('./checkin.mjs')) as CheckinModule;
 const { readQoderCredential, readQoderCredentialAt, persistQoderToken } = await import('./qoder.mjs');
 
 /** 造一个 JWT：只需要 payload，代码只解析不验签 */
-function fakeJwt(payload) {
-  const enc = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+function fakeJwt(payload: Record<string, unknown>) {
+  const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
   return `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc(payload)}.sig`;
 }
 
@@ -32,12 +65,23 @@ function localToday() {
 }
 
 /** 合成 Qoder CLI 文件回退凭据：盐 + AES-256-GCM(nonce:tag:cipher) */
-async function writeQoderCredHome(home, worker, { uid, name, token, refreshToken, exp }) {
+async function writeQoderCredHome(home: string, worker: string, { uid, name, token, refreshToken, exp }: {
+  uid?: string;
+  name?: string;
+  token: string;
+  refreshToken: string;
+  exp: number;
+}) {
   const dir = join(home, worker === 'qoder-cn' ? '.qoder-cn' : '.qoder');
   await mkdir(dir, { recursive: true });
   const salt = randomBytes(32);
   await writeFile(join(dir, '.keychain-salt'), salt);
-  const credential = {
+  const credential: {
+    serverName: string;
+    token: { accessToken: string; tokenType: string; expiresAt: number };
+    refreshToken: string;
+    user?: { id: string; name?: string; email: string };
+  } = {
     serverName: worker === 'qoder-cn' ? 'qoder.com.cn' : 'qoder.com',
     token: { accessToken: token, tokenType: 'Bearer', expiresAt: exp * 1000 },
     refreshToken,
@@ -51,7 +95,7 @@ async function writeQoderCredHome(home, worker, { uid, name, token, refreshToken
   await writeFile(join(dir, 'qoder-cli-credentials.json'), `${iv.toString('hex')}:${cipher.getAuthTag().toString('hex')}:${enc.toString('hex')}`);
 }
 
-async function writeQoderLegacyHome(home, worker, payload, machineId = '0123456789abcdef-legacy-machine') {
+async function writeQoderLegacyHome(home: string, worker: string, payload: Record<string, unknown>, machineId = '0123456789abcdef-legacy-machine') {
   const auth = join(home, worker === 'qoder-cn' ? '.qoder-cn' : '.qoder', '.auth');
   await mkdir(auth, { recursive: true });
   await writeFile(join(auth, 'machine_id'), `${machineId}\n`);
@@ -62,7 +106,7 @@ async function writeQoderLegacyHome(home, worker, payload, machineId = '01234567
   await writeFile(join(auth, 'user'), enc);
 }
 
-async function writeQoderCredProfile(worker, profile, credential, exp) {
+async function writeQoderCredProfile(worker: string, profile: string, credential: { uid?: string; name?: string; token: string; refreshToken: string }, exp: number) {
   const dir = join(root, '.agenthub', 'accounts', worker, profile);
   await mkdir(dir, { recursive: true });
   const salt = randomBytes(32);
@@ -180,9 +224,9 @@ test('Qoder 凭据没有用户信息时用 refreshToken 指纹区分账号，不
   await writeQoderCredHome(anonHome, 'qoder', { token: 'dt-a2', refreshToken: 'drt-a', exp: nowSecQ + 7200 });
   const refreshed = await readQoderCredentialAt(join(anonHome, '.qoder'), 'qoder');
 
-  assert.match(first.primary.identity, /^qoder-token:/);
-  assert.notEqual(first.primary.identity, second.primary.identity, '不同 refreshToken 是不同账号');
-  assert.equal(first.primary.identity, refreshed.primary.identity, 'accessToken 刷新但 refreshToken 未变，身份保持稳定');
+  assert.match(first.primary!.identity, /^qoder-token:/);
+  assert.notEqual(first.primary!.identity, second.primary!.identity, '不同 refreshToken 是不同账号');
+  assert.equal(first.primary!.identity, refreshed.primary!.identity, 'accessToken 刷新但 refreshToken 未变，身份保持稳定');
 });
 
 test('Qoder CLI 主登录态 .auth/user 可解密、可回写', async () => {
@@ -199,10 +243,10 @@ test('Qoder CLI 主登录态 .auth/user 可解密、可回写', async () => {
   });
   const cred = await readQoderCredential(home, 'qoder');
   assert.equal(cred.ok, true);
-  assert.equal(cred.primary.identity, 'qoder:8001');
-  assert.equal(cred.primary.display, 'Legacy User (legacy@example.com)');
-  assert.equal(cred.primary.token, 'dt-legacy');
-  assert.equal(cred.primary.format, 'legacy');
+  assert.equal(cred.primary!.identity, 'qoder:8001');
+  assert.equal(cred.primary!.display, 'Legacy User (legacy@example.com)');
+  assert.equal(cred.primary!.token, 'dt-legacy');
+  assert.equal(cred.primary!.format, 'legacy');
 
   const saved = await persistQoderToken({
     credFile: cred.file,
@@ -214,9 +258,9 @@ test('Qoder CLI 主登录态 .auth/user 可解密、可回写', async () => {
   });
   assert.equal(saved, true);
   const again = await readQoderCredential(home, 'qoder');
-  assert.equal(again.primary.token, 'dt-legacy-2');
-  assert.equal(again.primary.refreshToken, 'drt-legacy-2');
-  assert.ok(again.primary.expiresAt >= nowSecQ + 7000);
+  assert.equal(again.primary!.token, 'dt-legacy-2');
+  assert.equal(again.primary!.refreshToken, 'drt-legacy-2');
+  assert.ok(again.primary!.expiresAt >= nowSecQ + 7000);
 });
 
 test('Qoder 一键签到会拉取活动并逐个领取（幂等重放不重复计数）', async () => {
@@ -231,7 +275,7 @@ test('Qoder 一键签到会拉取活动并逐个领取（幂等重放不重复�
   // 上游每日 Credits 行必须带「每日」标题或单日起止时间才算每日活动（qoderCampaignIsDaily）；
   // 真实清单两条都有，这里按真实形态给 placements 标题。
   const dailyPlacements = [{ type: 'POPUP', content: { zh: { title: '每日签到领积分' } } }];
-  const calls = [];
+  const calls: string[] = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push(`${options.method || 'GET'} ${url}`);
     if (/\/me\/campaigns(\?|$)/.test(String(url))) {
@@ -276,7 +320,7 @@ test('Qoder 一键签到会拉取活动并逐个领取（幂等重放不重复�
 
 test('清空日志只清 history，不动今日打卡状态与凭据', async () => {
   const today = localToday();
-  await writeFile(process.env.AGENTHUB_CHECKIN_STATE, JSON.stringify({
+  await writeFile(process.env.AGENTHUB_CHECKIN_STATE!, JSON.stringify({
     autoCheckin: true,
     platforms: {
       workbuddy: { lastDate: today, lastTime: '08:30:00', status: 'already', message: '2 个账号已签', credits: 100, consecutiveDays: 7 },
@@ -308,7 +352,7 @@ test('清空后再清一次是幂等的', async () => {
 test('跨自然日但 retryAt 仍在未来时，概览保留等待原因和倒计时', async () => {
   const fixedNow = new Date(2026, 10, 2, 0, 0, 1);
   const retryAt = Math.floor(fixedNow.getTime() / 1000) + 3600;
-  await writeFile(process.env.AGENTHUB_CHECKIN_STATE, JSON.stringify({
+  await writeFile(process.env.AGENTHUB_CHECKIN_STATE!, JSON.stringify({
     autoCheckin: true,
     platforms: {
       qoder: {

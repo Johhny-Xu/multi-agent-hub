@@ -257,7 +257,7 @@ describe("jev-text", () => {
       fetch: vi.fn(async () => ({
         ok: true,
         json: async () => { throw new Error("not json"); },
-      }) as Response) as any,
+      }) as unknown as Response) as any,
     });
     expect(resNonJson).toEqual({ ok: false, reason: "malformed" });
 

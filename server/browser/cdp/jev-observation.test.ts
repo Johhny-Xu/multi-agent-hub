@@ -41,7 +41,7 @@ function createMockPage(overrides: {
     mainFrameId: "main_frame",
     _frames: framesMap,
     get: (id: string) => framesMap.get(id),
-    inWorld: vi.fn(async (frameId: string, work: (sess: any, ctx: number) => Promise<any>) => {
+    inWorld: vi.fn(async (_frameId: string, work: (sess: any, ctx: number) => Promise<any>) => {
       return work(session, 1);
     }),
   };

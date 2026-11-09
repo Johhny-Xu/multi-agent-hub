@@ -108,7 +108,7 @@ describe("hub-compat HTTP surface", () => {
 
     const health = await fetch(`http://127.0.0.1:${hub.port}/health`);
     expect(health.status).toBe(200);
-    expect((await health.json()).auth_required).toBe(true);
+    expect(((await health.json()) as { auth_required: boolean }).auth_required).toBe(true);
   });
 
   it("refuses a non-loopback bind without a token", async () => {

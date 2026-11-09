@@ -2920,4 +2920,35 @@ describe("soul", () => {
       });
     });
   });
+
+  it("defaults a new bot's browserProfile to mychrome without changing existing bots", () => {
+    const store = new Store(selection);
+    const created = store.createBot({ name: "Default Browser Bot" });
+    expect(created.browserProfile).toBe("mychrome");
+
+    const botsFile = join(DATA_DIR, "bots.json");
+    const raw: BotRecord[] = JSON.parse(readFileSync(botsFile, "utf8"));
+    const legacy = structuredClone(raw[0]);
+    legacy.id = "legacy-no-browser-profile";
+    legacy.name = "Legacy Bot";
+    delete legacy.browserProfile;
+    raw.push(legacy);
+    writeFileSync(botsFile, JSON.stringify(raw));
+
+    const reloaded = new Store(selection);
+    expect(reloaded.bot(created.id)?.browserProfile).toBe("mychrome");
+    expect(reloaded.bot("legacy-no-browser-profile")?.browserProfile).toBeUndefined();
+  });
+
+  it("preserves an explicit browserProfile when creating a bot", () => {
+    const store = new Store(selection);
+    const custom = store.createBot({ name: "Custom Browser Bot", browserProfile: "work-chrome" });
+    const cleared = store.createBot({ name: "Cleared Browser Bot", browserProfile: null });
+    expect(custom.browserProfile).toBe("work-chrome");
+    expect(cleared.browserProfile).toBeUndefined();
+
+    const reloaded = new Store(selection);
+    expect(reloaded.bot(custom.id)?.browserProfile).toBe("work-chrome");
+    expect(reloaded.bot(cleared.id)?.browserProfile).toBeUndefined();
+  });
 });

@@ -21,6 +21,8 @@ import { browserScope, withBrowserScope } from "@/lib/team-browser";
 const button = "rounded-md p-1.5 text-ink-secondary hover:bg-inset hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed";
 const NO_NAV: BrowserNav = { url: "", loading: false, canGoBack: false, canGoForward: false };
 
+const blankUrl = (url: string) => url === "" || url === "about:blank";
+
 export type BrowserSignIn = { url: string; site: string; nonce: number };
 /** A page to open in a new tab once the view is connected and awake: a published page's Open (usePageOpener). */
 export type BrowserPage = { url: string; nonce: number };
@@ -40,7 +42,11 @@ function tabsOf(value: unknown): BrowserTab[] {
 export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserSignIn; page?: BrowserPage }) {
   const { state } = useStore();
   const [fallback, setFallback] = useState(false);
-  const stream = state.config?.browserEngine?.engine === "chrome" && !fallback;
+  // My Chrome is the person's own shared Chrome: opening the view would bring its session up on a blank page, so the
+  // panel waits for the person or a bot that needs it, and covers a connected view that only shows about:blank.
+  const myChrome = state.config?.browserEngine?.myChrome === true
+    && (state.config?.browserProfiles?.some((profile) => profile.id === bot.browserProfile && profile.browser === "chrome") ?? false);
+  const stream = state.config?.browserEngine?.engine === "chrome" && !myChrome && !fallback;
   const [attempt, setAttempt] = useState(0);
   const [connected, setConnected] = useState(false);
   const [control, setControl] = useState<PreviewStreamControl | null>(null);
@@ -54,6 +60,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const [gone, setGone] = useState(false);
   const [asleep, setAsleep] = useState<"" | "asleep" | "waking">("");
   const [unstarted, setUnstarted] = useState(false);
+  const [opened, setOpened] = useState(false);
   const [kept, setKept] = useState(false);
   const [showProfiles, setShowProfiles] = useState(false);
   const [showTyping, setShowTyping] = useState(false);
@@ -98,7 +105,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
     setAttempt((value) => value + 1);
   }, []);
   // Another profile may run on the other engine: it gets the stream again if it has one.
-  useEffect(() => { setFallback(false); }, [bot.id, bot.browserProfile, scopedThread]);
+  useEffect(() => { setFallback(false); setOpened(false); }, [bot.id, bot.browserProfile, scopedThread]);
   useEffect(() => {
     setTabs([]);
     setNav(stream ? NO_NAV : { ...NO_NAV, canGoBack: true, canGoForward: true });
@@ -289,6 +296,9 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
     setConnected(false);
     setError("");
   }, [shown]);
+  // The person asked for the view, or a bot need opens it: a working bot, a sign-in, a published page.
+  const requested = opened || Boolean(bot.busy) || signIn !== undefined || signInOpen || page !== undefined;
+  const noPage = myChrome && connected && tabs.every((tab) => blankUrl(tab.url)) && blankUrl(nav.url);
   const typingReady = connected && you;
   const pipSupported = stream && supportsBrowserPictureInPicture();
   const passkeyWall = passkeyWallAt(nav.url);
@@ -339,7 +349,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
     {takeStatus === "stale" && <div role="status" className="shrink-0 border-b border-hairline/30 px-3 py-1.5 text-[12px] text-accent-text">{t("browser.control.stale", { name: bot.name })}</div>}
     {passkeyWall && passkeyDismissed !== nav.url && <PasskeyNotice wall={passkeyWall} botName={bot.name} onDismiss={() => setPasskeyDismissed(nav.url)} />}
     <div className="relative flex min-h-0 flex-1 flex-col bg-inset/40">
-      {shown ? (
+      {shown && (!myChrome || requested) ? (
         <StreamSurface
           key={`${attempt}:${stream ? "stream" : "live"}:${bot.browserProfile ?? ""}`}
           ref={surface}
@@ -349,7 +359,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
           onClient={onClient}
           onControl={onControl}
           onMessage={onMessage}
-          onConnectedChange={(next) => { setConnected(next); if (next) { setStarting(false); setGone(false); setError(""); } }}
+          onConnectedChange={(next) => { setConnected(next); if (next) { setStarting(false); setGone(false); setError(""); setOpened(true); } }}
           onFirstFrame={() => setStarting(false)}
           onUnauthorized={() => { if (stream) setFallback(true); else setGone(true); }}
           onGone={() => setGone(true)}
@@ -357,7 +367,18 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
           onLeave={() => address.current?.focus()}
         />
       ) : null}
-      {asleep || unstarted || heldElsewhere || gone || !connected || starting ? (
+      {myChrome && !requested ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/95 p-6 text-center text-[13px] text-ink-secondary">
+          <Globe size={24} />
+          <span>{t("browser.panel.notBrowsing")}</span>
+          <button type="button" className="rounded-lg border border-hairline px-3 py-1.5 text-[12px] text-ink hover:bg-inset" onClick={() => setOpened(true)}>{t("browser.panel.start")}</button>
+        </div>
+      ) : noPage ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/95 p-6 text-center text-[13px] text-ink-secondary">
+          <Globe size={24} />
+          <span>{t("browser.panel.notBrowsing")}</span>
+        </div>
+      ) : asleep || unstarted || heldElsewhere || gone || !connected || starting ? (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/95 p-6 text-center text-[13px] text-ink-secondary">
           {asleep ? <Moon size={24} /> : unstarted ? <Power size={24} /> : heldElsewhere ? <Hand size={24} /> : gone ? <Globe size={24} /> : <Loader2 size={24} className="animate-spin" />}
           <span>{asleep ? t("browser.panel.asleep") : unstarted ? t("browser.panel.notStarted") : heldElsewhere ? BROWSER_HELD_ELSEWHERE : gone ? t("browser.panel.disconnected") : !starting ? t("browser.panel.opening") : stream ? t("browser.panel.starting") : t("browser.live.botBusy", { name: bot.name })}</span>

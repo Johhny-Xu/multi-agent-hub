@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createBrowserGateway, type BrowserGatewayDeps } from "./jev.ts";
 import type {
   BrowserExecution,
+  BrowserObservation,
   BrowserScope,
   BrowserTransport,
 } from "./jev-types.ts";
@@ -28,7 +29,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["CLICK", "DONE"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -76,12 +77,13 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
     const result = await gateway.run(createMockScope(), {
       goal: "Submit form",
+      maxSteps: 4,
       expect: { all: [{ kind: "visible-text", text: "Successful" }] },
     });
 
@@ -94,7 +96,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["TYPE_TEXT"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -128,11 +130,11 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Search for shoes" });
+    const result = await gateway.run(createMockScope(), { goal: "Search for shoes", maxSteps: 4 });
 
     expect(result.status).toBe("needs-input");
     expect(result.pendingField?.requestId).toBeDefined();
@@ -143,7 +145,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["CLICK"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -160,7 +162,7 @@ describe("jev e2e scenarios", () => {
       })),
       verify: vi.fn(async () => true),
       prepare: vi.fn(async () => ({ ticket: "tk_1", call: { name: "click", arguments: { ref: "e1" } } })),
-      execute: vi.fn(async () => ({ state: "completed", result: {}, postObservation: "ok" })),
+      execute: vi.fn(async (): Promise<BrowserExecution> => ({ state: "completed", result: {}, postObservation: "ok" })),
     };
 
     const decider: Partial<Decider> = {
@@ -178,11 +180,11 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "pending"),
+      authorize: vi.fn(async () => "pending" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Sign in" });
+    const result = await gateway.run(createMockScope(), { goal: "Sign in", maxSteps: 4 });
 
     expect(result.status).toBe("needs-agent");
     expect(result.reason).toBe("permission-required");
@@ -205,11 +207,11 @@ describe("jev e2e scenarios", () => {
       decider: {} as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Interact with iframe" });
+    const result = await gateway.run(createMockScope(), { goal: "Interact with iframe", maxSteps: 4 });
 
     expect(result.status).toBe("needs-agent");
     expect(result.reason).toBe("unsupported-observation");
@@ -220,7 +222,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["CLICK"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -237,7 +239,7 @@ describe("jev e2e scenarios", () => {
       })),
       verify: vi.fn(async () => true),
       prepare: vi.fn(),
-      execute: vi.fn(async () => {
+      execute: vi.fn(async (): Promise<BrowserExecution> => {
         callAttempts++;
         return { state: "completed", result: {}, postObservation: "ok" };
       }),
@@ -254,11 +256,11 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Pay" });
+    const result = await gateway.run(createMockScope(), { goal: "Pay", maxSteps: 4 });
 
     expect(result.status).toBe("needs-agent");
     expect(callAttempts).toBe(0); // Zero duplicate submissions!
@@ -268,7 +270,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["DONE"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -303,12 +305,13 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
     const result = await gateway.run(createMockScope(), {
       goal: "Filter by size and color",
+      maxSteps: 4,
       expect: {
         all: [
           { kind: "visible-text", text: "Size: M" },
@@ -325,7 +328,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["DONE"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -364,12 +367,13 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
     const result = await gateway.run(createMockScope(), {
       goal: "Navigate",
+      maxSteps: 4,
       expect: {
         all: [{ kind: "url-path", origin: "https://official.local", pathname: "/dashboard" }],
       },
@@ -384,7 +388,7 @@ describe("jev e2e scenarios", () => {
     const transport: BrowserTransport = {
       capabilities: { mode: "dom-fast", operations: ["SELECT", "DONE"], semanticGuard: true, atomicObservation: true },
       rawCall: vi.fn(),
-      observe: vi.fn(async () => ({
+      observe: vi.fn(async (): Promise<BrowserObservation> => ({
         id: "obs_1",
         tabId: "tab_1",
         documentEpoch: "epoch_1",
@@ -421,7 +425,7 @@ describe("jev e2e scenarios", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);

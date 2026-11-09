@@ -3,23 +3,29 @@
 import { describe, expect, it } from "vitest";
 
 import { appendOriginLine } from "./hub-bridge.ts";
+import type { BotRecord, Store, TaskPatch } from "./store.ts";
+
+type BridgeStore = Pick<Store, "appendMessage" | "botByThread" | "patchTask">;
+type AppendMessageInput = Parameters<BridgeStore["appendMessage"]>[1];
 
 function fakeStore(threads: Record<string, string> = { "thread-1": "bot-1" }) {
-  const appended: Array<{ threadId: string; message: Record<string, unknown> }> = [];
-  const patched: Array<{ botId: string; threadId: string; patch: Record<string, unknown> }> = [];
+  const appended: Array<{ threadId: string; message: AppendMessageInput }> = [];
+  const patched: Array<{ botId: string; threadId: string; patch: TaskPatch }> = [];
+  const store: BridgeStore = {
+    botByThread: (threadId) => (threads[threadId] ? ({ id: threads[threadId] } as BotRecord) : null),
+    appendMessage: (threadId, message) => {
+      appended.push({ threadId, message });
+      return { id: "line-1", at: 0, role: "bot", kind: "text" };
+    },
+    patchTask: (botId, threadId, patch) => {
+      patched.push({ botId, threadId, patch });
+      return null;
+    },
+  };
   return {
     appended,
     patched,
-    store: {
-      botByThread: (threadId: string) => (threads[threadId] ? { id: threads[threadId] } : undefined),
-      appendMessage: (threadId: string, message: Record<string, unknown>) => {
-        appended.push({ threadId, message });
-        return { id: "line-1" };
-      },
-      patchTask: (botId: string, threadId: string, patch: Record<string, unknown>) => {
-        patched.push({ botId, threadId, patch });
-      },
-    },
+    store,
   };
 }
 
@@ -200,6 +206,34 @@ describe("the hub bridge origin route", () => {
     });
     expect(answers[0]?.status).toBe(504);
     expect(answers[0]?.body).toEqual({ ok: false, error: "quota_timeout" });
+  });
+
+  it("serves the last quotas it got, marked stale, when a later cold fallback runs past its budget (E66)", async () => {
+    const { store } = fakeStore();
+    const { createHubBridgeRoutes } = await import("./hub-bridge.ts");
+    const answers: Array<{ status: number; body: unknown }> = [];
+    const res = {} as never;
+    const quotaData = { updatedAt: "Tue 2026-11-10 1:40 AM CST (UTC+08:00)", workers: { zcode: { worker: "zcode", quotas: [] } } };
+    let calls = 0;
+    const route = createHubBridgeRoutes({
+      store,
+      askConsole: async () => null,
+      // first fetch finishes only after the budget (the background result is kept); later ones never finish
+      getAllQuotas: () => (calls++ === 0 ? new Promise((resolve) => setTimeout(() => resolve(quotaData), 40)) : new Promise(() => {})),
+      consoleReachable: async () => false,
+      quotaFallbackMs: 10,
+    });
+    const ask = () => route({
+      req: {} as never, res, url: new URL("http://127.0.0.1:8801/hub/quota"), path: "/hub/quota", method: "GET", auth: {} as never,
+      json: ((_res: never, status: number, body: unknown) => { answers.push({ status, body }); return res; }) as never,
+      readBody: (async () => ({})) as never,
+    });
+    await ask();
+    expect(answers[0]).toEqual({ status: 504, body: { ok: false, error: "quota_timeout" } });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await ask();
+    expect(answers[1]?.status).toBe(200);
+    expect(answers[1]?.body).toEqual({ ...quotaData, stale: true });
   });
 
   it("returns 502 on /hub/quota when console is unreachable and getAllQuotas fails", async () => {

@@ -1,6 +1,6 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -21,10 +21,12 @@ import {
   antigravityProfileDirectory,
   authorizationUrlFromLine,
   catalogFromAntigravityConfigOptions,
+  isAddedAntigravityAccount,
   isValidAntigravityInitializeResult,
   parseAntigravityAuthorizationUrl,
   prepareAntigravityProfile,
   probeAntigravityModels,
+  removeAntigravitySignIn,
   validateAntigravityCallbackUrl,
   validateAntigravityRuntime,
 } from "./antigravity-acp.ts";
@@ -158,7 +160,7 @@ describe("Antigravity sign-in lifecycle", () => {
       expect(unavailable.reason).not.toContain("fixture failure");
       install.mockRejectedValueOnce(new Error("Antigravity initialization timed out: fixture failure"));
       await expect(instance.installRuntime!()).rejects.toThrow("fixture failure");
-      install.mockResolvedValueOnce({ executablePath: fake.executable, harnessPath: fake.harness, source: "managed", version: "1.1.1" });
+      install.mockResolvedValueOnce({ executablePath: fake.executable, harnessPath: fake.harness, source: "managed", version: "1.1.1", spawnArgs: ["--uid="], kind: "packaged" });
       await instance.installRuntime!();
       expect((await instance.snapshot()).reason).not.toContain("fixture failure");
     } finally {
@@ -695,6 +697,61 @@ describe("official Antigravity runtime", () => {
     expect(first.environment.GOOGLE_API_KEY).toBeUndefined();
     expect(first.environment.GEMINI_HOME).toBe(first.directory);
     expect(first.environment.ANTIGRAVITY_HARNESS_PATH).toBe(fake.harness);
+  });
+
+  it("cli runtime: primary instance shares the real GEMINI_HOME, added accounts get their own", async () => {
+    const runtime = { executablePath: "/usr/bin/agy", harnessPath: "", source: "path" as const, version: null, spawnArgs: ["acp"], kind: "cli" as const };
+    const realHome = mkdtempSync(join(tmpdir(), "agy-real-gemini-"));
+    const primary = await prepareAntigravityProfile({ instanceId: "antigravity", runtime, baseEnv: { GEMINI_HOME: realHome } });
+    const added = await prepareAntigravityProfile({ instanceId: "antigravity-1b2c", runtime, baseEnv: { GEMINI_HOME: realHome } });
+    expect(primary.environment.GEMINI_HOME).toBe(resolve(realHome));
+    expect(primary.tokenPath).toBe(join(resolve(realHome), "antigravity-cli", "antigravity-oauth-token"));
+    expect(added.environment.HOME).toBe(join(added.directory, "home"));
+    expect(added.environment.DBUS_SESSION_BUS_ADDRESS).toBe("disabled:");
+    expect(added.environment.GEMINI_HOME).toBe(join(added.directory, "home", ".gemini"));
+    expect(added.tokenPath).toBe(join(added.directory, "home", ".gemini", "antigravity-cli", "antigravity-oauth-token"));
+    expect(primary.environment.HOME).not.toBe(join(primary.directory, "home"));
+    expect(primary.environment.DBUS_SESSION_BUS_ADDRESS).toBeUndefined();
+  });
+
+  it("cli runtime: an added account's HOME links the person's git and ssh setup", async () => {
+    const runtime = { executablePath: "/usr/bin/agy", harnessPath: "", source: "path" as const, version: null, spawnArgs: ["acp"], kind: "cli" as const };
+    const realHome = mkdtempSync(join(tmpdir(), "agy-real-home-"));
+    writeFileSync(join(realHome, ".gitconfig"), "[user]\n");
+    mkdirSync(join(realHome, ".ssh"));
+    const added = await prepareAntigravityProfile({ instanceId: "antigravity-home01", runtime, baseEnv: { HOME: realHome } });
+    const home = added.environment.HOME!;
+    expect(readFileSync(join(home, ".gitconfig"), "utf8")).toBe("[user]\n");
+    expect(existsSync(join(home, ".ssh"))).toBe(true);
+    expect(existsSync(join(home, ".npmrc"))).toBe(false);
+    expect(existsSync(join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token"))).toBe(false);
+  });
+
+  it("cli runtime: an added account is not signed in just because the primary is", async () => {
+    const runtime = { executablePath: "/usr/bin/agy", harnessPath: "", source: "path" as const, version: null, spawnArgs: ["acp"], kind: "cli" as const };
+    const realHome = mkdtempSync(join(tmpdir(), "agy-real-gemini-"));
+    mkdirSync(join(realHome, "antigravity-cli"), { recursive: true });
+    writeFileSync(join(realHome, "antigravity-cli", "antigravity-oauth-token"), "{\"token\":\"primary\"}");
+    const primary = await prepareAntigravityProfile({ instanceId: "antigravity", runtime, baseEnv: { GEMINI_HOME: realHome } });
+    const added = await prepareAntigravityProfile({ instanceId: "antigravity-9f9f", runtime, baseEnv: { GEMINI_HOME: realHome } });
+    expect(await antigravityProfileAuthenticated(primary)).toBe(true);
+    expect(await antigravityProfileAuthenticated(added)).toBe(false);
+  });
+
+  it("removeAntigravitySignIn clears an added account's cli token but never the real GEMINI_HOME", async () => {
+    const runtime = { executablePath: "/usr/bin/agy", harnessPath: "", source: "path" as const, version: null, spawnArgs: ["acp"], kind: "cli" as const };
+    const realHome = mkdtempSync(join(tmpdir(), "agy-real-gemini-"));
+    const realToken = join(realHome, "antigravity-cli", "antigravity-oauth-token");
+    mkdirSync(dirname(realToken), { recursive: true });
+    writeFileSync(realToken, "primary");
+    const added = await prepareAntigravityProfile({ instanceId: "antigravity-rm01", runtime, baseEnv: { GEMINI_HOME: realHome } });
+    mkdirSync(dirname(added.tokenPath), { recursive: true });
+    writeFileSync(added.tokenPath, "added");
+    await removeAntigravitySignIn("antigravity-rm01");
+    expect(existsSync(added.tokenPath)).toBe(false);
+    expect(readFileSync(realToken, "utf8")).toBe("primary");
+    expect(isAddedAntigravityAccount("antigravity")).toBe(false);
+    expect(isAddedAntigravityAccount("antigravity-rm01")).toBe(true);
   });
 
   it("points TEMP on Windows at one stable folder per instance under DATA_DIR/tmp", async () => {

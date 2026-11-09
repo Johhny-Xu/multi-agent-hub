@@ -16,6 +16,7 @@ import { DeepSeekAgentDriver } from "./acp/deepseek.ts";
 import { ClineAgentDriver } from "./acp/cline.ts";
 import { CopilotAgentDriver } from "./acp/copilot.ts";
 import { CommandCodeAgentDriver } from "./acp/command-code.ts";
+import { KiroAgentDriver } from "./acp/kiro.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 import { PiDriver } from "./pi.ts";
 import { MistralDriver } from "./mistral.ts";
@@ -32,7 +33,6 @@ import { McodeAgentDriver } from "./acp/mcode.ts";
 import { MeooAgentDriver } from "./acp/meoo.ts";
 import { ZcodeAgentDriver } from "./acp/zcode.ts";
 import { PerchAgentDriver } from "./acp/perch.ts";
-import { QwenPawAgentDriver } from "./acp/qwenpaw.ts";
 import { MimocodeAgentDriver } from "./acp/mimocode.ts";
 import { TraecodeAgentDriver } from "./traecode.ts";
 import { HarkWebDriver } from "./web-chat/hark.ts";
@@ -50,6 +50,7 @@ export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
   ClineAgentDriver,
   CopilotAgentDriver,
   CommandCodeAgentDriver,
+  KiroAgentDriver,
   CustomAcpDriver,
   PiDriver,
   OpenAICompatDriver,
@@ -72,7 +73,6 @@ export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
   MeooAgentDriver,
   ZcodeAgentDriver,
   PerchAgentDriver,
-  QwenPawAgentDriver,
   // MiMo Code runs its turns through its own ACP mode; Trae Code is the desktop IDE, whose driver
   // only registers the engine and its accounts and explains that turns cannot run headlessly.
   MimocodeAgentDriver,

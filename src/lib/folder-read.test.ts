@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { initialState, reducer, type AppState, type Bot, type BotAnnouncement, type Message } from "@/state/store";
-import { departmentUnread, folderUnreadThreadIds, markDepartmentRead, markFolderRead } from "./folder-read";
+import { departmentUnread, allUnread, folderUnreadThreadIds, markAllRead, markDepartmentRead, markFolderRead } from "./folder-read";
 
 const bot: Bot = {
   id: "maus", threadId: "elsewhere", name: "Maus", title: "", description: "", notifications: true,
@@ -118,6 +118,46 @@ describe("mark a department as read", () => {
     });
     await expect(markDepartmentRead(departmentUnread("Ops", bots, groups), request, () => {}, () => {})).rejects.toThrow("offline");
     expect(request.mock.calls.map(([path]) => path)).toEqual(["/api/bots/ada/read", "/api/bots/ada/read", "/api/bots/eve/read"]);
+  });
+});
+
+describe("mark everything as read", () => {
+  const member = (id: string, section: string | undefined, unread: boolean, extra: Partial<Bot> = {}): Bot => ({
+    ...bot, id, threadId: `${id}-main`, section, unread, projects: [],
+    tasks: [{ threadId: `${id}-main`, title: "Main", createdAt: 0, unread }, { threadId: `${id}-side`, title: "Side", createdAt: 1, unread }],
+    ...extra,
+  });
+  const bots = [member("ada", "Ops", true), member("ben", "Ops", false), member("cara", "Sales", true), member("dan", "Ops", true, { hidden: true })];
+  const groups = [
+    { id: "standup", unread: true, section: "Ops" }, { id: "deals", unread: false, section: "Sales" },
+    { id: "pair", unread: true, section: "Ops", dm: true },
+  ];
+
+  it("covers every shown bot with unread conversations and every unread group chat across departments", () => {
+    const unread = allUnread(bots, groups);
+    expect(unread.bots.map((b) => b.id)).toEqual(["ada", "cara"]);
+    expect(unread.groups.map((g) => g.id)).toEqual(["standup", "pair"]);
+    expect(allUnread([member("ada", undefined, false)], [{ id: "quiet", unread: false }])).toEqual({ bots: [], groups: [] });
+  });
+
+  it("clears every bot conversation and group chat with one request per thread, keeping earlier reads on a failure", async () => {
+    const calls: string[] = [];
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      calls.push(`${path} ${init?.body ?? ""}`.trim());
+      if (path.includes("cara")) throw new Error("offline");
+      return path.startsWith("/api/groups/") ? { group: { id: "standup", unread: false } } : { bot: { id: "ada" } as BotAnnouncement };
+    });
+    await expect(markAllRead(allUnread(bots, groups), request, () => {}, () => {})).rejects.toThrow("offline");
+    expect(calls).toEqual([
+      '/api/bots/ada/read {"threadId":"ada-main"}', '/api/bots/ada/read {"threadId":"ada-side"}',
+      '/api/bots/cara/read {"threadId":"cara-main"}',
+    ]);
+  });
+
+  it("sends nothing when everything is already read", async () => {
+    const request = vi.fn();
+    await markAllRead(allUnread([member("ada", "Ops", false)], [{ id: "quiet", unread: false }]), request, () => {}, () => {});
+    expect(request).not.toHaveBeenCalled();
   });
 });
 

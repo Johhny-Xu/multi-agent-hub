@@ -53,7 +53,7 @@ describe("Settings → Connections", () => {
     fixture.config = configStatusFromFrame({
       composio: { configured: false },
       box: { configured: false },
-      vps: { configured: false, sshAlias: "" },
+      vps: { configured: false, sshAlias: "", revision: "", instances: [] },
       rooms: { turnTimeoutMinutes: 10 },
       mcp: { callTimeoutMinutes: 10 },
       localVm: { mode: "shared", maxInstances: 1 },

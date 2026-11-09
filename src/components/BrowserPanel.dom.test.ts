@@ -5,11 +5,13 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
 
+const fixture = vi.hoisted(() => ({ state: null as Record<string, unknown> | null }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
-  return { ...original, useStore: () => ({ state: original.initialState, dispatch: vi.fn() }) };
+  return { ...original, useStore: () => ({ state: fixture.state ?? original.initialState, dispatch: vi.fn() }) };
 });
 vi.mock("@/lib/page-visible", () => ({ usePageVisible: () => true }));
 vi.mock("@/lib/browser-pip", () => ({
@@ -66,6 +68,7 @@ afterEach(() => {
   window.removeEventListener("keydown", onWindowKey);
   flushSync(() => root.unmount());
   host.remove();
+  fixture.state = null;
 });
 
 describe("the browser panel's Maximize", () => {
@@ -136,5 +139,24 @@ describe("the browser panel's Full screen", () => {
     click(fullscreenButton());
     await settle();
     expect(fullscreenButton()?.getAttribute("aria-label")).toBe("Full screen");
+  });
+});
+
+describe("a My Chrome bot's panel", () => {
+  it("shows the not-browsing placeholder with no stream behind it", async () => {
+    const store = await import("@/state/store");
+    const base = store.initialState as unknown as Record<string, unknown>;
+    fixture.state = {
+      ...base,
+      config: {
+        browserEngine: { kind: "engine", engine: "agent-browser", myChrome: true },
+        browserProfiles: [{ id: "mine", name: "Mine", browser: "chrome" }],
+      },
+    };
+    const mine = { ...bot, browserProfile: "mine" } as Bot;
+    flushSync(() => root.render(createElement(LiveBrowser, { bot: mine })));
+    await settle();
+    expect(host.textContent).toContain(t("browser.panel.notBrowsing"));
+    expect(host.querySelector("[data-stub-surface]")).toBeNull();
   });
 });

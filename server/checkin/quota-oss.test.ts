@@ -12,20 +12,26 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const vq = await import('../../checkin/vendor-quota.mjs');
-const deep = await import('../../checkin/quota-deep.mjs');
+const vq = await import('./vendor-quota.mjs');
+const deep = await import('./quota-deep.mjs');
 
-const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), {
+const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'Content-Type': 'application/json' },
 });
 
+type RouterCall = { url: string; headers: Record<string, string>; method: string; body: unknown };
+type MockFetchInput = Parameters<typeof fetch>[0];
+type MockOpts = { headers?: Record<string, string | undefined>; method?: string; body?: unknown };
+type Responder = Record<string, unknown> | ((url: string, opts: MockOpts) => Response);
+type FetchRouter = ((url: MockFetchInput, opts?: MockOpts) => Promise<Response>) & { calls: RouterCall[] };
+
 /** 按 URL 片段路由的 mock fetch，记录每次请求的 url/headers/method */
-function fetchRouter(routes) {
-  const calls = [];
-  const impl = async (url, opts = {}) => {
+function fetchRouter(routes: Array<[string, Responder]>): FetchRouter {
+  const calls: RouterCall[] = [];
+  const impl = (async (url: MockFetchInput, opts: MockOpts = {}): Promise<Response> => {
     const u = String(url);
-    calls.push({ url: u, headers: opts.headers || {}, method: opts.method || 'GET', body: opts.body });
+    calls.push({ url: u, headers: (opts.headers || {}) as Record<string, string>, method: opts.method || 'GET', body: opts.body });
     for (const [pattern, responder] of routes) {
       if (u.includes(pattern)) {
         // responder 是函数则自己产 Response；是普通对象则每次现场包一层（不能预构造
@@ -34,7 +40,7 @@ function fetchRouter(routes) {
       }
     }
     return jsonRes({ error: 'no route' }, 404);
-  };
+  }) as FetchRouter;
   impl.calls = calls;
   return impl;
 }
@@ -51,7 +57,7 @@ test('zcode：balance 解析按模型分桶（HUB zcode-entitlements 实测形�
         { show_name: '通用赠送', unit_type: 'token', total_units: 100000000, used_units: 0, remaining_units: 100000000, capabilities: [] },
       ],
     },
-  });
+  })!;
   assert.equal(parsed.enterprise, false);
   assert.equal(parsed.buckets.length, 3);
   assert.deepEqual(parsed.buckets[0].models, ['glm-5.3']);
@@ -60,12 +66,12 @@ test('zcode：balance 解析按模型分桶（HUB zcode-entitlements 实测形�
   // 通用桶：capabilities 无 model: 项 ⇒ 无模型归属
   assert.deepEqual(parsed.buckets[2].models, []);
   // 字符串数字也要解析出来（HUB 对这条踩过坑）
-  const strParsed = vq.parseZcodeBalance({ data: { balances: [{ show_name: 'X', total_units: '3000000', used_units: '0', remaining_units: '3000000' }] } });
+  const strParsed = vq.parseZcodeBalance({ data: { balances: [{ show_name: 'X', total_units: '3000000', used_units: '0', remaining_units: '3000000' }] } })!;
   assert.equal(strParsed.buckets[0].total, 3000000);
 });
 
 test('zcode：企业版 displayMode=enterprise 不下发数字，不得显示成 0', () => {
-  const parsed = vq.parseZcodeBalance({ data: { displayMode: 'enterprise', balances: [] } });
+  const parsed = vq.parseZcodeBalance({ data: { displayMode: 'enterprise', balances: [] } })!;
   assert.equal(parsed.enterprise, true);
   assert.deepEqual(parsed.buckets, []);
 });
@@ -133,11 +139,11 @@ test('zcode：device_mid 优先官方客户端 telemetry-state，找不到才生
 
 test('zcode：start-plan 主链路（mock fetch）——桶行、单位 token、计划名', async (t) => {
   const router = fetchRouter([
-    ['zcode.z.ai/api/v1/zcode-plan/billing/balance', (url, opts) => {
+    ['zcode.z.ai/api/v1/zcode-plan/billing/balance', (_url, opts) => {
       // device_mid 来自测试机的官方客户端/持久化副本，这里只断言非空（缺 mid 上游 3001）
-      assert.equal(typeof opts.headers['X-Device-Mid'], 'string');
-      assert.ok(opts.headers['X-Device-Mid'].length > 0);
-      assert.equal(opts.headers.Authorization, 'Bearer jwt-e2e');
+      assert.equal(typeof opts.headers!['X-Device-Mid'], 'string');
+      assert.ok(opts.headers!['X-Device-Mid']!.length > 0);
+      assert.equal(opts.headers!.Authorization, 'Bearer jwt-e2e');
       return jsonRes({
         code: 200,
         data: { balances: [{ show_name: 'GLM-5.3', unit_type: 'token', total_units: 3000000, used_units: 1200000, remaining_units: 1800000, capabilities: ['model:glm-5.3'] }] },
@@ -147,11 +153,11 @@ test('zcode：start-plan 主链路（mock fetch）——桶行、单位 token、
   t.mock.method(globalThis, 'fetch', router);
   const out = await vq.fetchZcodeQuota({ zcodeJwt: 'jwt-e2e', activeProvider: 'bigmodel' });
   assert.equal(out.plan, 'ZCode');
-  assert.equal(out.quotas.length, 1);
-  assert.equal(out.quotas[0].displayName, 'GLM-5.3');
-  assert.equal(out.quotas[0].unit, 'token');
-  assert.equal(out.quotas[0].total, 3000000);
-  assert.equal(out.quotas[0].remaining, 1800000);
+  assert.equal(out.quotas!.length, 1);
+  assert.equal(out.quotas![0].displayName, 'GLM-5.3');
+  assert.equal(out.quotas![0].unit, 'token');
+  assert.equal(out.quotas![0].total, 3000000);
+  assert.equal(out.quotas![0].remaining, 1800000);
 });
 
 // ---------------------------------------------------------------- minimaxcode
@@ -164,7 +170,7 @@ test('minimax：credit/details 余额 = Σ remaining_amount（字符串），每
     ],
     total_count: 2,
     base_resp: { status_code: 0, status_msg: 'ok' },
-  });
+  })!;
   assert.equal(parsed.balance, 1800);
   assert.equal(parsed.packages.length, 2);
   assert.match(parsed.packages[0].name, /积分包/);
@@ -173,8 +179,8 @@ test('minimax：credit/details 余额 = Σ remaining_amount（字符串），每
 
 test('minimax：业务码在 base_resp.status_code（HTTP 200 也可能带错）；details 缺失 ⇒ 余额 0', () => {
   const bizError = vq.parseMinimaxCreditDetails({ base_resp: { status_code: 1004, status_msg: 'invalid token' } });
-  assert.match(bizError.error, /invalid token/);
-  const empty = vq.parseMinimaxCreditDetails({ total_count: 0, base_resp: { status_code: 0 } });
+  assert.match(bizError!.error!, /invalid token/);
+  const empty = vq.parseMinimaxCreditDetails({ total_count: 0, base_resp: { status_code: 0 } })!;
   assert.equal(empty.balance, 0);
   assert.deepEqual(empty.packages, []);
   // 形状完全不对 ⇒ null
@@ -192,8 +198,8 @@ test('minimax：fetchMiniMaxQuota 以真实余额为主行、签到为附加行�
   t.mock.method(globalThis, 'fetch', router);
   // 签到面板在本机凭据缺失时返回 null，不阻断余额展示
   const out = await vq.fetchMiniMaxQuota('token-e2e');
-  assert.ok(out.quotas.length >= 1);
-  const balance = out.quotas.find((q) => q.name === '积分余额');
+  assert.ok(out.quotas!.length >= 1);
+  const balance = out.quotas!.find((q) => q.name === '积分余额');
   assert.ok(balance, '必须有积分余额主行');
   assert.equal(balance.total, 1234.5);
   assert.equal(balance.unit, 'credit');
@@ -261,10 +267,10 @@ test('antigravity：免费档（paidTier 空 / free-tier）跳过分模型，只
   t.mock.method(globalThis, 'fetch', router);
   const out = await vq.fetchAntigravityQuota({ token: 'tok-e2e', email: 'user@example.com' });
   assert.equal(out.plan, 'Free (user)');
-  assert.equal(out.quotas.length, 1);
-  assert.equal(out.quotas[0].name, 'gemini_weekly');
+  assert.equal(out.quotas!.length, 1);
+  assert.equal(out.quotas![0].name, 'gemini_weekly');
   // 免费档不发分模型行
-  assert.equal(out.quotas.find((q) => q.name === 'gemini-3.1-pro-high'), undefined);
+  assert.equal(out.quotas!.find((q) => q.name === 'gemini-3.1-pro-high'), undefined);
   // 两个配额端点必须走 9R 的 daily- 域
   assert.ok(router.calls.some((c) => c.url.startsWith('https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels')));
   assert.ok(router.calls.some((c) => c.url.startsWith('https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary')));
@@ -283,7 +289,7 @@ test('antigravity：付费档也只展示 Gemini 5h 与周额度（用户 2026-1
   ]);
   t.mock.method(globalThis, 'fetch', router);
   const out = await vq.fetchAntigravityQuota({ token: 'tok-e2e', email: 'user@example.com' });
-  assert.deepEqual(out.quotas.map((q) => q.name).sort(), ['gemini_session', 'gemini_weekly']);
+  assert.deepEqual(out.quotas!.map((q) => q.name).sort(), ['gemini_session', 'gemini_weekly']);
 });
 
 // ---------------------------------------------------------------- trae
@@ -294,7 +300,7 @@ test('trae：credits_limit=-1 视为无限，不并入求和（HUB trae-credits 
     { entitlement_base_info: { quota: { credits_limit: -1 } }, usage: { credits_amount: 30 } },
     { entitlement_base_info: { quota: { credits_limit: 200 } }, usage: { credits_amount: 50 } },
   ];
-  const summary = deep.traePacksSummary(packs);
+  const summary = deep.traePacksSummary(packs)!;
   assert.equal(summary.unlimited, true);
   assert.equal(summary.total, 700);
   assert.equal(summary.used, 180);
@@ -330,21 +336,21 @@ test('cline：usage-limits 解析（percentUsed 原值透传、空 resetsAt 窗�
   assert.equal(parsed.windows[0].resetsAt, '2026-09-29T15:41:02.244817775Z');
   assert.equal(parsed.windows[1].resetsAt, '');
   // 失败形态：success:false 或网关层 {error}
-  assert.match(vq.parseClineUsageLimits({ success: false, error: 'boom' }).error, /boom/);
-  assert.match(vq.parseClineUsageLimits({ error: 'gateway down' }).error, /gateway down/);
+  assert.match(vq.parseClineUsageLimits({ success: false, error: 'boom' }).error!, /boom/);
+  assert.match(vq.parseClineUsageLimits({ error: 'gateway down' }).error!, /gateway down/);
 });
 
 test('cline：fetch 主链路（mock fetch）——workos 前缀、me 端点、accountId 余额端点', async (t) => {
   const router = fetchRouter([
-    ['/api/v1/users/me/plan/usage-limits', (url, opts) => {
-      assert.equal(opts.headers.Authorization, 'Bearer workos:jwt-e2e');
+    ['/api/v1/users/me/plan/usage-limits', (_url, opts) => {
+      assert.equal(opts.headers!.Authorization, 'Bearer workos:jwt-e2e');
       return jsonRes({ success: true, data: { limits: [
         { type: 'five_hour', percentUsed: 30, resetsAt: '2026-11-08T15:00:00Z' },
         { type: 'weekly', percentUsed: 0, resetsAt: '' },
       ] } });
     }],
-    ['/api/v1/users/usr-abc/balance', (url, opts) => {
-      assert.equal(opts.headers.Authorization, 'Bearer workos:jwt-e2e');
+    ['/api/v1/users/usr-abc/balance', (_url, opts) => {
+      assert.equal(opts.headers!.Authorization, 'Bearer workos:jwt-e2e');
       return jsonRes({ data: { userId: 'usr-abc', balance: 500000 }, success: true });
     }],
   ]);
@@ -353,10 +359,10 @@ test('cline：fetch 主链路（mock fetch）——workos 前缀、me 端点、a
   assert.ok(router.calls.some((c) => c.url === 'https://api.cline.bot/api/v1/users/me/plan/usage-limits'));
   assert.ok(router.calls.some((c) => c.url === 'https://api.cline.bot/api/v1/users/usr-abc/balance'));
   // 空 resetsAt 的窗口不渲染（官方客户端行为），余额按 1e5 折算 USD
-  assert.equal(out.quotas.length, 2);
-  assert.equal(out.quotas[0].name, '5 小时窗口');
-  assert.equal(out.quotas[0].remainingPercentage, 70);
-  const balance = out.quotas.find((q) => q.name === '余额');
+  assert.equal(out.quotas!.length, 2);
+  assert.equal(out.quotas![0].name, '5 小时窗口');
+  assert.equal(out.quotas![0].remainingPercentage, 70);
+  const balance = out.quotas!.find((q) => q.name === '余额')!;
   assert.equal(balance.total, 5);
   assert.equal(balance.unit, 'USD');
 });
@@ -368,14 +374,14 @@ test('perch：/api/perchai/account 解析套餐与每日 PT；无剩余字段不
     session: { planCode: 'pilot', planName: 'Pilot', entitlements: [{ key: 'limits.daily_runs', value_json: { limit: null } }] },
     usageMeter: { dailyPt: 1234 },
   }), { planCode: 'pilot', planName: 'Pilot', dailyPt: 1234 });
-  assert.equal(vq.parsePerchAccount({ session: {} }).dailyPt, null);
+  assert.equal(vq.parsePerchAccount({ session: {} })!.dailyPt, null);
   assert.equal(vq.parsePerchAccount(null), null);
 
   const router = fetchRouter([
-    ['/api/perchai/account', (url, opts) => {
-      assert.equal(opts.headers.Authorization, 'Bearer perch-tok');
-      assert.equal(opts.headers['User-Agent'], 'perchai-cli/2.4.118');
-      assert.equal(opts.headers['x-perch-locale'], 'en');
+    ['/api/perchai/account', (_url, opts) => {
+      assert.equal(opts.headers!.Authorization, 'Bearer perch-tok');
+      assert.equal(opts.headers!['User-Agent'], 'perchai-cli/2.4.118');
+      assert.equal(opts.headers!['x-perch-locale'], 'en');
       return jsonRes({ session: { planCode: 'starter', planName: 'Starter' }, usageMeter: { dailyPt: 250 } });
     }],
   ]);
@@ -383,9 +389,9 @@ test('perch：/api/perchai/account 解析套餐与每日 PT；无剩余字段不
   const out = await vq.fetchPerchQuota({ token: 'perch-tok', appUrl: 'https://app.perchai.app', email: 'a@b.c' });
   assert.equal(out.plan, 'Starter');
   // 不编造剩余：不发额度条，当日已用走 message
-  assert.equal(out.quotas.length, 0);
-  assert.match(out.message, /今日已用 250 PT/);
-  assert.match(out.message, /未下发剩余/);
+  assert.equal(out.quotas!.length, 0);
+  assert.match(out.message!, /今日已用 250 PT/);
+  assert.match(out.message!, /未下发剩余/);
 });
 
 // ---------------------------------------------------------------- 注册表

@@ -63,3 +63,22 @@ it.each(["offline", "denied", "bad-token", "bad-email"])("keeps lookup failure n
   expect(await antigravityAccount(path)).toBeUndefined();
   expect(fetcher).toHaveBeenCalledTimes(calls);
 });
+
+it("reads the email an agy CLI token file names, without a network request", async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  const payload = Buffer.from(JSON.stringify({ email: "cli@example.test" }), "utf8").toString("base64").replace(/=+$/u, "");
+  await writeFile(path, JSON.stringify({ token: `header.${payload}.signature`, refresh_token: "synthetic" }));
+  expect(await antigravityAccount(path)).toEqual({ email: "cli@example.test", method: "login" });
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("reads a plain email field too, and ignores a value that is not an address", async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  await writeFile(path, JSON.stringify({ email: "plain@example.test", refresh_token: "synthetic" }));
+  expect((await antigravityAccount(path))?.email).toBe("plain@example.test");
+  await writeFile(path, JSON.stringify({ email: "not an email", refresh_token: "synthetic" }));
+  expect(await antigravityAccount(path)).toBeUndefined();
+  expect(fetcher).not.toHaveBeenCalled();
+});

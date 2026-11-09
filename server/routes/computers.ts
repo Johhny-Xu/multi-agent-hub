@@ -291,6 +291,7 @@ export function createComputerRoutes(deps: ComputerRouteDeps): RouteHandler {
     }
     m = path.match(/^\/api\/computers\/vps\/([\w-]+)\/remove$/);
     if (m && method === "POST") {
+      const instanceId = m[1];
       if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
         return json(res, 415, { error: "content-type must be application/json" });
       }
@@ -304,11 +305,11 @@ export function createComputerRoutes(deps: ComputerRouteDeps): RouteHandler {
       if (typeof body?.containerId !== "string" || !/^[a-f0-9]{64}$/i.test(body.containerId)) {
         return json(res, 400, { error: "containerId must be the immutable id shown in the inventory" });
       }
-      const target = listVpsTargets(cfg).find((candidate) => candidate.instance.id === m[1] && candidate.instance.kind === "ssh");
+      const target = listVpsTargets(cfg).find((candidate) => candidate.instance.id === instanceId && candidate.instance.kind === "ssh");
       if (!target || target.instance.kind !== "ssh") {
         return json(res, 404, { error: "no such VPS instance" });
       }
-      const releaseComputerLifecycle = claimManagedVpsMutation(m[1]);
+      const releaseComputerLifecycle = claimManagedVpsMutation(instanceId);
       try {
         return json(res, 200, await vps.removeManagedVpsComputer(
           { instanceId: target.instance.id, sshAlias: target.instance.sshAlias, revision: target.revision },

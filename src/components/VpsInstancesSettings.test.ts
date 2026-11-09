@@ -111,7 +111,7 @@ describe("interactive VPS checking", () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    const checkCalls = fixture.api.mock.calls.filter(([path]: [string]) => path.includes("/check"));
+    const checkCalls = fixture.api.mock.calls.filter((call) => String(call[0]).includes("/check"));
     expect(checkCalls).toHaveLength(0);
   });
 
@@ -140,7 +140,7 @@ describe("interactive VPS checking", () => {
       await new Promise((resolve) => setTimeout(resolve, 30));
     });
     const checkCalls = fixture.api.mock.calls
-      .map(([path]: [string]) => path)
+      .map((call) => String(call[0]))
       .filter((path: string) => path.includes("/check"));
     expect(checkCalls).toEqual([
       "/api/vps/instances/s1/check",

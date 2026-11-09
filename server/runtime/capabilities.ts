@@ -35,7 +35,23 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   clineAgent: { resume: true },
   copilotAgent: { resume: true },
   commandCodeAgent: { resume: true },
+  kiroAgent: { resume: true },
   customAcp: { resume: true },
+  codebuddyAgent: { resume: true },
+  codebuddyCnAgent: { resume: true },
+  qoderAgent: { resume: true },
+  qoderCnAgent: { resume: true },
+  perchAgent: { resume: true },
+  mimocodeAgent: { resume: true },
+  // The one-shot bridges (meoo, mcode, zcode, CodeArts) refuse session/load, and the Trae desktop
+  // IDE and the Hark web chat hold no restorable session at all: the hub replays the thread, so
+  // these take the chat family's cap.
+  meooAgent: { resume: false, stepCap: CHAT_STEP_CAP },
+  mcodeAgent: { resume: false, stepCap: CHAT_STEP_CAP },
+  zcodeAgent: { resume: false, stepCap: CHAT_STEP_CAP },
+  codeartsAcpAgent: { resume: false, stepCap: CHAT_STEP_CAP },
+  traecodeAgent: { resume: false, stepCap: CHAT_STEP_CAP },
+  harkWeb: { resume: false, stepCap: CHAT_STEP_CAP },
   "openai-compat": CHAT_ROW,
   grok: CHAT_ROW,
   minimax: CHAT_ROW,

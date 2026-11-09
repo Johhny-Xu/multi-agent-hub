@@ -1,7 +1,7 @@
 import { OrganizationIdentity } from "./OrganizationIdentity";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Bot as BotIcon, Check, ChevronRight, ClipboardCopy, Crown, FolderPlus, Library, Loader2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Pin, Plus, Search, TextQuote, Trash2, Users, X } from "lucide-react";
+import { Archive, Bot as BotIcon, Check, ChevronRight, ClipboardCopy, Crown, FolderPlus, LayoutTemplate, Loader2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Pin, Plus, Search, SquarePen, TextQuote, Trash2, Users, X, CheckCheck } from "lucide-react";
 import { api, useStore, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type BotProject, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { approvalModeFor } from "../../shared/approval-mode";
 import { liveActivityLabel, sidebarMessage } from "@/lib/live-activity";
@@ -39,7 +39,7 @@ import { NewTaskFolderDialog } from "./NewTaskFolderDialog";
 import { GroupThreadList } from "./SidebarGroupThreadList";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { draggedFolder, FOLDER_DRAG_TYPE, moveFolder, placeFolder } from "@/lib/folder-order";
-import { folderUnreadThreadIds, markFolderRead } from "@/lib/folder-read";
+import { allUnread, folderUnreadThreadIds, markAllRead, markFolderRead } from "@/lib/folder-read";
 import { HelperThreadGroup, orderedThreadList, partitionHelperThreads, SidebarThreadRow, stampClock, threadRecency, threadRowActions, useRelativeNow, useRevealedThreadRow, useSnoozeExpiry, visibleSidebarThreads } from "./SidebarThreadRow";
 import { setSidebarDensity, useSidebarDensity, usePinnedCircles, useUniversalPins, type SidebarDensity } from "@/lib/sidebar-preferences";
 import {
@@ -75,10 +75,10 @@ import { DesktopWorkspaceSwitcher, endCloudHowTo } from "./DesktopWorkspaceSwitc
 import { useCloudOwner } from "./CloudOwner";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { SidebarDebugSection } from "./SidebarDebugSection";
-import { DEBUG_ZONE_SECTION_ID, isDebugBot } from "@/lib/debug-zone";
+import { DEBUG_ZONE_SECTION_ID, isAdvancedOnlySection, isDebugBot } from "@/lib/debug-zone";
 import { NeedsYouButton, OwnerPickerHost, pickOwnerOf } from "./TeamOwner"; import { SidebarPeople } from "./SidebarPeople"; import { SidebarInboxRow } from "./SidebarInboxRow"; import { SidebarActiveThreads } from "./SidebarActiveThreads"; import { setAttentionPinned, useAttentionPinned } from "./inbox/attention-pinned"; import { useInboxSupport } from "@/state/inbox";
 import { showWhoReportsToWhom, TeamMenuItems } from "./SidebarTeamMenu";
-import { MENU_ITEM, MENU_SHEET } from "./menu-recipe";
+import { MENU_ITEM, MENU_ITEM_SEPARATOR, MENU_SHEET } from "./menu-recipe";
 import { ELEVATED_CONTROL } from "./elevated";
 import { useTeamPeople } from "@/state/team-people";
 export { TeamMenuItems };
@@ -189,7 +189,7 @@ export function GroupListItem({
       className={cn(
         "relative flex w-full items-center rounded-md text-left", SIMPLE_ROW_FOCUS,
         density === "icons" ? (railTile ? "h-[54px] justify-center" : "justify-center px-1 py-1.5") : simpleRow
-          ? cn("gap-2 rounded-[10px] py-2 pr-2 group-hover:pr-9 group-focus-within:pr-9 max-md:pr-9 touch:pr-9 md:h-[54px] md:py-0", !group.dm && hasThreadList ? "pl-6" : "pl-2") : "gap-2 py-1.5 pl-6 pr-9",
+          ? cn("gap-2 rounded-[8px] py-2 pr-2 group-hover:pr-9 group-focus-within:pr-9 max-md:pr-9 touch:pr-9 md:h-[54px] md:py-0", !group.dm && hasThreadList ? "pl-6" : "pl-2") : "gap-2 py-1.5 pl-6 pr-9",
         selected && !expanded ? "bg-raised" : "hover:bg-raised/50",
       )}
       title={density === "icons" ? group.name : undefined}
@@ -723,7 +723,7 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
     "flex w-full items-center rounded-xl text-left transition-colors duration-150", SIMPLE_ROW_FOCUS,
     iconOnly
       ? railTile ? "h-[54px] justify-center" : "justify-center px-1 py-1.5"
-      : simpleRow ? "gap-2 rounded-[10px] py-2 pl-2 pr-2 md:h-[54px] md:py-0"
+      : simpleRow ? "gap-2 rounded-[8px] py-2 pl-2 pr-2 md:h-[54px] md:py-0"
         : cn(showThreads ? "gap-2 py-2" : "gap-3 py-2", showThreads ? "pl-6 pr-9 group-hover:pr-[5.75rem] group-focus-within:pr-[5.75rem] max-md:pr-9 touch:pr-[5.75rem]" : "pl-2.5 pr-9"),
     !iconOnly && "max-md:rounded-2xl max-md:py-2.5",
     selected ? "bg-raised" : "hover:bg-raised/50",
@@ -980,6 +980,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const [teamLibraryOpen, setTeamLibraryOpen] = useState(false);
   const [teamInstallUrl, setTeamInstallUrl] = useState<string | null>(null);
   const [archivedBotsOpen, setArchivedBotsOpen] = useState(false);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const [teamFeedback, setTeamFeedback] = useState<{
     error: boolean;
     text: string;
@@ -1098,7 +1099,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
     botPreview(b, visibleMessages(b), state.instances, advanced).toLowerCase().includes(q) ||
     b.tasks?.some((task) => !task.routineRunId && task.title.toLowerCase().includes(q)) ||
     b.projects?.some((folder) => folder.name.toLowerCase().includes(q));
-  const matchingBots = everydayBots.filter((b) => !b.hidden && matchesBot(b));
+  const matchingBots = everydayBots.filter((b) => !b.hidden && matchesBot(b) && (advanced || !isAdvancedOnlySection(b.section)));
   const debugBots = advanced ? state.bots.filter((b) => !b.hidden && isDebugBot(b) && matchesBot(b)) : [];
   const visibleGroups = state.groups.filter((g) => !q || g.name.toLowerCase().includes(q) || g.tasks?.some((task) => task.title.toLowerCase().includes(q)));
   const viewerEmail = useViewerEmail();
@@ -1111,7 +1112,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   }) };
   const { botChats, sectionedRooms, unsectionedRooms } = partitionSidebarGroups(visibleGroups);
 
-  const sectionNames: string[] = [...(state.sections ?? []).filter((name) => !q || name.toLowerCase().includes(q.toLowerCase())), ...botDrag.pending];
+  const sectionNames: string[] = [...(state.sections ?? []).filter((name) => (advanced || !isAdvancedOnlySection(name)) && (!q || name.toLowerCase().includes(q.toLowerCase()))), ...botDrag.pending];
   for (const bot of sectionedBots) {
     if (!sectionNames.includes(bot.section!)) sectionNames.push(bot.section!);
   }
@@ -1121,7 +1122,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   for (const group of sectionedRooms) {
     if (!sectionNames.includes(group.section!)) sectionNames.push(group.section!);
   }
-  const drops = botDrag.arrange({ enabled: sections.interactive && !phone, main: saved.unsectionedBots, sectioned: saved.sectionedBots, departments: sectionNames, bots: state.bots, taken: departmentNames(state) });
+  const drops = botDrag.arrange({ enabled: (sections.interactive || density === "icons") && !phone, withinList: density === "icons", main: saved.unsectionedBots, sectioned: saved.sectionedBots, departments: sectionNames, bots: state.bots, taken: departmentNames(state) });
   const naturalSectionIds = [
     ...(pinnedBots.length > 0 && !universalPins && !simpleDesk ? [PINNED_SECTION_ID] : []),
     ...(unsectionedRooms.length > 0 ? [CHANNELS_SECTION_ID] : []),
@@ -1146,7 +1147,18 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
     setSearchOpen(true);
     toggleCollapsed();
   };
-  const plusItem = cn(MENU_ITEM, "text-ink hover:bg-menu-hover");
+  const plusItem = cn(MENU_ITEM, "text-ink hover:bg-menu-hover"), plusBot = state.activeView === "chat" ? state.bots.find((candidate) => candidate.id === state.selectedId) : undefined;
+  const markEverythingRead = async () => {
+    setMarkingAllRead(true);
+    try {
+      await markAllRead(allUnread(state.bots, state.groups), (path, init) => api(path, init), (bot) => dispatch({ type: "botPatched", bot }), (group) => dispatch({ type: "groupPatched", group }));
+      setPlusOpen(false);
+    } catch (error) {
+      dispatch({ type: "error", message: error instanceof Error ? `${t("sidebar.markAllReadFailed")} ${error.message}` : t("sidebar.markAllReadFailed") });
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
   const plusControl = (
     <div ref={plusMenuRef} className="contents">
     <button
@@ -1179,6 +1191,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
             <MessageSquarePlus size={16} className="text-ink-secondary" />
             {t("sidebar.newChat.title")}
           </button>}
+          {!advanced && plusBot && <><button role="menuitem" className={plusItem} onClick={() => { setPlusOpen(false); dispatch({ type: "newTask", botId: plusBot.id }); }}><SquarePen size={16} className="text-ink-secondary" />{t("sidebar.newConversationWith", { name: plusBot.name })}</button><div role="separator" className={MENU_ITEM_SEPARATOR} /></>}
           {teamSettingsAllowed !== false && <button
             onClick={() => { setPlusOpen(false); dispatch({ type: "newBot" }); }}
             role="menuitem"
@@ -1196,8 +1209,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
             role="menuitem"
             className={plusItem}
           >
-            <Users size={16} className="text-ink-secondary" />
-            {t("sidebar.newChannel.title")}
+            <Users size={16} className="text-ink-secondary" />{t("sidebar.newChannel.title")}
           </button>
           {advanced && !remoteClient && teamSettingsAllowed !== false && <button
             onClick={() => { setPlusOpen(false); setNewTeam(true); }}
@@ -1212,7 +1224,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
             role="menuitem"
             className={plusItem}
           >
-            <Library size={16} className="text-ink-secondary" />
+            <LayoutTemplate size={16} className="text-ink-secondary" />
             {t("sidebar.teamLibrary")}
           </button>}
           {advanced && archivedBots.length > 0 && (
@@ -1229,6 +1241,15 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
               <span className="text-[12px] text-ink-secondary">{archivedBots.length}</span>
             </button>
           )}
+          <button
+            onClick={() => { void markEverythingRead(); }}
+            role="menuitem"
+            disabled={markingAllRead}
+            className={plusItem}
+          >
+            {markingAllRead ? <Loader2 size={16} className="animate-spin text-ink-secondary" /> : <CheckCheck size={16} className="text-ink-secondary" />}
+            <span className="flex-1">{markingAllRead ? t("sidebar.markingAllRead") : t("sidebar.markAllRead")}</span>
+          </button>
           </>}
         </div>
       </>

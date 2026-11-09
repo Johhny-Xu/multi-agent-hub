@@ -13,9 +13,12 @@ const undiciFetchMock = vi.fn(async (url: unknown, init: unknown) => {
 
 vi.mock("undici", () => {
   class ProxyAgent {
+    declare url: string;
     dispatch = () => {};
     close = async () => {};
-    constructor(public url: string) {}
+    constructor(url: string) {
+      this.url = url;
+    }
   }
   return {
     ProxyAgent,

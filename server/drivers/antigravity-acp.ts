@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -128,7 +128,37 @@ export async function removeAntigravityProfile(instanceId: string, baseDir = DAT
 
 /** Signing out forgets only this account's stored Google sign-in; its profile stays for the next sign-in. */
 export async function removeAntigravitySignIn(instanceId: string, baseDir = DATA_DIR): Promise<void> {
-  await rm(join(antigravityProfileDirectory(instanceId, baseDir), "antigravity-acp", "acp_token.json"), { force: true, maxRetries: 4, retryDelay: 250 });
+  const directory = antigravityProfileDirectory(instanceId, baseDir);
+  await rm(join(directory, "antigravity-acp", "acp_token.json"), { force: true, maxRetries: 4, retryDelay: 250 });
+  // An added account's agy CLI sign-in lives in its own profile HOME (never the person's real ~/.gemini).
+  await rm(join(directory, "home", ".gemini", "antigravity-cli", "antigravity-oauth-token"), { force: true, maxRetries: 4, retryDelay: 250 });
+}
+
+/** Tools an agent turn needs from the person's own HOME (git identity, SSH keys, user-installed CLIs). */
+const SHARED_HOME_ENTRIES = [".gitconfig", ".git-credentials", ".ssh", ".local", ".npm-global", ".npmrc"];
+
+async function prepareIsolatedCliHome(home: string, realHome: string): Promise<void> {
+  await mkdir(home, { recursive: true, mode: 0o700 });
+  if (resolve(realHome) === resolve(home)) return;
+  for (const name of SHARED_HOME_ENTRIES) {
+    const target = join(realHome, name);
+    const link = join(home, name);
+    try {
+      await stat(target);
+    } catch {
+      continue;
+    }
+    try {
+      await lstat(link);
+    } catch {
+      await symlink(target, link).catch(() => {});
+    }
+  }
+}
+
+/** Accounts added in Settings are `antigravity-<uuid>`; the primary instance is plain `antigravity`. */
+export function isAddedAntigravityAccount(instanceId: string): boolean {
+  return instanceId.startsWith("antigravity-");
 }
 
 /** An isolated Google profile per instance; foreign Google credentials are stripped so the account
@@ -146,10 +176,17 @@ export async function prepareAntigravityProfile(input: {
   const acpDirectory = join(directory, "antigravity-acp");
   const cli = input.runtime.kind === "cli";
   /** The agy CLI keeps its Google sign-in under $GEMINI_HOME/antigravity-cli, so pointing the CLI runtime at the
-   * real GEMINI_HOME reuses it instead of asking for a second login. The packaged runtime stays isolated. */
-  const geminiHome = cli
+   * real GEMINI_HOME reuses it instead of asking for a second login. The packaged runtime stays isolated.
+   * Only the primary instance shares the real GEMINI_HOME: an added account (antigravity-<id>) gets its own
+   * GEMINI_HOME in its profile, otherwise it would inherit the first account's sign-in and never sign in. */
+  const sharesCliHome = cli && !isAddedAntigravityAccount(input.instanceId);
+  // The agy CLI ignores GEMINI_HOME (it uses $HOME/.gemini) and prefers the desktop keyring over files, so an
+  // added CLI account gets its own HOME under its profile and no session bus: its sign-in lands in that HOME only.
+  const isolatedCliHome = cli && !sharesCliHome ? join(directory, "home") : undefined;
+  const geminiHome = sharesCliHome
     ? resolve((input.baseEnv ?? process.env).GEMINI_HOME?.trim() || join(homedir(), ".gemini"))
-    : directory;
+    : isolatedCliHome ? join(isolatedCliHome, ".gemini") : directory;
+  if (isolatedCliHome) await prepareIsolatedCliHome(isolatedCliHome, (input.baseEnv ?? process.env).HOME?.trim() || homedir());
   await mkdir(acpDirectory, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") {
     const { chmod } = await import("node:fs/promises");
@@ -177,6 +214,7 @@ export async function prepareAntigravityProfile(input: {
   Object.assign(environment, {
     GEMINI_HOME: geminiHome,
     AGY_ACP_FORCE_FILE_STORAGE: "1",
+    ...(isolatedCliHome ? { HOME: isolatedCliHome, DBUS_SESSION_BUS_ADDRESS: "disabled:" } : {}),
     // Only Google's packaged runtime reads this; the CLI carries its own harness behind `agy acp`.
     ...(cli ? {} : { ANTIGRAVITY_HARNESS_PATH: input.runtime.harnessPath }),
     BROWSER: browserCommand,

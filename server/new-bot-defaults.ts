@@ -121,7 +121,13 @@ function settingsError(error: z.ZodError): Error {
   return new Error(field && issue.message.startsWith(String(issue.path[0])) ? issue.message : `${field || "the bot"} is not valid`);
 }
 
-export function resolveBotCreationDefaults(saved: NewBotDefaults | undefined, body: Record<string, unknown>) {
+export const DEFAULT_NEW_BOT_BROWSER_PROFILE = "mychrome";
+
+export function resolveBotCreationDefaults(
+  saved: NewBotDefaults | undefined,
+  body: Record<string, unknown>,
+  defaultBrowserProfile: string = DEFAULT_NEW_BOT_BROWSER_PROFILE,
+) {
   if (body.useDefaults !== undefined && typeof body.useDefaults !== "boolean") {
     throw Object.assign(new Error("useDefaults must be true or false"), { status: 400 });
   }
@@ -129,8 +135,8 @@ export function resolveBotCreationDefaults(saved: NewBotDefaults | undefined, bo
   const checked = botDefaultsProfileSchema.safeParse(body.settings === undefined ? {} : body.settings);
   if (!checked.success) throw Object.assign(settingsError(checked.error), { status: 400 });
   const explicit = checked.data;
-  const profile = { ...template.profile, ...explicit };
-  for (const key of ["name", "title", "description", "modelSelection", "section"] as const) {
+  const profile = { browserProfile: defaultBrowserProfile, ...template.profile, ...explicit };
+  for (const key of ["name", "title", "description", "modelSelection", "section", "browserProfile"] as const) {
     if (Object.hasOwn(body, key)) Object.assign(profile, { [key]: key === "section" && body[key] === null ? "" : body[key] });
   }
   const resolved = botDefaultsProfileSchema.safeParse(profile);

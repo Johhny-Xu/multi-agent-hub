@@ -30,6 +30,14 @@ case "$*" in
   *) echo "unexpected docker invocation: $*" >&2; exit 64 ;;
 esac
 `;
+const FAKE_SSH = `#!/bin/sh
+if [ "$1" = "-F" ]; then shift 2; fi
+case "$*" in
+  "-O check -- old-vps"|"-O check -- new-vps") exit 255 ;;
+  "-o BatchMode=yes -o PermitLocalCommand=no -T -- old-vps true"|"-o BatchMode=yes -o PermitLocalCommand=no -T -- new-vps true") exit 0 ;;
+  *) echo "unexpected fixture SSH command: $*" >&2; exit 64 ;;
+esac
+`;
 const OLD_VPS_CONTAINER = JSON.stringify([{
   Id: "c".repeat(64), Name: "/__NAME__", Image: `sha256:${"d".repeat(64)}`,
   Config: { Image: "localhost/openmausbot/cua-local-vm:driver-0.20.0-v5", Env: ["VNC_PW=fixture"],
@@ -147,6 +155,7 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
     writeFileSync(join(home, "static", "assets", "test.css"), "body{}");
     writeFileSync(join(fakeBin, "docker"), FAKE_DOCKER, { mode: 0o755 });
     chmodSync(join(fakeBin, "docker"), 0o755);
+    writeFileSync(join(fakeBin, "ssh"), FAKE_SSH, { mode: 0o755 });
     writeFileSync(join(fakeBin, "vps-container.json"), OLD_VPS_CONTAINER);
     // This computer's own desktop is on offer, as on a Mac with computer control turned on.
     mkdirSync(join(home, "user-data"), { recursive: true });
@@ -270,16 +279,25 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
 
   // A bot on its own server while the default is new-vps: a check made on the default would find nothing there to update.
   it.each([
-    { server: "the default VPS", name: "Old VPS Bot", defaultAlias: "old-vps", botAlias: undefined },
-    { server: "its own VPS", name: "Own VPS Bot", defaultAlias: "new-vps", botAlias: "old-vps" },
-  ])("never lands an Auto chat on this computer while its desktop on $server runs an older version", async ({ name, defaultAlias, botAlias }) => {
+    { server: "the default VPS", name: "Old VPS Bot", defaultInstance: "old-vps", botInstance: undefined },
+    { server: "its own VPS", name: "Own VPS Bot", defaultInstance: "new-vps", botInstance: "old-vps" },
+  ])("never lands an Auto chat on this computer while its desktop on $server runs an older version", async ({ name, defaultInstance, botInstance }) => {
     // No Local VM can be made either, so without the rule the turn would fall through to this computer.
     vm({ noContainers: true });
     rmSync(join(fakeBin, "docker.log"), { force: true });
     await start();
-    expect((await api("PUT", "/api/config", { vps: { sshAlias: defaultAlias } })).status).toBe(200);
+    const put = await api("PUT", "/api/config", { vps: {
+      version: 2,
+      instances: [
+        { id: "old-vps", name: "Old VPS", kind: "ssh", sshAlias: "old-vps" },
+        { id: "new-vps", name: "New VPS", kind: "ssh", sshAlias: "new-vps" },
+      ],
+      defaultInstanceId: defaultInstance,
+    } });
+    expect(put.status, `PUT /api/config: ${JSON.stringify(put.body)}`).toBe(200);
     const { bot } = await apiOk("POST", "/api/bots", { name, browser: false });
-    await apiOk("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps", computer: null, ...(botAlias ? { vpsAlias: botAlias } : {}) });
+    // A v2 instance list never falls back to the default, so even the "default VPS" bot names its instance.
+    await apiOk("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps", computer: null, vpsInstanceId: botInstance ?? defaultInstance });
     const threadId = await send(bot.id, "Check the VPS desktop.");
     const sent = await dumpFor("Check the VPS desktop.");
     expect(sent.mcpConfig?.mcpServers?.computer, "this computer must not stand in for the VPS").toBeUndefined();

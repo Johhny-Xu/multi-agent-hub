@@ -8,8 +8,7 @@ import { SidebarDebugSection } from "./SidebarDebugSection";
 const render = (collapsed: boolean, onToggle?: () => void) => renderToStaticMarkup(
   createElement(
     SidebarDebugSection,
-    { count: 2, collapsed, onToggle },
-    createElement("div", { "data-debug-row": "one" }, "hub·zcode"),
+    { count: 2, collapsed, onToggle, children: createElement("div", { "data-debug-row": "one" }, "hub·zcode") },
   ),
 );
 
@@ -36,8 +35,7 @@ describe("debug zone section", () => {
     const html = renderToStaticMarkup(
       createElement(
         SidebarDebugSection,
-        { count: 2, collapsed: false, showHeader: false },
-        createElement("div", { "data-debug-row": "one" }),
+        { count: 2, collapsed: false, showHeader: false, children: createElement("div", { "data-debug-row": "one" }) },
       ),
     );
     expect(html).not.toContain("Debug");

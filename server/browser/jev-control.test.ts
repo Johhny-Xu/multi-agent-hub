@@ -53,11 +53,11 @@ describe("jev-control", () => {
       decider: {} as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope(), { goal: "Run" });
+    const result = await gateway.run(createMockScope(), { goal: "Run", maxSteps: 4 });
 
     expect(result.status).toBe("needs-agent");
     expect(result.reason).toBe("unsupported-observation");
@@ -76,7 +76,7 @@ describe("jev-control", () => {
       observe: vi.fn(async () => createMockObservation()),
       verify: vi.fn(async () => true),
       prepare: vi.fn(async () => ({ ticket: "tk_1", call: { name: "click", arguments: {} } })),
-      execute: vi.fn(async () => ({ state: "completed", result: {}, postObservation: "ok" })),
+      execute: vi.fn(async (): Promise<BrowserExecution> => ({ state: "completed", result: {}, postObservation: "ok" })),
     };
 
     const decider: Partial<Decider> = {
@@ -118,11 +118,11 @@ describe("jev-control", () => {
         prepare: vi.fn(),
         execute: vi.fn(),
       }),
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
-    const result = await gateway.run(createMockScope({ signal: controller.signal }), { goal: "Run" });
+    const result = await gateway.run(createMockScope({ signal: controller.signal }), { goal: "Run", maxSteps: 4 });
 
     expect(result.status).toBe("interrupted");
     expect(result.reason).toBe("cancelled");
@@ -159,7 +159,7 @@ describe("jev-control", () => {
       decider: decider as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);
@@ -193,7 +193,7 @@ describe("jev-control", () => {
       decider: {} as Decider,
       config: () => ({ decider: { enabled: true, key: "key", jobs: { browserAutomation: true } } } as AppConfig),
       transport: () => transport,
-      authorize: vi.fn(async () => "allow"),
+      authorize: vi.fn(async () => "allow" as const),
     };
 
     const gateway = createBrowserGateway(deps);

@@ -8,7 +8,96 @@ const tempHome = await mkdtemp(join(tmpdir(), 'agenthub-cb-checkin-'));
 process.env.AGENTHUB_HOME = tempHome;
 process.env.AGENTHUB_CHECKIN_STATE = join(tempHome, 'checkin-state.json');
 
-const { checkinCodeBuddy, runCheckin, runAutoCheckinTick, getCheckinOverview, listCheckinAccounts } = await import('./checkin.mjs');
+/** checkin.mjs 尚未在 checkin.d.mts 里声明的导出，按实现的真实行为就地补类型 */
+interface CreditsSnapshot {
+  count?: number;
+  dosage?: number;
+  creditsRemain?: number;
+  packCount?: number;
+  packs: Array<{ id: string; size: number; remain: number; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface CheckinStateRecord {
+  lastDate?: string;
+  lastTime?: string;
+  status?: string;
+  retryCount?: number;
+  retryBudget?: number;
+  retryAt?: number;
+  pendingReason?: string;
+  accounts?: Array<{ status?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface CheckinAccount {
+  identity?: string;
+  name?: string;
+  display?: string;
+  active?: boolean;
+  token?: string;
+  refreshToken?: string;
+  credentialSource: string;
+  alternates: Array<{ token?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface CodeBuddyOutcome {
+  ok?: boolean;
+  status: string;
+  message: string;
+  accounts: Array<{ status?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface DecideCodeBuddyInput {
+  actStatus?: { active: boolean; todayCheckedIn: boolean; [key: string]: unknown };
+  claim?: { ok: boolean; code: number; msg: string; [key: string]: unknown };
+  report?: { ok: boolean; days?: number; note?: string; [key: string]: unknown };
+  web?: { ok: boolean; note?: string; [key: string]: unknown };
+  keep?: { ok: boolean; note?: string; [key: string]: unknown };
+  creditsBefore?: CreditsSnapshot | null;
+  [key: string]: unknown;
+}
+
+interface OverviewWithHistory {
+  ok: boolean;
+  today: string;
+  autoCheckin: boolean;
+  autoCheckinTime: string;
+  platforms: Record<string, CheckinStateRecord & { available?: boolean }>;
+  history: Array<{ platform?: string; status?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface CheckinStateFile {
+  autoCheckin?: boolean;
+  platforms: Record<string, CheckinStateRecord>;
+  history: Array<{ platform?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+type CheckinModule = Omit<typeof import('./checkin.mjs'), 'runCheckin' | 'getCheckinOverview'> & {
+  runCheckin(target?: string): Promise<{
+    ok: boolean;
+    results: Record<string, CodeBuddyOutcome>;
+    overview: OverviewWithHistory;
+    due?: string[];
+    [key: string]: unknown;
+  }>;
+  getCheckinOverview(): Promise<OverviewWithHistory>;
+  checkinCodeBuddy(overrideToken?: string | null): Promise<CodeBuddyOutcome>;
+  listCheckinAccounts(platform: string): Promise<CheckinAccount[]>;
+  platformNeedsRetry(state: CheckinStateRecord, today: string, nowSec: number, plat?: string): boolean;
+  selectAutoCheckinPlatforms(states: Record<string, CheckinStateRecord>, today: string, nowSec: number, extra?: string[]): string[];
+  aggregatePlatformStatus(accounts?: Array<{ status?: string; pendingReason?: string; retryAt?: number; [key: string]: unknown }>): CheckinStateRecord;
+  codeBuddyCreditsArrived(before: CreditsSnapshot | null, after: CreditsSnapshot | null): boolean;
+  buildCodeBuddyActivityEvent(uid: string): { eventCode: string; userId: string; conversationId: string; requestId: string; timestamp: number; [key: string]: unknown };
+  decideCodeBuddyOutcome(input?: DecideCodeBuddyInput): { status: string; message: string; awaitCredits?: boolean; [key: string]: unknown };
+};
+
+const checkinMod = (await import('./checkin.mjs')) as CheckinModule;
+const { checkinCodeBuddy, runCheckin, runAutoCheckinTick, getCheckinOverview, listCheckinAccounts } = checkinMod;
 const {
   CHECKIN_PLATFORMS,
   platformNeedsRetry,
@@ -17,13 +106,13 @@ const {
   codeBuddyCreditsArrived,
   buildCodeBuddyActivityEvent,
   decideCodeBuddyOutcome,
-} = await import('./checkin.mjs');
+} = checkinMod;
 const { encryptLegacyQoderUser } = await import('./qoder.mjs');
 
 /** 与 checkin.mjs 的 getTodayStr 同格式（本地时区 YYYY-MM-DD） */
 function todayStr() {
   const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
+  const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
@@ -232,7 +321,7 @@ test('runCheckin("codebuddy") integrates with overview and history', async () =>
 
 test('两个平台并发 runCheckin：状态、历史和重试计数都合并保留', async () => {
   await writeQoderTestCredentials();
-  await writeFile(process.env.AGENTHUB_CHECKIN_STATE, JSON.stringify({ autoCheckin: true, platforms: {}, history: [] }), 'utf-8');
+  await writeFile(process.env.AGENTHUB_CHECKIN_STATE!, JSON.stringify({ autoCheckin: true, platforms: {}, history: [] }), 'utf-8');
   const previousEnv = { ...process.env };
   const originalFetch = globalThis.fetch;
   process.env.QODER_UMID_NO_INSTALL = '1';
@@ -245,7 +334,7 @@ test('两个平台并发 runCheckin：状态、历史和重试计数都合并保
   };
   try {
     await Promise.all([runCheckin('qoder'), runCheckin('qoder-cn')]);
-    const state = JSON.parse(await readFile(process.env.AGENTHUB_CHECKIN_STATE, 'utf-8'));
+    const state = JSON.parse(await readFile(process.env.AGENTHUB_CHECKIN_STATE!, 'utf-8')) as CheckinStateFile;
     assert.equal(state.platforms.qoder.status, 'pending');
     assert.equal(state.platforms['qoder-cn'].status, 'pending');
     assert.equal(state.platforms.qoder.retryCount, 1);
@@ -260,7 +349,7 @@ test('两个平台并发 runCheckin：状态、历史和重试计数都合并保
 test('手动与自动签到并发：自动重试计数递增且不覆盖手动结果', async () => {
   await writeQoderTestCredentials();
   const today = todayStr();
-  const platforms = {};
+  const platforms: Record<string, CheckinStateRecord> = {};
   for (const plat of CHECKIN_PLATFORMS) {
     const accounts = await listCheckinAccounts(plat);
     platforms[plat] = {
@@ -276,7 +365,7 @@ test('手动与自动签到并发：自动重试计数递增且不覆盖手动�
   platforms['qoder-cn'].status = 'failed';
   platforms['qoder-cn'].retryCount = 2;
   platforms['qoder-cn'].retryBudget = 32;
-  await writeFile(process.env.AGENTHUB_CHECKIN_STATE, JSON.stringify({ autoCheckin: true, platforms, history: [] }), 'utf-8');
+  await writeFile(process.env.AGENTHUB_CHECKIN_STATE!, JSON.stringify({ autoCheckin: true, platforms, history: [] }), 'utf-8');
   const previousEnv = { ...process.env };
   const originalFetch = globalThis.fetch;
   process.env.QODER_UMID_NO_INSTALL = '1';
@@ -294,7 +383,7 @@ test('手动与自动签到并发：自动重试计数递增且不覆盖手动�
     await new Promise((resolve) => setTimeout(resolve, 5));
     const [, automatic] = await Promise.all([runCheckin('qoder'), automaticRun]);
     assert.deepEqual(automatic, ['qoder-cn']);
-    const state = JSON.parse(await readFile(process.env.AGENTHUB_CHECKIN_STATE, 'utf-8'));
+    const state = JSON.parse(await readFile(process.env.AGENTHUB_CHECKIN_STATE!, 'utf-8')) as CheckinStateFile;
     assert.equal(state.platforms.qoder.status, 'pending');
     assert.equal(state.platforms.qoder.retryCount, 1);
     assert.equal(state.platforms['qoder-cn'].status, 'pending');

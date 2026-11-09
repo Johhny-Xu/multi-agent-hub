@@ -45,7 +45,20 @@ interface Spec {
   stable?(read: (key: string) => Buffer | undefined): string | undefined;
   /** Says why a sign-in cannot be read as stored; a pair of files that only work together is checked here. */
   validate?(read: (key: string) => Buffer | undefined): SignInProblem | undefined;
+  /** The fingerprint of the credential itself, which rotates on a refresh; matching it alone never mixes two accounts. */
+  credentialKey?(read: (key: string) => Buffer | undefined): string | undefined;
+  /** The account's own id as the engine stores it; it survives a token refresh. */
+  accountId?(read: (key: string) => Buffer | undefined): string | undefined;
+  /** The entries that hold the rotating credential; every other entry must be unchanged to reuse a snapshot. */
+  tokenEntries?: string[];
+  /** True when the identity names the account rather than a provider list, so a lone identity match decides. */
+  identityNamesAccount?: boolean;
   note?: "shared-gh";
+}
+
+interface AccountKeys {
+  invariant?: string;
+  credential?: string;
 }
 
 type SignInProblem = "missing-machine-key" | "unreadable";
@@ -725,7 +738,8 @@ function fingerprint(entry: SpecEntry): string | null {
 
 function readLive(entries: SpecEntry[], key: string): Buffer | undefined {
   const entry = entries.find((candidate) => candidate.key === key);
-  const path = entry ? livePath(entry) : undefined;
+  if (!entry) return undefined;
+  const path = livePath(entry);
   if (!path) return undefined;
   try {
     const stat = statSync(path);
@@ -785,7 +799,7 @@ function readSnapshot(entries: SpecEntry[], accountDir: string, key: string): Bu
  * The stable id of a saved account. A snapshot written before the key was recorded still knows its
  * own account, so the key is read from the snapshot's own files; the recorded one is only a cache.
  */
-function accountKeyOf(spec: Spec, entries: SpecEntry[], accountDir: string, stored: StoredAccount): { invariant?: string; credential?: string } {
+function accountKeyOf(spec: Spec, entries: SpecEntry[], accountDir: string, stored: StoredAccount): AccountKeys {
   // The snapshot's own files decide: a key written by an older build names a moment, not an account.
   return accountKeys(spec, entries, accountDir, stored);
 }
@@ -799,13 +813,13 @@ function liveKeyOf(spec: Spec, entries: SpecEntry[]): string | undefined {
  * the credential it holds. The second one is what a snapshot written before the invariant existed can
  * still be matched by, and it is also what separates two accounts that share a nickname.
  */
-function liveKeysOf(spec: Spec, entries: SpecEntry[]): { invariant?: string; credential?: string } {
+function liveKeysOf(spec: Spec, entries: SpecEntry[]): AccountKeys {
   const read = (key: string) => readLive(entries, key);
   return { invariant: spec.key?.(read), credential: spec.credentialKey?.(read) };
 }
 
 /** The same names for a saved account: what its own snapshot says, plus what the index recorded. */
-function accountKeys(spec: Spec, entries: SpecEntry[], accountDir: string, stored: StoredAccount): { invariant?: string; credential?: string } {
+function accountKeys(spec: Spec, entries: SpecEntry[], accountDir: string, stored: StoredAccount): AccountKeys {
   const read = (key: string) => readSnapshot(entries, accountDir, key);
   const invariant = spec.key?.(read) ?? (stored.key?.startsWith("v2:") ? stored.key : undefined);
   return { invariant, credential: spec.credentialKey?.(read) ?? (stored.key && !stored.key.startsWith("v2:") ? stored.key : undefined) };
@@ -827,7 +841,7 @@ function accountAccountIdOf(spec: Spec, entries: SpecEntry[], accountDir: string
  * second line, because it survives a token refresh that changed the key; the identity is the third,
  * and only for engines whose identity names the account rather than a provider list.
  */
-function ownerOf(spec: Spec, entries: SpecEntry[], dir: string, accounts: StoredAccount[], liveKeys: string[], liveIdentity: string | undefined): StoredAccount | undefined {
+function ownerOf(spec: Spec, entries: SpecEntry[], dir: string, accounts: StoredAccount[], liveKeys: AccountKeys, liveIdentity: string | undefined): StoredAccount | undefined {
   return matchAccount(spec, entries, dir, accounts, liveKeys, liveIdentity, liveAccountIdOf(spec, entries));
 }
 
@@ -848,7 +862,7 @@ function matchAccount(
   entries: SpecEntry[],
   dir: string,
   accounts: StoredAccount[],
-  liveKeys: { invariant?: string; credential?: string },
+  liveKeys: AccountKeys,
   liveIdentity: string | undefined,
   liveAccountId: string | undefined,
 ): StoredAccount | undefined {
@@ -894,7 +908,7 @@ function driftedFrom(
   entries: SpecEntry[],
   accountDir: string,
   active: StoredAccount | undefined,
-  liveKeys: string[],
+  liveKeys: AccountKeys,
   liveIdentity: string | undefined,
 ): boolean {
   if (!active) return false;

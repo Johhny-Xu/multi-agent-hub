@@ -57,6 +57,14 @@ export function departmentUnread(name: string, bots: readonly DepartmentBot[], g
   };
 }
 
+/** What the "+" menu's "Mark all as read" covers: every shown bot with unread conversations, and every unread group chat, bot-to-bot channels included. */
+export function allUnread(bots: readonly DepartmentBot[], groups: readonly DepartmentGroup[]): { bots: DepartmentBot[]; groups: DepartmentGroup[] } {
+  return {
+    bots: bots.filter((bot) => !bot.hidden && botUnreadThreadIds(bot).length > 0),
+    groups: groups.filter((group) => group.unread),
+  };
+}
+
 /** One request at a time, so a failure keeps every read before it. */
 export async function markDepartmentRead(
   unread: { bots: readonly DepartmentBot[]; groups: readonly DepartmentGroup[] },
@@ -70,3 +78,6 @@ export async function markDepartmentRead(
     if (result.group) onGroup(result.group);
   }
 }
+
+/** The "+" menu's "Mark all as read": the same one-at-a-time requests as a department, across everything allUnread picks. */
+export const markAllRead = markDepartmentRead;

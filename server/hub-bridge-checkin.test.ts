@@ -2,6 +2,9 @@
 // them even when the console is down. The check-in module itself is stubbed; what is under test is the dispatch
 // through server/checkin/routes.ts and the bridge, not the check-ins.
 import { describe, expect, it, vi } from "vitest";
+import type { Store } from "./store.ts";
+
+type BridgeStore = Pick<Store, "appendMessage" | "botByThread" | "patchTask">;
 
 const checkin = vi.hoisted(() => ({
   OPEN_SOURCE_PROJECTS: { workbuddy: [], codebuddy: [], traecode: [], codearts: [], qoder: [] },
@@ -18,10 +21,10 @@ import { PASS } from "./routes/table.ts";
 import { createHubBridgeRoutes } from "./hub-bridge.ts";
 import { ensureCheckinScheduler } from "./checkin/routes.ts";
 
-const store = {
-  appendMessage: () => ({ id: "line-1" }),
-  botByThread: () => undefined,
-  patchTask: () => undefined,
+const store: BridgeStore = {
+  appendMessage: () => ({ id: "line-1", at: 0, role: "bot", kind: "text" }),
+  botByThread: () => null,
+  patchTask: () => null,
 };
 
 async function call(route: ReturnType<typeof createHubBridgeRoutes>, init: {

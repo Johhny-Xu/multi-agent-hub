@@ -57,3 +57,13 @@ describe("debug zone bots", () => {
     expect(isDebugInboxRow({ workingFor: { botId: "b2", name: "hub·zcode" } }, bots)).toBe(true);
   });
 });
+
+import { isAdvancedOnlySection } from "./debug-zone";
+
+describe("isAdvancedOnlySection", () => {
+  it("hides the 临时 department outside advanced mode only", () => {
+    expect(isAdvancedOnlySection("临时")).toBe(true);
+    expect(isAdvancedOnlySection("TEAM")).toBe(false);
+    expect(isAdvancedOnlySection(undefined)).toBe(false);
+  });
+});

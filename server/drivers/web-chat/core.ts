@@ -24,6 +24,7 @@ import type { ViewerHub } from "../../browser/viewers/core.ts";
 import type { BrowserService, BrowserTarget } from "../../browser/service.ts";
 import type { SiteAdapter, WebChatConfig, WebChatPage, WebChatSelectors } from "./types.ts";
 import { checkCdpAvailable, createWebChatPageFromCdpEndpoint, resolveConnectOverCDP } from "./cdp-transport.ts";
+import type { CdpTransportDeps } from "./cdp-transport.ts";
 import { getDefaultUserscriptBridge, WebChatUserscriptBridge } from "./userscript-bridge.ts";
 import {
   createDefaultWorkbenchPageFactory,
@@ -54,7 +55,7 @@ export {
 
 export const webChatConfigSchema = z.object({
   url: z.string().trim().url().optional(),
-  selectors: z.record(z.string()).optional(),
+  selectors: z.record(z.string(), z.string()).optional(),
   timeoutMs: z.number().positive().optional(),
   stabilitySec: z.number().positive().optional(),
   profileDir: z.string().optional(),
@@ -69,6 +70,12 @@ export const webChatConfigSchema = z.object({
 export function decodeWebChatConfig(raw: unknown): WebChatConfig {
   const parsed = webChatConfigSchema.parse(raw ?? {});
   return parsed as WebChatConfig;
+}
+
+// ProviderSnapshot only names "available"/"unavailable", but the workbench check answers "unknown"
+// (present, just not verifiable without opening the page); the wire carries it as-is.
+function unknownSnapshot(reason: string): ProviderSnapshot {
+  return { state: "unknown" as unknown as ProviderSnapshot["state"], authenticated: false, reason };
 }
 
 export function resolveProfileDir(
@@ -360,7 +367,7 @@ export async function runWebChatTurn(options: WebChatTurnOptions): Promise<strin
     ...baseEvent,
     type: "item.completed",
     text: finalText,
-  });
+  } as unknown as RuntimeEvent);
 
   emit({
     ...baseEvent,
@@ -504,7 +511,10 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
           sessionModelSwitch: "unsupported" as const,
         },
         async sendTurn(turnInput: SendTurnInput): Promise<TurnStartResult> {
-          const { threadId, turnId, text, sessionReset, botId } = turnInput;
+          const { threadId, text, sessionReset, botId } = turnInput;
+          // SendTurnInput doesn't name turnId, but the driver's callers (tests) pass it and the
+          // driver echoes it back; when absent it rides as undefined, as before.
+          const turnId = (turnInput as SendTurnInput & { turnId?: TurnId }).turnId as TurnId;
           const abortController = new AbortController();
           activeTurns.set(threadId, { turnId, abortController });
 
@@ -604,11 +614,12 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                 },
                 {
                   onDelta(deltaText) {
+                    // "item.delta" has no variant in RuntimeEvent; the userscript stream rides the wire as-is.
                     emit({
                       ...baseEvent,
                       type: "item.delta",
                       text: deltaText,
-                    });
+                    } as unknown as RuntimeEvent);
                   },
                   onDone(finalText) {
                     abortController.signal.removeEventListener("abort", onAbort);
@@ -616,7 +627,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                       ...baseEvent,
                       type: "item.completed",
                       text: finalText,
-                    });
+                    } as unknown as RuntimeEvent);
                     emit({
                       ...baseEvent,
                       type: "turn.completed",
@@ -808,7 +819,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
           if (mode === "cdp") {
             try {
               const resolver = deps.resolveConnectOverCDP ?? resolveConnectOverCDP;
-              await resolver(deps);
+              await resolver(deps as unknown as CdpTransportDeps);
             } catch (err: any) {
               return {
                 state: "unavailable",
@@ -852,11 +863,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
             }
 
             if (!deps.viewerHub && !deps.browserService) {
-              return {
-                state: "unknown",
-                authenticated: false,
-                reason: "需在工作台浏览器查看器中打开并登录 Hark，或连接油猴脚本/CDP",
-              };
+              return unknownSnapshot("需在工作台浏览器查看器中打开并登录 Hark，或连接油猴脚本/CDP");
             }
           }
 
@@ -898,11 +905,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
 
             if (deps.viewerHub || getWorkbenchViewerHub(instanceId) || service) {
               if (!awakeHub) {
-                return {
-                  state: "unknown",
-                  authenticated: false,
-                  reason: `需在工作台浏览器查看器中打开并登录 ${adapter.displayName}（${config.url || adapter.defaultUrl}）`,
-                };
+                return unknownSnapshot(`需在工作台浏览器查看器中打开并登录 ${adapter.displayName}（${config.url || adapter.defaultUrl}）`);
               }
 
               try {
@@ -916,11 +919,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                 });
 
                 if (!targetTab) {
-                  return {
-                    state: "unknown",
-                    authenticated: false,
-                    reason: `需在工作台浏览器查看器中打开并登录 ${adapter.displayName}（${config.url || adapter.defaultUrl}）`,
-                  };
+                  return unknownSnapshot(`需在工作台浏览器查看器中打开并登录 ${adapter.displayName}（${config.url || adapter.defaultUrl}）`);
                 }
 
                 const page = createWebChatPageFromCdp(targetTab.page);
@@ -937,20 +936,12 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                   authenticated: true,
                 };
               } catch {
-                return {
-                  state: "unknown",
-                  authenticated: false,
-                  reason: `需在工作台浏览器查看器中打开并登录 ${adapter.displayName}（${config.url || adapter.defaultUrl}）`,
-                };
+                return unknownSnapshot(`需在工作台浏览器查看器中打开并登录 ${adapter.displayName}（${config.url || adapter.defaultUrl}）`);
               }
             }
           }
 
-          return {
-            state: "unknown",
-            authenticated: false,
-            reason: "需在工作台浏览器查看器中打开并登录 Hark，或连接油猴脚本/CDP",
-          };
+          return unknownSnapshot("需在工作台浏览器查看器中打开并登录 Hark，或连接油猴脚本/CDP");
         },
         async dispose(): Promise<void> {
           listeners.clear();

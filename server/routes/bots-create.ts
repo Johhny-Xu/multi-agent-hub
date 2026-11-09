@@ -10,7 +10,7 @@ import type { ModelSelection } from "../contracts.ts";
 import type { hostedModelPolicy } from "../hosted-models.ts";
 import { MAX_MCP_SERVERS, mcpServerNameError } from "../mcp-registry.ts";
 import { journalMemoryWrite } from "../memory-journal.ts";
-import { resolveBotCreationDefaults } from "../new-bot-defaults.ts";
+import { DEFAULT_NEW_BOT_BROWSER_PROFILE, resolveBotCreationDefaults } from "../new-bot-defaults.ts";
 import { PRESET_UNAVAILABLE_MESSAGE, applyPresetToBot, presetOffered, type OrgInstallStatus, type PresetStore } from "../presets.ts";
 import { adminOnlyBotSetting, clientBotPatchViolation, type RequestAuth } from "../request-auth.ts";
 import type { RoutineManager } from "../routines.ts";
@@ -98,10 +98,15 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
       if ("error" in kept) return json(res, kept.error.includes("already") ? 409 : 400, { error: kept.error });
       const { id: _id, threadId: _threadId, ...rest } = body;
       body = rest;
-      const template = resolveBotCreationDefaults(cfg.newBotDefaults, body);
+      const defaultBrowserProfile = cfg.newBots?.browserProfile ?? DEFAULT_NEW_BOT_BROWSER_PROFILE;
+      const template = resolveBotCreationDefaults(cfg.newBotDefaults, body, defaultBrowserProfile);
       const settings = template.profile;
+      const explicitBrowserProfile = Object.hasOwn(body, "browserProfile")
+        || Boolean(body.settings && typeof body.settings === "object" && !Array.isArray(body.settings) && Object.hasOwn(body.settings, "browserProfile"))
+        || (body.useDefaults !== false && cfg.newBotDefaults?.profile.browserProfile !== undefined);
       if (auth.kind === "session" && !auth.scopes.includes("admin")) {
-        const field = clientBotPatchViolation(settings);
+        const { browserProfile: _defaultBrowserProfile, ...nonDefaultSettings } = settings;
+        const field = clientBotPatchViolation(explicitBrowserProfile ? settings : nonDefaultSettings);
         if (field || body.preset !== undefined || template.skills.length || template.routines.length || Object.keys(template.memory).length) {
           return json(res, 403, { error: "Creating a bot with these defaults needs the admin scope" });
         }
@@ -124,7 +129,7 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
       if (settings.avatarUrl && !storedAvatarExists(settings.avatarUrl)) {
         return json(res, 400, { error: "avatarUrl must reference an existing stored image" });
       }
-      if (settings.browserProfile && settings.browserProfile !== "guest" && !(cfg.browserProfiles ?? []).some(profile => profile.id === settings.browserProfile)) {
+      if (settings.browserProfile && settings.browserProfile !== "guest" && settings.browserProfile !== defaultBrowserProfile && !(cfg.browserProfiles ?? []).some(profile => profile.id === settings.browserProfile)) {
         return json(res, 400, { error: "browserProfile must name an existing browser profile" });
       }
       if (settings.mcpServers?.some(name => mcpServerNameError(name) !== null) || (settings.mcpServers?.length ?? 0) > MAX_MCP_SERVERS) {
@@ -196,6 +201,7 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
       const look = kept.id || settings.color || settings.mascotBody ? undefined : freshLook(store.bots);
       const bot = store.createBot({ ...profile.patch, soul: settings.soul, section, modelSelection: selection,
         toolScope: settings.toolScope ?? undefined, color: settings.color ?? look?.color, mascotBody: settings.mascotBody ?? look?.mascotBody,
+        browserProfile: settings.browserProfile,
         ...(deps.team && creator ? { createdBy: creator } : {}), ...(reportsTo ? { reportsTo } : {}),
         ...(created?.ok ? { visibility: created.visibility } : {}) }, kept.id ? { ...kept, seedMessages: false } : {});
       const createdRoutines: Array<{ id: string; enabled: boolean }> = [];

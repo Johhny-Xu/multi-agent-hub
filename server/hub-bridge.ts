@@ -19,6 +19,8 @@ const SCHEDULER = "http://127.0.0.1:8790/mcp";
 const PROBE_MS = 3_000;
 const QUOTA_RELAY_MS = 30_000;
 const QUOTA_FALLBACK_MS = 25_000;
+/** With earlier quotas in hand, wait only this long for a fresh walk before serving them marked stale (E66). */
+const QUOTA_STALE_WAIT_MS = 4_000;
 
 /** The check-in endpoints, keyed by the part after `/checkin`; the Daily page calls these. */
 const CHECKIN_ROUTES: Record<string, "GET" | "POST"> = {
@@ -271,6 +273,10 @@ export function createHubBridgeRoutes(deps: {
 }): RouteHandler {
   const checkinApi = createCheckinApi();
   ensureCheckinScheduler();
+  // E66: the in-process fallback walks 14 vendors and takes ~25-40 s cold, longer than its budget. The fetch keeps
+  // running after a timeout; whatever it (or any earlier fetch) returns is kept here and served, marked stale, the
+  // next time the budget runs out, so the quota page and the dispatch quota gate are not left with 504 every minute.
+  let lastQuotas: Record<string, unknown> | null = null;
   return async ({ req, res, path, url, method, json, readBody }) => {
     if (!path.startsWith("/hub/") && !path.startsWith("/api/checkin/")
       && path !== "/api/hub/tasks" && !path.startsWith("/api/hub/")) return PASS;
@@ -338,12 +344,17 @@ export function createHubBridgeRoutes(deps: {
       if (up) return json(res, 504, { ok: false, error: "console_slow" });
       let timer: ReturnType<typeof setTimeout> | null = null;
       try {
-        const fetchQuotas = deps.getAllQuotas ?? (await import("../checkin/vendor-quota.mjs")).getAllQuotas;
-        const budget = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("quota_timeout")), deps.quotaFallbackMs ?? QUOTA_FALLBACK_MS); });
-        const data = await Promise.race([fetchQuotas({ force: url.searchParams.get("refresh") === "1" }), budget]);
+        // server/checkin/vendor-quota.mjs is the full quota tracker (E66); the old repo-level checkin/ copy is not read here.
+        const fetchQuotas = deps.getAllQuotas ?? (await import("./checkin/vendor-quota.mjs")).getAllQuotas;
+        const budget = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("quota_timeout")), Math.min(deps.quotaFallbackMs ?? QUOTA_FALLBACK_MS, lastQuotas ? QUOTA_STALE_WAIT_MS : Infinity)); });
+        const fetching = Promise.resolve(fetchQuotas({ force: url.searchParams.get("refresh") === "1" }));
+        fetching.then((data) => { if (data && typeof data === "object") lastQuotas = data as Record<string, unknown>; }, () => {});
+        const data = await Promise.race([fetching, budget]);
         return json(res, 200, data);
       } catch (error) {
-        return json(res, (error as Error)?.message === "quota_timeout" ? 504 : 502, { ok: false, error: (error as Error)?.message === "quota_timeout" ? "quota_timeout" : "console_unreachable" });
+        const timedOut = (error as Error)?.message === "quota_timeout";
+        if (timedOut && lastQuotas) return json(res, 200, { ...lastQuotas, stale: true });
+        return json(res, timedOut ? 504 : 502, { ok: false, error: timedOut ? "quota_timeout" : "console_unreachable" });
       } finally {
         if (timer) clearTimeout(timer);
       }

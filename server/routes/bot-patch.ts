@@ -405,7 +405,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       if (body.vpsInstanceId !== undefined) {
         if (body.vpsInstanceId === null || body.vpsInstanceId === "") {
           patch.vpsInstanceId = undefined;
-        } else if (isVpsInstanceId(body.vpsInstanceId) && vpsInstanceById(cfg.vps, body.vpsInstanceId)) {
+        } else if (isVpsInstanceId(body.vpsInstanceId) && vpsInstanceById({ instances: cfg.vps?.instances ?? [] }, body.vpsInstanceId)) {
           patch.vpsInstanceId = body.vpsInstanceId;
         } else {
           return json(res, 400, { error: "vpsInstanceId must name an existing VPS computer, or be null" });

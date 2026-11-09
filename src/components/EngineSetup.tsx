@@ -273,8 +273,11 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
   const { refreshInstances, refreshModels } = useStore();
   const [busy, setBusy] = useState<"install" | "signin" | "complete" | "check" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [flow, setFlow] = useState<{ flowId: string; authorizationUrl: string } | null>(null);
   const [callbackUrl, setCallbackUrl] = useState("");
+  // agy CLI headless sign-in: Google lands on antigravity.google, so the code has to be pasted back here.
+  const pastedCode = !!flow && flow.authorizationUrl.includes(encodeURIComponent("https://antigravity.google/oauth-callback"));
   const managed = instance.install!.managed!;
 
   useEffect(() => {
@@ -286,6 +289,7 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>) => {
     setBusy(kind);
     setError(null);
+    setNotice(null);
     try { await action(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(null); }
@@ -319,8 +323,11 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
       body: JSON.stringify({ flowId: flow.flowId, callbackUrl }),
     });
     setCallbackUrl("");
+    setFlow(null);
+    // The card has to show the account it just signed in, not the one it was showing a moment ago.
     await refreshInstances();
     await refreshModels(instance.instanceId);
+    setNotice(t("engineSetup.signedIn"));
   });
 
   const check = () => run("check", async () => {
@@ -364,19 +371,20 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
             : t("engineSetup.signInGoogle")}
       </button>
       {busy === "signin" && <p role="status" className="text-[12px] text-ink-secondary">{t("engineSetup.antigravitySlow")}</p>}
+      {notice && <p role="status" data-sign-in-done className="text-[12px] text-success">{notice}</p>}
       {flow && (
         <>
           <button type="button" onClick={() => void check()} className="w-full rounded-lg bg-control px-3 py-2 text-[12px] font-semibold text-ink hover:bg-raised-hover">
             {busy === "check" ? t("common.checking") : t("engineSetup.finishedSignIn")}
           </button>
-          <details className="rounded-lg border border-hairline/50 bg-app px-2.5 py-2 text-[12px] text-ink-secondary">
+          <details open={pastedCode || undefined} className="rounded-lg border border-hairline/50 bg-app px-2.5 py-2 text-[12px] text-ink-secondary">
             <summary className="cursor-pointer select-none">{t("engineSetup.otherComputer")}</summary>
-            <p className="mt-2 leading-relaxed">{t("engineSetup.otherComputerHint")}</p>
+            <p className="mt-2 leading-relaxed">{t(pastedCode ? "engineSetup.antigravityPasteCodeHint" : "engineSetup.otherComputerHint")}</p>
             <input
               value={callbackUrl}
               onChange={(event) => setCallbackUrl(event.target.value)}
               aria-label={t("engineSetup.otherComputerUrl")}
-              placeholder="http://127.0.0.1:…/?code=…"
+              placeholder={pastedCode ? "https://antigravity.google/oauth-callback?code=…" : "http://127.0.0.1:…/?code=…"}
               className="mt-2 w-full rounded-md border border-hairline bg-inset px-2 py-1.5 text-[11px] text-ink outline-none focus:border-accent"
             />
             <button

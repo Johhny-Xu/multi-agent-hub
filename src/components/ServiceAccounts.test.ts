@@ -10,14 +10,36 @@ const fixture = vi.hoisted(() => ({
   calls: [] as Array<{ path: string; method: string; body?: unknown }>,
   refresh: vi.fn(),
   view: null as unknown,
+  autoSwitch: null as unknown,
+  autoSwitchFail: false,
+  autoSwitchPutFail: false,
 }));
 vi.mock("@/state/store", () => ({
   useStore: () => ({ refreshInstances: fixture.refresh }),
   api: async (path: string, init?: RequestInit) => {
     fixture.calls.push({ path, method: init?.method ?? "GET", ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) });
+    if (path.endsWith("/auto-switch")) {
+      if (fixture.autoSwitchFail) throw new Error("route gone");
+      if (init?.method === "PUT") {
+        if (fixture.autoSwitchPutFail) throw new Error("put refused");
+        fixture.autoSwitch = { ...(fixture.autoSwitch as object), enabled: JSON.parse(String(init.body)).enabled };
+      }
+      return { autoSwitch: fixture.autoSwitch };
+    }
     return { accounts: fixture.view };
   },
 }));
+// Keys that Hark has not merged into the packs yet fall back to the key name (plus params), so tests can spot them.
+vi.mock("@/lib/i18n", async (original) => {
+  const real = await original<typeof import("@/lib/i18n")>();
+  const { en } = await import("@/locales");
+  return {
+    ...real,
+    t: (key: Parameters<typeof real.t>[0], params?: Record<string, string | number>) =>
+      Object.hasOwn(en, key) ? real.t(key, params)
+        : params ? `${key} ${Object.entries(params).map(([name, value]) => `${name}=${value}`).join(" ")}` : key,
+  };
+});
 
 const { ServiceAccounts } = await import("./ServiceAccounts");
 
@@ -39,6 +61,9 @@ beforeEach(() => {
   fixture.calls = [];
   fixture.refresh.mockReset();
   fixture.view = view();
+  fixture.autoSwitch = null;
+  fixture.autoSwitchFail = false;
+  fixture.autoSwitchPutFail = false;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -106,5 +131,71 @@ describe("switching an engine's account", () => {
     flushSync(() => host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     await settle();
     expect(fixture.calls).toContainEqual({ path: "/api/instances/codebuddy/service-accounts", method: "POST", body: { label: "Work laptop" } });
+  });
+});
+
+describe("auto-switching on quota", () => {
+  const remount = () => {
+    flushSync(() => root.unmount());
+    host.remove();
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  };
+  const toggle = () => host.querySelector<HTMLButtonElement>("[data-auto-switch]")!;
+  const toggleChecked = () => toggle().getAttribute("aria-checked");
+
+  it("shows the toggle unchecked while off, with two accounts saved", async () => {
+    fixture.autoSwitch = { enabled: false, limited: [] };
+    flushSync(() => root.render(createElement(ServiceAccounts, { instance: engine })));
+    await settle();
+    expect(toggleChecked()).toBe("false");
+    expect(toggle().disabled).toBe(false);
+  });
+
+  it("disables the toggle until a second account is saved", async () => {
+    fixture.view = view({ accounts: [accounts[0]!], activeId: accounts[0]!.id });
+    fixture.autoSwitch = { enabled: false, limited: [] };
+    flushSync(() => root.render(createElement(ServiceAccounts, { instance: engine })));
+    await settle();
+    expect(toggle().disabled).toBe(true);
+    expect(host.textContent).toContain("at least two accounts");
+  });
+
+  it("stays away when the route reports unavailable or fails", async () => {
+    fixture.autoSwitch = { enabled: false, limited: [], available: false };
+    flushSync(() => root.render(createElement(ServiceAccounts, { instance: engine })));
+    await settle();
+    expect(host.querySelector("[data-auto-switch]")).toBeNull();
+
+    fixture.autoSwitch = { enabled: false, limited: [] };
+    fixture.autoSwitchFail = true;
+    remount();
+    flushSync(() => root.render(createElement(ServiceAccounts, { instance: engine })));
+    await settle();
+    expect(host.querySelector("[data-auto-switch]")).toBeNull();
+  });
+
+  it("marks the accounts that are cooling down", async () => {
+    fixture.autoSwitch = { enabled: true, limited: [{ accountId: accounts[1]!.id, until: Date.now() + 60_000 }] };
+    flushSync(() => root.render(createElement(ServiceAccounts, { instance: engine })));
+    await settle();
+    expect(host.querySelector(`[data-service-account="${accounts[1]!.id}"] [data-cooling]`)).not.toBeNull();
+    expect(host.querySelector(`[data-service-account="${accounts[0]!.id}"] [data-cooling]`)).toBeNull();
+  });
+
+  it("puts the new state when toggled on", async () => {
+    fixture.autoSwitch = { enabled: false, limited: [] };
+    flushSync(() => root.render(createElement(ServiceAccounts, { instance: engine })));
+    await settle();
+    flushSync(() => toggle().click());
+    await settle();
+    expect(fixture.calls).toContainEqual({
+      path: "/api/instances/codebuddy/service-accounts/auto-switch",
+      method: "PUT",
+      body: { enabled: true },
+    });
+    expect(fixture.refresh).toHaveBeenCalled();
+    expect(toggleChecked()).toBe("true");
   });
 });

@@ -13,8 +13,8 @@ import { join } from 'node:path';
 
 const trae = await import('./trae-checkin.mjs');
 
-const b64url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
-const fakeJwt = (payload) => `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;
+const b64url = (obj: object) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+const fakeJwt = (payload: Record<string, unknown>) => `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;
 
 // ---------------------------------------------------------------- storage 解密
 
@@ -119,14 +119,17 @@ test('ECDSA 签名归一化到低半区', () => {
 
 // ---------------------------------------------------------------- 签到链路
 
-function mockFetch(routes) {
-  const calls = [];
+type TraeMockOpts = RequestInit & { headers: Record<string, string | undefined> };
+type TraeRouteHandler = Record<string, unknown> | ((url: string, options: TraeMockOpts) => Record<string, unknown> | string);
+
+function mockFetch(routes: Array<[string, TraeRouteHandler]>) {
+  const calls: Array<{ url: string; body: string }> = [];
   globalThis.fetch = async (url, options = {}) => {
     const target = String(url);
     calls.push({ url: target, body: options.body ? String(options.body) : '' });
     for (const [pattern, handler] of routes) {
       if (target.includes(pattern)) {
-        const payload = typeof handler === 'function' ? handler(target, options) : handler;
+        const payload = typeof handler === 'function' ? handler(target, options as TraeMockOpts) : handler;
         return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
       }
     }
@@ -244,10 +247,10 @@ test('1001 用 refreshToken + 设备证明续期，新 token 继续签到并写�
   const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
   const freshToken = fakeJwt({ exp: Math.floor(Date.now() / 1000) + 3600, data: { id: 'u1' } });
 
-  let usedToken = '';
+  let usedToken: string | undefined = '';
   const calls = mockFetch([
     ['oauth/ExchangeToken', { Result: { Token: freshToken, RefreshToken: 'rotated-rt' } }],
-    ['checkin_credits/status', (url, options) => {
+    ['checkin_credits/status', (_url, options) => {
       usedToken = options.headers.Authorization;
       if (options.headers.Authorization === 'Cloud-IDE-JWT stale') return { code: 1001, message: 'not able to authenticate' };
       return { code: 0, checked_in: true };

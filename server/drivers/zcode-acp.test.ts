@@ -70,9 +70,26 @@ describe("ZcodeAgentDriver", () => {
 describe("catalogFromSnapshot", () => {
   it("keeps the app-server's current model when the plan is also listed", () => {
     const { models, defaultId } = catalogFromSnapshot(snapshot);
-    expect(models.map((model) => model.pickerId)).toEqual(["deepseek-v4.1-flash", "GLM-5.3-Flash", "GLM-5.3"]);
+    expect(models.map((model) => model.pickerId)).toEqual(["deepseek-v4.1-flash", "account:bigmodel-start-plan/GLM-5.3-Flash", "GLM-5.3"]);
     expect(defaultId).toBe("deepseek-v4.1-flash");
     expect(models[1]?.levels).toEqual(["max", "high"]);
+  });
+
+  it("qualifies the Start Plan entry even when it is the only provider offering the model (E65)", () => {
+    const { models, defaultId } = catalogFromSnapshot({
+      settings: {
+        model: {
+          available: [
+            { ref: { providerId: "account:bigmodel-start-plan", modelId: "GLM-5.3-Flash" }, label: "GLM-5.3-Flash" },
+            { ref: { providerId: "9router", modelId: "deepseek-v4.1-flash" }, label: "DeepSeek V4.1 Flash" },
+          ],
+          current: { providerId: "account:bigmodel-start-plan", modelId: "GLM-5.3-Flash" },
+        },
+      },
+    });
+    expect(models.map((model) => model.pickerId)).toEqual(["account:bigmodel-start-plan/GLM-5.3-Flash", "deepseek-v4.1-flash"]);
+    expect(models[0]?.label).toBe("GLM-5.3-Flash");
+    expect(defaultId).toBe("account:bigmodel-start-plan/GLM-5.3-Flash");
   });
 
   it("qualifies model ids that two providers offer", () => {
@@ -117,8 +134,8 @@ describe("preferZcodePlanModels", () => {
     const { models } = catalogFromSnapshot(snapshot);
     const options = models.map((model) => ({ id: model.pickerId, label: model.label }));
     const preferred = preferZcodePlanModels("deepseek-v4.1-flash", options);
-    expect(preferred.options.map((option) => option.id)).toEqual(["GLM-5.3-Flash", "GLM-5.3", "deepseek-v4.1-flash"]);
-    expect(preferred.default).toBe("GLM-5.3-Flash");
+    expect(preferred.options.map((option) => option.id)).toEqual(["account:bigmodel-start-plan/GLM-5.3-Flash", "GLM-5.3", "deepseek-v4.1-flash"]);
+    expect(preferred.default).toBe("account:bigmodel-start-plan/GLM-5.3-Flash");
   });
 
   it("leaves an account without plan models on its own default", () => {
@@ -438,6 +455,60 @@ describe("classifyZcodeRpcRejection", () => {
     expect(reason).not.toContain("06f6950e");
     expect(reason).not.toContain("unusual activity");
   });
+
+  it("reads the plan-quota code out of a nested vendor error object (E58)", () => {
+    const attribution = { detail: { error: { attribution: { providerErrorCode: "1005" } } } };
+    expect(classifyZcodeRpcRejection(attribution)).toBe("the plan's quota is used up (1005)");
+    const buried = {
+      detail: {
+        error: {
+          message: "Turn execution failed",
+          context: { errorPayloadRole: "wrapper" },
+          cause: {
+            message: "exceed quota limit",
+            context: { providerCode: 1005, errorPhase: "stream" },
+          },
+        },
+      },
+    };
+    expect(classifyZcodeRpcRejection(buried)).toBe("the plan's quota is used up (1005)");
+  });
+
+  it("keeps a plain rejection on the app-server wording when nothing nested names the quota (E58)", () => {
+    expect(classifyZcodeRpcRejection(new Error("RPC_REJECTED"))).toBe("rejected by the app server");
+    expect(classifyZcodeRpcRejection({ detail: { message: "upstream unavailable" } })).toBe("rejected by the app server");
+    expect(classifyZcodeRpcRejection(undefined)).toBe("");
+  });
+
+  it("reads a 429 concurrency refusal out of a nested vendor error object (E64)", () => {
+    const refused = {
+      detail: {
+        error: {
+          message: "Turn execution failed",
+          context: { errorPayloadRole: "wrapper" },
+          cause: {
+            message: "model.request.failed",
+            context: { statusCode: 429, statusMessage: "user concurrency limit exceeded", reason: "rate_limited", retryable: false },
+          },
+        },
+      },
+    };
+    expect(classifyZcodeRpcRejection(refused)).toBe("the plan's concurrency limit was hit (429); try again shortly");
+    expect(classifyZcodeRpcRejection({
+      detail: { error: { context: { statusCode: 429, statusMessage: "too many concurrent requests" } } },
+    })).toBe("the plan's concurrency limit was hit (429); try again shortly");
+  });
+
+  it("keeps a plain 429 rate limit on the plain rejection wording (E64)", () => {
+    expect(classifyZcodeRpcRejection({
+      detail: {
+        error: {
+          message: "model.request.failed",
+          context: { statusCode: 429, statusMessage: "rate limit exceeded", reason: "rate_limited", retryable: false },
+        },
+      },
+    })).toBe("rejected by the app server");
+  });
 });
 
 describe("normalizeZcodeSessionModel (E13)", () => {
@@ -752,6 +823,96 @@ describe("zcode BYOK output limit (FIX-E54)", () => {
   });
 });
 
+describe("zcode session model switch (E57) and plan-quota wording (E58)", () => {
+  it("reports a plan-quota turn failure as the fixed 1005 wording", async () => {
+    const bridge = startPollBridge("answer", 5, { FAKE_ZCODE_TURN: "quota-1005" });
+    const sessionId = await newPollSession(bridge);
+    await expect(pollPrompt(bridge, sessionId, "task"))
+      .rejects.toThrow(/TURN_FAILED: the plan's quota is used up \(1005\)/);
+  });
+
+  it("rebuilds the native session on the new model after a model change and closes the old one", async () => {
+    const bridge = startPollBridge("complete", 5, { FAKE_ZCODE_MODELS: "two" });
+    const sessionId = await newPollSession(bridge);
+    await pollPrompt(bridge, sessionId, "first turn");
+    await bridge.request("session/set_model", { sessionId, modelId: "GLM-5.3" });
+    await pollPrompt(bridge, sessionId, "second turn");
+    const state = bridge.state();
+    expect(state.creates).toBe(2);
+    expect(state.createdModels[0]).toMatchObject({ providerId: "plan", modelId: "GLM-5.3-Flash" });
+    expect(state.createdModels[1]).toMatchObject({ providerId: "plan", modelId: "GLM-5.3" });
+    expect(state.closes).toBe(1);
+    expect(state.closedSessions).toEqual(["sess-1"]);
+  });
+
+  it("keeps the pooled native session when the model did not change", async () => {
+    const bridge = startPollBridge("complete", 5, { FAKE_ZCODE_MODELS: "two" });
+    const sessionId = await newPollSession(bridge);
+    await pollPrompt(bridge, sessionId, "first turn");
+    await pollPrompt(bridge, sessionId, "second turn");
+    const state = bridge.state();
+    expect(state.creates).toBe(1);
+    expect(state.closes).toBe(0);
+  });
+});
+
+describe("zcode ACP bridge concurrency-limit retry (E64)", () => {
+  it("resends a concurrency-limited turn in the same native session until it succeeds", async () => {
+    const bridge = startPollBridge("answer", 5, {
+      FAKE_ZCODE_TURN: "concurrency-429",
+      FAKE_ZCODE_CONCURRENCY_FAILS: "2",
+      OMB_ZCODE_CONCURRENCY_RETRY_MS: "10",
+    });
+    const sessionId = await newPollSession(bridge);
+    const result = await pollPrompt(bridge, sessionId, "task");
+    expect(result.stopReason).toBe("end_turn");
+    expect(pollChunkText(bridge.updates())).toBe("OK after concurrency retry");
+    expect(bridge.state().sends).toBe(3);
+    expect(bridge.state().creates).toBe(1);
+  }, 20_000);
+
+  it("reports the concurrency wording once the retries are exhausted", async () => {
+    const bridge = startPollBridge("answer", 5, {
+      FAKE_ZCODE_TURN: "concurrency-429",
+      OMB_ZCODE_CONCURRENCY_RETRIES: "2",
+      OMB_ZCODE_CONCURRENCY_RETRY_MS: "10",
+    });
+    const sessionId = await newPollSession(bridge);
+    await expect(pollPrompt(bridge, sessionId, "task"))
+      .rejects.toThrow(/TURN_FAILED: the plan's concurrency limit was hit \(429\); try again shortly/);
+    expect(bridge.state().sends).toBe(3);
+  }, 20_000);
+
+  it("does not resend a concurrency refusal that landed after the turn already streamed text", async () => {
+    const bridge = startPollBridge("answer", 5, {
+      FAKE_ZCODE_TURN: "concurrency-429",
+      FAKE_ZCODE_CONCURRENCY_STREAM: "1",
+      OMB_ZCODE_CONCURRENCY_RETRY_MS: "10",
+    });
+    const sessionId = await newPollSession(bridge);
+    await expect(pollPrompt(bridge, sessionId, "task"))
+      .rejects.toThrow(/the plan's concurrency limit was hit \(429\)/);
+    expect(pollChunkText(bridge.updates())).toBe("partial answer ");
+    expect(bridge.state().sends).toBe(1);
+  }, 20_000);
+
+  it("ends the turn as cancelled when the session is cancelled during the retry backoff", async () => {
+    const bridge = startPollBridge("answer", 5, {
+      FAKE_ZCODE_TURN: "concurrency-429",
+      OMB_ZCODE_CONCURRENCY_RETRY_MS: "2000",
+    });
+    const sessionId = await newPollSession(bridge);
+    const pending = pollPrompt(bridge, sessionId, "task");
+    await waitFor(() => bridge.state().sends >= 1);
+    // The ACP client cancels by notification, which the bridge never answers; the harness's
+    // request timeout is caught and fires long after this test is done.
+    void bridge.request("session/cancel", { sessionId }).catch(() => {});
+    const result = await pending;
+    expect(result.stopReason).toBe("cancelled");
+    expect(bridge.state().sends).toBe(1);
+  }, 20_000);
+});
+
 /* A fake `zcode app-server` for the poll tests: it answers the session handshake and then
  * misbehaves on `session/events` in the way the test asks for. Written to a temp directory at
  * run time so the fixture lives with the test that uses it. Modes (FAKE_ZCODE_POLL_MODE):
@@ -765,7 +926,13 @@ describe("zcode BYOK output limit (FIX-E54)", () => {
  *   complete          accept and finish the turn at once with "OK complete"; the state file also
  *                     counts boots (app-server starts) and exits (the bridge ended its stdin)
  * FAKE_ZCODE_TURN turns a default-accept send into a terminal failure: "output-limit" replays the
- *           vendor's output-cap turn.failed payload, "vendor-error" an unrelated provider error.
+ *           vendor's output-cap turn.failed payload, "vendor-error" an unrelated provider error,
+ *           "quota-1005" the vendor's plan-quota refusal with the 1005 code buried in the error,
+ *           "concurrency-429" the vendor's 429 "user concurrency limit exceeded" refusal; with
+ *           concurrency-429 the first FAKE_ZCODE_CONCURRENCY_FAILS sends fail and later ones
+ *           complete, and FAKE_ZCODE_CONCURRENCY_STREAM="1" streams a text delta before the
+ *           terminal event.
+ *           FAKE_ZCODE_MODELS="two" lists GLM-5.3-Flash and GLM-5.3 so a session can switch models.
  *           In personal-store mode the state file also records the effective output cap per
  *           provider/model the store's rules put in force (limits). */
 const FAKE_POLL_APP_SERVER = `
@@ -775,8 +942,8 @@ import { createInterface } from "node:readline";
 const mode = process.env.FAKE_ZCODE_POLL_MODE ?? "answer";
 const stateFile = process.env.FAKE_ZCODE_POLL_STATE;
 const state = stateFile
-  ? { polls: 0, stops: 0, sends: 0, creates: 0, boots: 0, exits: 0, limits: {}, ...JSON.parse(readFileSync(stateFile, "utf8")) }
-  : { polls: 0, stops: 0, sends: 0, creates: 0, boots: 0, exits: 0, limits: {} };
+  ? { polls: 0, stops: 0, sends: 0, creates: 0, boots: 0, exits: 0, limits: {}, closes: 0, createdModels: [], closedSessions: [], ...JSON.parse(readFileSync(stateFile, "utf8")) }
+  : { polls: 0, stops: 0, sends: 0, creates: 0, boots: 0, exits: 0, limits: {}, closes: 0, createdModels: [], closedSessions: [] };
 const save = () => { if (stateFile) writeFileSync(stateFile, JSON.stringify(state)); };
 state.boots += 1;
 save();
@@ -839,11 +1006,15 @@ lines.on("line", (line) => {
       sessionId = probe ? "probe-1" : "sess-1";
       if (!probe) {
         state.creates += 1;
+        state.createdModels.push(params.model ?? null);
         save();
       }
       const store = mode === "personal-store" ? personalStore() : null;
+      const twoModels = [{ ref: { providerId: "plan", modelId: "GLM-5.3-Flash" }, label: "GLM-5.3-Flash" },
+        { ref: { providerId: "plan", modelId: "GLM-5.3" }, label: "GLM-5.3" }];
       const available = store ? store.models
-        : [{ ref: { providerId: "plan", modelId: "GLM-5.3-Flash" }, label: "GLM-5.3-Flash" }];
+        : process.env.FAKE_ZCODE_MODELS === "two" ? twoModels
+          : [{ ref: { providerId: "plan", modelId: "GLM-5.3-Flash" }, label: "GLM-5.3-Flash" }];
       if (store) {
         state.limits = store.limits;
         save();
@@ -923,6 +1094,68 @@ lines.on("line", (line) => {
         }), 20);
         break;
       }
+      if (process.env.FAKE_ZCODE_TURN === "quota-1005") {
+        // The vendor's own wire shape for a plan-quota refusal (CLI 0.16.9): the business code
+        // 1005 and the quota text sit several objects inside turn.failed's error, past the
+        // error.message the flat checks read.
+        setTimeout(() => notify("turn.failed", {
+          inputId,
+          turnPhase: "processing_input",
+          error: {
+            name: "Error",
+            message: "Turn execution failed",
+            code: "UNKNOWN_ERROR",
+            type: "unknown_error",
+            context: { errorPayloadRole: "wrapper" },
+            cause: {
+              name: "AiSdkModelAdapterError",
+              message: "exceed quota limit",
+              code: "model_request_failed",
+              context: { providerCode: "1005", errorPhase: "stream", exceptionKind: "provider_business" },
+              cause: { name: "ProviderBusinessError", message: "exceed quota limit", code: "PROVIDER_BUSINESS_ERROR" },
+            },
+          },
+        }), 20);
+        break;
+      }
+      if (process.env.FAKE_ZCODE_TURN === "concurrency-429") {
+        // The vendor's wire shape for a 429 "user concurrency limit exceeded" model refusal (E64):
+        // the status code and the concurrency wording sit deep inside turn.failed's error. The
+        // first FAKE_ZCODE_CONCURRENCY_FAILS sends fail, later ones complete; with
+        // FAKE_ZCODE_CONCURRENCY_STREAM the failing turn streams a text delta first, so the
+        // failure lands after output the retry must not duplicate.
+        const fails = Number(process.env.FAKE_ZCODE_CONCURRENCY_FAILS);
+        const failThis = !Number.isFinite(fails) || fails < 0 || state.sends <= fails;
+        setTimeout(() => {
+          if (process.env.FAKE_ZCODE_CONCURRENCY_STREAM === "1") {
+            notify("part.delta", { inputId, partId: "p1", field: "text", delta: "partial answer " });
+          }
+          if (failThis) {
+            notify("turn.failed", {
+              inputId,
+              turnPhase: "model",
+              error: {
+                name: "Error",
+                message: "Turn execution failed",
+                code: "UNKNOWN_ERROR",
+                type: "unknown_error",
+                context: { errorPayloadRole: "wrapper" },
+                cause: {
+                  name: "AiSdkModelAdapterError",
+                  message: "model.request.failed",
+                  code: "model_request_failed",
+                  context: { statusCode: 429, statusMessage: "user concurrency limit exceeded", reason: "rate_limited", retryable: false },
+                },
+              },
+            });
+          } else {
+            notify("turn.completed", {
+              inputId, resultType: "success", response: "OK after concurrency retry", usage: { inputTokens: 2, outputTokens: 2 },
+            });
+          }
+        }, 20);
+        break;
+      }
       if (mode === "timeout-with-events") {
         setInterval(() => notify("turn.started", { turnNumber: 1 }), 150);
       }
@@ -953,6 +1186,11 @@ lines.on("line", (line) => {
       reply(id, {});
       break;
     case "session/close":
+      if (params.sessionId !== "probe-1") {
+        state.closes += 1;
+        state.closedSessions.push(String(params.sessionId ?? ""));
+        save();
+      }
       reply(id, {});
       break;
     default:

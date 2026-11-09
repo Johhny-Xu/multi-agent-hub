@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RuntimeEvent } from "../../contracts.ts";
+import type { RuntimeEvent, SendTurnInput } from "../../contracts.ts";
 import { BrowserService, type BrowserTarget } from "../../browser/service.ts";
 import { FakeBackend, FakeChrome, type FakeDocument } from "../../browser/testing/fake-chrome.ts";
 import type { ViewerHub } from "../../browser/viewers/core.ts";
@@ -24,6 +24,34 @@ import {
 import { HARK_ADAPTER, HarkWebDriver } from "./hark.ts";
 import { setWorkbenchBotIdsForInstance } from "./workbench-page.ts";
 import type { WebChatPage } from "./types.ts";
+
+// Shared by the real-factory fixtures and the ZBOX-webchat-admin block, which both boot FakeChrome with it.
+const HARK_DOC: FakeDocument = {
+  title: "Hark Chat",
+  text: "Hark Chat\nWelcome",
+  elements: [
+    { role: "textbox", name: "Hidden Prompt", selector: "textarea", editable: true, box: [0, 0, 0, 0] },
+    { role: "textbox", name: "Visible Prompt", selector: "textarea", editable: true, box: [10, 10, 400, 50] },
+    {
+      role: "button",
+      name: "Send",
+      selector: 'button[type="submit"]',
+      box: [420, 10, 80, 50],
+      onClick: (page) => {
+        page.text += "\nAssistant response from real ViewerHub";
+        page.elements.push({
+          role: "paragraph",
+          name: "Assistant",
+          selector: ".assistant-message",
+          box: [10, 70, 400, 100],
+          value: "Assistant response from real ViewerHub",
+        });
+      },
+    },
+    { role: "paragraph", name: "Assistant First", selector: ".assistant-message", box: [10, 70, 400, 100], value: "First reply" },
+    { role: "paragraph", name: "Assistant Last", selector: ".assistant-message", box: [10, 180, 400, 100], value: "Assistant response from real ViewerHub" },
+  ],
+};
 
 class MockWebChatPage implements WebChatPage {
   currentUrl: string;
@@ -393,7 +421,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-1",
         text: "Say hello",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       expect(turn.turnId).toBe("turn-1");
 
@@ -451,7 +479,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-a",
         text: "First turn",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
       await new Promise((r) => setTimeout(r, 60));
 
       const sessionsFile = join(tempDir, ".openmausbot", "web-chat", "hark-multiturn", "sessions.json");
@@ -464,7 +492,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-b",
         text: "Second turn",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
       await new Promise((r) => setTimeout(r, 60));
 
       expect(mockPage.navigations).toContain("https://hark.com/c/hark-thread-456");
@@ -505,7 +533,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-cancel",
         text: "Cancel me",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       await instance.adapter.interruptTurn("thread-cancel");
       await new Promise((r) => setTimeout(r, 50));
@@ -562,7 +590,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-retry",
         text: "Test timeout retry",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       await new Promise((r) => setTimeout(r, 60));
 
@@ -599,7 +627,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-auth",
         text: "Will fail auth",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       await new Promise((r) => setTimeout(r, 50));
 
@@ -632,7 +660,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-sel",
         text: "Broken layout",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       await new Promise((r) => setTimeout(r, 50));
 
@@ -675,7 +703,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-csel",
         text: "Using custom selector",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       await new Promise((r) => setTimeout(r, 60));
 
@@ -689,33 +717,6 @@ describe("Web-chat driver (Hark)", () => {
     let service: BrowserService;
     let backend: FakeBackend;
     let browserDir: string;
-
-    const HARK_DOC: FakeDocument = {
-      title: "Hark Chat",
-      text: "Hark Chat\nWelcome",
-      elements: [
-        { role: "textbox", name: "Hidden Prompt", selector: "textarea", editable: true, box: [0, 0, 0, 0] },
-        { role: "textbox", name: "Visible Prompt", selector: "textarea", editable: true, box: [10, 10, 400, 50] },
-        {
-          role: "button",
-          name: "Send",
-          selector: 'button[type="submit"]',
-          box: [420, 10, 80, 50],
-          onClick: (page) => {
-            page.text += "\nAssistant response from real ViewerHub";
-            page.elements.push({
-              role: "paragraph",
-              name: "Assistant",
-              selector: ".assistant-message",
-              box: [10, 70, 400, 100],
-              value: "Assistant response from real ViewerHub",
-            });
-          },
-        },
-        { role: "paragraph", name: "Assistant First", selector: ".assistant-message", box: [10, 70, 400, 100], value: "First reply" },
-        { role: "paragraph", name: "Assistant Last", selector: ".assistant-message", box: [10, 180, 400, 100], value: "Assistant response from real ViewerHub" },
-      ],
-    };
 
     beforeEach(() => {
       browserDir = mkdtempSync(join(tmpdir(), "omb-browser-real-factory-"));
@@ -788,7 +789,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-rf-1",
         text: "Testing real factory",
         botId: "hark-auto",
-      });
+      } as SendTurnInput & { turnId: string });
 
       expect(turn.turnId).toBe("turn-rf-1");
 
@@ -856,7 +857,7 @@ describe("Web-chat driver (Hark)", () => {
         threadId: "t-nobot",
         turnId: "turn-nobot-1",
         text: "hello",
-      });
+      } as SendTurnInput & { turnId: string });
 
       const err = events.find((e) => e.type === "runtime.error") as { message?: string };
       expect(err).toBeDefined();
@@ -1039,7 +1040,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-ws-1",
         text: "Generate test response",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       expect(turn.turnId).toBe("turn-ws-1");
       expect(fakeSocket.sent).toHaveLength(2);
@@ -1079,13 +1080,13 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-stream-1",
         text: "Stream text",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       // Tab sends text deltas
       bridge.handleMessage(fakeSocket, JSON.stringify({ type: "text_delta", turnId: "turn-stream-1", text: "Hello" }));
       bridge.handleMessage(fakeSocket, JSON.stringify({ type: "text_delta", turnId: "turn-stream-1", text: "Hello world" }));
 
-      const deltas = events.filter((e) => e.type === "item.delta") as Array<{ text?: string }>;
+      const deltas = events.filter((e) => (e.type as string) === "item.delta") as Array<{ text?: string }>;
       expect(deltas).toHaveLength(2);
       expect(deltas[0]?.text).toBe("Hello");
       expect(deltas[1]?.text).toBe("Hello world");
@@ -1127,7 +1128,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-cancel-1",
         text: "Long response to cancel",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       // Interrupt turn
       await instance.adapter.interruptTurn("th-cancel");
@@ -1167,7 +1168,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-disc-1",
         text: "Disconnect test",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       // Tab disconnects
       bridge.removeTab("tab-hark-disc");
@@ -1290,7 +1291,7 @@ describe("Web-chat driver (Hark)", () => {
         turnId: "turn-fail-1",
         text: "Should fail gracefully",
         botId: "bot-test",
-      });
+      } as SendTurnInput & { turnId: string });
 
       const errEvent = events.find((e) => e.type === "runtime.error") as { message?: string };
       expect(errEvent).toBeDefined();
@@ -1479,8 +1480,6 @@ describe("Web-chat driver (Hark)", () => {
 
     describe("D: Workbench Transport Tab Behavior", () => {
       it("reuses existing hark.com tab without opening a new one or closing existing user tabs", async () => {
-        let _openedTab = false;
-        let _closedTab = false;
         const existingHarkTab = {
           id: "tab-hark-1",
           page: {
@@ -1506,8 +1505,8 @@ describe("Web-chat driver (Hark)", () => {
           host: {
             running: async () => {},
             tabs: () => [userOtherTab, existingHarkTab],
-            openTab: vi.fn(async () => { _openedTab = true; return {} as any; }),
-            closeTab: vi.fn(async () => { _closedTab = true; }),
+            openTab: vi.fn(async () => ({} as any)),
+            closeTab: vi.fn(async () => {}),
           },
         } as unknown as ViewerHub;
 

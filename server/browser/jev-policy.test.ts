@@ -80,10 +80,11 @@ describe("jev-policy", () => {
     const result = {
       ok: true as const,
       provider: "jev" as const,
+      latencyMs: 0,
       answers: {
-        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.95, margin: 0.3 },
-        click_target: { type: "choice" as const, choice: "c2", pTop: 0.92, margin: 0.25 },
-        type_text_target: { type: "choice" as const, choice: "t1", pTop: 0.1, margin: 0.01 },
+        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.95, margin: 0.3, probabilities: {} },
+        click_target: { type: "choice" as const, choice: "c2", pTop: 0.92, margin: 0.25, probabilities: {} },
+        type_text_target: { type: "choice" as const, choice: "t1", pTop: 0.1, margin: 0.01, probabilities: {} },
       },
     };
 
@@ -111,8 +112,9 @@ describe("jev-policy", () => {
     const result = {
       ok: true as const,
       provider: "jev" as const,
+      latencyMs: 0,
       answers: {
-        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.95, margin: 0.3 },
+        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.95, margin: 0.3, probabilities: {} },
       },
     };
 
@@ -151,9 +153,10 @@ describe("jev-policy", () => {
     const result = {
       ok: true as const,
       provider: "jev" as const,
+      latencyMs: 0,
       answers: {
-        operation: { type: "choice" as const, choice: "SELECT", pTop: 0.94, margin: 0.28 },
-        select_target: { type: "choice" as const, choice: "s2", pTop: 0.91, margin: 0.22 },
+        operation: { type: "choice" as const, choice: "SELECT", pTop: 0.94, margin: 0.28, probabilities: {} },
+        select_target: { type: "choice" as const, choice: "s2", pTop: 0.91, margin: 0.22, probabilities: {} },
       },
     };
 
@@ -177,9 +180,10 @@ describe("jev-policy", () => {
     const lowPtop = {
       ok: true as const,
       provider: "jev" as const,
+      latencyMs: 0,
       answers: {
-        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.88, margin: 0.25 },
-        click_target: { type: "choice" as const, choice: "c1", pTop: 0.95, margin: 0.3 },
+        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.88, margin: 0.25, probabilities: {} },
+        click_target: { type: "choice" as const, choice: "c1", pTop: 0.95, margin: 0.3, probabilities: {} },
       },
     };
     expect(chooseBrowserAction(lowPtop, batch)).toBeNull();
@@ -187,9 +191,10 @@ describe("jev-policy", () => {
     const lowMargin = {
       ok: true as const,
       provider: "jev" as const,
+      latencyMs: 0,
       answers: {
-        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.92, margin: 0.15 },
-        click_target: { type: "choice" as const, choice: "c1", pTop: 0.95, margin: 0.3 },
+        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.92, margin: 0.15, probabilities: {} },
+        click_target: { type: "choice" as const, choice: "c1", pTop: 0.95, margin: 0.3, probabilities: {} },
       },
     };
     expect(chooseBrowserAction(lowMargin, batch)).toBeNull();
@@ -225,9 +230,10 @@ describe("jev-policy", () => {
     const hallucinated = {
       ok: true as const,
       provider: "jev" as const,
+      latencyMs: 0,
       answers: {
-        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.95, margin: 0.3 },
-        click_target: { type: "choice" as const, choice: "c999", pTop: 0.95, margin: 0.3 },
+        operation: { type: "choice" as const, choice: "CLICK", pTop: 0.95, margin: 0.3, probabilities: {} },
+        click_target: { type: "choice" as const, choice: "c999", pTop: 0.95, margin: 0.3, probabilities: {} },
       },
     };
     expect(chooseBrowserAction(hallucinated, batch)).toBeNull();

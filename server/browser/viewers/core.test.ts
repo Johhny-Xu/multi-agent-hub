@@ -560,3 +560,30 @@ describe("what the panel shows besides the page", () => {
   });
 });
 
+
+describe("a view that may not start", () => {
+  it("opens on the running browser's own blank tab: its tab list comes through, no page of its own opens, and nothing says unstarted", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "omb-viewers-"));
+    folders.push(dataDir);
+    const backend = new FakeBackend(() => new FakeChrome({ documents: () => ({ ...PAGE, elements: PAGE.elements.map((element) => ({ ...element })) }) }));
+    const service = new BrowserService({ dataDir, backend: () => backend, maxRunning: 4, idleMs: () => 600_000, takeoverMs: 200 });
+    services.push(service);
+    const target = { session: "bot-a", key: "bot:a" };
+    await service.agentRpc(target, "tools/call", { name: "agent_browser_status", arguments: {} });
+    expect(backend.chromes).toHaveLength(1);
+    const pagesBefore = backend.chromes[0]!.pages.size;
+    const outputs: ViewerOutput[] = [];
+    const viewer = await service.attachViewer(target, { owner: "local-owner", canOperate: true, maxWidth: 3200, maxHeight: 2000, mayStart: false }, (output) => {
+      outputs.push(output);
+      if (output.type === "frame") output.ack();
+    });
+    await until(() => outputs, (seen) => seen.some((output) => output.type === "frame"));
+    expect(outputs.some((output) => output.type === "unstarted")).toBe(false);
+    const tabs = outputs.find((output): output is Extract<ViewerOutput, { type: "tabs" }> => output.type === "tabs");
+    expect(tabs?.tabs.map((tab) => tab.url)).toEqual(["about:blank"]);
+    expect(outputs.some((output) => output.type === "url" && output.url === "about:blank")).toBe(true);
+    expect(backend.chromes).toHaveLength(1);
+    expect(backend.chromes[0]!.pages.size).toBe(pagesBefore);
+    await viewer.close();
+  });
+});

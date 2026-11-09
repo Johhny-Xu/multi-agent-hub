@@ -118,7 +118,7 @@ export function vpsCanCheck(
   serverIds: ReadonlySet<string> | readonly string[],
 ): boolean {
   if (!row?.id) return false;
-  return serverIds instanceof Set ? serverIds.has(row.id) : serverIds.includes(row.id);
+  return "has" in serverIds ? serverIds.has(row.id) : serverIds.includes(row.id);
 }
 
 export function vpsUnsavedMessage(): string {

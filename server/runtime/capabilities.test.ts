@@ -9,6 +9,8 @@ import { ENGINE_KINDS, engineCapabilities, replaysTranscriptNatively, type Engin
 
 const chat: EngineCapabilities = { resume: false, nativeReviewer: false, full: true, edits: false, stepCap: 64, subagents: false };
 const bare: EngineCapabilities = { resume: true, nativeReviewer: false, full: true, edits: false, subagents: false };
+// The chat row's shape for engines that hold no restorable session but are not chat-completions.
+const replayed: EngineCapabilities = { resume: false, nativeReviewer: false, full: true, edits: false, stepCap: 64, subagents: false };
 
 const EXPECTED: Record<string, EngineCapabilities> = {
   claudeAgent: { resume: true, nativeReviewer: true, full: true, edits: true, subagents: false },
@@ -28,7 +30,20 @@ const EXPECTED: Record<string, EngineCapabilities> = {
   clineAgent: { resume: true, nativeReviewer: false, full: true, edits: false, subagents: false },
   copilotAgent: bare,
   commandCodeAgent: bare,
+  kiroAgent: bare,
   customAcp: bare,
+  codebuddyAgent: bare,
+  codebuddyCnAgent: bare,
+  qoderAgent: bare,
+  qoderCnAgent: bare,
+  perchAgent: bare,
+  mimocodeAgent: bare,
+  meooAgent: replayed,
+  mcodeAgent: replayed,
+  zcodeAgent: replayed,
+  codeartsAcpAgent: replayed,
+  traecodeAgent: replayed,
+  harkWeb: replayed,
   "openai-compat": chat,
   grok: chat,
   minimax: chat,

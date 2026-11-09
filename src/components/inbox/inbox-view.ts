@@ -45,7 +45,7 @@ export const inboxFixes = (
   (items ?? []).filter((item) => {
     if (item.kind === "message") return false;
     if (item.kind === "question" && view?.rows.some((row) => row.tab === "needs-you" && row.origin?.threadId === item.threadId)) return false;
-    if (options && !options.advanced && options.bots && item.botIds?.length) {
+    if (options && !options.advanced && options.bots && "botIds" in item && item.botIds.length) {
       if (item.botIds.every((id) => isDebugBotId(id, options.bots!))) return false;
     }
     return true;

@@ -16,6 +16,7 @@ import {
   antigravityProfileAuthenticated,
   prepareAntigravityProfile,
   probeAntigravityModels,
+  isAddedAntigravityAccount,
   removeAntigravitySignIn,
   validateAntigravityRuntime,
 } from "./antigravity-acp.ts";
@@ -27,6 +28,7 @@ import {
 import { resolveAntigravityReleaseAsset } from "./antigravity-release.ts";
 import { VERIFICATION_TEMP_KEY, scheduleAntigravityTempSweep } from "./antigravity-temp.ts";
 import { augmentedPath } from "../env-path.ts";
+import { AntigravityCliLoginController } from "./antigravity-cli-login.ts";
 
 export const STATIC_ANTIGRAVITY_MODELS: ModelCatalog = {
   default: "gemini-3.8-flash",
@@ -161,9 +163,12 @@ const support: AcpSupport = {
     if (!Array.isArray(configOptions) || !configOptions.some(option => option?.id === "mode")) {
       return;
     }
-    const modeOption = configOptions.find((option) => option?.id === "mode");
-    const offered: string[] = Array.isArray(modeOption?.options)
-      ? modeOption.options.flatMap((option: any) => typeof option?.value === "string" ? [option.value] : [])
+    const modeOption = configOptions.find((option) => option?.id === "mode") as
+      | ({ id?: unknown; currentValue?: unknown } & { options?: unknown })
+      | undefined;
+    const rawOffered = modeOption?.options;
+    const offered: string[] = Array.isArray(rawOffered)
+      ? (rawOffered as Array<{ value?: unknown }>).flatMap((option) => typeof option?.value === "string" ? [option.value] : [])
       : [];
     const wanted = antigravityPermissionMode(config.fullAuto, turn.approvalMode, offered);
     // Full on an agy CLI rides the launch flag; its session stays in the mode it opened in.
@@ -189,6 +194,9 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
     scheduleAntigravityTempSweep(input.instanceId);
     scheduleAntigravityTempSweep(VERIFICATION_TEMP_KEY);
     const auth = new AntigravityAuthController(() => void base.refreshModels?.());
+    // An added agy CLI account signs in with `agy acp --login` in its own HOME (see prepareAntigravityProfile).
+    const cliLogin = new AntigravityCliLoginController(() => void base.refreshModels?.());
+    let cliLoginActive = false;
     let installFailure: string | undefined;
     const runtimeAndProfile = async () => {
       // A GUI launch's raw PATH may omit the official runtime the model picker found.
@@ -231,16 +239,26 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
         : {}),
       startAuthentication: async () => {
         const { runtime, profile } = await runtimeAndProfile();
-        return auth.start(runtime, profile);
+        auth.cancel();
+        cliLogin.cancel();
+        cliLoginActive = runtime.kind === "cli" && isAddedAntigravityAccount(input.instanceId);
+        return cliLoginActive ? cliLogin.start(runtime, profile) : auth.start(runtime, profile);
       },
-      completeAuthentication: async (flowId, callbackUrl) => auth.complete(flowId, callbackUrl),
-      cancelAuthentication: async () => auth.cancel(),
+      completeAuthentication: async (flowId, callbackUrl) => cliLoginActive
+        ? cliLogin.complete(flowId, callbackUrl)
+        : auth.complete(flowId, callbackUrl),
+      cancelAuthentication: async () => {
+        auth.cancel();
+        cliLogin.cancel();
+      },
       signOut: async () => {
         auth.cancel();
+        cliLogin.cancel();
         await removeAntigravitySignIn(input.instanceId);
       },
       dispose: async () => {
         auth.cancel();
+        cliLogin.cancel();
         await base.dispose();
       },
     };

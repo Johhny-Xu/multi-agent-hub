@@ -24,10 +24,12 @@ import {
 import { PIDS_LIMIT, raisePidsLimit } from "./container-limits.ts";
 import { DATA_DIR, isValidSshAlias } from "./config.ts";
 import { augmentedPath } from "./env-path.ts";
-import { killCliTree, spawnCli } from "./procs.ts";
+import { COMMAND_TIMEOUT_KILL_GRACE_MS, defaultRunner, type VpsCommandRunner } from "./vps-command.ts";
+export { defaultRunner, type VpsCommandOptions, type VpsCommandRunner } from "./vps-command.ts";
 import { prepareVpsSsh } from "./vps-ssh.ts";
 import { loadEnvironmentId } from "./environment.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
+import { dockerCliMissing, dockerCliMissingProblem } from "./vps-hints.ts";
 
 export const VPS_IMAGE = CUA_IMAGE;
 export const VPS_MANAGED_LABEL = "com.openmausbot.vps";
@@ -35,16 +37,13 @@ export const VPS_CONTAINER_LABEL = "com.openmausbot.container";
 export const VPS_ENVIRONMENT_LABEL = "com.openmausbot.environment";
 export const VPS_VIEWER_LABEL = "com.openmausbot.vps-viewer";
 export const VPS_CONTAINER_PREFIX = "openmausbot-vps";
+export { dockerCliInstallCommand, vpsStartsForTurn, vpsUnavailableHint } from "./vps-hints.ts";
 // Lazy: index must finish data migration and take the writer lease before this may create the data directory.
 let vpsEnvironmentIdCache: string | null = null;
 function vpsEnvironmentId(): string {
   if (!vpsEnvironmentIdCache) vpsEnvironmentIdCache = loadEnvironmentId(DATA_DIR);
   return vpsEnvironmentIdCache;
 }
-// ssh + docker need this long to tear down a remote exec over a WAN; an orphaned exec keeps the driver socket busy.
-const COMMAND_TIMEOUT_TERM_GRACE_MS = 5_000;
-// killCliTree also waits up to one second for the forced group exit.
-const COMMAND_TIMEOUT_KILL_GRACE_MS = COMMAND_TIMEOUT_TERM_GRACE_MS + 1_000;
 
 const CONTAINER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/;
 const CONTAINER_ID = /^[a-f0-9]{12,64}$/i;
@@ -91,10 +90,10 @@ const pendingScreenshots = new Map<string, Promise<VpsScreenshot>>();
 const viewerConnections = new Map<string, { privateIp: string; password: string }>();
 const REMOTE_VIEWER_GRACE_MS = 30_000;
 const NATIVE_VIEWER_LIFETIME_MS = 8 * 60 * 60_000;
-const desktopTunnels = new Map<
-  string,
-  { child: ReturnType<typeof spawn>; joinUrl: string; expiry: ReturnType<typeof setTimeout>; viewers: number; localViewer: boolean }
->();
+type DesktopTunnel = { child: ReturnType<typeof spawn>; joinUrl: string; expiry: ReturnType<typeof setTimeout>; viewers: number; localViewer: boolean };
+type TunnelStart = { cancelled: boolean; child?: ReturnType<typeof spawn> };
+const desktopTunnels = new Map<string, DesktopTunnel>();
+const pendingDesktopTunnels = new Map<string, { promise: Promise<DesktopTunnel>; start: TunnelStart }>();
 
 function invalidateVpsTargetStatus(target: SshVpsTarget): void {
   const prefix = `${target.instanceId}:${target.revision}:`;
@@ -108,29 +107,7 @@ function invalidateVpsStatus(key: string): void {
   pendingStatuses.delete(key);
 }
 
-export interface VpsCommandOptions {
-  input?: string;
-  timeoutMs?: number;
-}
-
-export type VpsCommandRunner = (
-  args: string[],
-  options?: VpsCommandOptions,
-) => Promise<{ stdout: string; stderr: string }>;
-
 export type VpsLifecycleAction = "provision" | "start" | "stop" | "remove";
-
-export function vpsStartsForTurn(input: { wants: "cloud" | "vm" | "local" | "off" | undefined; autoStartVps?: boolean; automationSource?: string }): boolean {
-  if (input.wants === "cloud") return true;
-  if (input.wants !== undefined) return false;
-  return input.autoStartVps === true || Boolean(input.automationSource);
-}
-
-export function vpsUnavailableHint(input: { automationSource?: string; autoStartVps?: boolean; reachable?: boolean }): string {
-  if (input.automationSource) return "This scheduled run tried to start the VPS computer and could not reach it. Check the VPS connection in Settings → API keys.";
-  if (input.autoStartVps || input.reachable === false) return "Check the VPS connection in Settings → API keys.";
-  return input.reachable ? "Open Computer and enable Start VPS automatically, or choose Cloud computer to start it manually." : "";
-}
 
 export function vpsUnavailableStatus(botId: string, alias: string | null, problem: string): VpsComputerStatus {
   return { ...emptyStatus(botId, alias), problem };
@@ -221,9 +198,7 @@ export function vpsDockerArgs(alias: string, args: string[]): string[] {
 /** Never published by Docker: SSH forwards one loopback port to noVNC, and every caller-controlled part is validated before argv. */
 export function vpsSshTunnelArgs(alias: string, localPort: number, privateIp: string, configPath: string | null = null): string[] {
   if (!isValidSshAlias(alias)) throw new Error("invalid VPS SSH config alias");
-  if (!Number.isInteger(localPort) || localPort < 1024 || localPort > 65535) {
-    throw new Error("invalid VPS viewer port");
-  }
+  if (!Number.isInteger(localPort) || localPort < 1024 || localPort > 65535) throw new Error("invalid VPS viewer port");
   if (!privateDockerIpv4(privateIp)) throw new Error("invalid VPS private container address");
   return [
     ...(configPath ? ["-F", configPath] : []),
@@ -234,6 +209,8 @@ export function vpsSshTunnelArgs(alias: string, localPort: number, privateIp: st
     "ExitOnForwardFailure=yes",
     "-o",
     "PermitLocalCommand=no",
+    "-o",
+    "ControlPath=none",
     "-o",
     "ServerAliveInterval=30",
     "-o",
@@ -276,9 +253,18 @@ function loopbackAnswers(port: number): Promise<boolean> {
   });
 }
 
-function stopDesktopTunnel(key: string): boolean {
-  const tunnel = desktopTunnels.get(key);
-  if (!tunnel) return false;
+function stopDesktopTunnel(key: string, expected?: DesktopTunnel): boolean {
+  if (!expected) {
+    const pending = pendingDesktopTunnels.get(key);
+    if (pending) {
+      pending.start.cancelled = true;
+      const child = pending.start.child;
+      if (child?.exitCode === null && !child.killed) child.kill("SIGTERM");
+      pendingDesktopTunnels.delete(key);
+    }
+  }
+  const tunnel = expected ?? desktopTunnels.get(key);
+  if (!tunnel || desktopTunnels.get(key) !== tunnel) return false;
   desktopTunnels.delete(key);
   clearTimeout(tunnel.expiry);
   if (tunnel.child.exitCode === null && !tunnel.child.killed) tunnel.child.kill("SIGTERM");
@@ -296,7 +282,7 @@ export function closeVpsDesktopTunnel(key: string) {
 }
 
 export function closeAllVpsDesktopTunnels(): void {
-  for (const key of Array.from(desktopTunnels.keys())) stopDesktopTunnel(key);
+  for (const key of new Set([...desktopTunnels.keys(), ...pendingDesktopTunnels.keys()])) stopDesktopTunnel(key);
 }
 
 export function vpsDesktopConnection(key: string) {
@@ -317,101 +303,13 @@ export function vpsDesktopConnection(key: string) {
         tunnel.viewers--;
         if (!tunnel.viewers && !tunnel.localViewer && desktopTunnels.get(key) === tunnel) {
           tunnel.expiry = setTimeout(() => {
-            if (desktopTunnels.get(key) === tunnel) stopDesktopTunnel(key);
+            stopDesktopTunnel(key, tunnel);
           }, REMOTE_VIEWER_GRACE_MS);
           tunnel.expiry.unref();
         }
       };
     },
   };
-}
-
-const STREAM_CAP_CHARS = 16 * 1024 * 1024;
-
-function tailCollector() {
-  const chunks: string[] = [];
-  let total = 0;
-  return {
-    push(chunk: string) {
-      chunks.push(chunk);
-      total += chunk.length;
-      for (;;) {
-        const first = chunks[0];
-        if (chunks.length < 2 || first === undefined || total - first.length < STREAM_CAP_CHARS) break;
-        chunks.shift();
-        total -= first.length;
-      }
-    },
-    text(): string {
-      return chunks.join("").slice(-STREAM_CAP_CHARS);
-    },
-  };
-}
-
-export function defaultRunner(args: string[], options: VpsCommandOptions = {}): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    // Docker's SSH transport runs the first `ssh` on PATH: the app's shim, which shares one connection.
-    const ssh = prepareVpsSsh(DATA_DIR, augmentedPath());
-    const child = spawnCli("docker", args, {
-      shell: false,
-      env: { ...process.env, PATH: ssh.path },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const stdout = tailCollector();
-    const stderr = tailCollector();
-    let settled = false;
-    let failure: Error | null = null;
-    let timeout: ReturnType<typeof setTimeout>;
-    const settle = (finish: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      finish();
-    };
-    const fail = (error: Error) => {
-      if (settled || failure) return;
-      failure = error;
-      clearTimeout(timeout);
-      // ssh can hold these pipes after Docker exits; stop only this command's process group (SSH masters detach from it).
-      const cleaned = () => {
-        child.stdin.destroy();
-        child.stdout.destroy();
-        child.stderr.destroy();
-        settle(() => reject(error));
-      };
-      void killCliTree(child, COMMAND_TIMEOUT_TERM_GRACE_MS).then(cleaned, cleaned);
-    };
-    timeout = setTimeout(() => fail(new Error("Docker-over-SSH command timed out")), options.timeoutMs ?? 120_000);
-    timeout.unref?.();
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout.push(chunk);
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr.push(chunk);
-    });
-    child.stdin.on("error", (error) => {
-      fail(new Error(`Docker-over-SSH stdin failed: ${error.message}`));
-    });
-    child.on("error", (error) => {
-      fail(new Error(`Docker-over-SSH could not start: ${error.message}`));
-    });
-    child.on("close", (code, signal) => {
-      if (failure) return;
-      settle(() => {
-        if (code === 0) return resolve({ stdout: stdout.text(), stderr: stderr.text() });
-        const detail = stderr.text().trim().slice(-1000);
-        reject(new Error(detail || `Docker-over-SSH exited ${code ?? signal ?? "without a status"}`));
-      });
-    });
-    try {
-      child.stdin.end(options.input);
-    } catch (error) {
-      fail(new Error(`Docker-over-SSH stdin failed: ${error instanceof Error ? error.message : String(error)}`));
-    }
-  });
 }
 
 function emptyStatus(botId: string, alias: string | null): VpsComputerStatus {
@@ -445,6 +343,7 @@ function isMissingObjectMessage(message: string): boolean {
 }
 
 function transportFailure(message: string): string {
+  if (dockerCliMissing(message)) return dockerCliMissingProblem();
   if (/timed out/i.test(message)) {
     return "Docker over SSH failed while checking the VPS: the connection timed out. Check that the VPS is online, SSH is reachable from this computer, and Docker is running on the VPS, then retry. No computer was reset.";
   }
@@ -713,9 +612,11 @@ const VPS_INVENTORY_STATES = new Set<ManagedVpsInventoryInstance["state"]>([
   "dead",
 ]);
 
-type ManagedVpsAliasScan = Pick<ManagedVpsInventory, "available" | "problem" | "instances"> & { containerIds: Map<string, string> };
+/** One host's scan; the caller stamps each container with the configured instance it came from. */
+type ManagedVpsAliasScan = Pick<ManagedVpsInventory, "available" | "problem"> & { instances: Omit<ManagedVpsInventoryInstance, "instanceId">[]; containerIds: Map<string, string> };
 
 function inventoryFailure(alias: string, error: unknown): ManagedVpsAliasScan {
+  if (dockerCliMissing(error)) return { available: false, problem: `${dockerCliMissingProblem()} (VPS host: ${alias})`, instances: [], containerIds: new Map() };
   const detail = (error instanceof Error ? error.message : String(error))
     .replace(/[\r\n\t]+/g, " ")
     .trim()
@@ -774,7 +675,7 @@ async function scanManagedVpsAlias(
     const seenIds = new Set<string>();
     const seenNames = new Set<string>();
     const containerIds = new Map<string, string>();
-    const instances: ManagedVpsInventoryInstance[] = [];
+    const instances: ManagedVpsAliasScan["instances"] = [];
     for (const raw of details) {
       if (!raw || typeof raw !== "object") throw new Error("the VPS returned a malformed managed container");
       const detail = raw as {
@@ -1201,20 +1102,36 @@ export async function vpsComputerJoin(
   if (!isValidSshAlias(alias)) throw Object.assign(new Error("VPS is not configured"), { status: 409 });
   const tunnelKey = vpsTargetKey(target, botId);
 
-  const existing = desktopTunnels.get(tunnelKey);
-  if (existing && existing.child.exitCode === null && !existing.child.killed) {
-    if (!remoteViewer) existing.localViewer = true;
-    if (!existing.viewers || existing.localViewer) {
-      clearTimeout(existing.expiry);
-      existing.expiry = setTimeout(() => stopDesktopTunnel(tunnelKey), existing.localViewer ? NATIVE_VIEWER_LIFETIME_MS : REMOTE_VIEWER_GRACE_MS);
-      existing.expiry.unref();
-    }
-    return { joinUrl: existing.joinUrl, state: "running" };
+  let tunnel = desktopTunnels.get(tunnelKey);
+  if (tunnel && (tunnel.child.exitCode !== null || tunnel.child.killed)) {
+    stopDesktopTunnel(tunnelKey, tunnel);
+    tunnel = undefined;
   }
-  stopDesktopTunnel(tunnelKey);
+  if (!tunnel) {
+    let pending = pendingDesktopTunnels.get(tunnelKey);
+    if (!pending) {
+      const start: TunnelStart = { cancelled: false };
+      pending = { start, promise: startDesktopTunnel(target, botId, tunnelKey, alias, runner, start) };
+      pendingDesktopTunnels.set(tunnelKey, pending);
+    }
+    try { tunnel = await pending.promise; }
+    finally { if (pendingDesktopTunnels.get(tunnelKey) === pending) pendingDesktopTunnels.delete(tunnelKey); }
+  }
+  if (!remoteViewer) tunnel.localViewer = true;
+  if (!tunnel.viewers || tunnel.localViewer) {
+    clearTimeout(tunnel.expiry);
+    const current = tunnel;
+    tunnel.expiry = setTimeout(() => stopDesktopTunnel(tunnelKey, current), tunnel.localViewer ? NATIVE_VIEWER_LIFETIME_MS : REMOTE_VIEWER_GRACE_MS);
+    tunnel.expiry.unref();
+  }
+  return { joinUrl: tunnel.joinUrl, state: "running" };
+}
 
+async function startDesktopTunnel(target: SshVpsTarget, botId: string, tunnelKey: string, alias: string, runner: VpsCommandRunner, start: TunnelStart): Promise<DesktopTunnel> {
+  const assertOpen = () => { if (start.cancelled) throw new Error("VPS desktop tunnel start was cancelled"); };
   // Always re-inspect: a cached IP or password may predate a container replacement.
   const status = await computeVpsComputerStatus(target, botId, runner);
+  assertOpen();
   if (!status.ready) {
     throw Object.assign(new Error(status.problem ?? "The VPS computer is not ready"), { status: 409 });
   }
@@ -1227,6 +1144,7 @@ export async function vpsComputerJoin(
   }
 
   const localPort = await unusedLoopbackPort();
+  assertOpen();
   const ssh = prepareVpsSsh(DATA_DIR, augmentedPath());
   const child = spawn("ssh", vpsSshTunnelArgs(alias, localPort, connection.privateIp, ssh.configPath), {
     shell: false,
@@ -1234,6 +1152,7 @@ export async function vpsComputerJoin(
     stdio: ["ignore", "ignore", "pipe"],
     windowsHide: true,
   });
+  start.child = child;
   let failure: string | null = null;
   let stderr = "";
   child.stderr?.setEncoding("utf8");
@@ -1257,17 +1176,22 @@ export async function vpsComputerJoin(
     if (await loopbackAnswers(localPort)) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  if (failure || !(await loopbackAnswers(localPort))) {
+  const ready = !failure && await loopbackAnswers(localPort);
+  if (start.cancelled || failure || !ready) {
     if (child.exitCode === null && !child.killed) child.kill("SIGTERM");
+    assertOpen();
     const detail = failure || stderr.trim() || "the SSH port forward did not become ready";
     throw Object.assign(new Error(`Could not open the VPS live desktop: ${detail}`), { status: 502 });
   }
 
   const joinUrl = `http://127.0.0.1:${localPort}/vnc.html#autoconnect=true&resize=scale&password=${encodeURIComponent(connection.password)}`;
-  const expiry = setTimeout(() => stopDesktopTunnel(tunnelKey), remoteViewer ? REMOTE_VIEWER_GRACE_MS : NATIVE_VIEWER_LIFETIME_MS);
-  expiry.unref?.();
-  desktopTunnels.set(tunnelKey, { child, joinUrl, expiry, viewers: 0, localViewer: !remoteViewer });
-  return { joinUrl, state: "running" };
+  const tunnel: DesktopTunnel = {
+    child, joinUrl, viewers: 0, localViewer: false,
+    expiry: setTimeout(() => stopDesktopTunnel(tunnelKey, tunnel), REMOTE_VIEWER_GRACE_MS),
+  };
+  tunnel.expiry.unref();
+  desktopTunnels.set(tunnelKey, tunnel);
+  return tunnel;
 }
 
 export function vpsContainerMcpArgs(alias: string, containerName: string): string[] {

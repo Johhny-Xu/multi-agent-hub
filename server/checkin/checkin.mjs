@@ -1107,6 +1107,7 @@ async function fetchCodeBuddyCredits(token, domain = 'www.codebuddy.ai') {
       remain: Number(a.CapacityRemain) || 0,
       used: Number(a.CapacityUsed) || 0,
       created: Number(a.CreateTime) || 0,
+      end: Number(a.DeductionEndTime) || 0,
     }));
     return {
       count: Number(data.TotalCount) || 0,
@@ -1136,6 +1137,35 @@ export function codeBuddyCreditsArrived(before, after) {
   return after.packs.some((p) => {
     const o = old.get(p.id);
     return !!o && (p.remain > o.remain || p.size > o.size);
+  });
+}
+
+// en-CA 的日期就是 YYYY-MM-DD
+const SHANGHAI_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' });
+
+/**
+ * 用户口径（2026-11-10）：活跃成功 = **额度包**到账，剩余积分变多、dosage 变大不再单独算成功。
+ *   1) 签到后出现 before 没有的包 id（上游新发的包）；
+ *   2) 或当天是每月 1 号（Asia/Shanghai）且 after 里有一个未过期、过期时间落在下月 1 号（Asia/Shanghai）的包——
+ *      月包可能在签到前就已发放、基线里已有它，换期当天只能靠「下月 1 号到期」认领；
+ *      上游也有用 23:59:59 表示下月 1 号 00:00:00 的，零点前 1 秒以内一并接受。
+ * 旧口径 codeBuddyCreditsArrived 保留不删（别处/测试在用）。
+ */
+export function codeBuddyPackGranted(before, after, now = new Date()) {
+  if (!before || !after) return false;
+  const beforeIds = new Set((before.packs || []).map((p) => p.id));
+  if ((after.packs || []).some((p) => p.id && !beforeIds.has(p.id))) return true;
+  const [y, m, d] = SHANGHAI_DATE.format(now).split('-').map(Number);
+  if (d !== 1) return false;
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const firstOfNext = `${ny}-${String(nm).padStart(2, '0')}-01`;
+  // Asia/Shanghai 全年固定 UTC+8（无夏令时），下月 1 号的上海零点就落在这个 UTC 时刻
+  const midnightMs = Date.UTC(ny, nm - 1, 1) - 8 * 60 * 60 * 1000;
+  return (after.packs || []).some((p) => {
+    if (!p.end || p.end <= now.getTime()) return false;
+    return SHANGHAI_DATE.format(new Date(p.end)) === firstOfNext
+      || (p.end >= midnightMs - 1000 && p.end < midnightMs);
   });
 }
 
@@ -1703,7 +1733,7 @@ export async function checkinCodeBuddy(overrideToken = null) {
       await Promise.all(pending.map(async (r) => {
         if (settled.get(r).arrived) return;
         const after = await fetchCodeBuddyCredits(r.token, r.domain || 'www.codebuddy.ai');
-        if (codeBuddyCreditsArrived(r.creditsBefore, after)) settled.set(r, { arrived: true, after });
+        if (codeBuddyPackGranted(r.creditsBefore, after)) settled.set(r, { arrived: true, after });
       }));
       if ([...settled.values()].every((s) => s.arrived)) break;
       const left = deadline - Date.now();

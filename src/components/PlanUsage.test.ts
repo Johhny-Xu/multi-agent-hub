@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({ report: null as unknown }));
 vi.mock("react", async (original) => ({
@@ -11,6 +11,8 @@ vi.mock("@/state/store", () => ({ api: vi.fn(), useStore: () => ({ state: { inst
 import { PlanUsage } from "./PlanUsage";
 
 describe("Plan usage presentation", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
   it("distinguishes remaining account allowance, per-model usage, and unavailable windows", () => {
     fixture.report = {
       fetchedAt: "2026-10-02T09:00:00Z",
@@ -49,6 +51,9 @@ describe("Plan usage presentation", () => {
   });
 
   it("shows a credit allowance's counts beside how much of it is used", () => {
+    // 12d 13h before the reset below; the countdown must not depend on the day the suite runs.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-08T11:00:00.000Z"));
     fixture.report = {
       fetchedAt: "2026-11-08T09:00:00Z",
       providers: [{
@@ -379,14 +384,13 @@ describe("All registered CLI engines & sortEngines ordering", () => {
     }
   });
 
-  it("renders '此引擎不提供额度信息' for engines that do not provide quota (meoo, perch, qwenpaw, opencodeGo without quota)", async () => {
+  it("renders '此引擎不提供额度信息' for engines that do not provide quota (meoo, perch, opencodeGo without quota)", async () => {
     const { loadLocale, setLocale } = await import("@/lib/i18n");
     await loadLocale("zh");
     try {
       const instances = [
         makeInstance({ instanceId: "meoo", displayName: "Meoo", driverKind: "meooAgent" }),
         makeInstance({ instanceId: "perch", displayName: "Perch", driverKind: "perchAgent" }),
-        makeInstance({ instanceId: "qwenpaw", displayName: "QwenPaw", driverKind: "qwenpawAgent" }),
         makeInstance({ instanceId: "opencodeGo", displayName: "OpenCode", driverKind: "opencodeGo" }),
       ];
 
@@ -414,12 +418,11 @@ describe("All registered CLI engines & sortEngines ordering", () => {
 
       expect(html).toContain("Meoo");
       expect(html).toContain("Perch");
-      expect(html).toContain("QwenPaw");
       expect(html).toContain("OpenCode");
 
-      // All 4 render the exact unprovided text
+      // All 3 render the exact unprovided text
       const matches = html.match(/此引擎不提供额度信息/g);
-      expect(matches).toHaveLength(4);
+      expect(matches).toHaveLength(3);
     } finally {
       fixture.report = null;
       setLocale("en");

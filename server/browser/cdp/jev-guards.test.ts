@@ -77,7 +77,7 @@ describe("jev-guards", () => {
         return { result: { value: true } };
       }
       return {};
-    });
+    }) as unknown as CdpSession["send"];
 
     await actions.click(context, { ref: "e1" }, { guard });
     expect(beforeInputCalled).toBe(true);
@@ -163,7 +163,7 @@ describe("jev-guards", () => {
         };
       }
       return {};
-    });
+    }) as unknown as CdpSession["send"];
 
     await expect(actions.select(context, { ref: "e1" }, ["opt2"], { guard: { beforeInput: async () => {}, onInputStart: () => {} } }))
       .rejects.toThrow(/disabled/);

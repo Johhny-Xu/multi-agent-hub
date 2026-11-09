@@ -1045,7 +1045,7 @@ describe("config status frames", () => {
         xai: { configured: true },
         composio: { configured: true, mode: "managed" },
         box: { configured: false },
-        vps: { configured: true, sshAlias: "homelab" },
+        vps: { configured: true, sshAlias: "homelab", revision: "", instances: [] },
         rooms: { turnTimeoutMinutes: 20 },
         mcp: { callTimeoutMinutes: 30 },
         threads: { maxConcurrentPerBot: 10 },
@@ -1138,7 +1138,7 @@ describe("config status", () => {
   const config = configStatusFromFrame({
     composio: { configured: false },
     box: { configured: false },
-    vps: { configured: false, sshAlias: "" },
+    vps: { configured: false, sshAlias: "", revision: "", instances: [] },
     rooms: { turnTimeoutMinutes: 5 },
     mcp: { callTimeoutMinutes: 10 },
     localVm: { mode: "shared", maxInstances: 2 },
@@ -2556,7 +2556,7 @@ describe("live config frames", () => {
   const baseFrame: ConfigStatusFrame = {
     composio: { configured: false },
     box: { configured: false },
-    vps: { configured: false, sshAlias: "" },
+    vps: { configured: false, sshAlias: "", revision: "", instances: [] },
     rooms: { turnTimeoutMinutes: 10 },
     mcp: { callTimeoutMinutes: 10 },
     localVm: { mode: "shared", maxInstances: 1 },

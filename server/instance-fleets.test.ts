@@ -18,7 +18,7 @@ describe("the built-in fleets", () => {
   // 一个已保存的产品 fleet（含 claude/grok/codex）靠 PRODUCT_FLEET_ADDITIONS 补齐缺失实例：
   // 这两个引擎必须两张表都有，否则老配置的工作台依旧 Unknown engine。
   it("gains the mah-migrated account engines in saved product fleets too", () => {
-    for (const instanceId of ["traecode", "mimocode"]) {
+    for (const instanceId of ["traecode", "mimocode"] as const) {
       const driver = WORKER_SPECS[instanceId === "traecode" ? "traecode" : "mimocode"]!.driver;
       expect(DEFAULT_FLEET[instanceId]).toMatchObject({ driver });
       expect(PRODUCT_FLEET_ADDITIONS[instanceId]).toMatchObject({ driver });

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { InstanceConfig } from "../contracts.ts";
 import { json, readBody } from "../harness/http.ts";
-import { createServiceAccountRoutes } from "./service-accounts.ts";
+import { createServiceAccountRoutes, type ServiceAccountRouteDeps } from "./service-accounts.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const servers: Server[] = [];
@@ -18,7 +18,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-async function serve(extraInstances?: (base: string) => Record<string, InstanceConfig>) {
+async function serve(extraInstances?: (base: string) => Record<string, InstanceConfig>, autoSwitch?: ServiceAccountRouteDeps["autoSwitch"]) {
   const base = mkdtempSync(join(tmpdir(), "omb-service-account-routes-"));
   roots.push(base);
   const home = join(base, "home");
@@ -37,6 +37,7 @@ async function serve(extraInstances?: (base: string) => Record<string, InstanceC
     readOnly: () => flags.readOnly,
     refresh: () => { flags.refreshed += 1; },
     reclaim: (instanceId) => { flags.reclaimed.push(instanceId); },
+    ...(autoSwitch ? { autoSwitch } : {}),
     root: data,
   })];
   const server = createServer(async (req, res) => {
@@ -165,5 +166,53 @@ describe("the account routes", () => {
     expect(mimoSwitch.body.accounts.activeId).toBe(mimoAccount);
     expect(JSON.parse(readFileSync(join(base, "home", ".local", "share", "mimocode", "auth.json"), "utf8")))
       .toMatchObject({ uid: "2297352705" });
+  });
+});
+
+function fakeAutoSwitch() {
+  const enabled: Record<string, boolean> = {};
+  return {
+    enabled: (id: string) => enabled[id] === true,
+    setEnabled: (id: string, on: boolean) => { enabled[id] = on; },
+    status: (id: string) => ({ enabled: enabled[id] === true, limited: [] as Array<{ accountId: string; until: number }> }),
+  };
+}
+
+describe("the auto-switch route", () => {
+  it("reports auto-switch off by default, and unavailable when the host does not wire it", async () => {
+    const unwired = await serve();
+    const missing = await unwired.call("GET", "/api/instances/codebuddy/service-accounts/auto-switch");
+    expect(missing.status).toBe(200);
+    expect(missing.body.autoSwitch).toEqual({ enabled: false, limited: [], available: false });
+
+    const wired = await serve(undefined, fakeAutoSwitch());
+    const status = await wired.call("GET", "/api/instances/codebuddy/service-accounts/auto-switch");
+    expect(status.status).toBe(200);
+    expect(status.body.autoSwitch).toEqual({ enabled: false, limited: [] });
+  });
+
+  it("turns auto-switch on with PUT and reads the new state back", async () => {
+    const { call } = await serve(undefined, fakeAutoSwitch());
+    const put = await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", { enabled: true });
+    expect(put.status).toBe(200);
+    expect(put.body.autoSwitch).toEqual({ enabled: true, limited: [] });
+    expect((await call("GET", "/api/instances/codebuddy/service-accounts/auto-switch")).body.autoSwitch.enabled).toBe(true);
+    expect((await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", { enabled: false })).body.autoSwitch.enabled).toBe(false);
+  });
+
+  it("refuses a PUT whose enabled is not a boolean", async () => {
+    const { call } = await serve(undefined, fakeAutoSwitch());
+    expect((await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", { enabled: "yes" })).status).toBe(400);
+    expect((await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", {})).status).toBe(400);
+  });
+
+  it("guards the PUT like the other writes: unknown engine, content type and the read-only workspace", async () => {
+    const { call, flags } = await serve(undefined, fakeAutoSwitch());
+    expect((await call("PUT", "/api/instances/nope/service-accounts/auto-switch", { enabled: true })).status).toBe(404);
+    expect((await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", { enabled: true }, "text/plain")).status).toBe(415);
+    flags.readOnly = true;
+    expect((await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", { enabled: true })).status).toBe(403);
+    flags.readOnly = false;
+    expect((await call("PUT", "/api/instances/codebuddy/service-accounts/auto-switch", { enabled: true })).status).toBe(200);
   });
 });

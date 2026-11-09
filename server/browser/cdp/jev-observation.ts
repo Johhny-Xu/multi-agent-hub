@@ -2,7 +2,7 @@
 import type { BrowserObservation, BrowserOperation, BrowserScope } from "../jev-types.ts";
 import type { CdpPage } from "./page.ts";
 import type { NodeHandle } from "./refs.ts";
-import { DriverError } from "./errors.ts";
+import { DriverError, type DriverErrorCode } from "./errors.ts";
 import {
   DomObservationResult,
   JEV_DOM_SCRIPT,
@@ -22,9 +22,10 @@ export async function readJevObservation(
   const mainFrameId = page.frames.mainFrameId;
 
   // If there are other frames and options.allowFrames is not set, report unsupported frames.
-  const hasSubframes = Array.from(page.frames["_frames"]?.values() ?? []).some((f: { parentId: string | null }) => f.parentId !== null);
+  // Reads a "_frames" field FrameTree does not have (its map is private #frames), so this stays false; kept as-is.
+  const hasSubframes = Array.from((page.frames as unknown as { _frames?: Map<string, { parentId: string | null }> })["_frames"]?.values() ?? []).some((f) => f.parentId !== null);
   if (hasSubframes && !options.allowFrames) {
-    throw new DriverError("unsupported-observation", "Page contains frames or iframes; fast DOM observer only supports main document.");
+    throw new DriverError("unsupported-observation" as DriverErrorCode, "Page contains frames or iframes; fast DOM observer only supports main document.");
   }
 
   const raw = await page.frames.inWorld(mainFrameId, async (session, contextId) => {
@@ -55,7 +56,7 @@ export async function readJevObservation(
 
 export async function resolveJevTarget(
   page: CdpPage,
-  observationId: string,
+  _observationId: string,
   elementId: string,
 ): Promise<{ handle: NodeHandle; ref: string }> {
   const mainFrameId = page.frames.mainFrameId;
@@ -122,9 +123,9 @@ export async function validateJevObservation(
 }
 
 export async function waitForJevState(
-  page: CdpPage,
+  _page: CdpPage,
   previous: BrowserOperation,
-  target: NodeHandle | null,
+  _target: NodeHandle | null,
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) return;

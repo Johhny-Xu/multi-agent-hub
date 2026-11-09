@@ -12,9 +12,10 @@ import { AppCopyNotice } from "./EngineAppCopy";
 import { forgetAppCopySwitches } from "@/state/engine-install";
 import { AccountsCard, AddAccount, accountGroupOf, accountsReady, type AccountGroup } from "./EngineAccounts";
 import { ServiceAccounts } from "./ServiceAccounts";
-import { ClaudeEndpoints } from "./ClaudeEndpoints";
+import { ClaudeEndpoints, CodexEndpoints } from "./ClaudeEndpoints";
 import { DEVICE_SIGN_IN_COPY, deviceSignInProvider } from "./DeviceSignIn";
 import { AntigravityFreeSpace } from "./AntigravityFreeSpace";
+import { AntigravityAccounts } from "./AntigravityAccounts";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Select } from "./Select";
@@ -185,6 +186,18 @@ function CustomPicker({ instance, cliDefault, onClose, onSaved }: {
   );
 }
 
+/** Model ids grouped by their provider prefix (`openai/gpt-5` → `openai`); ids without one are left out. */
+export function modelGroups(ids: string[]): Array<{ prefix: string; ids: string[] }> {
+  const byPrefix = new Map<string, string[]>();
+  for (const id of ids) {
+    const cut = id.indexOf("/");
+    if (cut <= 0) continue;
+    const prefix = id.slice(0, cut);
+    byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), id]);
+  }
+  return [...byPrefix].map(([prefix, groupIds]) => ({ prefix, ids: groupIds }));
+}
+
 /** Which of an engine's models every picker offers. A model already chosen still shows as the current one. */
 export function ModelVisibility({ instance }: { instance: InstanceInfo }) {
   const { refreshInstances } = useStore();
@@ -192,11 +205,7 @@ export function ModelVisibility({ instance }: { instance: InstanceInfo }) {
   const [error, setError] = useState<string | null>(null);
   const official = instance.models.options.filter((option) => !option.custom);
   if (official.length === 0) return null;
-  const toggle = (id: string, show: boolean) => {
-    if (saving) return;
-    const hidden = new Set(official.filter((option) => option.hidden === true).map((option) => option.id));
-    if (show) hidden.delete(id);
-    else hidden.add(id);
+  const save = (hidden: Set<string>) => {
     setSaving(true);
     setError(null);
     api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "PATCH", body: JSON.stringify({ hiddenModels: [...hidden] }) })
@@ -204,10 +213,46 @@ export function ModelVisibility({ instance }: { instance: InstanceInfo }) {
       .catch((e) => setError(e.message))
       .finally(() => setSaving(false));
   };
+  const hiddenNow = () => new Set(official.filter((option) => option.hidden === true).map((option) => option.id));
+  const toggle = (id: string, show: boolean) => {
+    if (saving) return;
+    const hidden = hiddenNow();
+    if (show) hidden.delete(id);
+    else hidden.add(id);
+    save(hidden);
+  };
+  /** Provider groups (`opencode/…` is OpenCode Zen): one switch shows or hides the whole group. */
+  const groups = modelGroups(official.map((option) => option.id));
+  const toggleGroup = (prefix: string, show: boolean) => {
+    if (saving) return;
+    const hidden = hiddenNow();
+    for (const option of official) {
+      if (!option.id.startsWith(`${prefix}/`)) continue;
+      if (show) hidden.delete(option.id);
+      else hidden.add(option.id);
+    }
+    save(hidden);
+  };
   return (
     <details data-model-visibility={instance.instanceId} className="mt-4 border-t border-hairline/40 pt-3">
       <summary className="cursor-pointer rounded-md py-1 text-[12px] font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.modelsShown")}</summary>
       <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.modelsShownHint")}</p>
+      {groups.length > 1 && (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-b border-hairline/40 pb-2">
+          {groups.map(({ prefix, ids }) => {
+            const shown = official.filter((option) => ids.includes(option.id) && option.hidden !== true).length;
+            return (
+              <label key={prefix} className="flex items-center gap-2 text-[12px] font-medium text-ink">
+                <input type="checkbox" checked={shown > 0} disabled={saving}
+                  data-model-group={`${instance.instanceId}/${prefix}`}
+                  ref={(el) => { if (el) el.indeterminate = shown > 0 && shown < ids.length; }}
+                  onChange={(event) => toggleGroup(prefix, event.target.checked)} />
+                <span>{prefix === "opencode" ? t("engines.modelGroupZen") : prefix} ({shown}/{ids.length})</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
       <div className="mt-2 flex flex-col gap-1">
         {official.map((option) => (
           <label key={option.id} className="flex items-center gap-2 text-[12px] text-ink">
@@ -450,7 +495,7 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
     <EngineCard instance={instance} bare={bare}>
       {instance.disabled === true && <p data-engine-disabled={instance.instanceId} className="mb-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.disableHint")}</p>}
       {policyNote}
-      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed />}
+      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} description={instance.codexEndpoint ? t("agentEndpoints.codexHint") : undefined} unframed />}
       {engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
       {/* The setup panel that first said so is gone once the engine is Ready. */}
       {engineReady(instance) && <AppCopyNotice instance={instance} className="mt-3" />}
@@ -463,11 +508,13 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
             <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
           )
       )}
-      <ServiceAccounts instance={instance} />
+      {/* Antigravity keeps its accounts as instances: its card lists them in AntigravityAccounts instead. */}
+      {instance.driverKind !== "antigravityAgent" && <ServiceAccounts instance={instance} />}
       {instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
       {instance.driverKind === "antigravityAgent" && (
         <div className="mt-3 space-y-3">
           {instance.snapshot.authenticated && <p className="break-words text-[12px] text-ink-secondary">{instance.snapshot.account?.email ?? t("engineSetup.antigravity.emailUnavailable")}</p>}
+          <AntigravityAccounts instanceId={instance.instanceId} />
           <AntigravityAddAccount source={instance} />
           {instance.snapshot.authenticated === true && instance.authentication?.signOut === true && <AntigravityAccountAction instance={instance} action="signOut" />}
           {instance.instanceId.startsWith("antigravity-") && <AntigravityAccountAction instance={instance} action="remove" />}
@@ -590,7 +637,7 @@ export function EnginesSettings({ simple = false, more }: { simple?: boolean; mo
   const { state } = useStore();
   // Leaving Settings ends the "now uses the copy OpenMausBot installed" lines.
   useEffect(() => forgetAppCopySwitches, []);
-  const listed = state.instances.filter((i) => i.readOnly || i.cli !== undefined || i.cliDefault !== undefined || i.snapshot.state === "unavailable" || isApiKeyEngine(i) || i.claudeEndpoint !== undefined);
+  const listed = state.instances.filter((i) => i.readOnly || i.cli !== undefined || i.cliDefault !== undefined || i.snapshot.state === "unavailable" || isApiKeyEngine(i) || i.claudeEndpoint !== undefined || i.codexEndpoint !== undefined);
   // A provider's accounts share one card, which takes the place of its first account.
   const groups = new Map<AccountGroup, InstanceInfo[]>();
   for (const instance of listed) {
@@ -605,19 +652,21 @@ export function EnginesSettings({ simple = false, more }: { simple?: boolean; mo
   // A hidden ordinary Claude instance takes its card, and the endpoint section inside it, away. A hosted
   // workspace lists every engine read-only and refuses instance changes, so there the section has no Add.
   const hostedWorkspace = rows.length > 0 && rows.every((instance) => instance.readOnly);
+  const orphanCodexEndpoints = !groups.has("chatgpt") && !hostedWorkspace;
   const orphanEndpoints = !groups.has("claude") && !hostedWorkspace;
   const isReady = (instance: InstanceInfo) => { const group = groupOf(instance); return group ? accountsReady(groups.get(group)!) : engineReady(instance); };
   const renderEngine = (instance: InstanceInfo, bare = false) => {
     const group = groupOf(instance);
     return group
       ? <AccountsCard group={group} accounts={groups.get(group)!} bare={bare}
-        advanced={<>{group === "claude" && <ClaudeEndpoints />}<EngineAdvanced instance={instance} /></>} />
+        advanced={<>{group === "claude" ? <ClaudeEndpoints /> : <CodexEndpoints />}<EngineAdvanced instance={instance} /></>} />
       : <EngineRow instance={instance} bare={bare} />;
   };
 
   if (simple && more) return <>
     <SimpleEngines rows={rows} isReady={isReady} renderEngine={renderEngine} more={more} />
     {orphanEndpoints && <div className="px-4"><ClaudeEndpoints /></div>}
+    {orphanCodexEndpoints && <div className="px-4"><CodexEndpoints /></div>}
   </>;
 
   return (
@@ -631,6 +680,7 @@ export function EnginesSettings({ simple = false, more }: { simple?: boolean; mo
       </div>
       <EngineSections instances={rows} isReady={isReady} renderEngine={renderEngine} />
       {orphanEndpoints && <div className="px-4"><ClaudeEndpoints /></div>}
+      {orphanCodexEndpoints && <div className="px-4"><CodexEndpoints /></div>}
       <HiddenEngines />
       <CacheKeepWarmSettings />
     </div>

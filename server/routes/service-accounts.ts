@@ -16,11 +16,20 @@ export interface ServiceAccountRouteDeps {
   refresh(): void;
   /** After a switch: idle CLI processes of this engine still run under the account just switched away from. */
   reclaim(instanceId: string): void;
+  /** Per-engine quota auto-switch state; absent when the host does not wire the feature. */
+  autoSwitch?: {
+    enabled(id: string): boolean;
+    setEnabled(id: string, on: boolean): void;
+    status(id: string): { enabled: boolean; limited: Array<{ accountId: string; until: number }> };
+  };
   /** Tests keep snapshots in their own folder. */
   root?: string;
 }
 
 const PATH = /^\/api\/instances\/([\w.-]+)\/service-accounts(?:\/([a-f0-9-]{36})(\/switch)?)?$/;
+const AUTO_SWITCH_PATH = /^\/api\/instances\/([\w.-]+)\/service-accounts\/auto-switch$/;
+
+const AUTO_SWITCH_UNAVAILABLE = { enabled: false, limited: [] as Array<{ accountId: string; until: number }>, available: false };
 
 let pending: Promise<unknown> = Promise.resolve();
 
@@ -32,6 +41,24 @@ function exclusive<T>(work: () => Promise<T>): Promise<T> {
 
 export function createServiceAccountRoutes(deps: ServiceAccountRouteDeps): RouteHandler {
   return async ({ req, res, path, method, json, readBody }) => {
+    const autoSwitchMatch = AUTO_SWITCH_PATH.exec(path);
+    if (autoSwitchMatch) {
+      const instanceId = autoSwitchMatch[1]!;
+      if (!deps.instance(instanceId)) return json(res, 404, { error: "Unknown engine." });
+      if (method !== "GET" && method !== "PUT") return PASS;
+      if (method === "GET") {
+        return json(res, 200, { autoSwitch: deps.autoSwitch ? deps.autoSwitch.status(instanceId) : AUTO_SWITCH_UNAVAILABLE });
+      }
+      if (deps.readOnly()) return json(res, 403, { error: "Engine settings are managed by this workspace." });
+      if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+        return json(res, 415, { error: "content-type must be application/json" });
+      }
+      const body = await readBody(req, 8192);
+      const enabled = body && typeof body === "object" ? (body as { enabled?: unknown }).enabled : undefined;
+      if (typeof enabled !== "boolean") return json(res, 400, { error: "enabled must be true or false." });
+      if (deps.autoSwitch) deps.autoSwitch.setEnabled(instanceId, enabled);
+      return json(res, 200, { autoSwitch: deps.autoSwitch ? deps.autoSwitch.status(instanceId) : AUTO_SWITCH_UNAVAILABLE });
+    }
     const match = PATH.exec(path);
     if (!match) return PASS;
     const instanceId = match[1]!;

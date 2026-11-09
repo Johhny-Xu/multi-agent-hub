@@ -362,6 +362,16 @@ export function lmStudioV1Catalog(
   return { ids, loaded, windows };
 }
 
+/** Per-host allow-list for injected router models (personal trim of a big router catalog):
+ * OMB_INJECT_ALLOW_<HOST> = comma-separated model ids, e.g. OMB_INJECT_ALLOW_9ROUTER="ollama/gpt-oss:120b,trae".
+ * Unset or empty keeps every model the host lists. */
+export function injectAllowList(hostId: string, env: Record<string, string | undefined>): Set<string> | null {
+  const name = `OMB_INJECT_ALLOW_${hostId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+  const raw = env[name] ?? process.env[name];
+  const ids = (raw ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  return ids.length ? new Set(ids) : null;
+}
+
 export async function probeLocalInjects(
   env: Record<string, string | undefined> = process.env,
   fetchImpl: typeof fetch = fetch,
@@ -395,7 +405,9 @@ export async function probeLocalInjects(
     }),
   );
   for (const { host, ids, loaded, windows } of pages) {
+    const allow = injectAllowList(host.id, env);
     for (const model of ids) {
+      if (allow && !allow.has(model)) continue;
       const contextWindow = windows.get(model);
       found.push({
         id: encodeInjectId(host.id, model),

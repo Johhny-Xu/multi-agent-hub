@@ -11,10 +11,32 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 
+/** checkin.mjs 尚未在 checkin.d.mts 里声明的导出，按实现的真实行为就地补类型 */
+interface QoderCampaignRow {
+  campaignId?: string;
+  campaign_id?: string;
+  actionType?: string;
+  action_type?: string;
+  claimStatus?: string;
+  claim_status?: string;
+  startAt?: number;
+  endAt?: number;
+  [key: string]: unknown;
+}
+
+type CheckinModule = typeof import('./checkin.mjs') & {
+  extractQoderCampaigns(payload: unknown): QoderCampaignRow[];
+  qoderInWindow(row: QoderCampaignRow, nowSec?: number): boolean;
+  qoderClaimedToday(row: QoderCampaignRow, nowSec?: number): boolean;
+  qoderTodayWindowStart(nowSec?: number): number;
+  qoderNextWindowStart(row: QoderCampaignRow): number;
+  qoderPendingWindow(staleClaimed: QoderCampaignRow[], nowSec?: number): { retryAt: number; message: string } | null;
+};
+
 const {
   extractQoderCampaigns, qoderInWindow, qoderClaimedToday, qoderNextWindowStart, qoderPendingWindow,
   qoderTodayWindowStart,
-} = await import('./checkin.mjs');
+} = (await import('./checkin.mjs')) as CheckinModule;
 const {
   qoderHeaders,
 } = await import('./qoder.mjs');
@@ -142,7 +164,7 @@ test('UMID 缓存按地区目录读取，与国际版隔离', async () => {
     await mkdir(dir, { recursive: true });
     const cached = join(dir, process.platform === 'win32' ? 'runtime-info.exe' : 'runtime-info');
     await writeFile(cached, 'test');
-    const found = await device.findQoderUmidComponent(home, 'qoder-cn');
+    const found = (await device.findQoderUmidComponent(home, 'qoder-cn'))!;
     assert.equal(found.path, cached);
     assert.equal(found.source, 'cache');
     assert.equal(found.env, 0);
@@ -168,7 +190,7 @@ test('CN 官方包安装使用本机架构并写入地区缓存（npm 全部 moc
   content.copy(tar, 512);
   const body = gzipSync(tar);
   const integrity = `sha512-${createHash('sha512').update(body).digest('base64')}`;
-  const seen = [];
+  const seen: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = async (url) => {
     seen.push(String(url));

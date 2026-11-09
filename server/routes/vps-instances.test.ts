@@ -125,13 +125,13 @@ describe("VPS instance routes", () => {
   });
 
   it("leaves other routes to their own handlers", async () => {
-    const { call } = fixture([], {}, { kind: "session", scopes: ["client"] } as RequestAuthLike);
+    const { call } = fixture([], {}, { kind: "session", scopes: ["client"] } as unknown as RequestAuthLike);
     await expect(call("GET", "/api/auth/session")).rejects.toThrow("route passed GET /api/auth/session");
     await expect(call("POST", "/api/routines")).rejects.toThrow("route passed POST /api/routines");
   });
 
   it("keeps VPS management to the owner", async () => {
-    const { call } = fixture([], {}, { kind: "session", scopes: ["client"] } as RequestAuthLike);
+    const { call } = fixture([], {}, { kind: "session", scopes: ["client"] } as unknown as RequestAuthLike);
     const refused = await call("GET", "/api/vps/instances");
     expect(refused.status).toBe(403);
     expect(refused.body.error).toContain("owner");

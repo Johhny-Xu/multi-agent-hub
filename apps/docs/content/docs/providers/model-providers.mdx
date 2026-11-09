@@ -74,8 +74,9 @@ your bots use (see [OpenCode 2.x](#opencode-2x)).
    ```
 
    Keep this file plain JSON, with no comments or trailing commas.
-   OpenMausBot edits it when an OpenCode bot uses a model running on this
-   computer.
+   OpenMausBot never edits this file: a model running on this computer reaches
+   OpenCode through that session's own config (`OPENCODE_CONFIG_CONTENT`),
+   with its key passed as an environment variable.
 
 3. Refresh OpenCode's models in OpenMausBot.
 

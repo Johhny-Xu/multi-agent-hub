@@ -55,7 +55,7 @@ export interface Quota {
   total?: number;
   remaining?: number;
   remainingPercentage?: number;
-  resetAt?: string;
+  resetAt?: string | null;
   unlimited?: boolean;
   recurring?: boolean;
   isCreditBalance?: boolean;
@@ -392,13 +392,11 @@ export function PlanUsageSummary() {
   );
 }
 
-export function PlanUsage({
-  instances: propInstances,
-  quotaReport: propQuotaReport,
-}: {
+export function PlanUsage(props: {
   instances?: InstanceInfo[];
   quotaReport?: QuotaReport;
-} = {}) {
+}) {
+  const { instances: propInstances, quotaReport: propQuotaReport } = props ?? {};
   const { report, quotaReport: fetchedQuota, loading, error, now, load } = usePlanUsage();
   const quotaReport = propQuotaReport ?? fetchedQuota;
 

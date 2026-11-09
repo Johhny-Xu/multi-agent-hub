@@ -12,12 +12,13 @@
 // Sign-in lives in `~/.perch/cli-auth-session.json` (or $PERCH_CLI_AUTH_DIR); only its shape is
 // read here, never a token value. No login flow is driven from this driver.
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 
 import type { ModelCatalog, ProviderSnapshot } from "../../contracts.ts";
 import { augmentedPath, userHome } from "../../env-path.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import type { AcpMcpServer } from "../turn-mcp.ts";
 import { PERCH_TIERS, perchModelOptions, perchPrivateSettingsDir, perchSelectedModel, selectPerchModel } from "./perch-models.ts";
 
 /**
@@ -86,6 +87,35 @@ export function resolvePerchCli(env: Record<string, string | undefined>, cli: st
   return cli || "perch";
 }
 
+const OMB_MCP_NAMES = ".omb-mcp-names.json";
+
+/** Perch 2.4.125 accepts ACP `mcpServers` but never mounts them (E63, 2026-11-09 probe); it does load the session
+ * folder's `.perch/mcp.json`. The turn's servers are merged into that file; names OpenMausBot wrote last time and no
+ * longer sends are removed, and anything else in the file is left as the user wrote it. */
+export function perchProjectMcpConfig(cwd: string, mcpServers: AcpMcpServer[]): void {
+  const dir = join(cwd, ".perch");
+  const file = join(dir, "mcp.json");
+  const namesFile = join(dir, OMB_MCP_NAMES);
+  let existing: { servers?: Record<string, unknown> } & Record<string, unknown> = {};
+  let ours: string[] = [];
+  try { existing = JSON.parse(readFileSync(file, "utf-8")); } catch { existing = {}; }
+  try { ours = JSON.parse(readFileSync(namesFile, "utf-8")); } catch { ours = []; }
+  if (!Array.isArray(ours)) ours = [];
+  if (mcpServers.length === 0 && ours.length === 0) return;
+  const servers: Record<string, unknown> = { ...(existing.servers && typeof existing.servers === "object" ? existing.servers : {}) };
+  for (const name of ours) delete servers[name];
+  for (const server of mcpServers) {
+    servers[server.name] = "command" in server
+      ? { type: "stdio", command: server.command, args: server.args,
+        env: Object.fromEntries(server.env.map(({ name, value }) => [name, value])) }
+      : { type: server.type, url: server.url,
+        headers: Object.fromEntries(server.headers.map(({ name, value }) => [name, value])) };
+  }
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...existing, servers }, null, 2), { mode: 0o600 });
+  writeFileSync(namesFile, JSON.stringify(mcpServers.map((server) => server.name)), { mode: 0o600 });
+}
+
 const support: AcpSupport = {
   driverKind: "perchAgent",
   displayName: "Perch",
@@ -115,6 +145,7 @@ const support: AcpSupport = {
   applyTurnEnv: (env, context) => {
     if (!env.PERCH_CLI_SETTINGS_DIR?.trim()) env.PERCH_CLI_SETTINGS_DIR = perchPrivateSettingsDir(env);
     selectPerchModel(env, context.model ?? context.requestedModel);
+    perchProjectMcpConfig(context.cwd, context.mcpServers);
   },
   spawnFingerprint: (env) => perchSelectedModel(env),
 
@@ -165,6 +196,8 @@ const support: AcpSupport = {
     });
   }),
 
+  restartOnMcpChange: true,
+  mcpServersFromLaunch: true,
   pickAuthMethod: () => null,
   authFailure: "continue",
   isAuthenticated: (env) => perchSignedIn(env),

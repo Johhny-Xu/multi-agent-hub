@@ -364,9 +364,12 @@ const threadsConfigSchema = z.object({
 const newBotsConfigSchema = z.object({
   /** Effort for a new bot whose model selection names none. */
   effort: z.enum(EFFORT_LEVELS).optional(),
+  /** Browser profile for a new bot whose creation request names none (defaults to "mychrome"). */
+  browserProfile: z.string().trim().min(1).max(100).optional(),
 }).strict();
 const newBotsPatchSchema = z.object({
   effort: newBotsConfigSchema.shape.effort.nullable(),
+  browserProfile: newBotsConfigSchema.shape.browserProfile.nullable(),
 }).strict();
 const threadsPatchSchema = threadsConfigSchema.extend({
   maxConcurrentPerBot: threadsConfigSchema.shape.maxConcurrentPerBot.optional(),
@@ -464,8 +467,8 @@ const appConfigSchema = z.object({
   live: liveConfigSchema.optional(),
   /** Image provider credentials stay separate; choosing a router never reuses a cloud key. */
   imageGen: imageGenConfigSchema.optional(),
-  /** Non-secret profile details; aboutMe is shared with every bot. */
-  profile: z.object({ name: optionalText, email: optionalText, aboutMe: z.string().max(24_000).optional(), avatarUrl: z.union([z.literal(""), botAvatarUrlSchema]).optional() }).optional(),
+  /** Non-secret profile details; aboutMe is shared with every bot, and so are everyBotRules, ahead of each bot's own instructions. */
+  everyBotRules: z.string().max(24_000).optional(), profile: z.object({ name: optionalText, email: optionalText, aboutMe: z.string().max(24_000).optional(), avatarUrl: z.union([z.literal(""), botAvatarUrlSchema]).optional() }).optional(),
   /** UI language override (BCP-47, lowercase), absent follows the system; what a paired phone calls this computer, "" for the default. */
   language: optionalText, computerName: z.string().trim().max(63).optional(),
   rooms: roomConfigSchema.optional(),
@@ -521,7 +524,7 @@ export interface AppConfig extends HelperConfig {
   autoPlacement?: { enabled?: boolean; cpuHigh?: number; cpuLow?: number; memHighPct?: number; memLowPct?: number; memMinMb?: number };
   /** UI creation template. Saving it never mutates a bot or grants access. */
   newBotDefaults?: NewBotDefaults;
-  newBots?: { effort?: EffortLevel };
+  newBots?: { effort?: EffortLevel; browserProfile?: string };
   cliStartup?: {
     access: "local" | "tunnel" | "tailscale" | "public-url";
     publicUrl?: string;
@@ -559,7 +562,7 @@ export interface AppConfig extends HelperConfig {
   decider?: DeciderConfig;
   imageGen?: ImageGenerationConfig;
   live?: LiveConfig;
-  profile?: { name?: string; email?: string; aboutMe?: string; avatarUrl?: string };
+  profile?: { name?: string; email?: string; aboutMe?: string; avatarUrl?: string }; everyBotRules?: string;
   rooms?: { turnTimeoutMinutes: number };
   mcp?: { callTimeoutMinutes?: number };
   threads?: { maxConcurrentPerBot: number; eventLogMaxBytes?: number; eventLogRetentionDays?: number };
@@ -762,10 +765,10 @@ export function builtInBrowserEnabled(cfg: AppConfig, _env: NodeJS.ProcessEnv = 
   return cfg.features?.browser !== false;
 }
 
-/** Security: off unless true because a read-only folder grant can still be escalated to a shell. */
-export function sharedComputersEnabled(cfg: AppConfig): boolean {
-  return cfg.features?.sharedComputers === true;
-}
+/** Security: every paired session may lend its computer only when true, because a read-only folder grant can still be escalated to a shell. */
+export function sharedComputersEnabled(cfg: AppConfig): boolean { return cfg.features?.sharedComputers === true; }
+/** A self-hosted server's own admin pairings may lend their computer unless this is false (each desktop asks its person first). */
+export function ownerLendingEnabled(cfg: AppConfig): boolean { return cfg.features?.sharedComputers !== false; }
 
 export function claudeUserMcpEnabled(cfg: Pick<AppConfig, "features">): boolean {
   return cfg.features?.claudeUserMcp === true;
@@ -1036,9 +1039,10 @@ export function saveConfig(
     if (legacyWrite && jsonObjectSchema.safeParse(disk.vps).success && (disk.vps as { version?: unknown })?.version === 2) {
       throw Object.assign(new Error(LEGACY_VPS_ALIAS_ERROR), { status: 400 });
     }
-    disk.vps = normalizeVpsConfig(checkedPatch.vps);
+    // StoredVpsConfig is plain JSON (strings, numbers, booleans, arrays of those); the type just has no index signature.
+    disk.vps = normalizeVpsConfig(checkedPatch.vps) as unknown as JsonValue;
   }
-  for (const key of ["language", "computerName"] as const) if (checkedPatch[key] !== undefined) disk[key] = checkedPatch[key];
+  for (const key of ["language", "computerName", "everyBotRules"] as const) if (checkedPatch[key] !== undefined) disk[key] = checkedPatch[key];
   if (checkedPatch.customDomain !== undefined) disk.customDomain = checkedPatch.customDomain;
   if (checkedPatch.signIn !== undefined) disk.signIn = checkedPatch.signIn;
   // Replace the section so clearing a backup cannot revive the old selection.
