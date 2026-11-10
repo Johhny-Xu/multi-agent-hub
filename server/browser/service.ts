@@ -635,6 +635,13 @@ export class BrowserService {
     };
   }
 
+  /** The browser's active tab page for the Jev observer, or null while no browser runs or it has no tab. Never starts one. */
+  activePage(target: BrowserTarget): CdpPage | null {
+    const profile = this.#bySession(target.session);
+    if (!profile?.run || profile.run.closing) return null;
+    return profile.active()?.page ?? null;
+  }
+
   // People.
 
   async attachViewer(target: BrowserTarget, options: ViewerOptions, push: (output: ViewerOutput) => void): Promise<Viewer> {

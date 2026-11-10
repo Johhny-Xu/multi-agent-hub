@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BrowserLive } from "../browser-live.ts";
 import { attachesToChrome, type BrowserRuntime } from "../browser-runtime.ts";
+import type { StepContext } from "../browser-steps.ts";
 import type { ListenerOwnership } from "./egress/ownership.ts";
 import type { EgressHost } from "./egress/policy.ts";
 import { REDDIT_REFUSAL } from "./egress/reddit.ts";
@@ -90,7 +91,13 @@ describe("the runtime router", () => {
     await expect(runtime.closeIfIdle("s", 1000, CHROME)).resolves.toBe(false);
     expect(old.closeIfIdle).not.toHaveBeenCalled();
     await expect(runtime.closeIfIdle("s", 1000, AGENT_BROWSER)).resolves.toBe(true);
-    expect(old.closeIfIdle).toHaveBeenCalledWith("s", 1000, AGENT_BROWSER);
+    expect(old.closeIfIdle).toHaveBeenCalledWith("s", 1000, AGENT_BROWSER, undefined);
+  });
+
+  it("passes on whether an attached browser's own close is only a disconnect", async () => {
+    const { old, runtime } = engines();
+    await expect(runtime.closeIfIdle("s", 1000, AGENT_BROWSER, { attached: true })).resolves.toBe(true);
+    expect(old.closeIfIdle).toHaveBeenCalledWith("s", 1000, AGENT_BROWSER, { attached: true });
   });
 
   /** As server/host/browser.ts wires it. */
@@ -149,6 +156,17 @@ describe("the runtime router", () => {
     expect(refused).toEqual(["s1"]);
     expect(afterCall).toHaveBeenCalledOnce();
     expect(old.agentRpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("refusal sees who is calling: the bot and the conversation of the call", async () => {
+    const seen: Array<{ botId: string; threadId: string }> = [];
+    const { old, runtime } = engines({ refusal: (_session, _spec, _params, ctx) => { if (ctx) seen.push({ botId: ctx.botId, threadId: ctx.threadId }); return null; } });
+    const ctx = { botId: "scout", threadId: "thread-1", generation: "gen-1" } as unknown as StepContext;
+    await expect(runtime.agentRpc("s1", AGENT_BROWSER, "tools/call", { name: "agent_browser_snapshot" }, undefined, ctx)).resolves.toBe("agent-browser");
+    expect(seen).toEqual([{ botId: "scout", threadId: "thread-1" }]);
+    expect(old.agentRpc).toHaveBeenCalledWith("s1", AGENT_BROWSER, "tools/call", { name: "agent_browser_snapshot" }, undefined, ctx);
+    await expect(runtime.agentRpc("s1", AGENT_BROWSER, "tools/list", {}, undefined, ctx), "a listing is not refused").resolves.toBe("agent-browser");
+    expect(seen).toHaveLength(1);
   });
 
   it("asks afterClaim once beforeDispatch has claimed, and its refusal reaches neither engine", async () => {

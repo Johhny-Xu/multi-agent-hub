@@ -16,7 +16,7 @@ import { browserStreamAccess, createPreviewStreamClient, type PreviewStreamClien
 import { createLiveStreamClient, type LiveResume, type LiveStreamClient } from "@/lib/browser-stream-v1";
 import { BROWSER_HELD_ELSEWHERE } from "../../shared/browser-held";
 import { passkeyWallAt } from "../../shared/passkey-wall";
-import { browserScope, withBrowserScope } from "@/lib/team-browser";
+import { withBrowserScope } from "@/lib/team-browser";
 
 const button = "rounded-md p-1.5 text-ink-secondary hover:bg-inset hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed";
 const NO_NAV: BrowserNav = { url: "", loading: false, canGoBack: false, canGoForward: false };
@@ -88,7 +88,8 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const pageNow = useRef<string | null>(null);
   const latest = useRef({ openSignInPage: () => {}, takeControl: () => {} });
   const signInOpen = state.computerControl?.[bot.id]?.help?.place === "browser";
-  const scopedThread = browserScope(state.config?.team, bot.threadId).threadId;
+  // Always the conversation on screen: a team picks whose browser by it, and with the cloud browser each conversation has its own.
+  const scopedThread = bot.threadId || undefined;
   keepNow.current = kept || signInOpen;
   const profileName = bot.browserProfile === "guest" ? t("browser.panel.temporary")
     : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.panel.ownBrowser", { name: bot.name });

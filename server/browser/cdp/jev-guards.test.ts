@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import type { AutomationActionGuard } from "../jev-types.ts";
 import { JEV_VALIDATE_GUARD_SCRIPT } from "./jev-dom.ts";
@@ -17,9 +18,9 @@ describe("jev-guards", () => {
 
   it("rejects changed form values target identity and nearby context", () => {
     const script = JEV_VALIDATE_GUARD_SCRIPT("guard_1", "el_1");
-    expect(script).toContain("node.value !== savedGuard.value");
-    expect(script).toContain("node.checked !== savedGuard.checked");
-    expect(script).toContain("node.selectedIndex !== savedGuard.selectedIndex");
+    expect(script).toContain("(node.value ?? null) !== savedGuard.value");
+    expect(script).toContain("(node.checked ?? null) !== savedGuard.checked");
+    expect(script).toContain("(node.selectedIndex ?? null) !== savedGuard.selectedIndex");
   });
 
   it("uses full semantics before typing waiting scrolling and done", () => {
@@ -189,5 +190,15 @@ describe("jev-guards", () => {
     };
     expect(execution.state).toBe("completed");
     expect(execution.postObservation).toBe("failed");
+  });
+
+  it("keeps a link valid: properties a link lacks match the observer's null (E69)", () => {
+    const link = { isConnected: true, matches: () => false } as Record<string, unknown>;
+    const saved = { value: null, checked: null, selectedIndex: null, readOnly: null, disabled: false };
+    const state = { epoch: "1", nodes: new Map([[3, link]]), guards: new Map([["g_a", { epoch: "1", url: "https://example.com/", origin: "https://example.com", guardEntries: new Map([[3, saved]]) }]]) };
+    const run = () => runInNewContext(JEV_VALIDATE_GUARD_SCRIPT("g_a", "el_3"), { __ombJevState: state, location: { href: "https://example.com/", origin: "https://example.com" } });
+    expect(run()).toBe(true);
+    link.value = "typed";
+    expect(run()).toBe(false);
   });
 });

@@ -2,9 +2,9 @@
 import type { BrowserObservation, BrowserOperation, BrowserScope } from "../jev-types.ts";
 import type { CdpPage } from "./page.ts";
 import type { NodeHandle } from "./refs.ts";
-import { DriverError, type DriverErrorCode } from "./errors.ts";
+import { DriverError } from "./errors.ts";
 import {
-  DomObservationResult,
+  type DomObservationResult,
   JEV_DOM_SCRIPT,
   JEV_RESOLVE_TARGET_SCRIPT,
   JEV_VALIDATE_GUARD_SCRIPT,
@@ -21,12 +21,9 @@ export async function readJevObservation(
 ): Promise<BrowserObservation> {
   const mainFrameId = page.frames.mainFrameId;
 
-  // If there are other frames and options.allowFrames is not set, report unsupported frames.
-  // Reads a "_frames" field FrameTree does not have (its map is private #frames), so this stays false; kept as-is.
-  const hasSubframes = Array.from((page.frames as unknown as { _frames?: Map<string, { parentId: string | null }> })["_frames"]?.values() ?? []).some((f) => f.parentId !== null);
-  if (hasSubframes && !options.allowFrames) {
-    throw new DriverError("unsupported-observation" as DriverErrorCode, "Page contains frames or iframes; fast DOM observer only supports main document.");
-  }
+  // The fast observer reads the main document only. A page with iframes (ads, embeds, consent widgets) is still observed:
+  // its subframes are counted and named in the state text rather than failing the whole observation.
+  const subframes = page.frames.all().filter((frame) => frame.parentId !== null).length;
 
   const raw = await page.frames.inWorld(mainFrameId, async (session, contextId) => {
     const evalResult = await session.send<{
@@ -50,6 +47,9 @@ export async function readJevObservation(
 
   return {
     ...raw,
+    ...(subframes > 0 && !options.allowFrames
+      ? { stateText: `${raw.stateText}\n[${subframes} embedded frame(s) not observed; only the main document is listed]` }
+      : {}),
     tabId: scope.tabId ?? page.targetId,
   };
 }

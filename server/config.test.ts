@@ -32,6 +32,7 @@ import { cacheUntilConfigChanges,
   showToolCallsEnabled,
   saveConfig,
   skillAuthoringEnabled,
+  egmSkillsEnabled,
   sharedComputersEnabled,
   builtInBrowserEnabled,
   browserProfilePartitionId,
@@ -611,6 +612,16 @@ describe("configuration boundaries", () => {
     });
     expect(localVmMode({ localVm: { mode: "pool" } })).toBe("pool");
     expect(localVmMode({})).toBe("shared");
+  });
+
+  it("keeps the built-in EGM skills on by default with an explicit opt-out that round-trips", () => {
+    expect(egmSkillsEnabled({})).toBe(true);
+    expect(egmSkillsEnabled({ egmSkills: {} })).toBe(true);
+    expect(parseConfigPatch({ egmSkills: { enabled: false } })).toEqual({ egmSkills: { enabled: false } });
+    expect(egmSkillsEnabled({ egmSkills: { enabled: false } })).toBe(false);
+    expect(egmSkillsEnabled({ egmSkills: { enabled: true } })).toBe(true);
+    expect(() => parseConfigPatch({ egmSkills: { nonsense: true } })).toThrow();
+    expect(parseStoredConfig({ egmSkills: { enabled: false } })).toEqual({ egmSkills: { enabled: false } });
   });
 
   it("keeps skill authoring on by default with an explicit opt-out, and the browser off by default", () => {

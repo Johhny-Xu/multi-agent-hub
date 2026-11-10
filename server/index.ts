@@ -93,6 +93,7 @@ import { runtimeRequestCardFields } from "./request-card.ts";
 import type { DirectSendInput, DirectSendReceipt } from "./direct-send.ts";
 import { finishedWithoutSummaryLine, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts";
 import { chosenPlace, pickComputer } from "./computer-selection.ts";
+import { createCloudOffload } from "./host/cloud-offload.ts"; import { cloudOffloadSettings } from "./cloud-browser.ts";
 import { hostLoad, type HostLoad } from "./host-load.ts";
 import * as boat from "./boat.ts"; import { keyHint, keyStatus, nestedKeyStatus, withoutKeyHints } from "./key-hint.ts";
 import { cloudComputerRpc } from "./cloud-computer-tools.ts";
@@ -168,6 +169,7 @@ import {
   showToolCallsEnabled,
   claudeUserMcpEnabled,
   skillAuthoringEnabled,
+  egmSkillsEnabled,
   skillReviewEnabled,
   skillReviewSteps,
   autoRecallEnabled,
@@ -2404,11 +2406,12 @@ function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string): Dir
   return claim;
 }
 
+const cloudOffload = createCloudOffload({ cfg, dataDir: DATA_DIR, store: () => store });
 const {
   browserRuntime, browserLive, usedBrowserSessions, browserSweep, temporaryBrowserSessions,
   currentBrowserSession, forgetTemporaryBrowser, myChromeAvailable, usesMyChrome, lentChromeSummary, browserSessionSpec, browserIntegration,
-  browserReady, currentBrowserSpec, loginInput, browserSystemPrompt, closeBrowser, browserEngineSwitched, eraseDeletedBrowser, engineSummary, browserSessionsOf, signedInSitesTarget, uploadPaths, eraseAudienceBrowsers,
-} = createBrowserHost({ cfg, store: () => store, turnResources, activeInternalGenerationByThread, mintInternalCapability, DESKTOP_MANAGED, CLOUD_HOME, HOSTED_WORKSPACE, PORT, engineMemory, audienceOf: teamHost.browserAudience, ...(CLOUD_TEAM ? { browserBox: (fd: number, ro: readonly string[]) => botBox.browserBox(fd, ro) } : {}), lendRefusal: (turn) => cloudLendingRefusal({ botId: store.botByThread(turn.threadId)?.id ?? "", threadId: turn.threadId, generation: turn.generation }), device: () => deviceLinks.route(CLOUD_HOME_LENDER) ?? sharedComputers.internetAway(CLOUD_HOME_LENDER) ?? { unshared: true as const }, lentChrome: CLOUD_PERSONAL ? { route: () => deviceLinks.chromeRoute(CLOUD_HOME_LENDER), lender: () => sharedComputers.chromeLender(CLOUD_HOME_LENDER) } : undefined });
+  browserReady, currentBrowserSpec, loginInput, browserSystemPrompt, closeBrowser, browserEngineSwitched, eraseDeletedBrowser, engineSummary, browserSessionsOf, signedInSitesTarget, uploadPaths, eraseAudienceBrowsers, threadBrowserSession,
+} = createBrowserHost({ cfg, store: () => store, cloudBrowser: (botId, session, threadId, profile) => cloudOffload.browserFor(botId, session, threadId, profile), cloudAuthRefusal: (session, cdpUrl, params, who) => cloudOffload.authRefusal(session, cdpUrl, params, who), cloudSession: (botId, threadId, base, close) => cloudOffload.conversationSession(botId, threadId, base, close), cloudPeekSession: (botId, threadId, base) => cloudOffload.peekSession(botId, threadId, base), releaseBrowserSeat: (session, owner) => turnResources.releaseOne(`browser:${session}`, owner), turnResources, activeInternalGenerationByThread, mintInternalCapability, DESKTOP_MANAGED, CLOUD_HOME, HOSTED_WORKSPACE, PORT, engineMemory, decider, audienceOf: teamHost.browserAudience, ...(CLOUD_TEAM ? { browserBox: (fd: number, ro: readonly string[]) => botBox.browserBox(fd, ro) } : {}), lendRefusal: (turn) => cloudLendingRefusal({ botId: store.botByThread(turn.threadId)?.id ?? "", threadId: turn.threadId, generation: turn.generation }), device: () => deviceLinks.route(CLOUD_HOME_LENDER) ?? sharedComputers.internetAway(CLOUD_HOME_LENDER) ?? { unshared: true as const }, lentChrome: CLOUD_PERSONAL ? { route: () => deviceLinks.chromeRoute(CLOUD_HOME_LENDER), lender: () => sharedComputers.chromeLender(CLOUD_HOME_LENDER) } : undefined });
 
 const dataSheets = new DataSheetRegistry({
   broadcast: (frame) => broadcast({ ...frame }),
@@ -8492,9 +8495,9 @@ async function beginTurn(
           const session = browser.session;
           // The preview shares the profile with tool calls: claim the same browser:<session> resource, and skip the frame while another thread holds it.
           browserCapture = async () => {
-            const owner = turnResourceOwners.get(threadId);
-            if (!owner || !claimTurnResource(owner, `browser:${session}`)) throw new Error("another thread is using this browser");
-            return browserRuntime.previewFrame(session, () => relayFrame(spec, session), spec);
+            const owner = turnResourceOwners.get(threadId), now = threadBrowserSession(bot.id, liveBot.browserProfile, threadId), at = now.spec ? now.session : session, atSpec = now.spec ?? spec;
+            if (!owner || !claimTurnResource(owner, `browser:${at}`)) throw new Error("another thread is using this browser");
+            return browserRuntime.previewFrame(at, () => relayFrame(atSpec, at), atSpec);
           };
         }
       }
@@ -11792,7 +11795,7 @@ function signInMessage(botId: string, threadId: string, messageId: string): Mess
 const signInSettle = createSignInSettle({
   store, signInMessage, answerCardNode, releaseCardNode, resumableCards,
   parkedDirect: (threadId) => coordinator.parkedDirect(threadId) ?? coordinator.active().find((n) => n.threadId === threadId && n.parentId && !n.groupId && n.status === "waiting" && n.cards?.length), settleHelp: (messageId) => computerControl.settleHelp(messageId),
-  handBackBrowser: (bot, threadId) => browserLive.handBack(currentBrowserSession(bot.id, bot.browserProfile, teamHost.browserAudience(threadId))),
+  handBackBrowser: (bot, threadId) => browserLive.handBack(threadBrowserSession(bot.id, bot.browserProfile, threadId).session),
   releaseComputer: (key) => computerControl.release(key), computerKey: botComputerControlKey,
 });
 
@@ -11844,7 +11847,7 @@ function browserPromptFor(bot: { id: string; browserProfile?: string }, agentsMo
 
 /** Null while the browser engine is not installed. */
 async function botBrowserTarget(bot: BotRecord, threadId: string): Promise<{ session: string; spec: { command: string; env: Record<string, string> }; env: NodeJS.ProcessEnv } | null> {
-  const target = await currentBrowserSpec(bot.id, bot.browserProfile, teamHost.browserAudience(threadId));
+  const target = await currentBrowserSpec(bot.id, bot.browserProfile, teamHost.browserAudience(threadId), threadId);
   return target && { ...target, env: browserRuntimeEnv({ ...target.spec.env, AGENT_BROWSER_SESSION: target.session }) };
 }
 
@@ -11978,6 +11981,7 @@ function configStatus() {
     },
     billing: { currency: cfg.billing?.currency ?? "USD", prices: cfg.billing?.prices ?? {} },
     decisions: { retentionDays: decisionRetentionDays(cfg.decisions?.retentionDays) },
+    egmSkills: { enabled: egmSkillsEnabled(cfg) },
     safetyFloor: { enabled: safetyFloorOn() },
     openaiCompat: { ...keyStatus(cfg.openaiCompat?.key), url: cfg.openaiCompat?.url ?? "" },
     composio: {
@@ -11999,7 +12003,7 @@ function configStatus() {
     mcp: { callTimeoutMinutes: mcpCallTimeoutMinutes(cfg) },
     automaticRecovery: cfg.automaticRecovery ?? { enabled: false },
     cacheKeepWarm: cacheKeepWarmSettings(cfg),
-    autoPlacement: autoPlacementSettings(cfg),
+    autoPlacement: autoPlacementSettings(cfg), cloudOffload: cloudOffloadSettings(cfg),
     newBots: cfg.newBots?.effort ? { effort: cfg.newBots.effort } : {},
     threads: {
       maxConcurrentPerBot: maxConcurrentBotThreads(cfg, botThreadsHost(cloudPlanTier.starter())),
@@ -12764,18 +12768,18 @@ ROUTES.push(createWebChatRoutes({ upgrades, bridge: getDefaultUserscriptBridge()
 ROUTES.push(createBrowserViewerRoutes({
   upgrades, viewers: browserLive, dataDir: DATA_DIR, person: (auth) => (auth.kind === "session" ? actorKey(auth) : "local-owner"),
   audience: (auth, threadId) => teamHost.viewerBrowserAudience({ threadId, sees: (id) => visibleTo(viewerFor(auth)).thread(id), person: auth.kind === "session" ? actorKey(auth) : null }),
-  browser: async (botId, audience) => {
+  browser: async (botId, audience, threadId) => {
     const bot = store.bot(botId);
     if (!bot) return { status: 404, error: "no such bot" };
     if (!builtInBrowserEnabled(cfg) || bot.browser === false) return { status: 409, error: "Enable this bot's browser in its profile first." };
-    const browser = await browserIntegration(bot.id, bot.browserProfile, undefined, audience);
+    const browser = await browserIntegration(bot.id, bot.browserProfile, undefined, audience, threadId ?? undefined);
     return browser ? { botId: bot.id, session: browser.session, spec: browser.spec } : { status: 503, error: "Install the browser first." };
   },
   authorize: async (req, auth) => !HOSTED_WORKSPACE || auth.kind !== "session" ? null
     : workspaceAccess ? workspaceAccess.authorize(req, auth) : { status: 503, error: "Workspace sign-in is unavailable." },
-  current: (botId, session, auth, audience) => {
+  current: (botId, session, auth, audience, threadId) => {
     const current = store.bot(botId);
-    return !!current && current.browser !== false && builtInBrowserEnabled(cfg) && currentBrowserSession(current.id, current.browserProfile, audience) === session
+    return !!current && current.browser !== false && builtInBrowserEnabled(cfg) && threadBrowserSession(current.id, current.browserProfile, threadId ?? undefined, audience).session === session
       && (auth.kind !== "session" || (sessions.isLive(auth.session.id) && visibleTo(viewerFor(auth)).bot(botId)));
   },
   restartRefusal: (session) => browserRestartRefusal(browserRuntime.interrupted(session), store.bots.filter((candidate) => candidate.busy
@@ -13456,8 +13460,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         if (!bot || bot.browser === false || bot.computer === "off" || !builtInBrowserEnabled(cfg)) {
           return json(res, 403, { error: "browser tools are not enabled for this bot" });
         }
-        const browser = await browserIntegration(bot.id, bot.browserProfile, undefined, teamHost.browserAudience(internalCapability.threadId));
-        if (!browser || browser.session !== internalCapability.browserSession) {
+        const browser = await browserIntegration(bot.id, bot.browserProfile, undefined, teamHost.browserAudience(internalCapability.threadId), internalCapability.threadId);
+        if (!browser || browser.tokenSession !== internalCapability.browserSession) {
           return json(res, 409, { error: "this browser profile changed; start a new turn" });
         }
         if (body?.method !== "tools/list" && body?.method !== "tools/call") {
@@ -13480,7 +13484,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           requireActiveInternalCapability();
           const current = store.bot(bot.id);
           if (!current || current.browser === false || current.computer === "off" || !builtInBrowserEnabled(cfg) ||
-              currentBrowserSession(current.id, current.browserProfile, teamHost.browserAudience(internalCapability.threadId)) !== browser.session) {
+              currentBrowserSession(current.id, current.browserProfile, teamHost.browserAudience(internalCapability.threadId)) !== browser.tokenSession) {
             throw Object.assign(new Error("Browser access changed while connecting."), { status: 409 });
           }
           if (body.method === "tools/call" && !claimTurnResource(internalCapability, `browser:${browser.session}`)) {
@@ -15886,7 +15890,7 @@ const bindHost = process.env.OMB_HOST?.trim() ? HOST : listenHost(server);
 server.listen(PORT, bindHost, async () => {
   companyRuntimeReady();
   console.log(`openmausbot server on http://${bindHost}:${PORT}`);
-  personWaits.boot(); browserSweep.start(); startCloudTeamPolicy({ cloudHome: CLOUD_HOME, dataDir: DATA_DIR, managed: managedPolicy, sessions }); moveFreeze.hold(() => appTriggers.start(), () => void appTriggers.stop()); startCloudHomeConnectedApps({ cloudHome: CLOUD_HOME !== null, dataDir: DATA_DIR, cloudGrant: CLOUD_ENV.OMB_CLOUD_CONNECTED_APPS_GRANT, apply: (access) => { composio.setManagedBrokerAccess(access); broadcast({ kind: "config", ...configStatus() }); } });
+  personWaits.boot(); browserSweep.start(); cloudOffload.start(); startCloudTeamPolicy({ cloudHome: CLOUD_HOME, dataDir: DATA_DIR, managed: managedPolicy, sessions }); moveFreeze.hold(() => appTriggers.start(), () => void appTriggers.stop()); startCloudHomeConnectedApps({ cloudHome: CLOUD_HOME !== null, dataDir: DATA_DIR, cloudGrant: CLOUD_ENV.OMB_CLOUD_CONNECTED_APPS_GRANT, apply: (access) => { composio.setManagedBrokerAccess(access); broadcast({ kind: "config", ...configStatus() }); } });
   void afterFirstEngineRead().then(() => { if (builtInBrowserEnabled(cfg)) chromeLauncher.start(); });
   followupsReady = true; engineUpdates.start();
   drainQueuedSends();
@@ -15957,7 +15961,7 @@ const gracefulShutdown = createGracefulShutdown({
       upgrades.close();
       for (const idle of localVmIdles.values()) idle.cancel();
       cloudComputerPower.close();
-      vps.closeAllVpsDesktopTunnels();
+      vps.closeAllVpsDesktopTunnels(); cloudOffload.close();
       watchdog.stop();
       routines?.close(); void appTriggers.stop();
       calendarCalls?.stop(); botWaits.stop();

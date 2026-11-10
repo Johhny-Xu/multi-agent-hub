@@ -354,6 +354,8 @@ const autoPlacementSchema = z.object({
   memLowPct: z.number().min(0).max(100).optional(),
   memMinMb: z.number().int().min(0).max(1_000_000).optional(),
 }).strict();
+/** FEAT-cloud-offload: Auto bots' browser on a cloud machine first; `guard` keeps the bots' own headless Chrome off this host. */
+const cloudOffloadSchema = z.object({ enabled: z.boolean().optional(), guard: z.boolean().optional(), authDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)).max(200).optional(), requireAuthBots: z.array(z.string().max(128)).max(500).optional(), cloudPageCap: z.number().int().min(1).max(50).optional() }).strict();
 const threadsConfigSchema = z.object({
   maxConcurrentPerBot: z.number().int().min(1).max(MAX_CONCURRENT_BOT_THREADS),
   /** Byte cap for each thread's events/ and native/ log; absent means unbounded. */
@@ -385,6 +387,7 @@ const appConfigSchema = z.object({
   automaticRecovery: automaticRecoverySchema.optional(),
   cacheKeepWarm: cacheKeepWarmSchema.optional(),
   autoPlacement: autoPlacementSchema.optional(),
+  cloudOffload: cloudOffloadSchema.optional(),
   newBotDefaults: newBotDefaultsSchema.optional(),
   newBots: newBotsConfigSchema.optional(),
   /** CLI launch preferences; never enables remote access implicitly. */
@@ -489,6 +492,7 @@ const appConfigSchema = z.object({
   decisions: z.object({ retentionDays: z.number().int().min(1).max(3650).optional() }).strict().optional(),
   loopGuard: loopGuardConfigSchema.optional(),
   safetyFloor: z.object({ enabled: z.boolean().optional() }).strict().optional(), // off by default: safetyFloorEnabled in server/safety-floor-gate.ts
+  egmSkills: z.object({ enabled: z.boolean().optional() }).strict().optional(), // built-in EGM skills for every bot, on unless false
   localVm: localVmConfigSchema.optional(),
   features: featureConfigSchema.optional(),
   onboarding: onboardingConfigSchema.optional(),
@@ -522,6 +526,8 @@ export interface AppConfig extends HelperConfig {
   cacheKeepWarm?: { enabled: boolean; windowMinutes?: number };
   /** Auto placement: which local load sends a turn to the cloud. Absent = defaults, enabled. */
   autoPlacement?: { enabled?: boolean; cpuHigh?: number; cpuLow?: number; memHighPct?: number; memLowPct?: number; memMinMb?: number };
+  /** FEAT-cloud-offload; absent = on. */
+  cloudOffload?: { enabled?: boolean; guard?: boolean; authDomains?: string[]; requireAuthBots?: string[]; cloudPageCap?: number };
   /** UI creation template. Saving it never mutates a bot or grants access. */
   newBotDefaults?: NewBotDefaults;
   newBots?: { effort?: EffortLevel; browserProfile?: string };
@@ -550,6 +556,8 @@ export interface AppConfig extends HelperConfig {
   decisions?: { retentionDays?: number };
   loopGuard?: LoopGuardConfig;
   safetyFloor?: { enabled?: boolean };
+  /** Built-in Elephant-Goldfish Model skills, offered to every bot; on unless false. */
+  egmSkills?: { enabled?: boolean };
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
   openaiCompat?: { key?: string; url?: string; model?: string; provider?: string };
   composio?: { apiKey?: string; userId?: string; sessionId?: string };
@@ -722,6 +730,11 @@ export function threadEventLogRetentionDays(cfg: AppConfig): number | null {
 
 export function skillAuthoringEnabled(cfg: AppConfig): boolean {
   return cfg.features?.skillAuthoring !== false;
+}
+
+/** The built-in EGM skills ride every bot's turns unless the person turned them off for the whole workspace. */
+export function egmSkillsEnabled(cfg: AppConfig): boolean {
+  return cfg.egmSkills?.enabled !== false;
 }
 
 export const DEFAULT_SKILL_REVIEW_STEPS = 10;
@@ -1021,7 +1034,7 @@ export function saveConfig(
   const keepImageModels = keepKeysOutOfImageModels(disk, checkedPatch.imageGen);
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "gemini", "zhipu", "mistral", "cerebras", "treg", "postiz", "groq", "greenference", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine", "newBots", "safetyFloor", "autoPlacement"] as const) {
+  for (const key of ["xai", "anthropic", "gemini", "zhipu", "mistral", "cerebras", "treg", "postiz", "groq", "greenference", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine", "newBots", "safetyFloor", "egmSkills", "autoPlacement", "cloudOffload"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);

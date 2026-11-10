@@ -15,6 +15,7 @@ import { DiagnosticsRow } from "./DiagnosticsRow";
 import { EnginesSettings } from "./EnginesSettings";
 import { LocalComputerSection } from "./LocalComputerSection";
 import { AutoPlacementSettings } from "./AutoPlacementSettings";
+import { CloudOffloadSettings } from "./CloudOffloadSettings";
 import { PeopleSection } from "./PeopleSection";
 import { ActivitySection } from "./ActivitySection";
 import { BuiltInBrowserRow, ServerSitesRow } from "./BrowserSettingsRows";
@@ -210,7 +211,7 @@ export type RemoteAccessCards = Record<"client" | "domain" | "pairing" | "compan
 export function SimpleComputerPage({ has, remoteAccess, servers, disclose }: { has: Has; remoteAccess: RemoteAccessCards; servers: ReactNode; disclose: Disclose }) {
   return (
     <>
-      {has("computer") && <SettingsGroup label={t("settings.simple.computer.bots")} block="computer"><AdminOnly><AutoPlacementSettings /><LocalComputerSection /></AdminOnly></SettingsGroup>}
+      {has("computer") && <SettingsGroup label={t("settings.simple.computer.bots")} block="computer"><AdminOnly><AutoPlacementSettings /><CloudOffloadSettings /><LocalComputerSection /></AdminOnly></SettingsGroup>}
       {has("companion") && (
         <SettingsGroup label={t(pageIsThisComputer() ? "settings.section.phoneDevices" : "settings.section.thisServer")} block="companion">
           {remoteAccess.companion}

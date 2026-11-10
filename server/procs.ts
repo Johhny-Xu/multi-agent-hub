@@ -198,6 +198,10 @@ export function sharedBoxScope(cwd: string): string | null {
   return basename(dirname(parent)) === "task-workspaces" ? parent : resolve(cwd);
 }
 
+let botSpawnEnvHook: ((env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv) | null = null;
+/** What every bot engine's env gets on top: FEAT-cloud-offload's Chrome guard (server/local-chrome-guard.ts, E73). */
+export function setBotSpawnEnvHook(hook: ((env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv) | null): void { botSpawnEnvHook = hook; }
+
 export function spawnCli(
   cli: string,
   args: string[],
@@ -206,8 +210,9 @@ export function spawnCli(
 ): ChildProcessByStdio<Writable, Readable, Readable> {
   const resolved = resolveCli(cli, args);
   assertSafeCliArgv(resolved);
-  const homed = owner === "bot" || opts.engineHome ? engineHomes.forSpawn(opts.env ?? process.env) : null;
-  const options: CliSpawnOptions = homed ? { ...opts, env: homed.env } : opts;
+  const hooked: CliSpawnOptions = owner === "bot" && botSpawnEnvHook ? { ...opts, env: botSpawnEnvHook(opts.env ?? process.env) } : opts;
+  const homed = owner === "bot" || hooked.engineHome ? engineHomes.forSpawn(hooked.env ?? process.env) : null;
+  const options: CliSpawnOptions = homed ? { ...hooked, env: homed.env } : hooked;
   const boxed = boxedSpawn(resolved, options, owner, homed);
   const { box: _box, engineHome: _engineHome, botWork, ...spawnOpts } = options;
   // The box's extra descriptors (its seccomp filter) follow stdio; only a plain three-entry stdio can take them.

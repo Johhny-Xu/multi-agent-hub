@@ -59,6 +59,8 @@ interface Fixture {
   /** Whose browser each view was opened on, and each check that the view still shows it. */
   opened: Audience[];
   checked: Audience[];
+  /** The conversation each view was opened on, and each check that the view still shows it. */
+  threads: Array<string | null>;
   /** The last v1 view's check that it still shows the browser it opened on. */
   isCurrent: () => boolean;
   dataDir: string;
@@ -78,7 +80,7 @@ async function serve({ attach, current = () => true, download, audience = () => 
   download?: (id: string) => Download | undefined;
   audience?: (threadId: string | null) => Audience | null;
 } = {}): Promise<Fixture> {
-  const fixture = { origin: "", attachments: [], inputs: [], answers: [], pickerChecks: 0, resumes: [], people: [], sizes: [], opened: [], checked: [], dataDir: mkdtempSync(join(tmpdir(), "omb-browser-viewers-")) } as unknown as Fixture;
+  const fixture = { origin: "", attachments: [], inputs: [], answers: [], pickerChecks: 0, resumes: [], people: [], sizes: [], opened: [], checked: [], threads: [], dataDir: mkdtempSync(join(tmpdir(), "omb-browser-viewers-")) } as unknown as Fixture;
   folders.push(fixture.dataDir);
   const viewer = { id: "viewer", input: async (message: unknown) => { fixture.inputs.push(message); }, close: async () => {} } as unknown as Viewer;
   const service = {
@@ -119,12 +121,13 @@ async function serve({ attach, current = () => true, download, audience = () => 
       download: (_browser, id) => download?.(id),
     },
     audience: (_auth, threadId) => audience(threadId),
-    browser: async (botId, opened) => {
+    browser: async (botId, opened, threadId) => {
       fixture.opened.push(opened);
+      fixture.threads.push(threadId);
       return botId === "pepper" ? { botId, session: "bot-pepper", spec: { command: "omb-cdp", args: ["bot:pepper"], env: {} } } : { status: 404, error: "no such bot" };
     },
     authorize: async () => null,
-    current: (_botId, _session, _auth, checked) => { fixture.checked.push(checked); return current(); },
+    current: (_botId, _session, _auth, checked, threadId) => { fixture.checked.push(checked); fixture.threads.push(threadId); return current(); },
     restartRefusal: () => null,
   };
   const route = createBrowserViewerRoutes(deps);
@@ -438,5 +441,15 @@ describe("whose browser a view shows on a Team Cloud", () => {
     expect(fixture.isCurrent(), "an open view stops showing a conversation the person no longer sees").toBe(false);
     expect(await act()).toBe(404);
     expect(fixture.opened).toEqual(["member:p_ada", "member:p_ada"]);
+  });
+
+  it("takes the conversation a view names to the browser it opens and every check it makes", async () => {
+    const fixture = await serve();
+    expect((await fetch(`http://${fixture.origin}/api/bots/pepper/browser/live?threadId=ada-chat`)).status).toBe(204);
+    expect(fixture.threads, "the view opens the conversation's own browser").toEqual(["ada-chat"]);
+    expect(fixture.isCurrent()).toBe(true);
+    expect(fixture.threads).toEqual(["ada-chat", "ada-chat"]);
+    expect((await fetch(`http://${fixture.origin}/api/bots/pepper/browser/live`)).status).toBe(204);
+    expect(fixture.threads.slice(2)).toEqual([null]);
   });
 });

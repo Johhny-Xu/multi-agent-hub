@@ -39,7 +39,7 @@ function createMockPage(overrides: {
 
   const frames = {
     mainFrameId: "main_frame",
-    _frames: framesMap,
+    all: () => [...framesMap.values()],
     get: (id: string) => framesMap.get(id),
     inWorld: vi.fn(async (_frameId: string, work: (sess: any, ctx: number) => Promise<any>) => {
       return work(session, 1);
@@ -159,9 +159,24 @@ describe("jev-observation", () => {
     expect(JEV_DOM_SCRIPT).toContain("globalThis.__ombJevState");
   });
 
-  it("reports unsupported frames and preserves the AX tool path", async () => {
-    const { page } = createMockPage({ hasFrames: true });
-    await expect(readJevObservation(page, mockScope)).rejects.toThrow(/frames or iframes/);
+  const frameObs = {
+    id: "obs_f", documentEpoch: "epoch_f", origin: "https://example.com", title: "T", stateText: "Main text",
+    candidates: [], controls: [], guardId: "g_f", truncated: false, omittedCandidates: 0,
+  };
+
+  it("observes a page with iframes from its main document and names the frames it skipped", async () => {
+    const { page } = createMockPage({ hasFrames: true, evaluateResult: frameObs });
+    const obs = await readJevObservation(page, mockScope);
+    expect(obs.id).toBe("obs_f");
+    expect(obs.stateText).toContain("Main text");
+    expect(obs.stateText).toContain("1 embedded frame(s) not observed");
+  });
+
+  it("leaves the state text alone on a page without iframes, and when frames are allowed", async () => {
+    const plain = createMockPage({ evaluateResult: frameObs });
+    expect((await readJevObservation(plain.page, mockScope)).stateText).toBe("Main text");
+    const allowed = createMockPage({ hasFrames: true, evaluateResult: frameObs });
+    expect((await readJevObservation(allowed.page, mockScope, { allowFrames: true })).stateText).toBe("Main text");
   });
 
   it("enforces element option and byte limits with omission counts", () => {

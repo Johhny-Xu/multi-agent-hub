@@ -135,4 +135,26 @@ describe("jev-transport", () => {
     const step2 = await finishAutomationStep(handle); // Second call returns null (only recorded once)
     expect(step2).toBeNull();
   });
+
+  it("verifies a url-path expectation against the live page url (CdpPage.url() is a method)", async () => {
+    const obs = {
+      id: "o", documentEpoch: "e", origin: "https://example.com", title: "t", stateText: "Welcome back",
+      candidates: [], controls: [], guardId: "g", truncated: false, omittedCandidates: 0,
+    };
+    const page = {
+      targetId: "target_1",
+      url: () => "https://example.com/account/home?tab=1",
+      frames: {
+        mainFrameId: "main",
+        all: () => [{ id: "main", parentId: null }],
+        inWorld: async (_id: string, work: (s: unknown, c: number) => Promise<unknown>) =>
+          work({ send: async () => ({ result: { value: obs } }) }, 1),
+      },
+    };
+    const transport = createBuiltinBrowserTransport({ getPage: async () => page as never, rawDispatch: vi.fn() });
+    const scope = createMockScope();
+    expect(await transport.verify(scope, [{ kind: "url-path", origin: "https://example.com", pathname: "/account/home" }])).toBe(true);
+    expect(await transport.verify(scope, [{ kind: "url-path", origin: "https://example.com", pathname: "/login" }])).toBe(false);
+    expect(await transport.verify(scope, [{ kind: "url-path", origin: "https://other.example", pathname: "/account/home" }])).toBe(false);
+  });
 });

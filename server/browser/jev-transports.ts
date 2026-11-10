@@ -50,8 +50,8 @@ export function createBuiltinBrowserTransport(deps: BuiltinTransportDeps): Brows
     async verify(scope: BrowserScope, expectations: readonly BrowserExpectation[]): Promise<boolean> {
       const page = await deps.getPage(scope);
       const obs = await readJevObservation(page, scope);
-      // CdpPage.url is a method, but this reads it as a value; the constructed URL throws and verify answers false.
-      const currentUrl = (page.url as unknown as string) ?? obs.origin;
+      // CdpPage.url() is the live document URL; an empty one (page not yet committed) falls back to the observed origin.
+      const currentUrl = page.url() || obs.origin;
 
       for (const exp of expectations) {
         if (exp.kind === "visible-text") {

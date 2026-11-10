@@ -3454,5 +3454,11 @@
   "settings.simple.more.limits": "Limits",
   "settings.simple.more.open": "Öffnen",
   "serviceAccounts.coolingUntil": "Abklingzeit · bis {time}",
-  "serviceAccounts.saveAsNew": "Als neues Konto speichern"
+  "serviceAccounts.saveAsNew": "Als neues Konto speichern",
+  "egmSkills.title": "Elephant-Goldfish-Model-Fähigkeiten",
+  "egmSkills.subtitle": "EGM-Entwurfs- und Prüf-Fähigkeiten von Google, aus der Vendor-Kopie auf diesem Rechner übernommen.",
+  "egmSkills.row": "Alle Bots mit EGM-Fähigkeiten ausstatten",
+  "egmSkills.rowDetail": "Standardmäßig an; jeder Bot kann sie auch in seinen eigenen Fähigkeitseinstellungen ausschalten.",
+  "egmSkills.rowAria": "Alle Bots mit EGM-Fähigkeiten ausstatten",
+  "egmSkills.error": "Die Einstellung ließ sich nicht speichern."
 }

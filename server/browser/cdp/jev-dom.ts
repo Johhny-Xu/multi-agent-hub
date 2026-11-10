@@ -305,10 +305,10 @@ export const JEV_VALIDATE_GUARD_SCRIPT = (guardId: string, elementId: string) =>
   if (!savedGuard) return false;
 
   if (node.matches(':disabled') !== savedGuard.disabled) return false;
-  if (node.readOnly !== savedGuard.readOnly) return false;
-  if (node.value !== savedGuard.value) return false;
-  if (node.checked !== savedGuard.checked) return false;
-  if (node.selectedIndex !== savedGuard.selectedIndex) return false;
+  if ((node.readOnly ?? null) !== savedGuard.readOnly) return false;
+  if ((node.value ?? null) !== savedGuard.value) return false;
+  if ((node.checked ?? null) !== savedGuard.checked) return false;
+  if ((node.selectedIndex ?? null) !== savedGuard.selectedIndex) return false;
 
   return true;
 })()`;

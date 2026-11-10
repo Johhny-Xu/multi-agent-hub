@@ -46,10 +46,12 @@ afterEach(async () => { await Promise.all(hosts.splice(0).map((host) => host.bro
 
 const turn = { threadId: "thread-1", generation: "gen-1" };
 
-function setup(engine: "chrome" | "agent-browser" | undefined, { cloudHome = false, server = false, hosted = false, device, lendRefusal, holder, audienceOf, bots: botIds = ["scout"], browserBox, lentChrome, turnResources }: {
+function setup(engine: "chrome" | "agent-browser" | undefined, { cloudHome = false, server = false, hosted = false, device, lendRefusal, holder, audienceOf, bots: botIds = ["scout"], browserBox, lentChrome, turnResources, cloudSession, cloudPeekSession, cloudBrowser, cloudAuthRefusal, releaseBrowserSeat }: {
   cloudHome?: boolean; server?: boolean; hosted?: boolean; device?: BrowserHostDeps["device"]; lendRefusal?: BrowserHostDeps["lendRefusal"]; holder?: (resource: string) => TurnOwner | undefined;
   audienceOf?: BrowserHostDeps["audienceOf"]; bots?: string[]; browserBox?: BrowserHostDeps["browserBox"];
   lentChrome?: BrowserHostDeps["lentChrome"]; turnResources?: BrowserHostDeps["turnResources"];
+  cloudSession?: BrowserHostDeps["cloudSession"]; cloudPeekSession?: BrowserHostDeps["cloudPeekSession"]; cloudBrowser?: BrowserHostDeps["cloudBrowser"];
+  cloudAuthRefusal?: BrowserHostDeps["cloudAuthRefusal"]; releaseBrowserSeat?: BrowserHostDeps["releaseBrowserSeat"];
 } = {}) {
   const cfg = {
     features: { browser: true },
@@ -76,6 +78,11 @@ function setup(engine: "chrome" | "agent-browser" | undefined, { cloudHome = fal
     audienceOf,
     browserBox,
     lentChrome,
+    cloudSession,
+    cloudPeekSession,
+    cloudBrowser,
+    cloudAuthRefusal,
+    releaseBrowserSeat,
   });
   hosts.push(host);
   return { cfg, host, minted, bots };
@@ -487,6 +494,67 @@ describe("My Chrome on My Cloud, through the person's lent Chrome", () => {
     lend(null);
     expect(host.lentChromeSummary()).toEqual({ myChromeLendable: true });
     expect(setup(undefined).host.lentChromeSummary(), "the desktop host").toEqual({});
+  });
+});
+
+describe("a Cloud home's browser for a conversation that needs a sign-in (C2 T2)", () => {
+  afterEach(() => { vi.mocked(browserEngineStatus).mockReset(); });
+
+  it("runs that conversation in its own session, and mints the turn's token for the shared one", async () => {
+    vi.mocked(browserEngineStatus).mockReturnValue({ kind: "ready", binaryPath: "/usr/local/bin/agent-browser", version: "0.37.0", managed: false });
+    const cloudSession = vi.fn((_botId: string, threadId: string, base: string) => `${base}.auth-${threadId}`);
+    const cloudBrowser = vi.fn(async () => "http://127.0.0.1:9341");
+    const { host, minted } = setup(undefined, { cloudHome: true, cloudSession, cloudBrowser });
+    const browser = (await host.browserIntegration("scout", undefined, turn))!;
+    expect(browser.tokenSession, "the turn's capability names the shared session").toBe("bot-scout");
+    expect(browser.session, "the calls run in the session this conversation needs").toBe("bot-scout.auth-thread-1");
+    expect(cloudSession).toHaveBeenCalledWith("scout", "thread-1", "bot-scout", expect.any(Function));
+    expect(cloudBrowser).toHaveBeenCalledWith("scout", "bot-scout.auth-thread-1", "thread-1", undefined);
+    expect(minted).toEqual([expect.objectContaining({ botId: "scout", browserSession: "bot-scout", kind: "browser", ...turn })]);
+    // The browser route has no turn of its own: the alias still names the conversation that needs the sign-in.
+    const viewed = (await host.browserIntegration("scout", undefined, undefined, "team", turn.threadId))!;
+    expect(viewed.session).toBe("bot-scout.auth-thread-1");
+    expect(viewed.tokenSession).toBe("bot-scout");
+  });
+
+  it("shows a conversation the browser its own cloud session runs in, without starting one", async () => {
+    vi.mocked(browserEngineStatus).mockReturnValue({ kind: "ready", binaryPath: "/usr/local/bin/agent-browser", version: "0.37.0", managed: false });
+    const cloudPeekSession = vi.fn((_botId: string, threadId: string, base: string) => `${base}.c-${threadId}`);
+    const { host } = setup(undefined, { cloudHome: true, cloudPeekSession });
+    expect(host.threadBrowserSession("scout", undefined, turn.threadId).session).toBe("bot-scout.c-thread-1");
+    expect(host.threadBrowserSession("scout", undefined, undefined).session, "no conversation").toBe("bot-scout");
+    expect(host.usedBrowserSessions.size, "peeking starts no browser").toBe(0);
+    expect(cloudPeekSession).toHaveBeenCalledWith("scout", "thread-1", "bot-scout");
+    expect(await host.currentBrowserSpec("scout", undefined, "team", turn.threadId), "nothing runs in it yet").toMatchObject({ session: "bot-scout" });
+  });
+
+  it("names a conversation's own cloud session when a panel asks for its browser spec", async () => {
+    vi.mocked(browserEngineStatus).mockReturnValue({ kind: "ready", binaryPath: "/usr/local/bin/agent-browser", version: "0.37.0", managed: false });
+    const alias = (base: string) => `${base}.c-thread-1`;
+    const cloudSession = vi.fn((_botId: string, _threadId: string, base: string) => alias(base));
+    const cloudPeekSession = vi.fn((_botId: string, _threadId: string, base: string) => alias(base));
+    const cloudBrowser = vi.fn(async () => "http://127.0.0.1:9341");
+    const { host } = setup(undefined, { cloudHome: true, cloudSession, cloudPeekSession, cloudBrowser });
+    await host.browserIntegration("scout", undefined, turn);
+    expect(await host.currentBrowserSpec("scout", undefined, "team", turn.threadId)).toMatchObject({ session: "bot-scout.c-thread-1" });
+    expect(await host.currentBrowserSpec("scout", undefined, "team"), "no conversation names the shared one").toMatchObject({ session: "bot-scout" });
+  });
+
+  it("gives up the shared session's seat when a call moves its conversation out, and keeps it otherwise", async () => {
+    vi.mocked(browserEngineStatus).mockReturnValue({ kind: "ready", binaryPath: "/usr/local/bin/agent-browser", version: "0.37.0", managed: false });
+    const released: Array<{ session: string; owner: TurnOwner }> = [];
+    const cloudAuthRefusal = vi.fn((_session: string, _cdpUrl: string | undefined, params: unknown) => ((params as { arguments?: { url?: string } }).arguments?.url === "github.com" ? "moved" : null));
+    const { host } = setup(undefined, { cloudHome: true, cloudAuthRefusal, releaseBrowserSeat: (session, owner) => { released.push({ session, owner }); } });
+    const spec = { command: "/usr/local/bin/agent-browser", args: [], env: { AGENT_BROWSER_CDP: "http://127.0.0.1:9341" } } as never;
+    const ctx = { botId: "scout", botName: "scout", threadId: turn.threadId, generation: turn.generation, turnId: () => null, record: false };
+    const moved = await host.browserRuntime.agentRpc("mychrome", spec, "tools/call", { name: "agent_browser_open", arguments: { url: "github.com" } }, undefined, ctx);
+    expect(moved).toMatchObject({ isError: true, content: [{ type: "text", text: "moved" }] });
+    expect(cloudAuthRefusal).toHaveBeenCalledWith("mychrome", "http://127.0.0.1:9341", expect.anything(), { botId: "scout", threadId: turn.threadId });
+    expect(released).toEqual([{ session: "mychrome", owner: { threadId: turn.threadId, generation: turn.generation } }]);
+    // A move with no conversation to name gives up no seat.
+    cloudAuthRefusal.mockReturnValueOnce("moved");
+    await host.browserRuntime.agentRpc("mychrome", spec, "tools/call", { name: "agent_browser_open", arguments: { url: "github.com" } });
+    expect(released).toHaveLength(1);
   });
 });
 

@@ -79,6 +79,10 @@ export interface ConfigStatus {
   cacheKeepWarm?: { enabled: boolean; windowMinutes: number };
   /** Auto placement's local-load thresholds. Absent from older servers. */
   autoPlacement?: { enabled: boolean; cpuHigh: number; cpuLow: number; memHighPct: number; memLowPct: number; memMinMb: number };
+  /** FEAT-cloud-offload: `enabled` runs an Auto bot's browser on a cloud server's Chrome first, `guard` keeps this
+   * computer's own headless Chrome from starting, and `authDomains` lists the sites that keep using this computer's
+   * signed-in Chrome instead of copying the sign-in to the cloud. Absent from older servers. */
+  cloudOffload?: { enabled: boolean; guard: boolean; authDomains: string[] };
   localVm: { mode: "shared" | "per-bot" | "pool"; maxInstances: number; idleTimeoutMinutes?: number; preserveInstalledApps?: boolean };
   /** `providerKeys`: names of the keys saved for OpenCode's other
    * providers, never the keys. */
@@ -156,6 +160,8 @@ export interface ConfigStatus {
   computerName?: string;
   /** Opt-in flags. Absent means off. */
   features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean };
+  /** The built-in Elephant-Goldfish Model skills, offered to every bot; on unless false. */
+  egmSkills?: { enabled?: boolean };
   /** First-run progress: whether the welcome tour was finished and which
    * one-time hints were dismissed. Server-owned so it follows the workspace. */
   onboarding?: OnboardingStatus;

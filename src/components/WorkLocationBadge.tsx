@@ -10,6 +10,8 @@ export interface WorkLocationFacts {
   instanceName?: string;
   auto: boolean;
   reason?: string | null;
+  /** The machine and browser an Auto browser actually ran on (E72): "cloud-a" / "mychrome". */
+  browserAt?: { machine: string; browser: string; reason?: string } | null;
 }
 
 export function workLocationText(facts: WorkLocationFacts): { label: string; title: string } {
@@ -26,6 +28,13 @@ export function workLocationText(facts: WorkLocationFacts): { label: string; tit
           : facts.place === "browser"
             ? t("workLocation.browser")
             : t("workLocation.local");
+  // An Auto browser names the machine and browser it resolved to (E72), not just "Auto".
+  const at = facts.browserAt && (facts.place === "browser" || facts.place === "auto") ? facts.browserAt : null;
+  if (at) {
+    const shown = t("workLocation.browserAt", { where: `${at.machine} / ${at.browser}` });
+    const title = at.reason ? t("workLocation.autoReason", { reason: at.reason }) : t("workLocation.title", { place: shown });
+    return { label: shown, title };
+  }
   // An automatic placement says so on the badge itself, not only in the hover title (E38).
   const shown = facts.auto && facts.place !== "auto" ? `${label} · ${t("workLocation.auto")}` : label;
   const title = facts.auto && facts.reason
@@ -37,7 +46,7 @@ export function workLocationText(facts: WorkLocationFacts): { label: string; tit
 /** Where the bot in this conversation is working right now, in the chat header so a turn's place is never a guess. */
 export function WorkLocationBadge({ bot, task, className }: {
   bot: Pick<Bot, "computer" | "cloudBackend" | "vpsInstanceId">;
-  task?: Pick<Task, "surface" | "surfaceAuto" | "placementReason"> | null;
+  task?: Pick<Task, "surface" | "surfaceAuto" | "placementReason" | "browserPlacement"> | null;
   className?: string;
 }) {
   const { state } = useStore();
@@ -52,6 +61,7 @@ export function WorkLocationBadge({ bot, task, className }: {
     instanceName: instances.find((instance) => instance.id === bot.vpsInstanceId)?.name,
     auto: task?.surfaceAuto === true,
     reason: task?.placementReason,
+    browserAt: task?.browserPlacement ?? null,
   });
   return (
     <span

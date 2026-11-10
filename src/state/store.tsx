@@ -243,6 +243,7 @@ export interface Task extends Pick<WireTask, "private" | "setupRequest" | "inbox
   surface?: "cloud" | "vm" | "local" | "browser";
   surfaceAuto?: true;
   placementReason?: string;
+  browserPlacement?: { machine: string; browser: string; cloud: boolean; reason?: string };
   openedBy?: ThreadOpener;
   closedBy?: ThreadCloser;
   archivedAt?: number;
@@ -411,7 +412,7 @@ export type { BrowserEngineSummary, BrowserProfile, ConfigStatus, ManagedPolicyS
 // A section left out here is wiped from state.config whenever a config frame lands.
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "xResearch" | "treg" | "postiz" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "helpers" | "imageGen" | "live" | "savedKeys" | "profile" | "everyBotRules" | "language" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "edition" | "budgets" | "billing" | "managedPolicy" | "cloudHome" | "team" | "workspaceBanner" | "autoPlacement"
+  "xai" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "xResearch" | "treg" | "postiz" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "helpers" | "imageGen" | "live" | "savedKeys" | "profile" | "everyBotRules" | "language" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "edition" | "budgets" | "billing" | "managedPolicy" | "cloudHome" | "team" | "workspaceBanner" | "autoPlacement" | "cloudOffload"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -434,7 +435,7 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     threads: frame.threads,
     automaticRecovery: frame.automaticRecovery,
     cacheKeepWarm: frame.cacheKeepWarm,
-    autoPlacement: frame.autoPlacement,
+    autoPlacement: frame.autoPlacement, cloudOffload: frame.cloudOffload,
     localVm: frame.localVm,
     opencodeGo: frame.opencodeGo,
     tts: frame.tts,

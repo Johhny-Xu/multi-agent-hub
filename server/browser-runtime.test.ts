@@ -722,6 +722,26 @@ describe("server-owned browser MCP runtime", () => {
     expect(order).toEqual(["views s", "close s"]);
   });
 
+  it("leaves a browser attached to the person's own Chrome open once it sits idle", async () => {
+    const closeBrowser = vi.fn(async () => true);
+    const value = runtime({ closeBrowser });
+    const mine = { ...spec(), env: { ...spec().env, AGENT_BROWSER_CDP: "http://127.0.0.1:9333" } };
+    await value.agentRpc("mine", mine, "tools/call", { name: "echo" });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await value.closeIfIdle("mine", 10, mine)).toBe(false);
+    expect(closeBrowser).not.toHaveBeenCalled();
+  });
+
+  it("closes a conversation's own session on a cloud door once it sits idle, since agent-browser's close only disconnects", async () => {
+    const closeBrowser = vi.fn(async () => true);
+    const value = runtime({ closeBrowser });
+    const mine = { ...spec(), env: { ...spec().env, AGENT_BROWSER_CDP: "ws://127.0.0.1:9341/devtools/browser/omb-scope/bot-scout.c-0123456789" } };
+    await value.agentRpc("mine", mine, "tools/call", { name: "echo" });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await value.closeIfIdle("mine", 10, mine, { attached: true })).toBe(true);
+    expect(closeBrowser).toHaveBeenCalledWith("mine", expect.objectContaining({ command: process.execPath }));
+  });
+
   it("makes a call that arrives while its idle browser closes wait, then open it again", async () => {
     const closing = deferred<boolean>();
     const value = runtime({ closeBrowser: () => closing.promise });

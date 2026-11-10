@@ -20,6 +20,7 @@ import { ImageGenerationSettings } from "./ImageGenerationSettings";
 import { EnginesSettings } from "./EnginesSettings";
 import { LocalComputerSection } from "./LocalComputerSection";
 import { AutoPlacementSettings } from "./AutoPlacementSettings";
+import { CloudOffloadSettings } from "./CloudOffloadSettings";
 import { PhoneDevicesSection } from "./PhoneDevicesSection";
 import { pageIsThisComputer } from "@/lib/companion-bridge";
 import { ServerPairingCard } from "./ServerPairingCard";
@@ -432,7 +433,7 @@ export function SettingsModal() {
       case "companion":
         return <>{remoteAccess.companion}{remoteAccess.pairing}{remoteAccess.domain}{window.ogb?.environments ? null : remoteAccess.client}</>;
       case "computer":
-        return <><BuiltInBrowserRow /><ServerSitesRow /><BrowserProfilesRow /><AdminOnly><AutoPlacementSettings /><LocalComputerSection /></AdminOnly></>;
+        return <><BuiltInBrowserRow /><ServerSitesRow /><BrowserProfilesRow /><AdminOnly><AutoPlacementSettings /><CloudOffloadSettings /><LocalComputerSection /></AdminOnly></>;
       case "logins":
         return <LoginsSettings />;
       case "usage":

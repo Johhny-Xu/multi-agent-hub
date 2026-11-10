@@ -33,7 +33,14 @@ import type {
 } from "./jev-types.ts";
 
 export const DEFAULT_ACTIVE_BUDGET_MS = 12_000;
-export const MAX_JEV_TIMEOUT_MS = 750;
+/** One decision's time limit. 750 ms suits a nearby decision model; a host that reaches it through a proxy
+ * (about 1.2 s round trip from a weak host) sets OMB_JEV_DECISION_TIMEOUT_MS, clamped to 250..5000 ms. */
+export const MAX_JEV_TIMEOUT_MS = jevDecisionTimeoutMs(process.env.OMB_JEV_DECISION_TIMEOUT_MS);
+
+export function jevDecisionTimeoutMs(raw: string | undefined): number {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.min(5000, Math.max(250, Math.round(value))) : 750;
+}
 
 export interface BrowserGatewayDeps {
   decider: Decider;

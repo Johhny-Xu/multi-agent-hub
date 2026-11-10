@@ -836,12 +836,14 @@ export class BrowserRuntime {
   /** A browser without its identity still browses, so a failure here never fails the call. */
   launched(session: string, spec: LaunchSpec): Promise<void> { return this.launch?.started(session, spec).catch(() => undefined) ?? Promise.resolve(); }
 
-  /** The same barrier as a restart. Saved sign-ins stay, and a browser attached to the person's own Chrome is never closed. */
-  async closeIfIdle(session: string, idleMs: number, spec?: { command: string; args?: readonly string[]; env: Record<string, string | undefined> }): Promise<boolean> {
+  /** The same barrier as a restart. Saved sign-ins stay. A browser attached to the person's own Chrome is never closed
+   * unless the caller says its own close is only a disconnect: agent-browser's close drops the connection and leaves
+   * that Chrome running, so a conversation's own session on a cloud door can be closed once it sits idle. */
+  async closeIfIdle(session: string, idleMs: number, spec?: { command: string; args?: readonly string[]; env: Record<string, string | undefined> }, options?: { attached?: boolean }): Promise<boolean> {
     const gate = spec ? this.gate(session) : this.gates.get(session);
     if (gate && !gate.spec && spec) gate.spec = { command: spec.command, args: [...spec.args ?? []], env: { ...spec.env } };
     const launch = gate?.spec;
-    if (!gate || !launch || attachesToChrome(launch.env) || !(idleMs > 0) || Date.now() - gate.lastUsed < idleMs) return false;
+    if (!gate || !launch || (attachesToChrome(launch.env) && options?.attached !== true) || !(idleMs > 0) || Date.now() - gate.lastUsed < idleMs) return false;
     if (this.working(session)) return false;
     gate.closing = true;
     gate.ready = false;

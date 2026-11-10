@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBrowserGateway, type BrowserGatewayDeps } from "./jev.ts";
+import { createBrowserGateway, jevDecisionTimeoutMs, type BrowserGatewayDeps } from "./jev.ts";
 import type { BrowserExecution, BrowserObservation, BrowserScope, BrowserTransport, PreparedBrowserAction } from "./jev-types.ts";
 import type { Decider } from "../decider/index.ts";
 import type { AppConfig } from "../config.ts";
@@ -655,5 +655,15 @@ describe("jev gateway", () => {
     expect(JSON.stringify(result.pendingField)).not.toContain(SECRET_KEY);
     expect(JSON.stringify(result.steps)).not.toContain(SECRET_KEY);
     expect(JSON.stringify(result.lastObservation)).not.toContain(SECRET_KEY);
+  });
+});
+
+describe("jevDecisionTimeoutMs", () => {
+  it("defaults to 750 ms and clamps an env override to 250..5000", () => {
+    expect(jevDecisionTimeoutMs(undefined)).toBe(750);
+    expect(jevDecisionTimeoutMs("abc")).toBe(750);
+    expect(jevDecisionTimeoutMs("3000")).toBe(3000);
+    expect(jevDecisionTimeoutMs("50")).toBe(250);
+    expect(jevDecisionTimeoutMs("99999")).toBe(5000);
   });
 });

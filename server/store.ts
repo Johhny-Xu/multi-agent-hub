@@ -81,7 +81,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
   lastContextModel?: string;
   /** Absent (legacy) may be a person's choice: only an "auto" pin yields to a Works on change. */
   surfaceSource?: "user" | "auto";
-  /** Why an Auto turn put this conversation where it is: "本机 CPU 92%，转云端 VPS instabox". */
+  /** Why an Auto turn put this conversation where it is: "本机 CPU 92%，转云端 VPS cloud-a". */
   placementReason?: string;
   /** Epoch ms a person last wrote here: never a teammate, routine, webhook, the bot itself or a Slack relay. */
   askedAt?: number;
@@ -110,7 +110,7 @@ const ASK_NOW = { approvalMode: "ask" as const, autoApprove: false, alwaysAllow:
 const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
-  "routineRunId", "surface", "surfaceSource", "placementReason", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "setupRequest", "botApi", "outside",
+  "routineRunId", "surface", "surfaceSource", "placementReason", "browserPlacement", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "setupRequest", "botApi", "outside",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 

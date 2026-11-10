@@ -134,6 +134,9 @@ export interface BotMovedTo {
 
 /** One task = one conversation with its own context, thread and provider
  * session. */
+/** A browser's machine and profile as the chat header shows it (E72). */
+export interface BrowserPlacement { machine: string; browser: string; cloud: boolean; reason?: string }
+
 export interface WireTask extends InboxTask {
   /** Outstanding handoffs, not an active provider turn. */
   waitingForTeammates?: boolean;
@@ -195,9 +198,11 @@ export interface WireTask extends InboxTask {
    * select_computer), not a person, so the next Works on change moves it.
    * Derived at projection, never stored. */
   surfaceAuto?: true;
-  /** Why Auto put this conversation here: "本机 CPU 92%，转云端 VPS instabox". Present only
+  /** Why Auto put this conversation here: "本机 CPU 92%，转云端 VPS cloud-a". Present only
    * with an Auto pin. Derived at projection, never stored on the wire. */
   placementReason?: string;
+  /** Where this conversation's browser ran last on Auto (FEAT-cloud-offload, E72): "cloud-a" / "mychrome". */
+  browserPlacement?: BrowserPlacement;
   usage?: TaskUsage;
   /** Prompt-cache keep-warm status for this thread, derived at projection;
    * absent when no window is open. */
