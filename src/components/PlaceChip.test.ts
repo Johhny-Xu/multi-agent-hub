@@ -192,7 +192,7 @@ describe("the cloud desktop without a Boat key", () => {
     renderToStaticMarkup(createElement(Probe));
     return seen!;
   };
-  const vpsInstance = { id: "instabox", name: "instabox", kind: "ssh", configured: true, available: null, capabilities: { status: true, join: true, screenshot: true, start: true, stop: true, remove: true } };
+  const vpsInstance = { id: "cloud-a", name: "cloud-a", kind: "ssh", configured: true, available: null, capabilities: { status: true, join: true, screenshot: true, start: true, stop: true, remove: true } };
   afterEach(() => { fixture.config = null; });
 
   it("still reaches the cloud desktop when a VPS computer is there", () => {

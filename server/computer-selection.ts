@@ -19,7 +19,7 @@ export function chosenPlace(task: { surface?: Surface; surfaceSource?: "user" | 
 export interface PlacementLoad {
   pressure: "low" | "high";
   reason: string;
-  /** The configured cloud backend, for the reason: "VPS instabox", "桌面". */
+  /** The configured cloud backend, for the reason: "VPS cloud-a", "桌面". */
   cloudName?: string;
 }
 

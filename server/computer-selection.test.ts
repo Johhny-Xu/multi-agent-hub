@@ -68,7 +68,7 @@ describe("which computer select_computer picks", () => {
 
 describe("Auto placement by the host's load", () => {
   const low = { pressure: "low" as const, reason: "本机 CPU 12%，可用内存 70%" };
-  const high = { pressure: "high" as const, reason: "本机 CPU 92%", cloudName: "VPS instabox" };
+  const high = { pressure: "high" as const, reason: "本机 CPU 92%", cloudName: "VPS cloud-a" };
 
   it("keeps a calm machine's work here, over a ready cloud computer", () => {
     const picked = pickComputer([option("cloud", "ready"), option("local", "ready")], "auto", "cloud", false, undefined, low);
@@ -80,7 +80,7 @@ describe("Auto placement by the host's load", () => {
     for (const cloud of ["ready", "missing"] as const) {
       const picked = pickComputer([option("cloud", cloud), option("local", "ready")], "auto", "local", false, undefined, high);
       expect(picked.option?.surface).toBe("cloud");
-      expect(picked.placementReason).toBe("本机 CPU 92%，转云端 VPS instabox");
+      expect(picked.placementReason).toBe("本机 CPU 92%，转云端 VPS cloud-a");
     }
   });
 

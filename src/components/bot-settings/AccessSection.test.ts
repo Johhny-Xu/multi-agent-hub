@@ -361,7 +361,7 @@ describe("a VPS bot's own server", () => {
         revision: "r",
         defaultInstanceId: "production",
         instances: [
-          { id: "production", name: "instabox", kind: "ssh", configured: true, available: null, capabilities: { status: true, join: true, screenshot: true, start: true, stop: true, remove: true } },
+          { id: "production", name: "cloud-a", kind: "ssh", configured: true, available: null, capabilities: { status: true, join: true, screenshot: true, start: true, stop: true, remove: true } },
         ],
       },
     } as unknown as Partial<ConfigStatus>;

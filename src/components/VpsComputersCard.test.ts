@@ -7,10 +7,10 @@ import type { VpsComputerInventoryInstance } from "./LocalComputerSection";
 
 const fakeDesktop: VpsComputerInventoryInstance = {
   name: "openmausbot-vps-bot-abc123456789",
-  instanceId: "instabox",
+  instanceId: "cloud-a",
   containerId: "c".repeat(64),
   state: "running",
-  vpsAlias: "instabox",
+  vpsAlias: "cloud-a",
   ownerBotId: "bot-1",
   ownerName: "Scout",
   orphaned: false,
@@ -21,10 +21,10 @@ describe("VpsComputersCard sections", () => {
   it("renders each VPS instance in its own section with instance name, kind, status, and desktops", () => {
     const sections: VpsInstanceSection[] = [
       {
-        id: "instabox-id",
-        name: "instabox",
+        id: "cloud-a-id",
+        name: "cloud-a",
         kind: "ssh",
-        sshAlias: "instabox",
+        sshAlias: "cloud-a",
         state: "running",
         desktops: [fakeDesktop],
       },
@@ -53,7 +53,7 @@ describe("VpsComputersCard sections", () => {
         instances: [fakeDesktop],
         sections,
         configured: true,
-        aliases: ["instabox"],
+        aliases: ["cloud-a"],
         loading: false,
         removingName: null,
         error: null,
@@ -63,8 +63,8 @@ describe("VpsComputersCard sections", () => {
       }),
     );
 
-    // Section 1: SSH instabox
-    expect(markup).toContain("instabox");
+    // Section 1: SSH cloud-a
+    expect(markup).toContain("cloud-a");
     expect(markup).toContain("SSH");
     expect(markup).toContain("Scout");
     // The section carries the instance's own status; the desktop carries its own.
@@ -137,7 +137,7 @@ describe("VpsComputersCard sections", () => {
   it("reports an empty SSH host as an SSH host, not as a Boat desktop that is missing", () => {
     const markup = renderCard({
       configured: true,
-      sections: [{ id: "instabox-id", name: "instabox", kind: "ssh", sshAlias: "instabox", state: "ready", desktops: [] }],
+      sections: [{ id: "cloud-a-id", name: "cloud-a", kind: "ssh", sshAlias: "cloud-a", state: "ready", desktops: [] }],
     });
     expect(markup).toContain("No desktop on this SSH host yet.");
     expect(markup).not.toContain("desktops found on your VPS");
@@ -147,7 +147,7 @@ describe("VpsComputersCard sections", () => {
     const markup = renderCard({
       configured: false,
       sections: [
-        { id: "instabox-id", name: "instabox", kind: "ssh", sshAlias: "instabox", state: "ready", desktops: [fakeDesktop] },
+        { id: "cloud-a-id", name: "cloud-a", kind: "ssh", sshAlias: "cloud-a", state: "ready", desktops: [fakeDesktop] },
       ],
       instances: [fakeDesktop],
     });
