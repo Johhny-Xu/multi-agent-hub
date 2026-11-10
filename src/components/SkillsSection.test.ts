@@ -1,12 +1,32 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import { filterLibrarySkills, LibrarySkillMeta } from "./SkillsSection";
+import { filterLibrarySkills, LibrarySkillMeta, EgmSkillsSettings } from "./SkillsSection";
 import type { SkillsLibrarySkillWire } from "../../shared/wire";
 
-afterEach(() => setLocale("en"));
+// The EGM copy keys are delivered ahead of the language pack: unresolved keys render as themselves, so the
+// tests assert them by key while the existing skills.library.* keys keep their real wording.
+vi.mock("@/lib/i18n", async (original) => ({
+  ...await original<typeof import("@/lib/i18n")>(),
+  tFromServer: (key: string | undefined) => key ?? "",
+}));
+
+const egmStore = vi.hoisted(() => ({ config: {} as Record<string, unknown>, saved: [] as unknown[] }));
+vi.mock("@/state/store", () => ({
+  useStore: () => ({ state: { config: egmStore.config }, dispatch: vi.fn() }),
+  api: async (path: string, init?: { body?: string }) => {
+    egmStore.saved.push([path, init?.body]);
+    return { ...egmStore.config };
+  },
+}));
+
+afterEach(() => {
+  setLocale("en");
+  egmStore.config = {};
+  egmStore.saved = [];
+});
 
 const skill = (overrides: Partial<SkillsLibrarySkillWire> = {}): SkillsLibrarySkillWire => ({
   name: "order-audit",
@@ -60,5 +80,27 @@ describe("LibrarySkillMeta", () => {
     const html = renderToStaticMarkup(createElement(LibrarySkillMeta, { skill: skill() }));
     expect(html).toContain("No version");
     expect(html).not.toContain("Version ");
+  });
+});
+
+describe("EgmSkillsSettings", () => {
+  it("offers the built-in EGM skills to every bot unless the workspace turned them off", () => {
+    const on = renderToStaticMarkup(createElement(EgmSkillsSettings));
+    expect(on).toContain('data-testid="egm-skills-settings"');
+    expect(on).toContain("egmSkills.title");
+    expect(on).toContain("egmSkills.row");
+    expect(on).toContain('aria-label="egmSkills.rowAria"');
+    expect(on).toContain('aria-checked="true"');
+    egmStore.config = { egmSkills: { enabled: false } };
+    const off = renderToStaticMarkup(createElement(EgmSkillsSettings));
+    expect(off).toContain('aria-checked="false"');
+  });
+
+  it("renders the row copy by key until the language pack merges", () => {
+    const html = renderToStaticMarkup(createElement(EgmSkillsSettings));
+    expect(html).toContain("egmSkills.subtitle");
+    expect(html).toContain("egmSkills.rowDetail");
+    expect(html).not.toContain("egmSkills.error");
+    expect(egmStore.saved).toEqual([]);
   });
 });

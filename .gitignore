@@ -45,3 +45,6 @@ hub/results/
 logs/
 .agenthub/
 *.bak-*
+
+# vendor copies keep only what their VENDOR.md lists (upstream dot-folders stay out)
+vendor/*/.*

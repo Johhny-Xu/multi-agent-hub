@@ -20,7 +20,8 @@ import { z } from "zod";
 import { rankSkills } from "../shared/skill-fit.ts";
 import { isSkillName } from "../shared/skill-md.ts";
 import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR, loadConfig } from "./config.ts";
+import { egmListings, egmTurnSkills, isEgmSkillName, readEgmSkillFile, type EgmListing } from "./egm-skills.ts";
 import { directoryEntryState, entryExistsWithoutFollowing } from "./skill-storage.ts";
 import { INDEX_MAX_BYTES, INDEX_MAX_SKILLS, type SkillListing } from "./skills.ts";
 
@@ -291,6 +292,11 @@ export interface ImportedSkillView {
   /** Its folder, which native skill folders link to. */
   folder: string;
   file: string;
+  /** A built-in EGM skill's vendor root: where the agents/, resources/ and docs/ folders its steps
+   * reference live, since they sit at the vendor root and not beside the skill folder. */
+  root?: string;
+  /** How an EGM skill is called by name: /egm:<skill> on Claude Code and Antigravity, /<skill> elsewhere. */
+  command?: string;
 }
 
 function enabledFor(name: string, entry: ImportedSkillEntry, choices: Choices): boolean {
@@ -310,28 +316,51 @@ function loadedInPlace(entry: ImportedSkillEntry, native: readonly string[]): bo
 }
 
 /** The imported skills `botId` can use on a turn: switched on for it, unchanged since they came in, and named unlike any
- * of its own or library skills (`shadowed`), less those the turn's engine loads in place (`native`). Its prompt lists
- * the ones listedImportedSkills picks. */
-export function importedSkillsFor(botId: string, shadowed: ReadonlySet<string>, native: readonly string[] = []): ImportedSkillView[] {
+ * of its own or library skills (`shadowed`), less those the turn's engine loads in place (`native`), plus the built-in
+ * EGM skills under the same rules. `turn` is the turn's engine, whose subagent tool decides the EGM review skills.
+ * Its prompt lists the ones listedImportedSkills picks. */
+export function importedSkillsFor(botId: string, shadowed: ReadonlySet<string>, native: readonly string[] = [], turn?: SkillTurnEngine): ImportedSkillView[] {
   const index = readImportedSkills();
   const names = Object.keys(index).filter((name) => !shadowed.has(name)).sort();
-  if (!names.length) return [];
   const choices = readChoices(botId);
-  return names.flatMap((name) => {
+  const stored = names.flatMap((name) => {
     const entry = index[name]!;
     if (!enabledFor(name, entry, choices) || loadedInPlace(entry, native) || !importedSkillIntact(name, entry)) return [];
     const folder = join(IMPORTED_SKILLS_DIR, name);
     return [{ name, description: entry.description, folder, file: join(folder, "SKILL.md") }];
   });
+  // A turn's engine decides the EGM review skills, so they ride only turns that name one.
+  return turn
+    ? stored.concat(egmTurnSkills(loadConfig(), new Set(choices.off), shadowed, turn.driverKind).map((skill) => ({
+      name: skill.name, description: skill.description, folder: skill.folder, file: skill.file, root: skill.root, command: skill.command,
+    })))
+    : stored;
 }
 
 export const IMPORTED_CHANGED_WARNING = "its files changed after it was brought in — bring it in again from Settings → Replay welcome tour";
 
 export type ImportedSkillListing = SkillListing & { origin: "imported"; listed: boolean; file?: string };
 
+const egmListingView = (skill: EgmListing): ImportedSkillListing => ({
+  name: skill.name,
+  description: skill.description,
+  enabled: skill.enabled,
+  listed: false,
+  ...(skill.enabled ? { file: skill.file } : {}),
+  editable: false,
+  source: skill.source,
+  sha256: skill.sha256,
+  importedAt: skill.importedAt,
+  ...(skill.license ? { license: skill.license } : {}),
+  warnings: skill.warnings,
+  skippedFiles: [],
+  origin: "imported" as const,
+});
+
 /** Bot Settings → Skills: every imported skill not shadowed by one of the bot's own, with its switch for this bot,
- * the ones in its list (`about` is what the bot is for) first. An enabled one names its SKILL.md, so a search finds it. */
-export function importedSkillListings(botId: string, shadowed: ReadonlySet<string>, about = ""): ImportedSkillListing[] {
+ * the ones in its list (`about` is what the bot is for) first, plus the built-in EGM skills under the same rules
+ * (`turn`'s runner decides the EGM review skills). An enabled one names its SKILL.md, so a search finds it. */
+export function importedSkillListings(botId: string, shadowed: ReadonlySet<string>, about = "", turn?: SkillTurnEngine): ImportedSkillListing[] {
   const index = readImportedSkills();
   const choices = readChoices(botId);
   const listings = Object.keys(index).filter((name) => !shadowed.has(name)).sort().map((name): ImportedSkillListing => {
@@ -355,13 +384,19 @@ export function importedSkillListings(botId: string, shadowed: ReadonlySet<strin
       origin: "imported" as const,
     };
   });
+  for (const skill of (turn ? egmListings(loadConfig(), new Set(choices.off), turn.driverKind) : [])) {
+    if (shadowed.has(skill.name)) continue;
+    listings.push(egmListingView(skill));
+  }
   const listed = new Set(listedImportedSkills(botId, listings.filter((skill) => skill.enabled), about).map((skill) => skill.name));
   for (const skill of listings) skill.listed = listed.has(skill.name);
   return [...listings.filter((skill) => skill.listed), ...listings.filter((skill) => !skill.listed)];
 }
 
-/** The SKILL.md of an imported skill, only while its copy is intact. */
+/** The SKILL.md of an imported skill, only while its copy is intact; a built-in EGM skill reads from the vendor copy. */
 export function readImportedSkillFile(name: string): string | null {
+  const egm = readEgmSkillFile(name);
+  if (egm !== null) return egm;
   const entry = readImportedSkills()[name];
   if (!entry || !importedSkillIntact(name, entry)) return null;
   const bytes = readFileNoFollow(join(IMPORTED_SKILLS_DIR, name, "SKILL.md"));
@@ -370,21 +405,24 @@ export function readImportedSkillFile(name: string): string | null {
 }
 
 /** One bot's switch. Off stays off whatever is brought in later, and out of its search; on puts it in the bot's list and,
- * for a flagged skill, holds only for the files the person read. */
+ * for a flagged skill, holds only for the files the person read. Built-in EGM skills share the same choices file. */
 export function setImportedSkillEnabled(botId: string, name: string, enabled: boolean): SkillListing | { error: string } {
   const entry = readImportedSkills()[name];
-  if (!entry) return { error: `no skill named "${name}" was brought in from this computer` };
-  if (enabled && !importedSkillIntact(name, entry)) return { error: `"${name}" ${IMPORTED_CHANGED_WARNING}` };
+  if (!entry && !isEgmSkillName(name)) return { error: `no skill named "${name}" was brought in from this computer` };
+  if (entry && enabled && !importedSkillIntact(name, entry)) return { error: `"${name}" ${IMPORTED_CHANGED_WARNING}` };
   const choices = readChoices(botId);
   const off = choices.off.filter((other) => other !== name);
   const { [name]: _read, ...on } = choices.on;
   const listed = choices.listed?.filter((other) => other !== name);
   const next: Choices = enabled
-    ? { off, on: entry.warnings.length ? { ...on, [name]: entry.filesSha256 } : on, ...(listed ? { listed: [...listed, name].sort() } : {}) }
+    ? { off, on: entry?.warnings.length ? { ...on, [name]: entry.filesSha256 } : on, ...(listed ? { listed: [...listed, name].sort() } : {}) }
     : { off: [...off, name].sort(), on, ...(listed ? { listed } : {}) };
   mkdirSync(dirname(choicesPath(botId)), { recursive: true, mode: 0o700 });
   writeFileAtomic(choicesPath(botId), `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
-  return importedSkillListings(botId, new Set()).find((skill) => skill.name === name)!;
+  const refreshed = isEgmSkillName(name)
+    ? egmListings(loadConfig(), new Set(next.off), undefined).map(egmListingView)
+    : importedSkillListings(botId, new Set());
+  return refreshed.find((skill) => skill.name === name)!;
 }
 
 /** The engine of one turn, as far as which skill folders it loads by itself. */
@@ -436,7 +474,10 @@ export function importedSkillsPrompt(skills: readonly ImportedSkillView[], unlis
     intro + (lines.length ? `${lines.join("\n")}\n${guidance}` : "") + (omitted ? `${lines.length ? "\n" : ""}${notice(omitted)}` : "");
   const lines: string[] = [];
   for (const skill of skills.slice(0, INDEX_MAX_SKILLS)) {
-    const line = `- ${skill.name}: ${skill.description} Read ${JSON.stringify(skill.file)}.`;
+    const builtin = skill.root
+      ? ` Its steps reference agents/, resources/ and docs/ folders beside it; those live in ${JSON.stringify(skill.root)}, so read a path like agents/<file> from there. The command is ${skill.command ?? `/${skill.name}`}.`
+      : "";
+    const line = `- ${skill.name}: ${skill.description} Read ${JSON.stringify(skill.file)}.${builtin}`;
     if (Buffer.byteLength(block([...lines, line], skills.length - lines.length - 1 + unlisted), "utf8") > INDEX_MAX_BYTES) break;
     lines.push(line);
   }

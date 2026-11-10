@@ -1,9 +1,9 @@
 // Security: local browse only, with no registry and no network fetch, so an import is exactly the bytes pasted here.
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { intlLocale, t } from "@/lib/i18n";
+import { intlLocale, t, tFromServer } from "@/lib/i18n";
 import { useModalDialog } from "@/hooks/use-modal-dialog";
-import { useStore } from "@/state/store";
+import { api, useStore, type ConfigStatus } from "@/state/store";
 import { Card, Switch } from "./SettingsPrimitives";
 import type { SkillsLibrarySkillWire } from "../../shared/wire";
 import { Select } from "./Select";
@@ -31,6 +31,56 @@ export function LibrarySkillMeta({ skill }: { skill: SkillsLibrarySkillWire }) {
         <span key={tag} className="rounded bg-control px-1.5 py-0.5 font-mono">{tag}</span>
       ))}
     </div>
+  );
+}
+
+/** The built-in Elephant-Goldfish Model skills: one switch for the whole workspace; each bot keeps its own
+ * switch in its Skills settings. Until the language pack merges, the copy falls back to the English text. */
+export function EgmSkillsSettings() {
+  const { state, dispatch } = useStore();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const enabled = state.config?.egmSkills?.enabled !== false;
+
+  const toggle = async (next: boolean) => {
+    if (saving || next === enabled) return;
+    setSaving(true);
+    setError("");
+    try {
+      const config: ConfigStatus = await api("/api/config", {
+        method: "PATCH",
+        body: JSON.stringify({ egmSkills: { enabled: next } }),
+      });
+      dispatch({ type: "configStatus", config });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : tFromServer("egmSkills.error", "Could not save the setting."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card
+      title={tFromServer("egmSkills.title", "Elephant-Goldfish Model skills")}
+      subtitle={tFromServer("egmSkills.subtitle", "Google's EGM design-and-review skills, brought in from the vendor copy on this computer.")}
+    >
+      <div className="flex items-center justify-between gap-4" data-testid="egm-skills-settings">
+        <div className="min-w-0">
+          <div className="text-[14px] font-medium text-ink">{tFromServer("egmSkills.row", "Offer EGM skills to every bot")}</div>
+          <div className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">
+            {tFromServer("egmSkills.rowDetail", "On unless turned off here; each bot can also switch them off in its own Skills settings.")}
+          </div>
+        </div>
+        <Switch
+          checked={enabled}
+          aria-label={tFromServer("egmSkills.rowAria", "Offer EGM skills to every bot")}
+          disabled={saving}
+          onClick={() => void toggle(!enabled)}
+          className="disabled:cursor-wait disabled:opacity-50"
+        />
+      </div>
+      {error ? <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p> : null}
+    </Card>
   );
 }
 
@@ -207,6 +257,7 @@ export function SkillsSection() {
 
   return (
     <div className="flex flex-col gap-4">
+      <EgmSkillsSettings />
       <Card title={t("skills.library.title")} subtitle={t("skills.library.subtitle")}>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">

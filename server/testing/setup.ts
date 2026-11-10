@@ -18,6 +18,9 @@ delete process.env.HERMES_HOME;
 delete process.env.CODEX_HOME;
 // Named explicitly although homedir() already covers it: the device tests delete this directory wholesale.
 process.env.OMB_COMPANION_DIR = join(home, ".openmausbot-companion");
+// The built-in EGM skills read the repository vendor copy: keep them out of every other test skill list
+// (server/egm-skills.test.ts points this at its own fixture, or deletes it to read the real copy).
+process.env.OMB_EGM_VENDOR_DIR = join(home, "no-egm-vendor");
 
 // Product code follows navigator.language; pin it so English assertions do not depend on the host locale.
 Object.defineProperty(globalThis.navigator, "language", { value: "en", configurable: true });

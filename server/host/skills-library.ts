@@ -7,6 +7,7 @@ import { narrowestAudience, intersectAudience } from "../bot-visibility.ts";
 import { DATA_DIR, type AppConfig } from "../config.ts";
 import { appendDecision } from "../decision-log.ts";
 import { UNDO_STALE, type DirectApply } from "../direct-apply.ts";
+import { isEgmSkillName } from "../egm-skills.ts";
 import {
   importedSkillListings, importedSkillsFor, importedSkillsPrompt, listedImportedSkills, nativeSkillFolders, readImportedSkillFile,
   readImportedSkills, type ImportedSkillView, type SkillTurnEngine,
@@ -90,7 +91,8 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
   };
   const listBotSkills = (bot: BotRecord, threadId = bot.threadId): SkillListing[] => {
     const own = ownSkills(bot);
-    const listed = [...own, ...importedSkillListings(bot.id, new Set(own.map((skill) => skill.name)), aboutBot(bot))];
+    const listed = [...own, ...importedSkillListings(bot.id, new Set(own.map((skill) => skill.name)), aboutBot(bot),
+      engineOf(deps.instanceOf?.(bot.modelSelection.instanceId)))];
     const names = new Set(listed.map((skill) => skill.name));
     return [...listed, ...nativesFor(bot, threadId).filter((skill) => !names.has(skill.name)).map(nativeSkillListing)];
   };
@@ -101,7 +103,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     if (listSkills(bot.id).some((skill) => skill.name === name)) return null;
     // The library fallback is by assignment only, never by name alone.
     if (skillsLibraryEnabled(cfg) && listLibrarySkills().some((skill) => skill.name === name && (skill.everyBot || bot.assignedSkills?.includes(name)))) return readLibrarySkillFile(name);
-    if (readImportedSkills()[name]) return readImportedSkillFile(name);
+    if (readImportedSkills()[name] || isEgmSkillName(name)) return readImportedSkillFile(name);
     const native = nativesFor(bot).find((skill) => skill.name === name);
     return native ? readNativeSkillFile(native) : null;
   };
@@ -138,10 +140,10 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     };
   };
   /** This computer's skills for one turn: after the bot's own and library skills (`assigned`), less what the turn's
-   * engine already loads from the same folder. */
+   * engine already loads from the same folder, plus the built-in EGM skills for that engine. */
   const importsFor = (bot: BotRecord, assigned: readonly string[] | undefined, instance: TurnInstance | undefined): ImportedSkillView[] =>
     importedSkillsFor(bot.id, new Set(resolveBotSkills(bot.id, assigned).map((skill) => skill.name)),
-      nativeSkillFolders(engineOf(instance), { claudeUserSkills: claudeUserSkillsEnabled(cfg) }));
+      nativeSkillFolders(engineOf(instance), { claudeUserSkills: claudeUserSkillsEnabled(cfg) }), engineOf(instance));
   /** The ones of those the turn's prompt lists and links into its task folder; it searches for the rest. */
   const listedImports = (bot: BotRecord, available: readonly ImportedSkillView[]) => listedImportedSkills(bot.id, available, aboutBot(bot));
 
