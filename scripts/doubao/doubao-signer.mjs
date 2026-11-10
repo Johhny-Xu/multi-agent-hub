@@ -12,7 +12,7 @@
 //   node doubao-signer.mjs checkin       签到（已签则跳过）+ 只领 task_status=2 的已完成任务（幂等）
 // 不打印 cookie / token。
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, openSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';

@@ -967,7 +967,7 @@ export class CdpProxy {
       clearTimeout(waiter.timeout);
     }
     this.#slots.length = 0;
-    for (const pipe of [...this.#pipes]) pipe.close();
+    for (const pipe of Array.from(this.#pipes)) pipe.close();
     this.#pipes.clear();
     this.#server.closeAllConnections?.();
     await new Promise<void>((resolvePromise) => this.#server.close(() => resolvePromise()));
