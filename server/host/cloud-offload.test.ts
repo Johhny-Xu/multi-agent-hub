@@ -325,6 +325,18 @@ describe("cloud offload for an Auto bot's browser (E72)", () => {
     expect(roots).toEqual(["/data/omb/workspaces", "/data/omb/task-workspaces", "/home/u/proj/site"]);
   });
 
+  it("changes nothing while no cloud machine is configured, though it is on by default", async () => {
+    const { offload, patches, proxies, fallback } = harness({ cfg: { vps: { instances: [] } } });
+    const { close, closed } = closer();
+    expect(offload.conversationSession("b1", "t1", "mychrome", close)).toBe("mychrome");
+    expect(await offload.browserFor("b1", "sess", "t1", "mychrome")).toBeUndefined();
+    expect(await offload.browserFor("b1", "sess", "t1", undefined)).toBeUndefined();
+    expect(offload.authRefusal("sess", "http://127.0.0.1:9339", { name: "agent_browser_open", arguments: { url: "https://github.com/login" } }, { botId: "b1", threadId: "t1" })).toBeNull();
+    await offload.refreshGuard();
+    expect(offload.guardState().cdpUrl).toBeNull();
+    expect({ patches, proxies: proxies.length, ensured: fallback.ensured, closed }).toEqual({ patches: [], proxies: 0, ensured: 0, closed: [] });
+  });
+
   it("stays out of the way when cloud offload is off", async () => {
     const { offload } = harness({ cfg: { cloudOffload: { enabled: false } } });
     expect(await offload.browserFor("b1", "sess", "t1", "mychrome")).toBeUndefined();

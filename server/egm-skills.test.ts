@@ -1,7 +1,7 @@
 // The built-in EGM skills: the vendor copy is read-only, so the tests point OMB_EGM_VENDOR_DIR at a fixture
 // root they write themselves and only the discovery test reads the real vendor copy, which the rtest sync
 // brings along. HOME and the data folder are this test file's own temporary ones (server/testing/setup.ts).
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,8 +9,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR, egmSkillsEnabled, loadConfig, saveConfig } from "./config.ts";
 import { EGM_SUBAGENTS_WARNING, egmCommandPrefix, egmListings, egmSkills, egmTurnSkills, driverSpawnsSubagents } from "./egm-skills.ts";
 import {
-  IMPORTED_SKILLS_DIR, importedSkillListings, importedSkillsFor, importedSkillsPrompt, readImportedSkillFile, setImportedSkillEnabled,
+  IMPORTED_SKILLS_DIR, importedSkillListings, importedSkillsFor, importedSkillsPrompt, readImportedSkillFile, setImportedSkillEnabled, syncImportedSkillLinks,
 } from "./imported-skills.ts";
+import { parseSkillMd } from "../shared/skill-md.ts";
+import { skillExport } from "./skill-export.ts";
+import { harnessSkillLinks } from "./skill-task-links.ts";
+import type { BotRecord } from "./store.ts";
 
 const EGMS = ["egm-bootstrap", "egm-brainstorm", "egm-draft", "egm-drift-report", "egm-resolve", "egm-review", "egm-review-loop"];
 const REVIEWERS = new Set(["egm-bootstrap", "egm-brainstorm", "egm-review", "egm-review-loop"]);
@@ -123,5 +127,43 @@ describe("built-in EGM skills", () => {
     expect(importedSkillsFor(newBot(), new Set(), [], { driverKind: "codex" })).toEqual([]);
     expect(readImportedSkillFile("egm-draft")).toBeNull();
     expect(setImportedSkillEnabled(newBot(), "egm-draft", false)).toEqual({ error: `no skill named "egm-draft" was brought in from this computer` });
+  });
+
+  it("reads every vendor description the way the package format checks it, folded lines and all", () => {
+    delete process.env.OMB_EGM_VENDOR_DIR;
+    for (const skill of egmSkills()) {
+      const parsed = parseSkillMd(readFileSync(skill.file, "utf8"));
+      expect("error" in parsed ? parsed.error : parsed.description).toBe(skill.description);
+      expect(skill.description).not.toMatch(/^[>|]/);
+    }
+  });
+
+  it("never rides a team or bot package: every install brings its own copy", () => {
+    const bot = { id: newBot(), modelSelection: { instanceId: "i" } } as unknown as BotRecord;
+    const own = { name: "weekly-report", description: "Writes the weekly report.", enabled: true, origin: "own" };
+    const listed = [own, ...importedSkillListings(bot.id, new Set(), "", { driverKind: "codex" })];
+    expect(listed.map((skill) => skill.name)).toEqual(["weekly-report", ...EGMS]);
+    const exporter = skillExport({
+      listBotSkills: () => listed as never,
+      readBotSkillFile: (_bot, name) => `---\nname: ${name}\ndescription: x\n---\n`,
+    });
+    const team = exporter.collectTeamSkills([bot], "all");
+    expect(team.ok && [...team.skillsByBot.values()].flat().map((skill) => skill.name)).toEqual(["weekly-report"]);
+    expect(team.available).toEqual(["weekly-report"]);
+    expect(exporter.checkedExportSkillNames(["egm-draft"], [bot])).toMatchObject({ ok: false });
+  });
+
+  it("counts its task-folder links as the harness's own, and takes a stale one back out", () => {
+    const botId = newBot();
+    expect(harnessSkillLinks(botId).imported.get("egm-draft")).toBe(join(fixtureRoot, "skills", "egm-draft"));
+    const folder = mkdtempSync(join(tmpdir(), "omb-egm-task-"));
+    try {
+      syncImportedSkillLinks(botId, folder, importedSkillsFor(botId, new Set(), [], { driverKind: "codex" }));
+      expect(lstatSync(join(folder, ".claude", "skills", "egm-draft")).isSymbolicLink()).toBe(true);
+      syncImportedSkillLinks(botId, folder, []);
+      expect(existsSync(join(folder, ".claude", "skills", "egm-draft"))).toBe(false);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 });

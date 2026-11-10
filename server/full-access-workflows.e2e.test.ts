@@ -77,7 +77,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
       if (["SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "TZ"].includes(key.toUpperCase()) && value) env[key.toUpperCase()] = value;
     }
     Object.assign(env, {
-      HOME: dataDir, USERPROFILE: dataDir, OMB_DATA_DIR: dataDir,
+      HOME: dataDir, USERPROFILE: dataDir, OMB_DATA_DIR: dataDir, OMB_EGM_VENDOR_DIR: join(dataDir, "no-egm-vendor"),
       APPDATA: join(dataDir, "AppData", "Roaming"), LOCALAPPDATA: join(dataDir, "AppData", "Local"),
       XDG_CONFIG_HOME: join(dataDir, ".config"), XDG_CACHE_HOME: join(dataDir, ".cache"),
       XDG_DATA_HOME: join(dataDir, ".local", "share"), HERMES_HOME: join(dataDir, ".hermes"),

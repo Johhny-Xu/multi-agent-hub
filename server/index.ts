@@ -2389,6 +2389,7 @@ function clearDirectTurnDispatch(threadId: string, claimId: string): void {
 }
 
 const compactionControllers = new Map<string, { generation: string; controller: AbortController }>();
+const cloudOffload = createCloudOffload({ cfg, dataDir: DATA_DIR, store: () => store });
 
 function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string): DirectTurnDispatchClaim | null {
   const threadId = expectedThreadId ?? store.bot(botId)?.threadId;
@@ -2406,7 +2407,6 @@ function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string): Dir
   return claim;
 }
 
-const cloudOffload = createCloudOffload({ cfg, dataDir: DATA_DIR, store: () => store });
 const {
   browserRuntime, browserLive, usedBrowserSessions, browserSweep, temporaryBrowserSessions,
   currentBrowserSession, forgetTemporaryBrowser, myChromeAvailable, usesMyChrome, lentChromeSummary, browserSessionSpec, browserIntegration,

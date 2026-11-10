@@ -68,6 +68,11 @@ export function cloudOffloadOn(cfg: Pick<AppConfig, "cloudOffload">): boolean {
   return cfg.cloudOffload?.enabled !== false;
 }
 
+/** On, and with a cloud machine configured to run browsers on: without one the offload leaves this host as it was. */
+export function cloudOffloadActive(cfg: Pick<AppConfig, "cloudOffload" | "vps">): boolean {
+  return cloudOffloadOn(cfg) && cloudBrowserMachines(cfg).length > 0;
+}
+
 /** The sign-in sites as configured (lowercase hosts), the defaults while the person set none. */
 export function authDomains(cfg: Pick<AppConfig, "cloudOffload">): string[] {
   const set = cfg.cloudOffload?.authDomains;

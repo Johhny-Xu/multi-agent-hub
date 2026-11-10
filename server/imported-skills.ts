@@ -21,7 +21,7 @@ import { rankSkills } from "../shared/skill-fit.ts";
 import { isSkillName } from "../shared/skill-md.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR, loadConfig } from "./config.ts";
-import { egmListings, egmTurnSkills, isEgmSkillName, readEgmSkillFile, type EgmListing } from "./egm-skills.ts";
+import { egmListings, egmSkillFolder, egmTurnSkills, isEgmSkillName, readEgmSkillFile, type EgmListing } from "./egm-skills.ts";
 import { directoryEntryState, entryExistsWithoutFollowing } from "./skill-storage.ts";
 import { INDEX_MAX_BYTES, INDEX_MAX_SKILLS, type SkillListing } from "./skills.ts";
 
@@ -507,7 +507,8 @@ function linkDirectory(root: string, relative: string, create: boolean): string 
 function linksToImported(link: string, name: string, base = dirname(link)): boolean {
   try {
     if (!lstatSync(link).isSymbolicLink()) return false;
-    return comparable(resolve(base, readlinkSync(link).replace(/^\\\\\?\\/, ""))) === comparable(join(IMPORTED_SKILLS_DIR, name));
+    const target = comparable(resolve(base, readlinkSync(link).replace(/^\\\\\?\\/, "")));
+    return target === comparable(join(IMPORTED_SKILLS_DIR, name)) || (name.startsWith("egm-") && target === comparable(egmSkillFolder(name)));
   } catch {
     return false;
   }

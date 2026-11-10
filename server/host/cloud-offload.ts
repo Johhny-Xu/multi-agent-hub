@@ -11,7 +11,7 @@ import { browserEngineAttachCdpUrl, type AppConfig } from "../config.ts";
 import { chosenPlace } from "../computer-selection.ts";
 import { CdpProxy, type CdpProxyOptions } from "../cloud-cdp-proxy.ts";
 import { cdpUrlPort, scopedCdpUrl } from "../cloud-cdp-scope.ts";
-import { CloudBrowserPool, authDomainOf, authDomains, cloudBrowserMachines, cloudOffloadOn, sshCloudBrowserDeps, type CloudBrowserDeps, type CloudBrowserMachine } from "../cloud-browser.ts";
+import { CloudBrowserPool, authDomainOf, authDomains, cloudBrowserMachines, cloudOffloadActive, sshCloudBrowserDeps, type CloudBrowserDeps, type CloudBrowserMachine } from "../cloud-browser.ts";
 import { guardedBotEnv, startHeadlessChromeSweep, writeChromeShims, writeGuardState, type GuardState } from "../local-chrome-guard.ts";
 import { LOCAL_CHROME_PORT, LocalChromePool, realLocalChromeDeps } from "../local-chrome-pool.ts";
 import { setBotSpawnEnvHook } from "../procs.ts";
@@ -183,7 +183,7 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
   }
 
   async function refreshGuard(): Promise<void> {
-    if (!cloudOffloadOn(cfg)) return noteGuard(null);
+    if (!cloudOffloadActive(cfg)) return noteGuard(null);
     const pick = await pool.pick(cloudBrowserMachines(cfg), GUARD_SESSION);
     // With no cloud Chrome a CLI still gets one Chrome here: the capped fallback, started when it connects.
     noteGuard(pick.cdpUrl ? await doorFor(pick.cdpUrl) : await fallbackDoor());
@@ -207,7 +207,7 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
    * another's page; its own again while it needs a sign-in, closing the first; or the one its bot shares when it keeps a
    * browser the person chose. */
   function conversationSession(botId: string, threadId: string | undefined, base: string, close: (session: string) => Promise<void>): string {
-    if (!cloudOffloadOn(cfg) || !threadId) return base;
+    if (!cloudOffloadActive(cfg) || !threadId) return base;
     const key = convoKey(botId, threadId);
     const bot = deps.store().bot(botId);
     const task = bot?.tasks?.find((candidate) => candidate.threadId === threadId);
@@ -249,7 +249,7 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       if (key(task.browserPlacement) === key(placement)) return;
       store.patchTask(botId, threadId, { browserPlacement: placement });
     };
-    if (!cloudOffloadOn(cfg) || chosenPlace(task, bot.computer ?? undefined) !== undefined) {
+    if (!cloudOffloadActive(cfg) || chosenPlace(task, bot.computer ?? undefined) !== undefined) {
       record(undefined);
       return undefined;
     }
@@ -285,7 +285,7 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
    * that made it to mychrome, and only that one. The call itself is refused with what happened; the shared cloud
    * connection stays open for every other conversation. Returns the text for the bot, or null to let the call through. */
   function authRefusal(_session: string, cdpUrl: string | undefined, params: unknown, who: { botId: string; threadId: string } | undefined): string | null {
-    if (!cloudOffloadOn(cfg) || !isCloudUrl(cdpUrl)) return null;
+    if (!cloudOffloadActive(cfg) || !isCloudUrl(cdpUrl)) return null;
     const call = params as { name?: unknown; arguments?: { url?: unknown } } | null;
     if (typeof call?.name !== "string" || !OPENING_TOOLS.has(call.name) || typeof call.arguments?.url !== "string") return null;
     const domain = authDomain(/^[a-z][a-z0-9+.-]*:/i.test(call.arguments.url) ? call.arguments.url : `https://${call.arguments.url}`);
@@ -311,16 +311,28 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
     guardState: () => guard,
     start(): void {
       if (process.env.VITEST) return;
-      try {
-        writeChromeShims(shimDir);
-        writeGuardState(stateFile, guard);
-        setBotSpawnEnvHook((env) => cloudOffloadOn(cfg) && cfg.cloudOffload?.guard !== false ? guardedBotEnv(env, shimDir, stateFile, guard) : env);
-      } catch (error) {
-        log(`cloud offload: chrome shims not written: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      if (cfg.cloudOffload?.guard !== false) stopSweep = startHeadlessChromeSweep({ log });
-      void refreshGuard().catch(() => {});
-      timer = setInterval(() => void refreshGuard().catch(() => {}), REFRESH_MS);
+      // Nothing is written, swept or injected until a cloud machine is configured; adding one later arms it on the next tick.
+      let shims = false;
+      const arm = () => {
+        if (!cloudOffloadActive(cfg)) return;
+        if (!shims) {
+          try {
+            writeChromeShims(shimDir);
+            writeGuardState(stateFile, guard);
+            shims = true;
+          } catch (error) {
+            log(`cloud offload: chrome shims not written: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+        if (!stopSweep && cfg.cloudOffload?.guard !== false) stopSweep = startHeadlessChromeSweep({ log });
+      };
+      setBotSpawnEnvHook((env) => shims && cloudOffloadActive(cfg) && cfg.cloudOffload?.guard !== false ? guardedBotEnv(env, shimDir, stateFile, guard) : env);
+      const tick = () => {
+        arm();
+        void refreshGuard().catch(() => {});
+      };
+      tick();
+      timer = setInterval(tick, REFRESH_MS);
       timer.unref?.();
     },
     close(): void {

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { egmSkillsEnabled, type AppConfig } from "./config.ts";
-import { isSkillName } from "../shared/skill-md.ts";
+import { isSkillName, parseSkillMd } from "../shared/skill-md.ts";
 
 /** The vendor copy's root; OMB_EGM_VENDOR_DIR moves it for tests. */
 function vendorRoot(): string {
@@ -25,33 +25,6 @@ const SUBAGENT_DRIVERS = new Set(["claudeAgent", "codex", "antigravityAgent", "o
 
 export function driverSpawnsSubagents(driverKind: string | undefined): boolean {
   return driverKind !== undefined && SUBAGENT_DRIVERS.has(driverKind);
-}
-
-/** The vendor's SKILL.md files fold long descriptions over several lines (`description: >-`), which the
- * shared single-line frontmatter reader cannot; this reads just the keys the listings show. */
-function readEgmFrontmatter(raw: string): { name: string; description: string; license?: string } | null {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return null;
-  let name = "";
-  let description = "";
-  let license: string | undefined;
-  const lines = match[1]!.split(/\r?\n/);
-  for (let at = 0; at < lines.length; at += 1) {
-    const kv = lines[at]!.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
-    if (!kv) continue;
-    const key = kv[1]!.toLowerCase();
-    if (key !== "name" && key !== "description" && key !== "license") continue;
-    let value = kv[2]!.trim().replace(/^["']|["']$/g, "");
-    if (/^[>|][+-]?$/.test(value)) {
-      const folded: string[] = [];
-      while (at + 1 < lines.length && /^\s/.test(lines[at + 1]!)) folded.push(lines[++at]!.trim());
-      value = folded.join(" ");
-    }
-    if (key === "name") name = value;
-    else if (key === "description") description = value;
-    else license = value;
-  }
-  return name && description ? { name, description, license } : null;
 }
 
 export interface EgmSkill {
@@ -87,8 +60,9 @@ export function egmSkills(options: { root?: string } = {}): EgmSkill[] {
     } catch {
       continue;
     }
-    const parsed = readEgmFrontmatter(raw);
-    if (!parsed || parsed.name !== name) continue;
+    // The shared reader the package format checks descriptions with, so a listing never disagrees with its SKILL.md.
+    const parsed = parseSkillMd(raw);
+    if ("error" in parsed || parsed.name !== name) continue;
     skills.push({
       name,
       description: parsed.description,
@@ -100,6 +74,11 @@ export function egmSkills(options: { root?: string } = {}): EgmSkill[] {
     });
   }
   return skills;
+}
+
+/** Where a vendor EGM skill's folder is, which the harness links task folders to; whether or not it exists now. */
+export function egmSkillFolder(name: string): string {
+  return join(vendorRoot(), SKILLS_DIR, name);
 }
 
 export function isEgmSkillName(name: string): boolean {

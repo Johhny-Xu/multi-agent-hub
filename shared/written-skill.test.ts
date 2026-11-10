@@ -30,6 +30,15 @@ describe("written skills", () => {
     expect(parseSkillMd(text)).toMatchObject({ description: 'Show the "receipt", not the promise' });
   });
 
+  it("reads a folded or literal block description the way YAML does, so every reader of a SKILL.md agrees", () => {
+    const folded = "---\nname: egm-like\nlicense: Apache-2.0\ndescription: >-\n  Turns half-baked ideas into\n  structured hypotheses.\n---\nBody";
+    expect(parseSkillMd(folded)).toMatchObject({ name: "egm-like", description: "Turns half-baked ideas into structured hypotheses.", license: "Apache-2.0", body: "Body" });
+    const literal = "---\nname: two-lines\ndescription: |\n  First line.\n  Second line.\n---\n";
+    expect(parseSkillMd(literal)).toMatchObject({ description: "First line.\nSecond line." });
+    const paragraphs = "---\nname: paras\ndescription: >\n  One\n  two.\n\n  Three.\nlicense: MIT\n---\n";
+    expect(parseSkillMd(paragraphs)).toMatchObject({ description: "One two.\nThree.", license: "MIT" });
+  });
+
   it("names the first problem in a draft", () => {
     expect(writtenSkillProblem({ ...draft, name: "Stand Up" })).toBe("name");
     expect(writtenSkillProblem({ ...draft, name: "goal" })).toBe("reserved");

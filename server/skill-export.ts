@@ -1,4 +1,5 @@
 import { BOT_PACKAGE_MAX_SKILLS } from "./bot-package.ts";
+import { EGM_SOURCE } from "./egm-skills.ts";
 import type { SkillsLibraryHost } from "./host/skills-library.ts";
 import type { ExportablePackageSkill, TeamExportSkip } from "./package-export.ts";
 import { isSkillName } from "./skills.ts";
@@ -7,8 +8,10 @@ import type { BotRecord } from "./store.ts";
 /** The skill side of bot and team package export: which names may be exported, and each bot's exportable copies. */
 export function skillExport(host: Pick<SkillsLibraryHost, "listBotSkills" | "readBotSkillFile">) {
   const { readBotSkillFile } = host;
-  // A skill the engine loads by itself from its own folder (the person's ~/.claude/skills, a project's) is never packed.
-  const listBotSkills = (bot: BotRecord) => host.listBotSkills(bot).filter((skill) => (skill as { origin?: string }).origin !== "native");
+  // A skill the engine loads by itself from its own folder (the person's ~/.claude/skills, a project's) is never packed,
+  // nor a built-in vendor EGM skill: every install brings its own copy.
+  const listBotSkills = (bot: BotRecord) => host.listBotSkills(bot)
+    .filter((skill) => (skill as { origin?: string }).origin !== "native" && skill.source !== EGM_SOURCE);
   function checkedExportSkillNames(
     value: unknown,
     bots: readonly BotRecord[],

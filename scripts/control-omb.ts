@@ -162,6 +162,8 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // Without it the server also scans /opt/homebrew/bin, /usr/local/bin and the
     // login shell's PATH, finding a developer's own engine CLIs that CI lacks.
     OMB_TEST_SEALED_PATH: "1",
+    // Like server/testing/setup.ts in-process: no built-in EGM skills in a test server's skill lists unless a caller opts in.
+    OMB_EGM_VENDOR_DIR: parentEnv.OMB_EGM_VENDOR_DIR || join(dataDir, "no-egm-vendor"),
   });
   // The fake engines' knobs are the one thing a caller may script into the child.
   for (const [key, value] of Object.entries(parentEnv)) {

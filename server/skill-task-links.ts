@@ -1,13 +1,16 @@
 import { join } from "node:path";
 
+import { egmSkills } from "./egm-skills.ts";
 import { IMPORTED_SKILLS_DIR, readImportedSkills, syncImportedSkillLinks, type ImportedSkillView } from "./imported-skills.ts";
 import type { HarnessSkillLinks } from "./lending-memory.ts";
 import { ownSkillLinks, syncSkillLinks } from "./skills.ts";
 import { ensureTaskWorkspace } from "./workspace.ts";
 
-/** Every link this file's two syncs may put in a bot's folders. */
+/** Every link this file's two syncs may put in a bot's folders: its own skills, this computer's, and the built-in EGM ones. */
 export function harnessSkillLinks(botId: string): HarnessSkillLinks {
-  return { own: ownSkillLinks(botId), imported: new Map(Object.keys(readImportedSkills()).map((name) => [name, join(IMPORTED_SKILLS_DIR, name)])) };
+  const imported = new Map(Object.keys(readImportedSkills()).map((name) => [name, join(IMPORTED_SKILLS_DIR, name)]));
+  for (const skill of egmSkills()) if (!imported.has(skill.name)) imported.set(skill.name, skill.folder);
+  return { own: ownSkillLinks(botId), imported };
 }
 
 export function syncTaskSkillLinks(

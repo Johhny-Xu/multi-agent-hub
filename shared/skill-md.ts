@@ -107,17 +107,37 @@ export function parseSkillMd(raw: string): ParsedSkill | { error: string } {
   };
 }
 
-/** The single-line `key: value` fields of a SKILL.md's frontmatter, keys lowercased; null without a frontmatter block. */
+/** A block scalar's indented lines as YAML reads them: `|` keeps the line breaks, `>` folds them into spaces
+ * (a blank line stays a break); either way without the trailing break, as a one-line field would be. */
+function blockScalar(indicator: string, lines: readonly string[]): string {
+  const text = lines.map((line) => line.trim());
+  if (indicator.startsWith("|")) return text.join("\n").replace(/\n+$/, "");
+  let out = "";
+  for (const line of text) {
+    if (!line) out += "\n";
+    else out += out && !out.endsWith("\n") ? ` ${line}` : line;
+  }
+  return out.replace(/\n+$/, "");
+}
+
+/** The `key: value` fields of a SKILL.md's frontmatter, keys lowercased; null without a frontmatter block. A value
+ * is one line, or a `>`/`|` block scalar over the indented lines below it (how long descriptions are often folded). */
 export function readSkillFrontmatter(raw: string): { fields: Record<string, string>; body: string } | null {
   // A byte order mark (Notepad, PowerShell) would hide the opening ---.
   if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) return null;
   const fields: Record<string, string> = {};
-  for (const line of match[1]!.split(/\r?\n/)) {
-    const kv = line.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+  const lines = match[1]!.split(/\r?\n/);
+  for (let at = 0; at < lines.length; at += 1) {
+    const kv = lines[at]!.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
     if (!kv) continue;
-    fields[kv[1]!.toLowerCase()] = unquoteScalar(kv[2]!);
+    const value = kv[2]!.trim();
+    if (/^[>|][+-]?$/.test(value)) {
+      const block: string[] = [];
+      while (at + 1 < lines.length && (/^\s/.test(lines[at + 1]!) || (lines[at + 1] === "" && /^\s/.test(lines[at + 2] ?? "")))) block.push(lines[++at]!);
+      fields[kv[1]!.toLowerCase()] = blockScalar(value, block);
+    } else fields[kv[1]!.toLowerCase()] = unquoteScalar(value);
   }
   return { fields, body: match[2] ?? "" };
 }

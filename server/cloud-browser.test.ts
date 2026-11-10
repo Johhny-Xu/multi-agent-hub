@@ -10,6 +10,7 @@ import {
   cloudOffloadSettings,
   cloudBrowserMachines,
   cloudOffloadOn,
+  cloudOffloadActive,
   parseRemoteAnswer,
   remoteChromeScript,
   tunnelArgs,
@@ -64,6 +65,14 @@ describe("cloud machines a browser may run on", () => {
   it("is on unless the config turns it off", () => {
     expect(cloudOffloadOn({})).toBe(true);
     expect(cloudOffloadOn({ cloudOffload: { enabled: false } })).toBe(false);
+  });
+
+  it("acts only while a cloud machine is configured, however it is switched", () => {
+    const one = { instances: [{ id: "i1", name: "cloud-a", kind: "ssh", sshAlias: "cloud-a" }] };
+    expect(cloudOffloadActive({})).toBe(false);
+    expect(cloudOffloadActive({ vps: { instances: [] } } as never)).toBe(false);
+    expect(cloudOffloadActive({ vps: one } as never)).toBe(true);
+    expect(cloudOffloadActive({ vps: one, cloudOffload: { enabled: false } } as never)).toBe(false);
   });
 });
 
