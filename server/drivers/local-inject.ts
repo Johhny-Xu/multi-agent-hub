@@ -15,6 +15,8 @@ export interface LocalHost {
   apiKeyEnv?: string;
   /** /models answers slower than a local runtime (a router fans out to its providers). */
   probeTimeoutMs?: number;
+  /** The host routes provider/model ids that its /models does not list; allow-listed ones are injected anyway. */
+  routesUnlisted?: boolean;
 }
 
 export const LOCAL_HOSTS: LocalHost[] = [
@@ -26,7 +28,7 @@ export const LOCAL_HOSTS: LocalHost[] = [
   { id: "unsloth", label: "Unsloth", baseUrl: "http://127.0.0.1:8888/v1", apiKeyEnv: "UNSLOTH_STUDIO_AUTH_TOKEN" },
   { id: "unsloth_api", label: "Unsloth", baseUrl: "http://127.0.0.1:8888/v1", apiKeyEnv: "UNSLOTH_STUDIO_AUTH_TOKEN" },
   // 9router: key comes only from the OMB-injected env (never 9router's own database).
-  { id: "9router", label: "9router", baseUrl: "http://127.0.0.1:20128/v1", apiKeyEnv: "OMB_9ROUTER_API_KEY", probeTimeoutMs: 6000 },
+  { id: "9router", label: "9router", baseUrl: "http://127.0.0.1:20128/v1", apiKeyEnv: "OMB_9ROUTER_API_KEY", probeTimeoutMs: 12000, routesUnlisted: true },
 ];
 
 export const INJECT_SEP = "::";
@@ -404,8 +406,14 @@ export async function probeLocalInjects(
       return { host, ids, loaded, windows };
     }),
   );
-  for (const { host, ids, loaded, windows } of pages) {
+  for (const { host, ids: listed, loaded, windows } of pages) {
     const allow = injectAllowList(host.id, env);
+    // A router routes provider/model ids its /models omits (custom provider nodes, e.g. 9router "stai/step-5-preview");
+    // an allow-listed provider/model id is injected for such a host once the host answered at all.
+    const unlisted = allow && host.routesUnlisted && listed.length
+      ? [...allow].filter((model) => model.includes("/") && MODEL_ID.test(model) && !listed.includes(model))
+      : [];
+    const ids = [...listed, ...unlisted];
     for (const model of ids) {
       if (allow && !allow.has(model)) continue;
       const contextWindow = windows.get(model);

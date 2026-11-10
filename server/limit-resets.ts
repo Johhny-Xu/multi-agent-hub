@@ -302,7 +302,9 @@ export class LimitResetClock {
 
   private unnamed(engine: string): EngineLimit {
     const account = this.options.accounts().find((candidate) => candidate.id === engine);
-    // account.driver is a PlanDriver; only the reported ones ever reach here, so it is narrowed as-is.
-    return { engine, name: account?.name ?? engine, driver: (account?.driver ?? "claude") as EngineLimit["driver"], window: null, usedPercent: null, resetsAt: null, blocked: false };
+    // account.driver is a PlanDriver, wider than the four a limit reports (meoo, or a refused engine with no account):
+    // anything else takes the same "claude" default a missing account always did.
+    const driver: Driver = account && REPORTED_DRIVERS.has(account.driver) ? (account.driver as Driver) : "claude";
+    return { engine, name: account?.name ?? engine, driver, window: null, usedPercent: null, resetsAt: null, blocked: false };
   }
 }

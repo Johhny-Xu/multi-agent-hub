@@ -27,6 +27,7 @@ export const CHAT_NOTICE = {
   "chat.notice.part.switchAccount": "switch this bot to another AI or Claude account",
   "chat.notice.webhookHome":
     "I'm back on this computer, so my webhook \"{name}\" has an address here again. Open Automations, choose Copy address on \"{name}\", and paste it into the app that sends to it.",
+  "chat.notice.stop.thinkingCap": "{provider} spent its whole output limit ({limit} tokens) thinking and stopped before writing a reply or running a tool (stop: length). Split the task into smaller steps, or ask it to continue.",
   "chat.notice.acpRestarted": "{provider} was restarted because a session sharing its process ignored Stop",
   "chat.notice.acpStopFailed": "{provider} ignored Stop and its process could not be ended",
   "chat.notice.toolCount": "{provider} refused this turn because this model takes at most {limit} tools and this bot offers more, even with its tool lists trimmed, so nothing ran. Turn off some of this bot's apps or MCP servers, or switch the bot to another model.",

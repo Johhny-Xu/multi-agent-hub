@@ -11,6 +11,7 @@ import type { TraceList, TraceRootSummary } from "../../shared/usage-trace";
 import { BotAvatar } from "./Avatar";
 import { PlanUsage } from "./PlanUsage";
 import { Select } from "./Select";
+import { Card, SIMPLE_CARD } from "./SettingsPrimitives";
 import { UsageBudgetCards, type BudgetState } from "./UsageBudget";
 import { TraceView } from "./usage/TraceView";
 import { LiveBadge, modelName, StatStrip, totalsStats } from "./usage/TraceWaterfall";
@@ -111,9 +112,8 @@ function WhereItWent({ range, version, onBudget }: { range: { from: string; to: 
   const byOther = useUsageGroups(range, other, version);
   useEffect(() => { onBudget(byBot?.budget ?? null); }, [byBot, onBudget]);
   return (
-    <section className="rounded-2xl border border-hairline/50 bg-card p-5" aria-label={t("usage.page.where")}>
-      <h3 className="text-[15px] font-medium text-ink">{t("usage.page.where")}</h3>
-      <div className="mt-4 grid gap-6 md:grid-cols-2">
+    <Card title={t("usage.page.where")}>
+      <div className="grid gap-6 md:grid-cols-2">
         <div>
           <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-secondary">{t(GROUP_LABEL_KEYS.bot)}</div>
           {byBot ? <GroupBars groupBy="bot" groups={byBot.groups} /> : <Loader2 size={14} className="animate-spin text-ink-secondary" />}
@@ -135,7 +135,7 @@ function WhereItWent({ range, version, onBudget }: { range: { from: string; to: 
           {byOther?.groupBy === other ? <GroupBars groupBy={other} groups={byOther.groups} /> : <Loader2 size={14} className="animate-spin text-ink-secondary" />}
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -218,7 +218,7 @@ export function UsageSection() {
           <Select size="sm" value={period} onChange={(event) => { setPeriod(event.target.value as UsagePeriod); setOpen(null); }} aria-label={t("usage.history.period")}>
             {USAGE_PERIODS.map((option) => <option key={option} value={option}>{t(PERIOD_LABEL_KEYS[option])}</option>)}
           </Select>
-          <a href={usageExportHref(range)} download className="flex items-center gap-1.5 rounded-lg border border-hairline/40 px-2.5 py-1 text-[12px] text-ink-secondary hover:bg-raised/50 hover:text-ink">
+          <a href={usageExportHref(range)} download className="ui-button flex items-center gap-1.5">
             <Download size={13} />{t("usage.history.export")}
           </a>
         </div>
@@ -226,31 +226,27 @@ export function UsageSection() {
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       {open ? (
         <TraceView id={open.id} at={open.at} actions={(
-          <button type="button" onClick={() => setOpen(null)} className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink">
+          <button type="button" onClick={() => setOpen(null)} className="ui-button flex shrink-0 items-center gap-1">
             <ArrowLeft size={13} />{t("trace.back")}
           </button>
         )} />
       ) : (
         <>
-          <section className="overflow-hidden rounded-2xl border border-hairline/50 bg-card" data-testid="usage-totals">
+          <section className={SIMPLE_CARD} data-testid="usage-totals">
             {list ? <StatStrip items={totalsStats(list.totals, t("trace.stat.time"))} />
-              : <div className="flex items-center gap-2 p-5 text-[13px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("common.checking")}</div>}
+              : <div className="flex items-center gap-2 px-4 py-2.5 text-[13px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("common.checking")}</div>}
           </section>
           <WhereItWent range={range} version={version} onBudget={setBudget} />
-          <section className="rounded-2xl border border-hairline/50 bg-card p-2" aria-label={t("usage.page.runs")}>
-            <div className="px-3 pb-1 pt-3">
-              <h3 className="text-[15px] font-medium text-ink">{t("usage.page.runs")}</h3>
-              <p className="mt-0.5 text-[13px] text-ink-secondary">{t("usage.page.runsHint")}</p>
-            </div>
-            {list && !list.roots.length && <p className="px-3 py-3 text-[13px] text-ink-secondary">{t("usage.page.runsEmpty")}</p>}
-            <ul className="mt-1 flex flex-col">
+          <Card title={t("usage.page.runs")} subtitle={t("usage.page.runsHint")}>
+            {list && !list.roots.length && <p className="text-[13px] text-ink-secondary">{t("usage.page.runsEmpty")}</p>}
+            <ul className="flex flex-col">
               {list?.roots.map((root) => <RunRow key={root.id} root={root} onOpen={() => setOpen({ id: root.id, at: root.startedAt })} />)}
             </ul>
             {list?.next !== undefined && (
-              <button type="button" onClick={more} className="m-2 rounded-lg px-3 py-1.5 text-[13px] text-accent hover:bg-raised/50">{t("usage.page.more")}</button>
+              <button type="button" onClick={more} className="self-start text-left text-[12px] font-medium text-accent hover:underline">{t("usage.page.more")}</button>
             )}
-            {untimed && <p className="px-3 pb-3 pt-1 text-[12px] text-ink-tertiary">{t("usage.page.untimedNote")}</p>}
-          </section>
+            {untimed && <p className="mt-1 text-[12px] text-ink-tertiary">{t("usage.page.untimedNote")}</p>}
+          </Card>
         </>
       )}
       <PlanUsage />

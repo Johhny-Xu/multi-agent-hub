@@ -416,7 +416,7 @@ export function PlanUsage(props: {
           disabled={loading}
           aria-label={t("planUsage.refresh")}
           title={t("planUsage.refresh")}
-          className="rounded-md p-2 text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50"
+          className="ui-icon-button"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
         </button>
@@ -432,7 +432,7 @@ export function PlanUsage(props: {
 
       {/* Instance-driven mode (shows all registered CLI engines sorted, with multiple plan rows grouped) */}
       {useInstanceMode && instances.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col divide-y divide-hairline/30">
           {instances.map((instance) => {
             const provider = report?.providers.find((p) => p.id === instance.instanceId);
             const worker = quotaReport?.workers ? quotaWorkerForInstance(instance, quotaReport.workers) : undefined;
@@ -447,7 +447,7 @@ export function PlanUsage(props: {
                 key={instance.instanceId}
                 data-plan-provider={instance.instanceId}
                 className={cn(
-                  "border-t border-hairline/30 pt-3 first:border-t-0 first:pt-0",
+                  "py-3 first:pt-0 last:pb-0",
                   instance.disabled && "opacity-60",
                 )}
               >
@@ -457,7 +457,7 @@ export function PlanUsage(props: {
                   </span>
                   {plan && <span className="truncate text-[12px] text-ink-secondary">{plan}</span>}
                   {instance.disabled && (
-                    <span className="rounded bg-inset px-1.5 py-0.5 text-[11px] text-ink-tertiary">
+                    <span className="rounded-full bg-ink/[0.07] px-2 py-0.5 text-[11px] font-medium text-ink-tertiary">
                       {t("planUsage.disabled")}
                     </span>
                   )}
@@ -558,9 +558,9 @@ export function PlanUsage(props: {
 
       {/* Fallback report-only mode (when instances store is not available) */}
       {!useInstanceMode && report && report.providers.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col divide-y divide-hairline/30">
           {report.providers.map((provider) => (
-            <div key={provider.id} className="border-t border-hairline/30 pt-3 first:border-t-0 first:pt-0">
+            <div key={provider.id} className="py-3 first:pt-0 last:pb-0">
               <div className="mb-2 flex min-w-0 items-baseline gap-2">
                 <span className="truncate text-[14px] font-medium text-ink">{providerLabel(provider)}</span>
                 {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}

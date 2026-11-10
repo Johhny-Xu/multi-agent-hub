@@ -611,7 +611,7 @@ describe("hub-compat dispatch", () => {
     const z = await startFakeOm({ instances: [
       { instanceId: "zcode", displayName: "ZCode",
         snapshot: { state: "available", authenticated: true },
-        models: { default: "wx/Deepseek-v4-flash", options: [{ id: "stealth" }] } },
+        models: { default: "deepseek-v4.1-flash", options: [{ id: "stealth" }] } },
     ] });
     try {
       const tools = freshTools(z.url);

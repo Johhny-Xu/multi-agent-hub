@@ -59,7 +59,6 @@ const ZCODE_MODELS: ModelCatalog = {
         { id: "max", label: "Max" },
       ],
     },
-    { id: "wx/Deepseek-v4-flash", label: "DeepSeek V4 Flash" },
     { id: "step-5-preview", label: "Step 5 Preview" },
     { id: "LongCat-2.5-Preview", label: "LongCat 2.5 Preview" },
   ],

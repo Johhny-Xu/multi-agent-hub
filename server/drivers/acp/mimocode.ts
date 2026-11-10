@@ -13,17 +13,19 @@
 // first one that answers as the MiMo CLI, trying the launcher first and the baseline build before
 // the AVX2 one.
 //
-// House rule: only the CLI's own bundled tiers run. Ids under `mimo/`/`xiaomi/` are the whitelist —
-// the `9router/*` rows `mimo models` also prints come from the CLI's own BYOK providers in its
-// config, so they are filtered out of the catalog and a turn without a whitelisted pick is pinned
-// to `mimo/mimo-auto`. No key of the person's own is injected, and the CLI's own provider
-// configuration is never read or written.
+// House rule: only the CLI's own bundled tiers and OpenMausBot's own local inject run. Ids under
+// `mimo/`/`xiaomi/` are the whitelist — the `9router/*` rows `mimo models` also prints come from the
+// CLI's own BYOK providers in its config, so they are filtered out of the catalog and a turn without a
+// whitelisted pick is pinned to `mimo/mimo-auto`. A local-inject pick (`9router::model`, E70) rides
+// MIMOCODE_CONFIG_CONTENT as an `omb-<host>` openai-compatible provider whose key is an `{env:…}`
+// reference, so the CLI's own provider configuration is never read or written and its own BYOK
+// providers are never what an inject turn runs.
 import { execFile } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import type { ModelCatalog, SendTurnInput } from "../../contracts.ts";
-import { decodeInjectId } from "../local-inject.ts";
+import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { userHome } from "../../env-path.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
 
@@ -35,6 +37,83 @@ const MIMOCODE_MODEL_PREFIXES: readonly string[] = ["mimo/", "xiaomi/"];
 
 function isBundledModel(id: string): boolean {
   return MIMOCODE_MODEL_PREFIXES.some((prefix) => id.startsWith(prefix));
+}
+
+/** OpenMausBot's own inject providers in the child's config are `omb-<host>`, never the CLI's own
+ * `9router` provider of the same host (E70). */
+export const MIMOCODE_INJECT_PROVIDER_PREFIX = "omb-";
+
+/** A wire id `omb-<host>/<model>` for a known local-inject host. */
+export function isMimocodeInjectWireModel(id: string): boolean {
+  if (!id.startsWith(MIMOCODE_INJECT_PROVIDER_PREFIX)) return false;
+  const slash = id.indexOf("/");
+  if (slash <= MIMOCODE_INJECT_PROVIDER_PREFIX.length) return false;
+  return Boolean(localHost(id.slice(MIMOCODE_INJECT_PROVIDER_PREFIX.length, slash)));
+}
+
+/** Output tokens an injected model may produce per request; the 32000 OpenCode forks default to is
+ * where long-thinking models stop before answering (FIX-E54). */
+const DEFAULT_BYOK_MAX_OUTPUT_TOKENS = 64_000;
+
+function byokMaxOutputTokens(env: Record<string, string | undefined>): number {
+  const parsed = Number(env.OMB_BYOK_MAX_OUTPUT_TOKENS);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_BYOK_MAX_OUTPUT_TOKENS;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
+}
+
+/** Upsert an openai-compatible `omb-<host>` provider into MIMOCODE_CONFIG_CONTENT so the CLI can select
+ * `omb-<host>/<model>` (E70). The CLI (an OpenCode fork) reads it once per process and merges it over its
+ * own config; the env is part of the spawn fingerprint, so another inject model respawns. The key rides
+ * as `{env:<name>}` when the host names one, so it stays in the child env and out of any file. */
+export function ensureMimocodeInjectModel(
+  modelId: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const inject = decodeInjectId(modelId);
+  if (!inject) return modelId;
+  const host = localHost(inject.host);
+  if (!host) return modelId;
+  const providerId = `${MIMOCODE_INJECT_PROVIDER_PREFIX}${inject.host}`;
+  const wire = `${providerId}/${inject.model}`;
+  let config: Record<string, unknown> = {};
+  if (env.MIMOCODE_CONFIG_CONTENT?.trim()) {
+    try {
+      const parsed = JSON.parse(env.MIMOCODE_CONFIG_CONTENT) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return wire;
+      config = parsed as Record<string, unknown>;
+    } catch {
+      return wire;
+    }
+  }
+  const providers = record(config.provider);
+  const existing = record(providers[providerId]);
+  const options = record(existing.options);
+  options.baseURL = host.baseUrl;
+  if (!options.apiKey) {
+    options.apiKey = host.apiKeyEnv && env[host.apiKeyEnv] ? `{env:${host.apiKeyEnv}}` : hostApiKey(host, env);
+  }
+  const models = record(existing.models);
+  if (!models[inject.model]) {
+    models[inject.model] = {
+      name: `${inject.model} (${host.label})`,
+      limit: { context: 0, output: byokMaxOutputTokens(env) },
+    };
+  }
+  if (!env.MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX?.trim()) {
+    env.MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = String(byokMaxOutputTokens(env));
+  }
+  providers[providerId] = {
+    ...existing,
+    npm: (existing.npm as string | undefined) || "@ai-sdk/openai-compatible",
+    name: (existing.name as string | undefined) || `${host.label} (OpenMausBot)`,
+    options,
+    models,
+  };
+  env.MIMOCODE_CONFIG_CONTENT = JSON.stringify({ ...config, provider: providers });
+  return wire;
 }
 
 /** `mimo models` on 0.1.15, verified 2026-11-08, minus the CLI's `9router/*` BYOK rows; the context
@@ -170,7 +249,7 @@ export function parseMimoModels(output: string): ModelCatalog | null {
  * id among them) is replaced with the fallback; a locally injected id is the person's own and passes. */
 function normalizeMimocodeTurn(turn: SendTurnInput): SendTurnInput {
   const { model } = turn;
-  if (model && (decodeInjectId(model) || isBundledModel(model))) return turn;
+  if (model && (decodeInjectId(model) || isBundledModel(model) || isMimocodeInjectWireModel(model))) return turn;
   return { ...turn, model: MIMOCODE_FALLBACK_MODEL };
 }
 
@@ -190,6 +269,11 @@ async function resolveModels(
 const support: AcpSupport = {
   driverKind: "mimocodeAgent",
   displayName: "MiMo Code",
+  // E54: the CLI (an OpenCode fork) caps each request at this, 32000 when unset.
+  outputTokenCap: (env) => {
+    const parsed = Number(env.MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 32_000;
+  },
   models: MIMOCODE_MODELS,
   defaultCli: "mimo",
   nativeSource: "mimo.acp",
@@ -221,7 +305,11 @@ const support: AcpSupport = {
     return { state: "available", version: cli.version, authenticated: mimocodeSignedIn(env), billing: "subscription" };
   },
 
-  resolveModels: (env, config) => resolveModels(env, config),
+  resolveModels: async (env, config) => mergeLocalInject(await resolveModels(env, config), env),
+
+  // A local-inject pick (`9router::model`) becomes the CLI-native `omb-9router/model` with its provider
+  // in MIMOCODE_CONFIG_CONTENT (E70); bundled ids pass unchanged.
+  resolveTurnModel: (model, env) => (model ? ensureMimocodeInjectModel(model, env) : model),
 
   selectModel: { configId: "model" },
 

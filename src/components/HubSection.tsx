@@ -17,7 +17,7 @@ import {
   type HubLiveRow,
   type HubTaskView,
 } from "@/lib/hub-tasks";
-import { Card } from "./SettingsPrimitives";
+import { Card, SettingRow, SIMPLE_CARD } from "./SettingsPrimitives";
 
 type HubHealth = { console: { ok: boolean; url: string }; scheduler: { ok: boolean; url: string } };
 type HubPanel = "checkin" | "ui";
@@ -168,31 +168,33 @@ function DispatchedTasks() {
             const elapsed = rowElapsedSeconds(row, now);
             const detail = row.status === "running" ? row.progress : row.result;
             return (
-              <li key={row.task.ref} className="rounded-lg border border-hairline/40 p-3" data-hub-task={row.task.ref}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-ink">
-                      <span className="truncate">{row.task.agent}</span>
-                      <span className="font-mono text-[11px] font-normal text-ink-tertiary">{row.task.ref}</span>
+              <li key={row.task.ref} className={SIMPLE_CARD} data-hub-task={row.task.ref}>
+                <div className="px-4 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-ink">
+                        <span className="truncate">{row.task.agent}</span>
+                        <span className="font-mono text-[11px] font-normal text-ink-tertiary">{row.task.ref}</span>
+                      </div>
+                      {row.task.title && (
+                        <p className="mt-0.5 line-clamp-2 break-words text-[12px] text-ink-secondary">{row.task.title}</p>
+                      )}
                     </div>
-                    {row.task.title && (
-                      <p className="mt-0.5 line-clamp-2 break-words text-[12px] text-ink-secondary">{row.task.title}</p>
-                    )}
+                    <div className="shrink-0 text-right">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE[row.status] ?? STATUS_TONE.unknown}`}>
+                        {t(STATUS_KEY[row.status] ?? "settings.hub.statusUnknown")}
+                      </span>
+                      {elapsed !== null && (
+                        <div className="mt-1 font-mono text-[11px] text-ink-tertiary">{formatElapsed(elapsed)}</div>
+                      )}
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE[row.status] ?? STATUS_TONE.unknown}`}>
-                      {t(STATUS_KEY[row.status] ?? "settings.hub.statusUnknown")}
-                    </span>
-                    {elapsed !== null && (
-                      <div className="mt-1 font-mono text-[11px] text-ink-tertiary">{formatElapsed(elapsed)}</div>
-                    )}
-                  </div>
+                  {detail && (
+                    <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-ink-secondary">
+                      {detail}
+                    </p>
+                  )}
                 </div>
-                {detail && (
-                  <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-ink-secondary">
-                    {detail}
-                  </p>
-                )}
               </li>
             );
           })}
@@ -237,16 +239,12 @@ export function HubSection() {
         </p>
         <div className="mt-3 flex flex-col gap-2">
           {PANELS.map((panel) => (
-            <div key={panel.id} className="rounded-lg border border-hairline/40">
-              <div className="flex items-start justify-between gap-4 p-3">
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium text-ink">{panel.title()}</div>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{panel.help()}</p>
-                </div>
+            <div key={panel.id} className={SIMPLE_CARD}>
+              <SettingRow title={panel.title()} subtitle={panel.help()} className="py-2.5">
                 <button type="button" className="ui-button shrink-0" onClick={() => setOpen(open === panel.id ? null : panel.id)}>
                   {open === panel.id ? t("settings.hub.close") : t("settings.hub.open")}
                 </button>
-              </div>
+              </SettingRow>
               {open === panel.id && !narrow && (
                 <iframe
                   src={panel.src}

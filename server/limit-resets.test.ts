@@ -444,4 +444,20 @@ describe("LimitResetClock and the turns that follow a refusal", () => {
     expect(instance.blockedUntil("claude")).toBeNull();
     expect(instance.report().engines).toEqual([]);
   });
+
+describe("LimitResetClock unnamed engines", () => {
+  it("never reports a driver outside the four a limit names (a meoo account, or an engine with no account)", () => {
+    const now = 1_800_000_000_000;
+    const instance = new LimitResetClock({
+      accounts: () => [{ id: "meoo", name: "Meoo", driver: "meoo" as const, environment: {} }, { id: "codex", name: "Codex", driver: "codex" as const, environment: {} }],
+      now: () => now,
+    });
+    instance.noteRefusal("meoo", now + 3_600_000);
+    instance.noteRefusal("zcode", now + 3_600_000);
+    instance.noteRefusal("codex", now + 3_600_000);
+    const drivers = Object.fromEntries(instance.report().engines.map((e) => [e.engine, e.driver]));
+    expect(drivers).toEqual({ meoo: "claude", zcode: "claude", codex: "codex" });
+    expect(instance.report().engines.find((e) => e.engine === "meoo")?.name).toBe("Meoo");
+  });
+});
 });

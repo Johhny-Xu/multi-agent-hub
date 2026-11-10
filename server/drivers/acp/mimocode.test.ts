@@ -13,6 +13,8 @@ import { BUILT_IN_DRIVERS } from "../builtIn.ts";
 import {
   LOGIN_NOTE,
   MimocodeAgentDriver,
+  ensureMimocodeInjectModel,
+  isMimocodeInjectWireModel,
   mimocodeCliCandidates,
   mimocodeCliInstalled,
   mimocodeSignedIn,
@@ -246,5 +248,51 @@ describe("MiMo Code ACP driver", () => {
     await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
     expect(configCalls().map((call) => [call.method, call.params.configId, call.params.value]))
       .toEqual([["session/set_config_option", "model", "mimo/mimo-auto"]]);
+  });
+
+  it("injects a local 9router pick as an omb- provider in MIMOCODE_CONFIG_CONTENT (E70)", () => {
+    const env: Record<string, string | undefined> = { OMB_9ROUTER_API_KEY: "sk-fixture-secret" };
+    expect(ensureMimocodeInjectModel("9router::stai/step-5-preview", env)).toBe("omb-9router/stai/step-5-preview");
+    const config = JSON.parse(env.MIMOCODE_CONFIG_CONTENT!) as {
+      provider: Record<string, { npm: string; options: { baseURL: string; apiKey: string }; models: Record<string, { limit: { output: number } }> }>;
+    };
+    const provider = config.provider["omb-9router"];
+    expect(provider.npm).toBe("@ai-sdk/openai-compatible");
+    expect(provider.options).toEqual({ baseURL: "http://127.0.0.1:20128/v1", apiKey: "{env:OMB_9ROUTER_API_KEY}" });
+    expect(provider.models["stai/step-5-preview"].limit.output).toBe(64_000);
+    expect(config.provider["9router"]).toBeUndefined();
+    expect(env.MIMOCODE_CONFIG_CONTENT).not.toContain("sk-fixture-secret");
+    expect(env.MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe("64000");
+    // A second inject model joins the same provider; bundled ids pass untouched.
+    expect(ensureMimocodeInjectModel("9router::hw/glm-5.3", env)).toBe("omb-9router/hw/glm-5.3");
+    expect(Object.keys((JSON.parse(env.MIMOCODE_CONFIG_CONTENT!) as typeof config).provider["omb-9router"].models).sort())
+      .toEqual(["hw/glm-5.3", "stai/step-5-preview"]);
+    expect(ensureMimocodeInjectModel("xiaomi/mimo-v2.6-pro", env)).toBe("xiaomi/mimo-v2.6-pro");
+    expect(isMimocodeInjectWireModel("omb-9router/stai/step-5-preview")).toBe(true);
+    expect(isMimocodeInjectWireModel("9router/stai/step-5-preview")).toBe(false);
+    expect(isMimocodeInjectWireModel("omb-nohost/x")).toBe(false);
+  });
+
+  it("runs an injected pick on the omb- provider, not the CLI's own BYOK or the fallback (E70)", async () => {
+    instance = await MimocodeAgentDriver.create({
+      instanceId: "mimocode-inject", displayName: "MiMo Code", enabled: true,
+      environment: {
+        ...byokDefaultEnvironment(),
+        OMB_9ROUTER_API_KEY: "sk-fixture-secret",
+        FAKE_ACP_MODELS: "9router/stai/step-5-preview,mimo/mimo-auto,omb-9router/stai/step-5-preview",
+      },
+      config: { cli: FAKE_CLI, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "mimocode-inject", text: "hello", model: "9router::stai/step-5-preview", approvalMode: "full",
+    });
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(configCalls().map((call) => [call.method, call.params.configId, call.params.value]))
+      .toEqual([["session/set_config_option", "model", "omb-9router/stai/step-5-preview"]]);
+    const launch = JSON.parse(readFileSync(join(scratch, "launch.json"), "utf8")) as { env: Record<string, string> };
+    const content = JSON.parse(launch.env.MIMOCODE_CONFIG_CONTENT) as { provider: Record<string, { options: { apiKey: string } }> };
+    expect(content.provider["omb-9router"].options.apiKey).toBe("{env:OMB_9ROUTER_API_KEY}");
+    expect(launch.env.MIMOCODE_CONFIG_CONTENT).not.toContain("sk-fixture-secret");
   });
 });

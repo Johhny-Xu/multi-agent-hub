@@ -111,7 +111,7 @@ export function endedWithoutReport(text: string): boolean {
 const WORKERS: Record<string, string> = {
   antigravity: "antigravity", codebuddy: "codebuddy", "codebuddy-cn": "codebuddyCn",
   minimaxcode: "mcode", qoder: "qoder", "qoder-cn": "qoderCn", codearts: "codearts",
-  meoo: "meoo", cline: "cline", opencode: "opencodeGo", "github-copilot": "githubCopilot",
+  meoo: "meoo", opencode: "opencodeGo", "github-copilot": "githubCopilot",
   zcode: "zcode",
 };
 

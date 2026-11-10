@@ -1814,3 +1814,19 @@ describe.skipIf(process.platform === "win32")("which OpenCode runs", () => {
     expect(env.OPENCODE_DISABLE_AUTOUPDATE).toBe("1");
   });
 });
+
+describe("openCodeOutputTokenCap (E54)", () => {
+  it("reads the per-request cap OpenCode runs under, 32000 when unset or invalid", async () => {
+    const { openCodeOutputTokenCap } = await import("./opencode-go.ts");
+    expect(openCodeOutputTokenCap({ OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "64000" })).toBe(64_000);
+    expect(openCodeOutputTokenCap({})).toBe(32_000);
+    expect(openCodeOutputTokenCap({ OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "lots" })).toBe(32_000);
+  });
+
+  it("matches the cap an inject turn sets, so a cut-off BYOK turn is reported", async () => {
+    const { openCodeOutputTokenCap, ensureOpenCodeInjectModel } = await import("./opencode-go.ts");
+    const env: Record<string, string | undefined> = { OMB_BYOK_MAX_OUTPUT_TOKENS: "48000" };
+    ensureOpenCodeInjectModel("9router::stai/step-5-preview", env);
+    expect(openCodeOutputTokenCap(env)).toBe(48_000);
+  });
+});

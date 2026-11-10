@@ -437,8 +437,9 @@ describe("Web-chat driver (Hark)", () => {
       expect(types).toContain("item.completed");
       expect(types).toContain("turn.completed");
 
-      const itemCompleted = events.find((e) => e.type === "item.completed") as { text?: string };
+      const itemCompleted = events.find((e) => e.type === "item.completed") as { text?: string; itemType?: string };
       expect(itemCompleted.text).toBe("Hello from Hark web!");
+      expect(itemCompleted.itemType, "routines only collect assistant_text items").toBe("assistant_text");
 
       const turnCompleted = events.find((e) => e.type === "turn.completed") as { ok?: boolean; stopReason?: string };
       expect(turnCompleted.ok).toBe(true);
@@ -1851,4 +1852,23 @@ describe("WEBCHAT-wire: snapshot reads botIdsForInstance from the workbench regi
     expect(snapshot.reason).toContain("需在工作台浏览器查看器中打开并登录");
     expect(seen).toEqual(["harkWeb"]);
   });
+
+describe("workbench page factory fallback", () => {
+  it("opens the first live browser profile by its own session and key when no target resolver is set", async () => {
+    let opened: BrowserTarget | undefined;
+    const service = {
+      profiles: () => [{ session: "bot-one", key: "bot:bot-one" }],
+      profile: (target: BrowserTarget) => { opened = target; throw new Error("stop-here"); },
+    } as unknown as BrowserService;
+    const factory = createDefaultWorkbenchPageFactory({ browserService: service });
+    await expect(factory({ instanceId: "harkWeb-fallback-test", url: "https://example.com" })).rejects.toThrow("stop-here");
+    expect(opened).toEqual({ session: "bot-one", key: "bot:bot-one" });
+  });
+
+  it("still names the bot when there is no profile to fall back to", async () => {
+    const service = { profiles: () => [], profile: vi.fn() } as unknown as BrowserService;
+    const factory = createDefaultWorkbenchPageFactory({ browserService: service });
+    await expect(factory({ instanceId: "harkWeb-fallback-test", url: "https://example.com", botId: "b1" })).rejects.toThrow(/browser target for bot "b1"/);
+  });
+});
 });

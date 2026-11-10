@@ -24,6 +24,8 @@ export interface AcpTurn {
     usagePeak: number | null;
     usageLast: number | null;
     usageCompacted: boolean;
+    /** Output tokens the turn's last model request spent, from the session/prompt result's usage (E54). */
+    outputTokens?: number | null;
     /** Stop went unanswered: only the cancel timeout settles the turn, once its session is closed or its process gone. */
     cancelling: boolean;
   };
@@ -84,8 +86,17 @@ export interface AcpTurnEnd {
 /** How a settling turn ends, once its last text is out. A Stop the agent answers with end_turn (OpenCode does) is the
  * person's stop. A reply that is only a provider's error body fails the turn in plain words. Otherwise `end_turn` with
  * nothing to show is a lost turn: a provider may cut a reasoning-only stream and still answer end_turn. */
-export function endTurn(current: AcpTurn, ok: boolean, stopReason: string | null, ai: string): AcpTurnEnd {
+export function endTurn(current: AcpTurn, ok: boolean, stopReason: string | null, ai: string, outputCap?: number): AcpTurnEnd {
   const ended = ok && stopReason === null;
+  // E54: an agent that hits its output cap while still thinking (finish=length) answers end_turn with nothing after
+  // its last tool; say that plainly instead of letting the turn end silently.
+  const thinkingCapped = ended && !current.state.stopped && typeof outputCap === "number" && outputCap > 0
+    && typeof current.state.outputTokens === "number" && current.state.outputTokens >= outputCap
+    && !current.state.text.trim();
+  if (thinkingCapped) {
+    current.flushAssistantText();
+    return { ok: false, stopReason: "max_tokens", error: noticeFailure("chat.notice.stop.thinkingCap", { provider: ai, limit: String(outputCap) }) };
+  }
   const errorReply = ended && !current.state.stopped && !current.state.repliedText ? errorReplyFailure(ai, current.state.text) : null;
   if (!errorReply) current.flushAssistantText();
   if (ended && current.state.stopped) return { ok, stopReason: "cancelled" };

@@ -23,4 +23,20 @@ describe("injectAllowList", () => {
     const found = await probeLocalInjects({ OMB_9ROUTER_API_KEY: "k", OMB_INJECT_ALLOW_9ROUTER: "trae,ollama/gpt-oss:120b" }, fetchImpl);
     expect(found.filter((m) => m.host === "9router").map((m) => m.model).sort()).toEqual(["ollama/gpt-oss:120b", "trae"]);
   });
+  it("routes an allow-listed provider/model id the router does not list (9router custom provider node)", async () => {
+    const fetchImpl = (async (url: string | URL) => {
+      if (String(url).startsWith("http://127.0.0.1:20128/v1/models")) {
+        return new Response(JSON.stringify({ data: [{ id: "trae" }, { id: "step-5" }] }), { status: 200 });
+      }
+      return new Response("no", { status: 404 });
+    }) as typeof fetch;
+    const found = await probeLocalInjects({ OMB_9ROUTER_API_KEY: "k", OMB_INJECT_ALLOW_9ROUTER: "trae,stai/step-5-preview,nonslash" }, fetchImpl);
+    expect(found.filter((m) => m.host === "9router").map((m) => m.model).sort()).toEqual(["stai/step-5-preview", "trae"]);
+  });
+
+  it("injects no unlisted id when the router did not answer", async () => {
+    const fetchImpl = (async () => new Response("no", { status: 502 })) as typeof fetch;
+    const found = await probeLocalInjects({ OMB_9ROUTER_API_KEY: "k", OMB_INJECT_ALLOW_9ROUTER: "stai/step-5-preview" }, fetchImpl);
+    expect(found.filter((m) => m.host === "9router")).toEqual([]);
+  });
 });

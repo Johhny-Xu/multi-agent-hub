@@ -453,3 +453,44 @@ describe("All registered CLI engines & sortEngines ordering", () => {
     expect(html).toContain("Unlimited");
   });
 });
+
+describe("the native settings card", () => {
+  const instance = (patch: Partial<import("@/state/store").InstanceInfo> & { instanceId: string; displayName: string }): import("@/state/store").InstanceInfo => ({
+    driverKind: "generic",
+    models: { default: "m1", options: [{ id: "m1", label: "Model 1" }] },
+    snapshot: { state: "available", authenticated: true },
+    ...patch,
+  });
+
+  it("renders inside the native settings card, with native row separators and the standard refresh icon button", () => {
+    fixture.report = {
+      fetchedAt: "2026-10-02T09:00:00Z",
+      providers: [{
+        id: "fixture", name: "Fixture provider", driver: "claude", plan: "Pro", ok: true, error: null,
+        fiveHour: { available: true, remainingPercent: 68, usedPercent: 32, resetsAt: null },
+        weekly: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null }, extra: [],
+        models: [],
+      }],
+    };
+    const html = renderToStaticMarkup(createElement(PlanUsage));
+    expect(html).toContain("rounded-xl bg-card p-4");
+    expect(html).toContain('class="ui-icon-button"');
+    expect(html).toContain("divide-y divide-hairline/30");
+    expect(html).toContain('aria-valuenow="32"');
+  });
+
+  it("keeps each registered engine on a native divided row and badges a disabled one with the native pill", () => {
+    fixture.report = null;
+    const html = renderToStaticMarkup(createElement(PlanUsage, {
+      instances: [
+        instance({ instanceId: "codebuddy", displayName: "CodeBuddy", driverKind: "codebuddyAgent" }),
+        instance({ instanceId: "qoder", displayName: "Qoder", driverKind: "qoderAgent", disabled: true }),
+      ],
+    }));
+    expect(html).toContain('data-plan-provider="codebuddy"');
+    expect(html).toContain("divide-y divide-hairline/30");
+    expect(html).toContain("rounded-full");
+    expect(html).toContain("text-ink-tertiary");
+    expect(html).toContain("opacity-60");
+  });
+});

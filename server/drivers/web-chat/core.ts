@@ -366,6 +366,7 @@ export async function runWebChatTurn(options: WebChatTurnOptions): Promise<strin
   emit({
     ...baseEvent,
     type: "item.completed",
+    itemType: "assistant_text",
     text: finalText,
   } as unknown as RuntimeEvent);
 
@@ -626,6 +627,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                     emit({
                       ...baseEvent,
                       type: "item.completed",
+                      itemType: "assistant_text",
                       text: finalText,
                     } as unknown as RuntimeEvent);
                     emit({

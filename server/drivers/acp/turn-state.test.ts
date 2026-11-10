@@ -58,3 +58,43 @@ describe("endTurn on a reply that is a provider's error body", () => {
     expect(replies).toEqual(["Let me check the deploy.", ERROR_BODY]);
   });
 });
+
+/** A turn that only thought (producedItem from reasoning chunks), with its last request's output tokens. */
+function thinkingTurn(outputTokens: number | null, text = "", stopped = false) {
+  const { current, replies } = turnWith(text, { stopped });
+  current.state.producedItem = true;
+  current.state.outputTokens = outputTokens;
+  return { current, replies };
+}
+
+describe("endTurn when the model spent its output cap thinking (E54)", () => {
+  it("fails the turn with a readable cap notice that suggests splitting the task", () => {
+    const { current } = thinkingTurn(64_000);
+    expect(endTurn(current, true, null, "OpenCode", 64_000)).toEqual({
+      ok: false, stopReason: "max_tokens", error: {
+        message: "OpenCode spent its whole output limit (64000 tokens) thinking and stopped before writing a reply or running a tool (stop: length). Split the task into smaller steps, or ask it to continue.",
+        text: { key: "chat.notice.stop.thinkingCap", params: { provider: "OpenCode", limit: "64000" } },
+      },
+    });
+  });
+
+  it("still flags a cut-off last request after earlier words in the same turn, keeping those words", () => {
+    const { current, replies } = turnWith("", { replied: "Writing index.html now." });
+    current.state.outputTokens = 32_000;
+    expect(endTurn(current, true, null, "MiMo Code", 32_000)).toMatchObject({ ok: false, stopReason: "max_tokens" });
+    expect(replies).toEqual(["Writing index.html now."]);
+  });
+
+  it("leaves a turn alone when its last request stayed under the cap or wrote text", () => {
+    expect(endTurn(thinkingTurn(63_999).current, true, null, "OpenCode", 64_000)).toEqual({ ok: true, stopReason: null });
+    const { current, replies } = thinkingTurn(64_000, "Done: index.html");
+    expect(endTurn(current, true, null, "OpenCode", 64_000)).toEqual({ ok: true, stopReason: null });
+    expect(replies).toEqual(["Done: index.html"]);
+  });
+
+  it("does nothing without a cap or usage, and a Stop still ends as cancelled", () => {
+    expect(endTurn(thinkingTurn(64_000).current, true, null, "Grok")).toEqual({ ok: true, stopReason: null });
+    expect(endTurn(thinkingTurn(null).current, true, null, "OpenCode", 64_000)).toEqual({ ok: true, stopReason: null });
+    expect(endTurn(thinkingTurn(64_000, "", true).current, true, null, "OpenCode", 64_000)).toEqual({ ok: true, stopReason: "cancelled" });
+  });
+});

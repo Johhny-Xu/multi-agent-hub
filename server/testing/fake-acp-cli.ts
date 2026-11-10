@@ -226,6 +226,8 @@ const dumpEnv = Object.fromEntries(
     "TMP",
     "SystemRoot",
     "FAKE_ACP_MODE",
+    "MIMOCODE_CONFIG_CONTENT",
+    "MIMOCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX",
     "FAKE_ACP_RPC_DUMP",
     "FAKE_ACP_IMAGE_CAPABILITY",
     "FAKE_ACP_DUMP_PROMPT",

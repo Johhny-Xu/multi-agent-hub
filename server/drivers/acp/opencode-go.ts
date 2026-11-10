@@ -354,6 +354,12 @@ function configRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+/** OpenCode 1.19 caps each request at OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, 32000 when unset (E54). */
+export function openCodeOutputTokenCap(env: Record<string, string | undefined>): number {
+  const parsed = Number(env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 32_000;
+}
+
 /** Output tokens an injected BYOK model may produce per turn. The 32000 OpenCode defaults to is where long-thinking
  * models stop before answering (FIX-E54). */
 const DEFAULT_BYOK_MAX_OUTPUT_TOKENS = 64_000;
@@ -415,7 +421,10 @@ export function ensureOpenCodeInjectModel(
     options,
     models,
   };
-  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...config, provider: providers });
+  // E74: OpenCode runs titles/summaries on small_model, which otherwise falls back to its own free model and
+  // bypasses the inject; pin it to the injected model unless the config already names one.
+  const smallModel = typeof config.small_model === "string" && config.small_model ? config.small_model : native;
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...config, provider: providers, small_model: smallModel });
   return native;
 }
 
@@ -729,6 +738,7 @@ const support = (
   classifyError: classifyOpenCodeError,
   promptUnreachedModel: openCodePromptUnreachedModel,
   limitFacts: openCodeLimitFacts,
+  outputTokenCap: openCodeOutputTokenCap,
   describeAccountError: describeOpenCodeAccountError,
   resolveModels: async (environment, config, instanceId, fresh) => {
     if (fresh) markOpenCodeCatalogRefreshed(instanceId, (sources.now ?? Date.now)());
