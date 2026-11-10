@@ -39,9 +39,13 @@ hub 仓没有上游的这些目录/文件（快照时剔除了），生成 patch
 `No such file or directory`：
 
 ```
-docs/  .github/  deploy/  build/  .tmpexp/  .oss-scanner/  .claude/  .well-known/
+docs/  .github/  deploy/  .tmpexp/  .oss-scanner/  .claude/  .well-known/
 apps/  Dockerfile  .dockerignore  compose.yaml
 ```
+
+**`build/` 必须随上游同步**（不在排除清单里）：hub 自 1.3.2 起携带上游的打包资源 `build/`（图标、entitlements、dmg 背景等），
+electron-builder 打 Linux/Windows 包要用；1.3.2 首次发版就因缺 `build/` 失败（E67）。同步后检查
+`git -C "$OM_REPO" diff --stat "$OLD" "$NEW" -- build/` 列出的文件都已进 hub。om 仓（0146 运行树）不需要 `build/`。
 
 ### 2.3 移植到 om 仓时的排除清单
 
@@ -107,7 +111,7 @@ tar czf /tmp/hub-pre-XXXX.tgz -C /tmp hub-pre-XXXX
 # 2. 生成过滤后的 patch
 cd "$OM_REPO"
 git diff "$OLD" "$NEW" -- . \
-  ':(exclude)docs/**' ':(exclude).github/**' ':(exclude)deploy/**' ':(exclude)build/**' \
+  ':(exclude)docs/**' ':(exclude).github/**' ':(exclude)deploy/**' \
   ':(exclude).tmpexp/**' ':(exclude).oss-scanner/**' ':(exclude).claude/**' \
   ':(exclude).well-known/**' ':(exclude)apps/**' ':(exclude)Dockerfile' \
   ':(exclude).dockerignore' ':(exclude)compose.yaml' > /tmp/upstream.patch

@@ -54,10 +54,11 @@ backup_repo "$HUB_REPO" hub
 backup_repo "$OM_REPO" om
 
 # 2. Upstream delta, filtered to paths the hub snapshot actually carries. Without these
-# excludes git apply stops on docs/, .github/, deploy/, build/, Dockerfile and the docs app.
+# excludes git apply stops on docs/, .github/, deploy/, Dockerfile and the docs app. build/ is NOT excluded: the
+# hub carries upstream's packaging resources since 1.3.2 (release run failed without them, E67).
 say "Generating $OLD -> $NEW delta"
 EXCLUDES=(
-  ':(exclude)docs/**' ':(exclude).github/**' ':(exclude)deploy/**' ':(exclude)build/**'
+  ':(exclude)docs/**' ':(exclude).github/**' ':(exclude)deploy/**'
   ':(exclude).tmpexp/**' ':(exclude).oss-scanner/**' ':(exclude).claude/**'
   ':(exclude).well-known/**' ':(exclude)apps/**' ':(exclude)Dockerfile'
   ':(exclude).dockerignore' ':(exclude)compose.yaml'
