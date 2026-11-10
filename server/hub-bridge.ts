@@ -8,7 +8,7 @@ import { Buffer } from "node:buffer";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PASS, type RouteHandler } from "./routes/table.ts";
-import { createCheckinApi, ensureCheckinScheduler } from "./checkin/routes.ts";
+import { createCheckinApi, ensureCheckinScheduler, type CheckinApi } from "./checkin/routes.ts";
 import { hubEventLog, redactEventText } from "./hub-compat/events.ts";
 import { resolveStateDir } from "./hub-compat/store.ts";
 import type { Store } from "./store.ts";
@@ -29,6 +29,9 @@ const CHECKIN_ROUTES: Record<string, "GET" | "POST"> = {
   "/run": "POST",
   "/history/clear": "POST",
   "/config": "POST",
+  // FEAT-doubao-checkin: QR sign-in in the cloud browser; the QR is a screenshot, no credential passes through here.
+  "/doubao/login": "POST",
+  "/doubao/login/status": "GET",
 };
 
 /** The console UI calls these absolute paths, so the embedded page keeps working under /hub/ui/. */
@@ -264,6 +267,8 @@ export function appendOriginLine(
 
 export function createHubBridgeRoutes(deps: {
   store: Pick<Store, "appendMessage" | "botByThread" | "patchTask">;
+  /** Tests swap the check-in API (the real one runs the console's modules and the Doubao cloud signer). */
+  checkinApi?: CheckinApi;
   getAllQuotas?: (opts?: { force?: boolean }) => Promise<unknown>;
   /** Whether the console answers at all; a console that is up but slow must not trigger a second quota fetch. */
   consoleReachable?: () => Promise<boolean>;
@@ -271,7 +276,9 @@ export function createHubBridgeRoutes(deps: {
   quotaFallbackMs?: number;
   askConsole?: typeof askConsole;
 }): RouteHandler {
-  const checkinApi = createCheckinApi();
+  const checkinApi = deps.checkinApi ?? createCheckinApi();
+  /** One sign-in check-in at a time: a scan noticed by two polls must not sign in twice. */
+  let doubaoAfterLogin: Promise<unknown> | null = null;
   ensureCheckinScheduler();
   // E66: the in-process fallback walks 14 vendors and takes ~25-40 s cold, longer than its budget. The fetch keeps
   // running after a timeout; whatever it (or any earlier fetch) returns is kept here and served, marked stale, the
@@ -382,6 +389,14 @@ export function createHubBridgeRoutes(deps: {
     if (!expected) return PASS;
     if (method !== expected) return json(res, 405, { ok: false, error: "method_not_allowed" });
 
+    if (method === "GET" && checkin === "/doubao/login/status") {
+      const answer = await checkinApi.doubaoLoginStatus();
+      // Just scanned: sign in for today now, in the background, instead of waiting for tomorrow's run.
+      if (answer.loggedIn && !doubaoAfterLogin) {
+        doubaoAfterLogin = checkinApi.run("doubao").catch(() => undefined).finally(() => { doubaoAfterLogin = null; });
+      }
+      return json(res, 200, answer);
+    }
     if (method === "GET") {
       return json(res, 200, checkin === "/status" ? await checkinApi.status() : checkinApi.projects());
     }
@@ -399,6 +414,7 @@ export function createHubBridgeRoutes(deps: {
         return json(res, 200, await checkinApi.run(target));
       }
       if (checkin === "/history/clear") return json(res, 200, await checkinApi.clearHistory());
+      if (checkin === "/doubao/login") return json(res, 200, await checkinApi.doubaoLoginStart());
       return json(res, 200, await checkinApi.config(body));
     } catch (error) {
       return json(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });

@@ -131,7 +131,8 @@ test('CHECKIN_PLATFORMS 是唯一平台清单，且必须含国际版', () => {
   assert.ok(CHECKIN_PLATFORMS.includes('codebuddy'), '国际版漏了就会重演「失败后不再重试」');
   assert.ok(CHECKIN_PLATFORMS.includes('workbuddy'));
   assert.ok(CHECKIN_PLATFORMS.includes('qoder-cn'));
-  assert.equal(CHECKIN_PLATFORMS.length, 8);
+  assert.ok(CHECKIN_PLATFORMS.includes('doubao'), '豆包（云机浏览器签到，FEAT-doubao-checkin）');
+  assert.equal(CHECKIN_PLATFORMS.length, 9);
 });
 
 test('platformNeedsRetry：今天没签 / 失败待重试 要补，已成功不补', () => {
@@ -393,4 +394,15 @@ test('手动与自动签到并发：自动重试计数递增且不覆盖手动�
     globalThis.fetch = originalFetch;
     process.env = previousEnv;
   }
+});
+
+test('retryAt 留 2 分钟余量：整点 tick 比 retryAt 早几秒也要选中，早得多仍不选', () => {
+  const today = '2026-11-10';
+  const retryAt = 1_794_273_100; // 09:11:40
+  const p = { lastDate: today, status: 'pending', retryCount: 3, retryBudget: 8, retryAt, pendingReason: 'campaign_closed' };
+  assert.equal(platformNeedsRetry(p, today, retryAt - 1, 'codebuddy'), true, '09:11:39 的 tick 不能错过 09:11:40 的 retryAt');
+  assert.equal(platformNeedsRetry(p, today, retryAt - 119, 'codebuddy'), true, '余量内');
+  assert.equal(platformNeedsRetry(p, today, retryAt - 121, 'codebuddy'), false, '余量外仍等');
+  assert.equal(platformNeedsRetry(p, today, retryAt - 3600, 'codebuddy'), false, '一小时前不选');
+  assert.deepEqual(selectAutoCheckinPlatforms({ codebuddy: p }, today, retryAt - 3).includes('codebuddy'), true);
 });

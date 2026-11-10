@@ -37,6 +37,8 @@ type CheckinPlatform = {
   signedAccounts?: number;
   pendingAccounts?: number;
   accounts?: CheckinAccount[];
+  /** "qr": the platform signs in by scanning a QR the hub screenshots from its cloud browser (Doubao). */
+  loginKind?: string;
 };
 
 /** One platform's answer from a run: what the sign-in attempt returned. */
@@ -100,6 +102,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   minimaxcode: "MiniMax Code",
   mimocode: "MiMo Code",
   meoo: "Meoo",
+  doubao: "豆包 Doubao",
   zcode: "ZCode",
   "github-copilot": "GitHub Copilot",
   antigravity: "Antigravity",
@@ -342,6 +345,93 @@ function Unreachable({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+type QrAnswer = { ok?: boolean; loggedIn?: boolean; qrPng?: string; error?: string };
+
+/** How long a shown QR is polled before it is called expired; the platform's own codes last about this long. */
+const QR_POLL_MS = 3_000;
+const QR_LIFETIME_MS = 180_000;
+
+/** Sign a QR-login platform (Doubao) in from here: the hub's cloud browser opens the platform's login page and sends
+ * back a screenshot of its QR; the person scans it with the platform's app. No credential ever passes this page. */
+export function QrLogin({ platformKey, name, signedIn, onLoggedIn }: {
+  platformKey: string;
+  name: string;
+  signedIn: boolean;
+  onLoggedIn?: () => void;
+}) {
+  const [phase, setPhase] = useState<"idle" | "loading" | "shown" | "done" | "expired" | "failed">("idle");
+  const [qr, setQr] = useState<string>("");
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    if (phase !== "shown") return;
+    let stopped = false;
+    const started = Date.now();
+    const timer = setInterval(async () => {
+      if (stopped) return;
+      if (Date.now() - started > QR_LIFETIME_MS) { setPhase("expired"); return; }
+      try {
+        const answer = await api<QrAnswer>(`/hub/checkin/${platformKey}/login/status`, { timeoutMs: 60_000 });
+        if (!stopped && answer?.loggedIn) {
+          setPhase("done");
+          onLoggedIn?.();
+          // The hub checks in right after the scan; its result lands a little later.
+          setTimeout(() => onLoggedIn?.(), 45_000);
+        }
+      } catch {
+        // A missed poll is retried on the next tick.
+      }
+    }, QR_POLL_MS);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [phase, platformKey, onLoggedIn]);
+
+  const start = async () => {
+    setPhase("loading");
+    setError("");
+    try {
+      const answer = await api<QrAnswer>(`/hub/checkin/${platformKey}/login`, { method: "POST", body: "{}", timeoutMs: 180_000 });
+      if (answer?.loggedIn) { setPhase("done"); onLoggedIn?.(); return; }
+      if (answer?.ok && answer.qrPng) { setQr(answer.qrPng); setPhase("shown"); return; }
+      setError(answer?.error || t("settings.daily.qrFailed"));
+      setPhase("failed");
+    } catch {
+      setError(t("settings.daily.qrFailed"));
+      setPhase("failed");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5" data-daily-qr-login>
+      {phase === "shown" && qr && (
+        <div className="flex flex-col items-center gap-1.5 rounded-lg bg-inset p-3">
+          <img src={`data:image/png;base64,${qr}`} alt={t("settings.daily.qrAlt", { name })} className="size-40 rounded-md bg-white" />
+          <p className="text-center text-[12px] leading-relaxed text-ink-secondary">{t("settings.daily.qrHint", { name })}</p>
+          <p className="flex items-center gap-1 text-[11px] text-ink-tertiary">
+            <Loader2 size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            {t("settings.daily.qrWaiting")}
+          </p>
+        </div>
+      )}
+      {phase === "done" && <p className="text-[12px] text-ink-secondary">{t("settings.daily.qrDone")}</p>}
+      {phase === "expired" && <p className="text-[12px] text-ink-secondary">{t("settings.daily.qrExpired")}</p>}
+      {phase === "failed" && error && <p className="break-words text-[12px] text-warning">{error}</p>}
+      {phase !== "shown" && phase !== "done" && (
+        <button
+          type="button"
+          className={cn("flex items-center gap-1.5 self-start", signedIn ? "py-1 text-[12px] font-medium text-accent hover:underline" : "ui-button")}
+          disabled={phase === "loading"}
+          onClick={() => void start()}
+        >
+          {phase === "loading" && <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+          {phase === "loading" ? t("settings.daily.qrLoading")
+            : phase === "expired" || phase === "failed" ? t("settings.daily.qrRetry")
+              : signedIn ? t("settings.daily.qrRelogin") : t("settings.daily.qrLogin")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** One platform's check-in card: the platform's own line, then every account it signs, each with its status. A long
  * line of error text stays two lines tall until it is asked for in full. */
 export function PlatformCard({
@@ -352,6 +442,7 @@ export function PlatformCard({
   running,
   busy,
   today,
+  onLoginChanged,
 }: {
   platformKey: string;
   name: string;
@@ -360,6 +451,8 @@ export function PlatformCard({
   running?: boolean;
   busy?: boolean;
   today?: string;
+  /** A QR-login platform signed in (or out): reload the status. */
+  onLoginChanged?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [allAccounts, setAllAccounts] = useState(false);
@@ -370,7 +463,8 @@ export function PlatformCard({
   const signedToday = platformSignedToday(platform, today);
   // Why the platform is not signed today: a sign-in it still needs, or the window, cooldown or campaign it waits for.
   const reason = isUnconfigured ? platformReason(platform) : pendingReasonLabel(platform.pendingReason);
-  const hasBody = Boolean(reason) || Boolean(platform.message && !isUnconfigured) || rows.length > 0;
+  const qrLogin = platform.loginKind === "qr";
+  const hasBody = Boolean(reason) || Boolean(platform.message && !isUnconfigured) || rows.length > 0 || qrLogin;
 
   return (
     <div className={SIMPLE_CARD} data-daily-platform>
@@ -416,6 +510,9 @@ export function PlatformCard({
             <div className="rounded-lg bg-inset px-3 py-2 text-[12px] leading-relaxed text-ink-secondary">
               {reason}
             </div>
+          )}
+          {qrLogin && (
+            <QrLogin platformKey={platformKey} name={name} signedIn={!isUnconfigured && platform.status !== "expired"} onLoggedIn={onLoginChanged} />
           )}
           {platform.message && !isUnconfigured && (
             <button
@@ -765,6 +862,7 @@ export function DailySection() {
                 running={runningPlatform === key}
                 busy={running || !!runningPlatform}
                 today={checkin?.today}
+                onLoginChanged={loadCheckin}
               />
             ))}
           </div>

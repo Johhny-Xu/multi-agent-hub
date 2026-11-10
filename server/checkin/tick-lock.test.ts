@@ -55,6 +55,7 @@ async function seedPendingState(stateFile: string) {
       'qoder-cn': { ...signed },
       minimaxcode: { ...signed },
       meoo: { ...signed },
+      doubao: { ...signed },
       traecode: { status: 'pending', lastDate: '2000-01-01', retryCount: 0 },
     },
     history: [],

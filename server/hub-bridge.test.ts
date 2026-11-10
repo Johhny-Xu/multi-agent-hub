@@ -261,3 +261,52 @@ describe("the hub bridge origin route", () => {
     expect(answers[0]?.body).toEqual({ ok: false, error: "console_unreachable" });
   });
 });
+
+describe("the Doubao QR sign-in routes (FEAT-doubao-checkin)", () => {
+  function fakeCheckinApi(loggedIn: boolean) {
+    const runs: string[] = [];
+    const api = {
+      status: async () => ({ ok: true }),
+      projects: () => ({ ok: true }),
+      run: async (target: string) => { runs.push(target); return { ok: true }; },
+      clearHistory: async () => ({ ok: true }),
+      config: async () => ({ ok: true }),
+      doubaoLoginStart: async () => ({ ok: true, loggedIn: false, qrPng: "iVBORw0K" }),
+      doubaoLoginStatus: async () => ({ ok: true, loggedIn }),
+    };
+    return { api, runs };
+  }
+  async function call(route: any, method: string, path: string) {
+    const answers: Array<{ status: number; body: any }> = [];
+    const res = {} as never;
+    await route({
+      req: {} as never, res, url: new URL(`http://127.0.0.1:8801${path}`), path, method, auth: {} as never,
+      json: ((_res: never, status: number, body: unknown) => { answers.push({ status, body }); return res; }) as never,
+      readBody: (async () => ({})) as never,
+    });
+    return answers[0];
+  }
+
+  it("starts the sign-in with POST and hands back the cloud browser's QR screenshot", async () => {
+    const { store } = fakeStore();
+    const { api } = fakeCheckinApi(false);
+    const { createHubBridgeRoutes } = await import("./hub-bridge.ts");
+    const route = createHubBridgeRoutes({ store, checkinApi: api });
+    expect(await call(route, "POST", "/hub/checkin/doubao/login")).toEqual({ status: 200, body: { ok: true, loggedIn: false, qrPng: "iVBORw0K" } });
+    expect((await call(route, "GET", "/hub/checkin/doubao/login"))?.status).toBe(405);
+  });
+
+  it("signs in for today once after the scan, however many polls notice it", async () => {
+    const { store } = fakeStore();
+    const { api, runs } = fakeCheckinApi(true);
+    const { createHubBridgeRoutes } = await import("./hub-bridge.ts");
+    const route = createHubBridgeRoutes({ store, checkinApi: api });
+    const [a, b] = await Promise.all([
+      call(route, "GET", "/hub/checkin/doubao/login/status"),
+      call(route, "GET", "/hub/checkin/doubao/login/status"),
+    ]);
+    expect(a?.body).toEqual({ ok: true, loggedIn: true });
+    expect(b?.body).toEqual({ ok: true, loggedIn: true });
+    expect(runs).toEqual(["doubao"]);
+  });
+});

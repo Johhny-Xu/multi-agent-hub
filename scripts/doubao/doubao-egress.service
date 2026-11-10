@@ -1,0 +1,15 @@
+[Unit]
+Description=Doubao signer egress: reverse SOCKS over ssh stdio so the cloud Chromium exits via this host's CN IP (no browser runs here)
+After=network-online.target
+
+[Service]
+# DOUBAO_EGRESS_SSH is the cloud side's ssh command, e.g. "ssh -o BatchMode=yes <cloud-host> node"; keep it in this
+# env file on the host, never in the repository.
+EnvironmentFile=%h/.config/doubao-egress.env
+ExecStart=/bin/bash -lc 'exec node %h/.local/lib/doubao-egress/rsocks.mjs local -- $DOUBAO_EGRESS_SSH doubao-signer/rsocks.mjs remote 19341'
+Restart=always
+RestartSec=20
+Nice=10
+
+[Install]
+WantedBy=default.target

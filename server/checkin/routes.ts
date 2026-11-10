@@ -8,6 +8,7 @@ import {
   startAutoCheckinScheduler,
   updateCheckinConfig,
 } from "./checkin.mjs";
+import { doubaoLoginPoll, doubaoLoginStart } from "./doubao-checkin.mjs";
 
 export interface CheckinApi {
   status(): Promise<unknown>;
@@ -15,6 +16,9 @@ export interface CheckinApi {
   run(target: string): Promise<unknown>;
   clearHistory(): Promise<unknown>;
   config(body: Record<string, unknown>): Promise<unknown>;
+  /** Doubao QR sign-in in the cloud browser (FEAT-doubao-checkin): start shows a QR, status polls for the scan. */
+  doubaoLoginStart(): Promise<{ ok: boolean; loggedIn: boolean; qrPng?: string; error?: string }>;
+  doubaoLoginStatus(): Promise<{ ok: boolean; loggedIn: boolean; error?: string }>;
 }
 
 export function createCheckinApi(): CheckinApi {
@@ -24,6 +28,8 @@ export function createCheckinApi(): CheckinApi {
     run: (target) => runCheckin(target),
     clearHistory: () => clearCheckinHistory(),
     config: (body) => updateCheckinConfig(body),
+    doubaoLoginStart: () => doubaoLoginStart(),
+    doubaoLoginStatus: () => doubaoLoginPoll(),
   };
 }
 
