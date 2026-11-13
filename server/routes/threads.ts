@@ -2,10 +2,12 @@ import { userError } from "../user-errors.ts";
 import { basename, join } from "node:path";
 
 import type { WireBot, WireGroup } from "../../shared/wire.ts";
+import { NO_SUCH_BOT } from "../../shared/bot-read.ts";
 import {
   ATTACHMENTS_DIR, attachmentStorageUsage, clearAttachments, deleteAttachment, extensionForMime, FILE_MAX_BYTES, IMAGE_MAX_BYTES,
   parseAudioRange, readAttachment, saveFile, saveImageUpload, validateAttachmentUploadId, type SavedAttachment,
 } from "../attachments.ts";
+import { saveXmindUpload, XMIND_MIME } from "../xmind.ts";
 import { deliveredCopy } from "../bot-attachment.ts";
 import { memberBot, memberGroup, type Viewer, type VisibleSet } from "../bot-visibility.ts";
 import type { ComputerControl } from "../computer-control.ts";
@@ -58,6 +60,8 @@ export interface ThreadRouteDeps {
   viewerFor(auth: RequestAuth): Viewer;
   /** A room's unread mark as this person has read it (a Team Cloud); the room as it is anywhere else. */
   groupFor?(auth: RequestAuth, group: WireGroup): WireGroup;
+  /** The bots in this person's own order (a Team Cloud's User); the team's order anywhere else. */
+  botOrderFor?(auth: RequestAuth, bots: readonly BotRecord[]): readonly BotRecord[];
   visibleTo(viewer: Viewer): VisibleSet;
   /** A Team Cloud: gives a member their own MausBot once, before their first list of bots. */
   memberDefaultBot?(email: string): unknown;
@@ -75,6 +79,13 @@ export function createThreadRoutes(deps: ThreadRouteDeps): RouteHandler {
     pageSize, messagePage, messageWindow, publicBotQueuedMessages, publicGroupState, wireBot,
     botComputerControlSnapshot, messageFileRootsForThread, viewerFor, visibleTo,
   } = deps;
+  // tasks stays explicit: clients expect [] where wireBot() would omit the key.
+  const shownBot = (bot: BotRecord, visible: VisibleSet, limit: number | undefined) => {
+    const wired = wireBot(bot);
+    // Narrowed first: on a Team Cloud the selected conversation may be someone else's, and its words never go out.
+    const shown = memberBot({ ...wired, tasks: wired.tasks ?? [] }, visible);
+    return { ...shown, ...(typeof shown.threadId === "string" ? messagePage(shown.threadId, limit) : { messages: [], hasMore: false, activeLeafId: null }) };
+  };
   const jobs = createJobRoutes({ store, coordinator: deps.coordinator, groupThreadIsWorking: deps.groupThreadIsWorking, viewerFor, visibleTo, sessions });
   const handle = async ({ req, res, url, path, method, auth, json, readBody }: RouteContext): Promise<unknown> => {
     let m: RegExpMatchArray | null = null;
@@ -89,16 +100,10 @@ export function createThreadRoutes(deps: ThreadRouteDeps): RouteHandler {
       try { groupUsageReader.refresh(); } catch { }
       const limit = pageSize(url.searchParams.get("messages"));
       if (limit === null) return json(res, 400, { error: "messages must be a non-negative whole number" });
-      // tasks stays explicit: clients expect [] where wireBot() would omit the key.
-      const shownBots = store.bots.filter((bot) => visible.bot(bot.id));
+      const shownBots = (deps.botOrderFor?.(auth, store.bots) ?? store.bots).filter((bot) => visible.bot(bot.id));
       const queued = publicBotQueuedMessages();
       return json(res, 200, {
-        bots: shownBots.map((bot) => {
-          const wired = wireBot(bot);
-          // Narrowed first: on a Team Cloud the selected conversation may be someone else's, and its words never go out.
-          const shown = memberBot({ ...wired, tasks: wired.tasks ?? [] }, visible);
-          return { ...shown, ...(typeof shown.threadId === "string" ? messagePage(shown.threadId, limit) : { messages: [], hasMore: false, activeLeafId: null }) };
-        }),
+        bots: shownBots.map((bot) => shownBot(bot, visible, limit)),
         botQueuedMessages: visible.everything ? queued : Object.fromEntries(Object.entries(queued).filter(([threadId]) => visible.thread(threadId))),
         sections: visible.sections(store.sections),
         groups: store.groups.filter((g) => visible.group(g.id)).map((g) => {
@@ -115,6 +120,15 @@ export function createThreadRoutes(deps: ThreadRouteDeps): RouteHandler {
           }),
         ),
       });
+    }
+
+    m = path.match(/^\/api\/bots\/([\w-]+)$/);
+    if (m && method === "GET") {
+      const bot = store.bot(m[1]);
+      if (!bot || !visible.bot(bot.id)) return json(res, 404, { error: NO_SUCH_BOT });
+      const limit = pageSize(url.searchParams.get("messages"));
+      if (limit === null) return json(res, 400, { error: "messages must be a non-negative whole number" });
+      return json(res, 200, { bot: shownBot(bot, visible, limit) });
     }
 
     m = path.match(/^\/api\/threads\/([\w-]+)\/messages$/);
@@ -375,7 +389,9 @@ export function createThreadRoutes(deps: ThreadRouteDeps): RouteHandler {
       try {
         // Returning must not destroy the socket: the caller still sends the 4xx when the byte count crosses the limit.
         const chunks = req.iterator({ destroyOnReturn: false }) as AsyncIterable<Buffer>;
-        const saved = await saveFile(chunks, name, rawType ?? "", { uploadId, expectedBytes: declaredLength });
+        const saved = rawType?.split(";")[0]!.trim().toLowerCase() === XMIND_MIME
+          ? await saveXmindUpload(chunks, name, { uploadId })
+          : await saveFile(chunks, name, rawType ?? "", { uploadId, expectedBytes: declaredLength });
         deps.uploads.note(auth, basename(saved.path));
         return json(res, 201, saved);
       } catch (error) {

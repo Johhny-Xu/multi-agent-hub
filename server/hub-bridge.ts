@@ -32,6 +32,11 @@ const CHECKIN_ROUTES: Record<string, "GET" | "POST"> = {
   // FEAT-doubao-checkin: QR sign-in in the cloud browser; the QR is a screenshot, no credential passes through here.
   "/doubao/login": "POST",
   "/doubao/login/status": "GET",
+  // FEAT-dumate: 百度搭子 QR sign-in in the shared browser (mychrome); the cookie stays on this server.
+  "/dumate/login": "POST",
+  "/dumate/login/status": "GET",
+  "/dumate/accounts": "GET",
+  "/dumate/account/remove": "POST",
 };
 
 /** The console UI calls these absolute paths, so the embedded page keeps working under /hub/ui/. */
@@ -279,6 +284,7 @@ export function createHubBridgeRoutes(deps: {
   const checkinApi = deps.checkinApi ?? createCheckinApi();
   /** One sign-in check-in at a time: a scan noticed by two polls must not sign in twice. */
   let doubaoAfterLogin: Promise<unknown> | null = null;
+  let dumateAfterLogin: Promise<unknown> | null = null;
   ensureCheckinScheduler();
   // E66: the in-process fallback walks 14 vendors and takes ~25-40 s cold, longer than its budget. The fetch keeps
   // running after a timeout; whatever it (or any earlier fetch) returns is kept here and served, marked stale, the
@@ -397,6 +403,15 @@ export function createHubBridgeRoutes(deps: {
       }
       return json(res, 200, answer);
     }
+    if (method === "GET" && checkin === "/dumate/login/status") {
+      const answer = await checkinApi.dumateLoginStatus();
+      // Same as Doubao: the scan just landed, so check in for today now, once, in the background.
+      if (answer.loggedIn && !dumateAfterLogin) {
+        dumateAfterLogin = checkinApi.run("dumate").catch(() => undefined).finally(() => { dumateAfterLogin = null; });
+      }
+      return json(res, 200, answer);
+    }
+    if (method === "GET" && checkin === "/dumate/accounts") return json(res, 200, await checkinApi.dumateAccounts());
     if (method === "GET") {
       return json(res, 200, checkin === "/status" ? await checkinApi.status() : checkinApi.projects());
     }
@@ -415,6 +430,12 @@ export function createHubBridgeRoutes(deps: {
       }
       if (checkin === "/history/clear") return json(res, 200, await checkinApi.clearHistory());
       if (checkin === "/doubao/login") return json(res, 200, await checkinApi.doubaoLoginStart());
+      if (checkin === "/dumate/login") return json(res, 200, await checkinApi.dumateLoginStart());
+      if (checkin === "/dumate/account/remove") {
+        const id = typeof body.id === "string" ? body.id : "";
+        if (!/^dm-[A-Za-z0-9-]{1,40}$/.test(id)) return json(res, 400, { ok: false, error: "bad_id" });
+        return json(res, 200, await checkinApi.dumateRemoveAccount(id));
+      }
       return json(res, 200, await checkinApi.config(body));
     } catch (error) {
       return json(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });

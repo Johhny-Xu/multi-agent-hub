@@ -20,19 +20,23 @@ const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const KEY = "tsk_e2e_secret_value_7f3a9c2e41d8";
 
 type JevRequest = { auth?: string; body: any };
+type GeminiRequest = { key?: string; body: any };
 type RouteScript = { status?: number; choice?: string; p?: number; hold?: Promise<void> };
 
 let child: ChildProcess;
 let jev: Server;
+let gemini: Server;
 let openrouter: Server | undefined;
 let home = "";
 let data = "";
 let base = "";
+let geminiUrl = "";
 let output = "";
 let engineDump = "";
 let titleDump = "";
 let fallbackTitleDump = "";
 const jevRequests: JevRequest[] = [];
+const geminiRequests: GeminiRequest[] = [];
 const openrouterRequests: JevRequest[] = [];
 let script: RouteScript = {};
 let openrouterScript: RouteScript = {};
@@ -83,6 +87,28 @@ beforeAll(async () => {
   });
   await new Promise<void>((resolve) => jev.listen(0, "127.0.0.1", resolve));
   const jevUrl = `http://127.0.0.1:${(jev.address() as AddressInfo).port}`;
+
+  gemini = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      const body = JSON.parse(raw || "{}");
+      geminiRequests.push({ key: req.headers["x-goog-api-key"] as string | undefined, body });
+      const send = (status: number, value: unknown) => {
+        res.writeHead(status, { "content-type": "application/json" });
+        res.end(JSON.stringify(value));
+      };
+      if (req.method !== "POST" || req.url !== "/v1beta/decisions" || body.model !== "gemini-decision-1" || !body.questions?.answer) {
+        return send(400, { error: { code: 400, status: "INVALID_ARGUMENT", details: [{ reason: "API_KEY_INVALID" }] } });
+      }
+      send(200, {
+        answers: { answer: { type: "noul", noul: 0.96, confidence: 0.98 } },
+        usage: { total_input_tokens: 40, total_output_tokens: 0, total_tokens: 40 },
+      });
+    });
+  });
+  await new Promise<void>((resolve) => gemini.listen(0, "127.0.0.1", resolve));
+  geminiUrl = `http://127.0.0.1:${(gemini.address() as AddressInfo).port}/v1beta`;
 
   home = mkdtempSync(join(tmpdir(), "omb-decider-rooms-"));
   data = join(home, ".openmausbot");
@@ -144,6 +170,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (child) await waitForExit(child, { signal: "SIGTERM" });
   await new Promise<void>((resolve) => (jev ? jev.close(() => resolve()) : resolve()));
+  await new Promise<void>((resolve) => (gemini ? gemini.close(() => resolve()) : resolve()));
   await new Promise<void>((resolve) => (openrouter ? openrouter.close(() => resolve()) : resolve()));
   if (home) await removeTempDir(home);
 });
@@ -308,6 +335,21 @@ describe("Auto rooms ask the decision model who answers", { timeout: 90_000 }, (
     expect(JSON.parse(disk).decider).toMatchObject({ key: "", enabled: true, jobs: { roomRouting: true } });
     expect(disk).not.toContain("tsk_new_valid_key");
     expect((await api("PUT", "/api/config", { decider: { key: "" } })).body.decider).toMatchObject({ configured: false, enabled: false });
+  });
+
+  it("stores a supplied Gemini key as a tombstone too, and no response or file holds it", async () => {
+    const GEMINI_KEY = "AIza-e2e-secret-value-9c1f4a";
+    expect((await api("PUT", "/api/config", { decider: { geminiBaseUrl: geminiUrl } })).status).toBe(200);
+    const saved = await api("PUT", "/api/config?secretStorage=external", { decider: { geminiKey: GEMINI_KEY } });
+    expect(saved.status).toBe(200);
+    expect(saved.text).not.toContain(GEMINI_KEY);
+    expect(geminiRequests.at(-1)?.key).toBe(GEMINI_KEY);
+    expect(geminiRequests.at(-1)?.body.model).toBe("gemini-decision-1");
+    const disk = readFileSync(join(data, "config.json"), "utf8");
+    expect(JSON.parse(disk).decider).toMatchObject({ geminiKey: "" });
+    expect(disk).not.toContain(GEMINI_KEY);
+    expect((await api("GET", "/api/config")).text).not.toContain(GEMINI_KEY);
+    expect((await api("PUT", "/api/config", { decider: { geminiKey: "" } })).status).toBe(200);
   });
 
   describe("with OpenRouter as the provider", () => {

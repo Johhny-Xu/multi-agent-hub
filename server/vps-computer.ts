@@ -9,11 +9,9 @@ import {
   CUA_SOCKET,
   IMAGE as CUA_IMAGE,
   cuaExecArgs,
-  dockerSecurityIsHardened,
   imageLabelsMatch,
   managedImageDockerfile,
   wholeScreenshot,
-  type DockerHardeningConfig,
   BASE_IMAGE_DIGEST,
   BASE_IMAGE_LABEL,
   DRIVER_LABEL,
@@ -21,6 +19,7 @@ import {
   IMAGE_LAYER_VERSION,
   MANAGED_LABEL,
 } from "./container-computer.ts";
+import { desktopCapArgs, dockerSecurityIsHardened, type DockerHardeningConfig } from "./container-isolation.ts";
 import { PIDS_LIMIT, raisePidsLimit } from "./container-limits.ts";
 import { DATA_DIR, isValidSshAlias } from "./config.ts";
 import { augmentedPath } from "./env-path.ts";
@@ -79,7 +78,10 @@ export function vpsLifecycleBusy(): boolean {
 }
 const LOCK_ACQUIRE_TIMEOUT_MS = 5_000;
 const STATUS_CACHE_TTL_MS = 10_000;
-const statusCache = new Map<string, { status: VpsComputerStatus; expiresAt: number }>();
+const statusCache = new Map<string, { status: VpsComputerStatus; expiresAt: number; at?: number }>();
+/** A preview poll (GET /computer) may show a status this old at once while a fresh inspection runs behind it: a full
+ * inspection is six docker-over-SSH round trips (~0.8 s each, ~2 s per exec), 10–25 s a poll before this. */
+export const VPS_PREVIEW_STALE_MS = 60_000;
 const pendingStatuses = new Map<string, Promise<VpsComputerStatus>>();
 const pendingProvisions = new Map<string, Promise<VpsComputerStatus>>();
 const SCREENSHOT_BUDGET_MS = 45_000;
@@ -327,7 +329,7 @@ function emptyStatus(botId: string, alias: string | null): VpsComputerStatus {
     desktopReady: false,
     desktop_error: null,
     ready: false,
-    problem: alias ? "Docker over SSH is not reachable" : "Configure a VPS SSH alias in Settings → API keys",
+    problem: alias ? "Docker over SSH is not reachable" : "Configure a VPS SSH alias in AI › Other services",
     image_ref: VPS_IMAGE,
     base_image_ref: BASE_IMAGE,
     driver_version: CUA_DRIVER_VERSION,
@@ -395,7 +397,7 @@ function hasNoPublishedPorts(config: {
 }
 
 function statusProblem(status: VpsComputerStatus): string | null {
-  if (!status.configured) return "Configure a VPS SSH alias in Settings → API keys";
+  if (!status.configured) return "Configure a VPS SSH alias in AI › Other services";
   if (!status.daemonUp) return "Docker over SSH could not reach the VPS; check the SSH alias and Docker on the VPS";
   if (!status.image) return `Prepare the pinned OpenMausBot Cua image on the VPS (Driver ${CUA_DRIVER_VERSION})`;
   if (status.container === "missing") return "No OpenMausBot container exists for this bot on the VPS";
@@ -576,11 +578,20 @@ export async function vpsComputerStatus(
   target: SshVpsTarget,
   botId: string,
   runner: VpsCommandRunner = defaultRunner,
+  opts: { staleMs?: number } = {},
 ): Promise<VpsComputerStatus> {
   const cacheKey = vpsTargetKey(target, botId);
   const lockKey = vpsLockKey(target, botId);
   const cacheable = runner === defaultRunner;
   if (cacheable) {
+    const recent = statusCache.get(cacheKey);
+    // Preview polls only: a recent status answers at once and one fresh inspection runs behind it. Every lifecycle
+    // change deletes the entry, so this never shows a computer as it was before it was just started, stopped or removed.
+    if (recent && opts.staleMs && recent.expiresAt <= Date.now()
+      && Date.now() - (recent.at ?? recent.expiresAt - STATUS_CACHE_TTL_MS) < opts.staleMs) {
+      if (!pendingStatuses.has(cacheKey) && !lifecycleLocks.has(lockKey)) void vpsComputerStatus(target, botId, runner).catch(() => {});
+      return recent.status;
+    }
     const capture = pendingScreenshots.get(cacheKey);
     if (capture) await capture.catch(() => {});
     const cached = statusCache.get(cacheKey);
@@ -593,7 +604,7 @@ export async function vpsComputerStatus(
   try {
     const status = await inspection;
     if (cacheable && pendingStatuses.get(cacheKey) === inspection && !lifecycleLocks.has(lockKey)) {
-      statusCache.set(cacheKey, { status, expiresAt: Date.now() + STATUS_CACHE_TTL_MS });
+      statusCache.set(cacheKey, { status, expiresAt: Date.now() + STATUS_CACHE_TTL_MS, at: Date.now() });
     }
     return status;
   } finally {
@@ -803,12 +814,8 @@ export function vpsContainerRunArgs(
     "private",
     "--cgroupns",
     "private",
-    "--cap-drop",
-    "ALL",
-    "--cap-add",
-    "SETUID",
-    "--cap-add",
-    "SETGID",
+    // No host mounts, so root in this desktop can install packages without reaching the host's files.
+    ...desktopCapArgs("docker"),
     "--shm-size",
     "512m",
     // Without a restart policy Docker leaves the container down after a VPS reboot; unless-stopped still honors Stop.

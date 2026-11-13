@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { createDispatchTools, qualifyDefaultModel } from "./dispatch.ts";
+import { createDispatchTools, isRestartNotice, qualifyDefaultModel } from "./dispatch.ts";
 
 /** mcp/hub.mjs is plain JS with no type declarations; importing it by URL keeps tsc from requiring one. */
 interface HubClient {
@@ -172,6 +172,7 @@ async function startFakeOm(config: {
         }
         bot.modelSelection = body.modelSelection ?? bot.modelSelection;
         if (typeof body.hidden === "boolean") bot.hidden = body.hidden;
+        if (typeof body.pinnedEngine === "boolean") (bot as FakeBot & { pinnedEngine?: boolean }).pinnedEngine = body.pinnedEngine;
         return json(200, { ok: true });
       }
       const tasksMatch = /^\/api\/bots\/([\w-]+)\/tasks$/.exec(url);
@@ -508,6 +509,27 @@ describe("hub-compat dispatch", () => {
     expect(cwds).toContain(explicit);
   });
 
+  it("E101. hub·<agent> 建好就锁定引擎（PATCH pinnedEngine:true），复用时已锁定不再重复 PATCH", async () => {
+    const tools = freshTools(om.url);
+    // 套件共用一个假 8801：前面的用例可能留下多个同名 hub·codebuddy，只看它们整体。
+    type PinBot = { id: string; name: string; pinnedEngine?: boolean };
+    const hubBots = () => (om.bots as PinBot[]).filter((b) => b.name === "hub·codebuddy");
+    const pins = () => om.calls.filter((c) => hubBots().some((b) => c === `PATCH /api/bots/${b.id}`)).length;
+    const first = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "pin 1", timeout_s: 60 });
+    await waitFor(refOf(first), tools);
+    expect(hubBots().some((b) => b.pinnedEngine === true)).toBe(true);
+    const before = pins();
+    const second = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "pin 2", timeout_s: 60 });
+    await waitFor(refOf(second), tools);
+    expect(pins()).toBe(before);
+    // 已存在但没锁定的老 bot：复用时补锁
+    for (const b of hubBots()) b.pinnedEngine = false;
+    const third = await tools.hub_dispatch_cli({ agent: "codebuddy", task: "pin 3", timeout_s: 60 });
+    await waitFor(refOf(third), tools);
+    expect(hubBots().filter((b) => b.pinnedEngine === true)).toHaveLength(1);
+    expect(pins()).toBe(before + 1);
+  });
+
   it("zcode_delegate wait=false 异步回执 + wait=true 同步格式 + zcode-last 落盘", async () => {
     const tools = freshTools(om.url);
     const asyncReceipt = await tools.zcode_delegate({ task: "async zcode", wait: false, timeout_s: 60 });
@@ -605,6 +627,43 @@ describe("hub-compat dispatch", () => {
       expect(optionOnly.bots[0]?.modelSelection)
         .toMatchObject({ instanceId: "codebuddyCn", model: "only-option" });
     } finally { optionOnly.server.close(); }
+  });
+
+  it("豆包：agent=doubao / 豆包 / doubaoAgent 落到 8801 的 doubao 实例（doubaoAgent 驱动）", async () => {
+    const om = await startFakeOm({ instances: [
+      { instanceId: "doubao", driverKind: "doubaoAgent", displayName: "豆包 CLI",
+        snapshot: { state: "available", authenticated: true },
+        models: { default: "doubao-default", options: [{ id: "doubao-default" }] } },
+    ] });
+    try {
+      const tools = freshTools(om.url);
+      for (const agent of ["doubao", "豆包", "doubaoAgent"]) {
+        const receipt = await tools.hub_dispatch_cli({ agent, task: `doubao via ${agent}`, timeout_s: 60 });
+        const ref = refOf(receipt);
+        expect(ref).toMatch(/^doubao-[0-9a-f]{10}$/);
+        await waitFor(ref, tools);
+      }
+      expect(om.bots.find((b) => b.name === "hub·doubao")?.modelSelection)
+        .toMatchObject({ instanceId: "doubao", model: "doubao-default" });
+    } finally { om.server.close(); }
+  });
+
+  it("百度搭子：agent=dumate / 百度搭子 落到 8801 的 dumate 实例（dumate 驱动）", async () => {
+    const om = await startFakeOm({ instances: [
+      { instanceId: "dumate", driverKind: "dumate", displayName: "百度搭子",
+        snapshot: { state: "available", authenticated: true },
+        models: { default: "dumate-default", options: [{ id: "dumate-default" }] } },
+    ] });
+    try {
+      const tools = freshTools(om.url);
+      for (const agent of ["dumate", "百度搭子", "DuMate"]) {
+        const receipt = await tools.hub_dispatch_cli({ agent, task: `dumate via ${agent}`, timeout_s: 60 });
+        expect(refOf(receipt)).toMatch(/^dumate-[0-9a-f]{10}$/);
+        await waitFor(refOf(receipt), tools);
+      }
+      expect(om.bots.find((b) => b.name === "hub·dumate")?.modelSelection)
+        .toMatchObject({ instanceId: "dumate", model: "dumate-default" });
+    } finally { om.server.close(); }
   });
 
   it("zcode 缺省模型必须在 instance options 里，否则拒绝且不建 bot", async () => {
@@ -1697,6 +1756,24 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
     } finally { turn.om.server.close(); }
   });
 
+  it("E101. 额度用完（WORKER_QUOTA_EXHAUSTED）是终态：线程被接管到别的引擎又有新产出，也不翻回 running", async () => {
+    const terminalAt = Date.now() / 1000 - 5;
+    const turn = await seedTurn({ busy: true, status: "error", errorCode: "WORKER_QUOTA_EXHAUSTED", text: "任务失败: 额度/套餐已用完: 1005",
+      extra: { status_history: [{ from: null, to: "running", at: terminalAt - 10 }, { from: "running", to: "error", at: terminalAt }] },
+      messages: (requestId, at) => [
+        { role: "user", kind: "text", text: "task", at: at - 20000, id: requestId },
+      ] });
+    try {
+      turn.om.pushMessage(turn.threadId, { role: "bot", kind: "text", text: "continuing on another engine", at: Date.now(), requestMessageId: turn.requestId });
+      for (let i = 0; i < 2; i++) {
+        expect(JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true })).status).toBe("error");
+      }
+      const record = recordOf(turn);
+      expect(record.error_code).toBe("WORKER_QUOTA_EXHAUSTED");
+      expect(record.status_history).toHaveLength(2);
+    } finally { turn.om.server.close(); }
+  });
+
   it("E51. 8801 重启把过程叙述打成终态、之后的工具没收尾：已记 completed 的重算为 WORKER_INTERRUPTED", async () => {
     const turn = await seedTurn({ status: "completed", text: "Now core.ts — the snapshot fallback…", messages: (requestId, at) => [
       { role: "user", kind: "text", text: "task", at, id: requestId },
@@ -1715,6 +1792,64 @@ describe("R6-A 验收：结算口径、超时窗口与登记状态", () => {
       expect(record.error_code).toBe("WORKER_INTERRUPTED");
       expect(record.partial_text).toContain("Now core.ts");
     } finally { turn.om.server.close(); }
+  });
+
+  const restartNotice = (at: number, requestId: string) => ({ role: "bot", kind: "activity", text: "", at, requestMessageId: requestId,
+    tool: { name: "failed: turn interrupted — OpenMausBot restarted", ok: false, text: { key: "chat.notice.restartInterrupted" } } });
+
+  it("E96. 8801 重启杀掉回合：running 记录结算为 WORKER_INTERRUPTED，半截回复只进 partial_text，不追问", async () => {
+    const turn = await seedTurn({ messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "activity", text: "", at: at + 200, requestMessageId: requestId, tool: { name: "edit", ok: true } },
+      { role: "bot", kind: "text", text: "接下来改 core.ts，先", at: at + 400, requestMessageId: requestId, turnSucceeded: true, turnTerminal: true },
+      restartNotice(at + 600, requestId),
+    ] });
+    try {
+      const status = JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true }));
+      expect(status.status).toBe("error");
+      const record = recordOf(turn);
+      expect(record.error_code).toBe("WORKER_INTERRUPTED");
+      expect(record.text).toContain("重启");
+      expect(record.text).not.toContain("接下来改 core.ts");
+      expect(record.partial_text).toContain("接下来改 core.ts");
+      expect(record.interrupted).toBe(true);
+      expect((turn.om.threads.get(turn.threadId) ?? []).filter((m: any) => m.role === "user")).toHaveLength(1);
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E96. 已被记成 completed 的重启打断回合：读取时纠正为 WORKER_INTERRUPTED", async () => {
+    const turn = await seedTurn({ status: "completed", text: "正在跑测试", messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "text", text: "正在跑测试", at: at + 300, requestMessageId: requestId, turnSucceeded: true, turnTerminal: true },
+      restartNotice(at + 500, requestId),
+    ] });
+    try {
+      expect(JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true })).status).toBe("error");
+      const record = recordOf(turn);
+      expect(record.error_code).toBe("WORKER_INTERRUPTED");
+      expect(record.partial_text).toContain("正在跑测试");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E96. 重启通知之后 8801 自动续跑并成功收尾：按续跑结果记 completed", async () => {
+    const turn = await seedTurn({ messages: (requestId, at) => [
+      { role: "user", kind: "text", text: "task", at, id: requestId },
+      { role: "bot", kind: "text", text: "做了一半", at: at + 100, requestMessageId: requestId },
+      restartNotice(at + 200, requestId),
+      { role: "bot", kind: "activity", text: "", at: at + 300, requestMessageId: requestId, tool: { name: "edit", ok: true } },
+      { role: "bot", kind: "text", text: "# 汇报\n\n全部做完", at: at + 400, requestMessageId: requestId, turnSucceeded: true, turnTerminal: true },
+    ] });
+    try {
+      expect(JSON.parse(await turn.tools.hub_task_status({ ref: turn.ref, json: true })).status).toBe("completed");
+      expect(recordOf(turn).text).toContain("全部做完");
+    } finally { turn.om.server.close(); }
+  });
+
+  it("E96. 重启通知识别：认 key 或原文，不认普通失败工具", () => {
+    expect(isRestartNotice({ role: "bot", kind: "activity", tool: { name: "x", ok: false, text: { key: "chat.notice.restartInterrupted" } } })).toBe(true);
+    expect(isRestartNotice({ role: "bot", kind: "activity", tool: { name: "failed: turn interrupted — OpenMausBot restarted", ok: false } })).toBe(true);
+    expect(isRestartNotice({ role: "bot", kind: "activity", tool: { name: "failed: bash exited 1", ok: false } })).toBe(false);
+    expect(isRestartNotice({ role: "user", kind: "text", text: "turn interrupted — OpenMausBot restarted" })).toBe(false);
   });
 
   it("E51. 轮询中发现回合被打断：自动追问续跑一次，用续跑后的汇报收尾", async () => {

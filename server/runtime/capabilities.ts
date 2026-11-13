@@ -51,6 +51,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   zcodeAgent: { resume: false, stepCap: CHAT_STEP_CAP },
   codeartsAcpAgent: { resume: false, stepCap: CHAT_STEP_CAP },
   traecodeAgent: { resume: false, stepCap: CHAT_STEP_CAP },
+  doubaoAgent: { resume: false, stepCap: CHAT_STEP_CAP },
   harkWeb: { resume: false, stepCap: CHAT_STEP_CAP },
   "openai-compat": CHAT_ROW,
   grok: CHAT_ROW,
@@ -59,6 +60,8 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   cerebras: CHAT_ROW,
   groq: CHAT_ROW,
   greenference: CHAT_ROW,
+  modelgo: CHAT_ROW,
+  dumate: CHAT_ROW,
   meta: CHAT_ROW,
 };
 

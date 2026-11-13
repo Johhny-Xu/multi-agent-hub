@@ -2,10 +2,10 @@ import { decodeRoutedCodexConfig, managedCodexArgs, endpointCodexArgs, type Code
 export { managedCodexArgs, endpointCodexArgs } from "./codex-endpoint-config.ts";
 import { codexActionFailure } from "./codex-action-notice.ts";
 import { codexToolSurfaceArgs } from "./codex-tool-surface.ts";
-import { codexShellDisabled, GUEST_CONFINED_CODEX_ARGS } from "./codex-guest.ts";
+import { codexShellDisabled, codexTurnConfigArgs } from "./codex-guest.ts";
 import { TEAM_TOOLS_FAILED, teamToolsFailed } from "./team-tools.ts";
 import { enabledMcpMounts, mcpStartupTracker, supportsMcpStartup } from "./codex-mcp-startup.ts";
-import { boxProxyEnvNames, type McpApprovalMode, mountMcpServer } from "./codex-mcp-mount.ts";
+import { boxAdmittedEnv, boxProxyEnvNames, customServerEnvBox, type McpApprovalMode, mountMcpServer } from "./codex-mcp-mount.ts";
 import { reportUnsupportedCalls, rolloutMark, type RolloutMark } from "./codex-unsupported-calls.ts";
 // The `codex` CLI headless over its app-server JSON-RPC (NDJSON on stdio): completion is
 // `turn/completed`, approvals arrive as server→client requests, resumeCursor is the codex thread id.
@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { codexConfigMcp, codexConfigRunsServer, mountedMcpServerName } from "./codex-mcp-names.ts";
+import { codexConfigMcp, codexConfigRunsServer, codexMcpDisableArgs, mountedMcpServerName } from "./codex-mcp-names.ts";
 
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "../config.ts";
 import { laterStartup, openStartupModelCatalog, unconfirmedModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
@@ -52,7 +52,7 @@ import { commandSummary, toolDetailPreview } from "../tool-summary.ts";
 import { codexDeveloperInstructions, syncCodexInstructions } from "./codex-instructions.ts";
 import { volatileContextNote, withContextNote } from "./prompt-split.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
-import { CodexDeviceAuthController } from "./codex-device-auth.ts";
+import { CodexDeviceAuthController } from "./codex-device-auth.ts"; import { messageItem } from "../harness/text-items.ts";
 import { codexAccountEmail, codexHome } from "./codex-identity.ts";
 import { linkSharedCodexHome } from "./codex-shared-home.ts";
 import { containsControlCharacter, mcpAppApprovalForm, mcpAppApprovalText, mcpElicitationDeclined, plainRecord } from "./codex-app-approval.ts";
@@ -108,7 +108,7 @@ const renamedMcpServers = new Set<string>();
 function noteRenamedMcpServer(name: string, mountName: string): void {
   if (renamedMcpServers.has(name)) return;
   renamedMcpServers.add(name);
-  console.error(`codex: MCP server ${JSON.stringify(name)} is also declared in Codex's own config.toml — mounted as ${JSON.stringify(mountName)} for this bot so the two do not merge`);
+  console.error(`codex: MCP server ${JSON.stringify(name)} is mounted as ${JSON.stringify(mountName)} for this bot to keep its CLI configuration distinct`);
 }
 
 interface CodexApprovalParams {
@@ -517,7 +517,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       const hideRefusedModel = (raw: string) => hidePlanRefusedModel(turn.model, raw, route);
       const signedOut = chatgptTurn && await loginCheck.check(childEnv()) === "missing";
       const authBridge = planAuth && await planRenewal.supported() ? await startPlanTokenBridge(() => planAuth.accessToken(), () => { assertPlanCurrent(); if (stopRequested) throw new Error("This task has ended."); }) : null;
-      try { assertPlanCurrent(); if (active.has(threadId)) throw new Error("a turn is already running on this thread"); } catch (error) { authBridge?.close(); throw error; }
+      let turnConfigArgs: string[]; try { assertPlanCurrent(); if (active.has(threadId)) throw new Error("a turn is already running on this thread"); turnConfigArgs = codexTurnConfigArgs(turn, childEnv()); } catch (error) { authBridge?.close(); throw error; }
       const turnId = newId();
       if (signedOut) {
         emit({ ...base(threadId, turnId), type: "turn.started" });
@@ -550,7 +550,9 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           // Native shell snapshots can restore variables the shell policy removed.
           ...(turn.toolScope === undefined && !authBridge ? [] : ["-c", "features.shell_snapshot=false"]),
           // A guest-driven turn: no shell, no file reads (-c wins over config files).
-          ...(turn.guestConfined ? GUEST_CONFINED_CODEX_ARGS : [])];
+          ...turnConfigArgs];
+        const codexConfig = codexConfigMcp(env), declaredInCodexConfig = codexConfig.names;
+        if (turn.toolScope !== undefined) appServerArgs.push(...codexMcpDisableArgs(declaredInCodexConfig));
         const baseEnv = new Map(Object.entries(env).filter(([, value]) => value !== undefined));
         const mountedNames = new Set<string>();
         const selectedMcp = new Map<string, StdioMcpSpec>();
@@ -606,12 +608,10 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         for (const name of ["data", "email", "device"] as const) if (turn.integrations?.[name]) mountSelected(name, name, turn.integrations[name]);
         // A `-c` override merges with a same-named server in config.toml, and stdio over url is
         // "invalid configuration" that kills the turn, so such a server mounts under its own name.
-        const codexConfig = codexConfigMcp(env), declaredInCodexConfig = codexConfig.names;
-        if (turn.toolScope !== undefined) {
-          for (const name of declaredInCodexConfig) appServerArgs.push("-c", `mcp_servers.${name}.enabled=false`);
-        }
+        const takenMcpNames = new Set([...declaredInCodexConfig, ...selectedMcp.keys(), ...(turn.integrations?.phone ? ["openmausbot_phone"] : [])]);
         for (const [name, server] of Object.entries(turn.integrations?.custom ?? {}).filter(([name, server]) => turn.toolScope !== undefined || !codexConfigRunsServer(codexConfig, name, server))) {
-          const mountName = mountedMcpServerName(name, declaredInCodexConfig);
+          const mountName = mountedMcpServerName(name, takenMcpNames);
+          takenMcpNames.add(mountName);
           if (mountName !== name) noteRenamedMcpServer(name, mountName);
           mountSelected(name, mountName, server, "prompt", turn.toolScope === undefined && !("url" in server) ? boxProxyEnvNames() : []);
         }
@@ -633,10 +633,10 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           }
         }
 
-        // Codex gives MCP children their variables from the environment it runs shell commands in, so
-        // every variable a mount writes is excluded from that shell (snapshots are off).
+        // Codex hands MCP children its shell environment, so mounted variables (and box-admitted custom env) leave that shell.
+        const customBox = customServerEnvBox(turn.integrations?.custom, selectedMcp), boxAdmitted = boxAdmittedEnv(customBox);
         const mountedEnv = [...mountedNames].filter((name) => env[name] !== undefined && !SHELL_ESSENTIALS.has(name) && !name.startsWith("LC_")
-          && (name === "ELECTRON_RUN_AS_NODE" || baseEnv.get(name) !== env[name]));
+          && (name === "ELECTRON_RUN_AS_NODE" || boxAdmitted.has(name) || baseEnv.get(name) !== env[name]));
         const privateEnv = [...new Set([
           ...(config.endpoint ? ["OPENMAUSBOT_CODEX_API_KEY"] : []),
           ...(turn.toolScope !== undefined ? ["OMB_GATE_CONFIG_*"] : []),
@@ -659,7 +659,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         const child = spawnHoldingSlot(releaseSlot, () => spawnCli(...codexLaunch(config.cli, appServerArgs), {
           cwd: turn.cwd ?? homedir(),
           env,
-          stdio: ["pipe", "pipe", "pipe"],
+          stdio: ["pipe", "pipe", "pipe"], ...customBox,
         }, "bot"));
 
       let abandoned = false;
@@ -806,7 +806,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           return settle(false, failedStop);
         }
         await interruptibleDelay(Math.max(1, Math.round(delayMs * retryScale)), stopSignal.signal).promise;
-        if (!stopRequested) void launchAttempt(attempt).catch(() => authBridge?.close());
+        if (!stopRequested) { try { turnConfigArgs = codexTurnConfigArgs(turn, childEnv()); } catch (error) { emit({ ...base(threadId, turnId), type: "runtime.error", message: error instanceof Error ? error.message : String(error) }); return settle(false, "rpc_error"); } void launchAttempt(attempt).catch(() => authBridge?.close()); }
         else await settle(false, "interrupted");
       };
 
@@ -1069,7 +1069,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
             const delta = typeof p.delta === "string" ? p.delta : "";
             if (delta) {
               state.sawStreamDelta = true;
-              emit({ ...base(threadId, turnId), type: "content.delta", streamKind: "assistant_text", delta });
+              emit({ ...base(threadId, turnId), ...messageItem({ id: p.itemId }), type: "content.delta", streamKind: "assistant_text", delta });
             }
             break;
           }
@@ -1113,10 +1113,10 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
               if (item.text?.trim()) {
                 state.lastText = item.text;
                 if (!state.sawStreamDelta) {
-                  emit({ ...base(threadId, turnId), type: "content.delta", streamKind: "assistant_text", delta: item.text });
+                  emit({ ...base(threadId, turnId), ...messageItem(item), type: "content.delta", streamKind: "assistant_text", delta: item.text });
                 }
                 state.sawStreamDelta = false;
-                emit({ ...base(threadId, turnId), type: "item.completed", itemType: "assistant_text", text: item.text });
+                emit({ ...base(threadId, turnId), ...messageItem(item), type: "item.completed", itemType: "assistant_text", text: item.text });
               }
               openAsyncQuestion(item, asks, steerActiveTurn, (event) => emit({ ...base(threadId, turnId), ...event }));
             } else if (item.type === "imageGeneration" && item.status !== "failed") {

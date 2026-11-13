@@ -140,7 +140,7 @@ describe("fixed server words", () => {
 
   it.each([
     ["serverError.decider.accountRequired", "Add your Cloudflare account ID with the token."],
-    ["serverError.decider.keyRequired", "Save a Cloudflare Workers AI, Jev or OpenRouter key before turning on fast decisions."],
+    ["serverError.decider.keyRequired", "Save a Cloudflare Workers AI, Jev, Gemini or OpenRouter key before turning on fast decisions."],
     ["serverError.decider.jevRejected", "Jev rejected this key. Check it at typesafe.ai and paste it again."],
     ["serverError.decider.workersRejected", "Cloudflare rejected this token. Check that it has Workers AI permission and belongs to this account ID."],
     ["serverError.decider.routerRejected", "OpenRouter rejected this key. Check it at openrouter.ai/keys and paste it again."],

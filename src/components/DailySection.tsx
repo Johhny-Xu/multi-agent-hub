@@ -37,7 +37,8 @@ type CheckinPlatform = {
   signedAccounts?: number;
   pendingAccounts?: number;
   accounts?: CheckinAccount[];
-  /** "qr": the platform signs in by scanning a QR the hub screenshots from its cloud browser (Doubao). */
+  /** "qr": the platform signs in by scanning a QR the hub reads from a browser it drives (Doubao in the cloud browser,
+   * DuMate in the shared browser). */
   loginKind?: string;
 };
 
@@ -103,6 +104,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   mimocode: "MiMo Code",
   meoo: "Meoo",
   doubao: "豆包 Doubao",
+  dumate: "百度搭子 DuMate",
   zcode: "ZCode",
   "github-copilot": "GitHub Copilot",
   antigravity: "Antigravity",
@@ -235,6 +237,8 @@ export function pendingReasonLabel(reason: string | undefined): string {
       return t("settings.daily.reasonCampaignClosed");
     case "await_credits":
       return t("settings.daily.reasonAwaitCredits");
+    case "awaiting_confirm":
+      return t("settings.daily.reasonAwaitingConfirm");
     default:
       return "";
   }
@@ -345,6 +349,7 @@ function Unreachable({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** `qrPng` is base64 image bytes: a PNG screenshot (Doubao) or the login page's own QR image, which Baidu serves as a GIF (DuMate). */
 type QrAnswer = { ok?: boolean; loggedIn?: boolean; qrPng?: string; error?: string };
 
 /** How long a shown QR is polled before it is called expired; the platform's own codes last about this long. */
@@ -404,8 +409,10 @@ export function QrLogin({ platformKey, name, signedIn, onLoggedIn }: {
     <div className="flex flex-col gap-1.5" data-daily-qr-login>
       {phase === "shown" && qr && (
         <div className="flex flex-col items-center gap-1.5 rounded-lg bg-inset p-3">
-          <img src={`data:image/png;base64,${qr}`} alt={t("settings.daily.qrAlt", { name })} className="size-40 rounded-md bg-white" />
-          <p className="text-center text-[12px] leading-relaxed text-ink-secondary">{t("settings.daily.qrHint", { name })}</p>
+          <img src={`data:${qr.startsWith("R0lGOD") ? "image/gif" : "image/png"};base64,${qr}`} alt={t("settings.daily.qrAlt", { name })} className="size-40 rounded-md bg-white" />
+          <p className="text-center text-[12px] leading-relaxed text-ink-secondary">
+            {platformKey === "dumate" ? t("settings.daily.qrHintDumate") : t("settings.daily.qrHint", { name })}
+          </p>
           <p className="flex items-center gap-1 text-[11px] text-ink-tertiary">
             <Loader2 size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
             {t("settings.daily.qrWaiting")}
@@ -425,7 +432,7 @@ export function QrLogin({ platformKey, name, signedIn, onLoggedIn }: {
           {phase === "loading" && <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
           {phase === "loading" ? t("settings.daily.qrLoading")
             : phase === "expired" || phase === "failed" ? t("settings.daily.qrRetry")
-              : signedIn ? t("settings.daily.qrRelogin") : t("settings.daily.qrLogin")}
+              : signedIn ? (platformKey === "dumate" ? t("settings.daily.qrAddAccount") : t("settings.daily.qrRelogin")) : t("settings.daily.qrLogin")}
         </button>
       )}
     </div>
@@ -434,6 +441,38 @@ export function QrLogin({ platformKey, name, signedIn, onLoggedIn }: {
 
 /** One platform's check-in card: the platform's own line, then every account it signs, each with its status. A long
  * line of error text stays two lines tall until it is asked for in full. */
+/** DuMate keeps several Baidu accounts on the server; one can be dropped from here (its cookie is deleted there).
+ * The first press arms the button, the second removes. */
+export function RemoveDumateAccount({ id, onRemoved }: { id: string; onRemoved?: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const remove = async () => {
+    if (!armed) { setArmed(true); return; }
+    setBusy(true);
+    try {
+      await api(`/hub/checkin/dumate/account/remove`, { method: "POST", body: JSON.stringify({ id }) });
+      onRemoved?.();
+    } catch {
+      // The row stays; the next status load shows the truth.
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      data-daily-remove-account
+      className={cn("shrink-0 text-[11px] hover:underline", armed ? "font-medium text-warning" : "text-ink-tertiary")}
+      disabled={busy}
+      onClick={() => void remove()}
+      onBlur={() => setArmed(false)}
+    >
+      {armed ? t("settings.daily.removeAccountConfirm") : t("settings.daily.removeAccount")}
+    </button>
+  );
+}
+
 export function PlatformCard({
   platformKey,
   name,
@@ -543,6 +582,9 @@ export function PlatformCard({
                       {row.display || row.name || "–"}
                     </span>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      {platformKey === "dumate" && row.name?.startsWith("dm-") && (
+                        <RemoveDumateAccount id={row.name} onRemoved={onLoginChanged} />
+                      )}
                       {row.credits !== undefined && row.credits !== "" && Number(row.credits) > 0 && (
                         <span className="text-[11px] tabular-nums text-ink-tertiary">+{row.credits}</span>
                       )}

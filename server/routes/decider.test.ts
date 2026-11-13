@@ -45,6 +45,22 @@ describe("decider proxy schema validation", () => {
   });
 });
 
+describe("the Gemini provider's test", () => {
+  it("accepts a Gemini draft, checks it at Gemini, and returns the verdict unchanged", async () => {
+    const testKey = vi.fn()
+      .mockResolvedValueOnce({ ok: true, latencyMs: 7 })
+      .mockResolvedValueOnce({ ok: false, reason: "rejected", status: 400 });
+    const route = createDeciderRoutes({ decider: { testKey } as any, config: () => ({}) });
+
+    const first = await call(route, "/api/decider/test", "POST", { provider: "gemini", key: " AIza-draft " });
+    expect(testKey).toHaveBeenCalledWith({ key: "AIza-draft", provider: "gemini" });
+    expect(first.answer).toEqual({ status: 200, body: { ok: true, latencyMs: 7 } });
+
+    const second = await call(route, "/api/decider/test", "POST", { provider: "gemini", key: "AIza-bad" });
+    expect(second.answer).toEqual({ status: 200, body: { ok: false, reason: "rejected", status: 400 } });
+  });
+});
+
 describe("decider proxy route read/write and masking", () => {
   it("GET /api/decider/proxy returns the masked proxyUrl", async () => {
     const cfg: AppConfig = {

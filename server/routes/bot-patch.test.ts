@@ -267,6 +267,40 @@ describe("PATCH /api/bots/:id phoneApps", () => {
   });
 });
 
+describe("PATCH /api/bots/:id pinnedEngine", () => {
+  it("persists pinnedEngine", async () => {
+    const { store, bot, patch } = fixture();
+    expect(store.bot(bot.id)?.pinnedEngine, "absent means false").toBeUndefined();
+
+    const stored = await patch(bot.id, { pinnedEngine: true });
+
+    expect(stored.status, JSON.stringify(stored.body)).toBe(200);
+    expect(store.bot(bot.id)?.pinnedEngine).toBe(true);
+    expect(stored.body.bot.pinnedEngine).toBe(true);
+    expect(new Store(() => sonnet).bot(bot.id)?.pinnedEngine, "survives a restart").toBe(true);
+  });
+
+  it("does not clear pinnedEngine when patch omits it", async () => {
+    const { store, bot, patch } = fixture();
+    await patch(bot.id, { pinnedEngine: true });
+
+    const renamed = await patch(bot.id, { name: "Scout II" });
+
+    expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
+    expect(store.bot(bot.id)?.pinnedEngine).toBe(true);
+  });
+
+  it("rejects a non-boolean pinnedEngine", async () => {
+    const { store, bot, patch } = fixture();
+
+    const refused = await patch(bot.id, { pinnedEngine: "yes" });
+
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toBe("pinnedEngine must be true or false");
+    expect(store.bot(bot.id)?.pinnedEngine).toBeUndefined();
+  });
+});
+
 describe("PATCH /api/bots/:id mainThreadChoice", () => {
   it("stores the conversation the person chose, clears it with null, and refuses a routine run or another bot's thread", async () => {
     const { store, bot, patch } = fixture();

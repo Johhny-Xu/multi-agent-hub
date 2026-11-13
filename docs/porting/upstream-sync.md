@@ -52,8 +52,11 @@ electron-builder 打 Linux/Windows 包要用；1.3.2 首次发版就因缺 `buil
 按任务约定，以下内容不进 om 仓（它们是 hub 自己的任务书、桥接层和签到脚本）：
 
 ```
-docs/  server/hub-compat/  checkin/  tests/console_*
+docs/  checkin/  tests/console_*
 ```
+
+**`server/hub-compat/` 不在排除清单里**（E97，2026-11-13 更正）：om 树的 `server/hub-bridge.ts` 会 import 它，
+缺了 8801 起不来。同步时整目录原样复制（两树 md5 一致），不做三方合并；它由 Hark 亲自维护，力工不碰。
 
 另外**不要**移植这些（属于产品品牌与仓库配置，不是功能）：
 
@@ -400,3 +403,77 @@ cd /home/johhny/openmausbot && git switch port/20261107   # 工作区本来就�
 
 两仓的未提交改动备份：`/tmp/hub-pre-0146.tgz`、`/tmp/om-pre-0146.tgz`（含
 `tracked.patch`、`status.txt`、`untracked-list.txt`、`untracked.tgz`）。
+
+## 9. 本轮：v0.1.150 → v0.1.154（2026-11-12 23:00 – 11-13 02:00）
+
+上游 `v0.1.150..v0.1.154` 共 704 个提交（Team Cloud 共享/团队记忆、发布到 Netlify 与
+Published apps 页、聊天流式显示、设置菜单重排、云电脑额度文案、MCP 名称精确匹配等）。
+本轮新开工作树 `~/openmausbot-0154`（分支 `port/0154`），8801 由 0146 切过去（见 §9.5）。
+
+### 9.1 om 树（`~/openmausbot-0154`）三方合并结果
+
+脚本：`~/.cache/zrev/up154/port.py`，结果 `~/.cache/zrev/up154/port0154.json`
+（base = v0.1.150，theirs = v0.1.154，ours = 0146 快照 `~/.cache/zrev/up154/snap-0146/`）。
+
+| 类别 | 数量 | 说明 |
+| --- | --- | --- |
+| copy（本项目未改，直接取 0154） | 101 | |
+| merged（git merge-file 干净合并） | 91 | |
+| conflict（人工/力工解） | 51 | 解法原则见 `~/.cache/zrev/up154/COMMON.md`：上游全收、本项目功能全留、上游搬家则跟着搬 |
+| new（0154 新增文件） | 631 | |
+| up-deleted（上游删、本项目改过） | 4 | `SettingsModal.groups/simple.test.ts`、`SettingsSimplePages.member.test.ts`、`SettingsSimplePages.tsx`：上游已把设置拆成一个菜单，随上游删除 |
+
+51 个冲突文件里重灾区：`server/index.ts`、`server/store.ts`、`server/config.ts`、
+`server/drivers/acp/core.ts`、`server/drivers/antigravity.ts`、`src/state/store.tsx`、
+`EngineSetup/EnginesSettings/EngineLibrary/ModelPickerFull/SimpleModelMenu`、
+`analytics-allowlist`、10 个 locale + `source-hashes.json`（locale 用 `up154-jmerge.py` 按键取并集后重算哈希）。
+
+0146 在升级期间新增的改动（豆包 doubao、Antigravity 账号、local-computer/E94 等）用
+`port0146new.py` 二次带入 0154：new 2、copy 8、merge3 10、conflict 2（`routes/instances.test.ts`、
+`analytics-allowlist.ts`，取并集）。DuMate（E99）随后由子代理直接在 0154 落地。
+
+### 9.2 产品仓（`~/multi-agent-hub`）
+
+脚本：`~/.cache/zrev/up154/hubapply.py`，结果 `hubapply.json`：copy154 1682、merge3 21、
+delete 24、keep 1（`scripts/ci-workflow.test.ts`，本项目 CI 不同）、noop 717、**skip-never 11（`server/hub-compat/` 全目录）**。
+
+上游删除、随之在 hub 删除的 24 个文件：escalations（含 `routes/internal-escalate.ts`）、
+peer-approval 一组、starter-bot-limit、LoginsSettings、TeamOrgChart（含 `src/lib/team-org-chart.ts`）、
+`SettingsSimplePages.tsx` 与三个旧设置测试、`external-runtime-busy.e2e.test.ts`。
+**注意**：这些删除尚未提交，`git ls-files` 仍列出它们，所以在主仓跑
+`scripts/testing/file-size-ratchet.test.ts` 会 ENOENT（`server/escalations.ts`）；提交后即恢复。0154 树（干净工作树）里同一测试通过。
+
+依赖：`@trycua/cua-driver` 0.41.3 → 0.45.4（主仓已 `pnpm install`）；0154 树另装 `playwright-core`（harkWeb / web-chat 驱动用）。
+
+### 9.3 E97：`server/hub-compat/` 必须整目录原样复制
+
+§2.3 原先把 `server/hub-compat/` 列入「不进 om 仓」，**这是错的**：`server/hub-bridge.ts`
+会 import 它，om 树缺这个目录 8801 起不来。规则改为：hub-compat 由 Hark 亲自维护，
+两树整目录 md5 一致；同步脚本对它只做「整目录复制」，不做三方合并，力工不碰。
+
+### 9.4 本轮测试与修正
+
+- 0154 树测试清单 `/tmp/n2-0154-tests.txt`（77 个文件 = `/tmp/up154-tests.txt` 54 个 + doubao、dumate、
+  antigravity 账号、instances、hub-compat 5 个、web-chat、plan-usage 等）。
+- 测试期修正（两树同改，备份 `~/.cache/zrev/*.bak-night2`）：
+  - `server/plan-usage.ts`：Meoo 的 `currentPeriodEnd` 不带时区（`2026-11-21T00:00:00`），按北京时间读（`beijingWallClock`），
+    不再随宿主时区漂移；测试期望改为 `2026-11-20T16:00:00.000Z`（= 北京 11-21 00:00）。
+  - `src/state/store.test.ts`「config status frames」：本项目的 vps 配置帧带多 VPS 列表 `instances` 与 `revision`，期望补上这两个字段。
+  - `scripts/testing/file-size-ratchet.test.ts`：登记本项目增长——`server/index.ts` 15907、`server/plan-usage.ts` 1115、
+    `server/vps-computer.ts` 1332，新增 `server/drivers/openai-chat.ts` 1003。
+  - `server/drivers/acp/qoder.ts`：E89，qoderCn 静态模型表加 `qmodel_latest`（Qwen4-Max-Preview）。
+  - `server/drivers/web-chat/{core,cdp-transport}.ts`：E100，harkWeb 默认 CDP 改连 mychrome（9333，可用 `OMB_WEBCHAT_CDP_URL` 改），拒绝 Electron 应用的调试口（开发机上 9222 被 Trae CN 占用）。
+- 0154 全量结果：77 个文件 3219 过 / 1 败（file-size-ratchet，测试机无 `.git`，本机跑通过）。
+- 只能在有 `.git` 的树里跑 file-size-ratchet（rtest/rt154 同步到测试机时排除了 `.git`，在测试机上必败，属环境）。
+
+### 9.5 8801 切换（本轮实际做法）
+
+- 前端：`cd ~/openmausbot-0154 && NODE_OPTIONS=--max-old-space-size=3072 nice node_modules/.bin/vite build`（约 1m45s，不与其他 build 并行）。
+- drop-in：`~/.config/systemd/user/openmausbot-lan.service.d/0154.conf`（`WorkingDirectory=%h/openmausbot-0154`），
+  原 `0146.conf` 移出（副本 `~/.cache/zrev/0146.conf.bak-night2`）。数据备份 `~/.cache/zrev/omdata-pre-0154-night2/`（config/bots/sessions + runtime.db、messages.db 在线备份）。
+- 重启前确认所有 bot `busy=false`、hub 没有 running 派活（E96）。
+- `XDG_RUNTIME_DIR=/run/user/$(id -u johhny) systemctl --user daemon-reload && systemctl --user restart openmausbot-lan`；
+  同时重启 `multi-agent-hub-mcp`（跑主仓 `server/hub-compat/main.ts`）。
+- 回滚：删 `0154.conf`、放回 `0146.conf`、daemon-reload、restart。
+
+- 实测（2026-11-13 01:27 切换后）：首页与 /api/health 200（/hub/quota 首次 504、随后 200，属冷启动）；日常页 /hub/checkin/status 含豆包与 DuMate；引擎库可见 doubaoAgent（未登录）、dumate（未扫码）；E95 Antigravity 账号 5 个（含 henry），切 henry 再切回 ultra 后不丢号，monster 删除 dry 检查无阻挡（未实删）；qoderCn 13 个模型含 qmodel_latest；worker-smoke codebuddy-cn、minimaxcode 通过，zcode 额度用完（见 E101）。

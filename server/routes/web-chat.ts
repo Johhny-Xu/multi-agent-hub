@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 
 import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
+import { ownerOrAdmin } from "../request-auth.ts";
 import type { Upgrades } from "./upgrades.ts";
 import {
   getDefaultUserscriptBridge,
@@ -42,7 +43,7 @@ export function createWebChatRoutes(deps: WebChatRouteDeps = {}): RouteHandler {
   const bridge = deps.bridge ?? getDefaultUserscriptBridge();
   deps.upgrades?.route((path) => path === WS_PATH);
 
-  return async ({ req, res, path, method, json }: RouteContext) => {
+  return async ({ req, res, path, method, json, auth }: RouteContext) => {
     if (!path.startsWith("/api/web-chat") && path !== "/harkweb.user.js") {
       return PASS;
     }
@@ -67,12 +68,18 @@ export function createWebChatRoutes(deps: WebChatRouteDeps = {}): RouteHandler {
       return;
     }
 
-    // Returns userscript bridge token; admin-only under central request-auth requiredScope / ADMIN_ALLOW
-    if (method === "GET" && path === "/api/web-chat/connection") {
+    // Returns the userscript bridge token: admin-only under the central gate (requiredScope / ADMIN_ALLOW), and checked
+    // again here so a route table that skips the gate still never hands it to a guest or a shared server's bot shell.
+    // POST is the app's way in: a same-origin POST carries Origin, which a plain-HTTP LAN page's GET does not (no
+    // Sec-Fetch-Site off a secure context), so a cookie session could never prove it was its own page (403 in the app).
+    if ((method === "GET" || method === "POST") && path === "/api/web-chat/connection") {
+      if (auth && !ownerOrAdmin(auth)) return json(res, 403, { error: "forbidden: only an admin can read the web-chat connection token" });
       const host = req.headers.host || "127.0.0.1:8801";
+      const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]?.trim().toLowerCase();
+      const secure = forwardedProto === "https" || Boolean((req.socket as { encrypted?: boolean } | undefined)?.encrypted);
       const token = deps.token?.() ?? "";
       return json(res, 200, {
-        wsUrl: `ws://${host}/api/web-chat/ws`,
+        wsUrl: `${secure ? "wss" : "ws"}://${host}/api/web-chat/ws`,
         token,
       });
     }

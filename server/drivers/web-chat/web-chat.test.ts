@@ -1872,3 +1872,27 @@ describe("workbench page factory fallback", () => {
   });
 });
 });
+
+// E100: web-chat never drives an Electron app's DevTools port, and defaults to the shared browser (mychrome).
+import { checkCdpAvailable as realCheckCdpAvailable } from "./cdp-transport.ts";
+import { DEFAULT_WEBCHAT_CDP_URL, webChatCdpUrl } from "./core.ts";
+describe("E100 web-chat CDP target", () => {
+  const versionFetch = (userAgent: string) => (async () => new Response(JSON.stringify({ Browser: "Chrome/142", "User-Agent": userAgent }), { status: 200 })) as unknown as typeof fetch;
+  it("accepts a real Chrome and refuses an Electron app's DevTools port", async () => {
+    await expect(realCheckCdpAvailable("http://127.0.0.1:9333", 500, { fetchFn: versionFetch("Mozilla/5.0 (X11; Linux x86_64) Chrome/157.0 Safari/537.36") })).resolves.toBe(true);
+    await expect(realCheckCdpAvailable("http://127.0.0.1:9222", 500, { fetchFn: versionFetch("Mozilla/5.0 TraeCN/1.107.1 Chrome/142.0 Electron/39.2.3 Safari/537.36") })).resolves.toBe(false);
+    await expect(realCheckCdpAvailable("http://127.0.0.1:9333", 500, { fetchFn: (async () => new Response("", { status: 404 })) as unknown as typeof fetch })).resolves.toBe(false);
+  });
+  it("defaults to mychrome, and lets the instance config or OMB_WEBCHAT_CDP_URL choose another", () => {
+    expect(DEFAULT_WEBCHAT_CDP_URL).toBe("http://127.0.0.1:9333");
+    const saved = process.env.OMB_WEBCHAT_CDP_URL;
+    delete process.env.OMB_WEBCHAT_CDP_URL;
+    try {
+      expect(webChatCdpUrl({}, {})).toBe("http://127.0.0.1:9333");
+      expect(webChatCdpUrl({}, { OMB_WEBCHAT_CDP_URL: "http://127.0.0.1:9444" })).toBe("http://127.0.0.1:9444");
+      expect(webChatCdpUrl({ cdpUrl: "http://127.0.0.1:9555" }, { OMB_WEBCHAT_CDP_URL: "http://127.0.0.1:9444" })).toBe("http://127.0.0.1:9555");
+    } finally {
+      if (saved === undefined) delete process.env.OMB_WEBCHAT_CDP_URL; else process.env.OMB_WEBCHAT_CDP_URL = saved;
+    }
+  });
+});

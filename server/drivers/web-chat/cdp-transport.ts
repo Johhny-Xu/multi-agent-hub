@@ -23,7 +23,10 @@ export async function checkCdpAvailable(
     const res = await fetchImpl(`${cdpUrl.replace(/\/+$/, "")}/json/version`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return res.ok;
+    if (!res.ok) return false;
+    // E100: an Electron app's DevTools port (Trae, VS Code…) answers /json/version too, but it is not a browser to drive.
+    const version = (typeof res.json === "function" ? await res.json().catch(() => null) : null) as { "User-Agent"?: unknown } | null;
+    return !(typeof version?.["User-Agent"] === "string" && /\bElectron\//.test(version["User-Agent"]));
   } catch {
     return false;
   }

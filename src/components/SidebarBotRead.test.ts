@@ -133,10 +133,10 @@ describe("Simple mode's bot menu", () => {
   it("leads with Pin, Move and Mark as read, then the thread items, then Rename, then Copy conversation ID and More, and ends with Archive and Delete", () => {
     draw();
     expect([...sheet().querySelectorAll("button")].map((node) => node.textContent)).toEqual([
-      "Pin", "Move to department", "Mark as read", "New thread", "View threads", "Rename", "Copy conversation ID", "More", "Archive", "Delete",
+      "Pin", "Move to department", "Mark as read", "Mark all as read", "New thread", "View threads", "Rename", "Copy conversation ID", "More", "Archive", "Delete",
     ]);
     expect([...sheet().children].map((node) => node.getAttribute("role") === "separator" ? "|" : node.textContent)).toEqual([
-      "Pin", "Move to department", "Mark as read", "|", "New thread", "View threads", "|", "Rename", "|", "Copy conversation ID", "More", "|", "Archive", "Delete",
+      "Pin", "Move to department", "Mark as read", "Mark all as read", "|", "New thread", "View threads", "|", "Rename", "|", "Copy conversation ID", "More", "|", "Archive", "Delete",
     ]);
     flushSync(() => button("Rename").click());
     expect(onRename).toHaveBeenCalledWith(bot.id);
@@ -176,5 +176,84 @@ describe("Simple mode's bot menu", () => {
     flushSync(() => more().click());
     await wait(20);
     expect(flyout()).not.toBeNull();
+  });
+});
+
+describe("bot list's Mark all as read", () => {
+  const other: Bot = { id: "scout", threadId: "scout-main", name: "Scout", title: "", description: "", color: "blue",
+    notifications: true, unread: true, messages: [], modelSelection: { instanceId: "fake", model: "test" },
+    tasks: [{ threadId: "scout-main", title: "Main", createdAt: 1, unread: true }] };
+  const archived: Bot = { ...structuredClone(other), id: "attic", threadId: "attic-main", name: "Attic", hidden: true,
+    tasks: [{ threadId: "attic-main", title: "Old", createdAt: 1, unread: true }] };
+  const room = { id: "room", name: "Room", memberIds: ["reviewer", "scout"], messages: [], unread: true, threadId: "room-thread" } as unknown as AppState["groups"][number];
+  const reads = (fetch: ReturnType<typeof vi.fn>) => fetch.mock.calls.map(([url, init]) => `${String(url)} ${init?.body ? JSON.parse(String(init.body)).threadId : ""}`.trim());
+  const serve = async (url: unknown, init?: RequestInit) => {
+    const path = String(url);
+    if (path.startsWith("/api/groups/")) return new Response(JSON.stringify({ group: { id: "room", unread: false } }), { headers: { "content-type": "application/json" } });
+    const botId = path.split("/")[3]!, threadId = JSON.parse(String(init?.body)).threadId;
+    const current = state.bots.find((candidate) => candidate.id === botId)!;
+    return new Response(JSON.stringify({ bot: { ...current, unread: false, tasks: current.tasks!.map((task) => task.threadId === threadId ? { ...task, unread: false } : task) } }), { headers: { "content-type": "application/json" } });
+  };
+  let answer = vi.fn(serve);
+  beforeEach(() => {
+    answer = vi.fn(serve);
+    state = { ...state, bots: [structuredClone(bot), structuredClone(other), structuredClone(archived)], groups: [structuredClone(room)] };
+  });
+
+  it("sits right after the bot's own read item in both views", () => {
+    draw();
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((node) => node.textContent);
+    expect(labels.indexOf("Mark all as read")).toBe(labels.indexOf("Mark all conversations as read") + 1);
+    mode.advanced = false; draw();
+    const simple = [...document.querySelectorAll('[role="menuitem"]')].map((node) => node.textContent);
+    expect(simple.indexOf("Mark all as read")).toBe(simple.indexOf("Mark as read") + 1);
+  });
+
+  it("reads every shown bot's unread threads and every unread group chat, one request at a time, then closes", async () => {
+    vi.stubGlobal("fetch", answer); draw();
+    flushSync(() => button("Mark all as read").click());
+    await expect.poll(() => onClose.mock.calls.length).toBe(1);
+    expect(reads(answer)).toEqual([
+      "/api/bots/reviewer/read background", "/api/bots/reviewer/read next", "/api/bots/scout/read scout-main", "/api/groups/room/read",
+    ]);
+    expect(state.bots.filter((candidate) => !candidate.hidden).every((candidate) => candidate.tasks!.every((task) => !task.unread))).toBe(true);
+    expect(state.groups[0]!.unread).toBe(false);
+    expect(state.selectedId).toBe("another-bot");
+  });
+
+  it("is disabled once nothing shown is unread, even with an archived bot still unread", () => {
+    state.bots.filter((candidate) => !candidate.hidden).forEach((candidate) => { candidate.unread = false; candidate.tasks!.forEach((task) => { task.unread = false; }); });
+    state.groups[0]!.unread = false; draw();
+    expect(button("Mark all as read").disabled).toBe(true);
+  });
+
+  it("works from a bot with nothing unread of its own", async () => {
+    state.bots[0]!.tasks!.forEach((task) => { task.unread = false; }); state.bots[0]!.unread = false;
+    vi.stubGlobal("fetch", answer); draw();
+    expect(button().disabled).toBe(true);
+    expect(button("Mark all as read").disabled).toBe(false);
+    flushSync(() => button("Mark all as read").click());
+    await expect.poll(() => onClose.mock.calls.length).toBe(1);
+    expect(reads(answer)).toEqual(["/api/bots/scout/read scout-main", "/api/groups/room/read"]);
+  });
+
+  it("keeps completed reads and shows the failure when one request fails, guarding repeat clicks", async () => {
+    const fetch = vi.fn(serve);
+    fetch.mockImplementationOnce(serve);
+    fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ error: "Fixture read failed" }), { status: 500 }));
+    vi.stubGlobal("fetch", fetch); draw();
+    const trigger = button("Mark all as read");
+    flushSync(() => { trigger.click(); trigger.click(); });
+    await expect.poll(() => document.querySelector('[role="alert"]')?.textContent).toContain("Fixture read failed");
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Completed reads were kept");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(state.bots[0]!.tasks!.find((task) => task.threadId === "background")?.unread).toBe(false);
+    expect(state.bots[1]!.tasks![0]!.unread).toBe(true);
+  });
+
+  it("is not offered to thread-pinned remote clients", () => {
+    window.ogb = { remoteClient: { active: true } } as typeof window.ogb;
+    draw(); expect(button("Mark all as read")).toBeUndefined();
   });
 });

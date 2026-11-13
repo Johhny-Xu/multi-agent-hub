@@ -141,5 +141,24 @@ describe("Settings → Google Gemini → account list", () => {
     const remove = [...work.querySelectorAll("button")].find((item) => item.textContent === "Remove") as HTMLButtonElement;
     expect(remove.disabled).toBe(true);
     expect(work.textContent).toContain("1 bot(s)");
+    // It names the bot, so the person knows which one to move to another model first.
+    expect(work.textContent).toContain("(Bee)");
+  });
+
+  it("removes exactly the account chosen from several, the one in the middle, and lists the bot on another by name", async () => {
+    const onUltra = { id: "argon", threadId: "argon-thread", name: "argon-box3", modelSelection: { instanceId: "antigravity-ultra" } } as unknown as Bot;
+    fixture.state = { ...fixture.state, bots: [onUltra], instances: [google("antigravity", "Google Gemini", true),
+      google("antigravity-monster", "monster", true), google("antigravity-jxks", "jxks", true), google("antigravity-ultra", "ultra", true)] };
+    await render();
+    const ids = () => rows().map((row) => row.getAttribute("data-antigravity-account"));
+    expect(ids()).toEqual(["antigravity", "antigravity-monster", "antigravity-jxks", "antigravity-ultra"]);
+    const ultra = rows()[3]!;
+    expect(([...ultra.querySelectorAll("button")].find((item) => item.textContent === "Remove") as HTMLButtonElement).disabled).toBe(true);
+    expect(ultra.textContent).toContain("(argon-box3)");
+    await click([...rows()[1]!.querySelectorAll("button")].find((item) => item.textContent === "Remove"));
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain("monster");
+    await click([...dialog!.querySelectorAll("button")].find((item) => item.textContent === "Remove"));
+    expect(ids()).toEqual(["antigravity", "antigravity-jxks", "antigravity-ultra"]);
   });
 });

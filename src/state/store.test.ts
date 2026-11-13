@@ -1059,7 +1059,8 @@ describe("config status frames", () => {
       xai: { configured: true },
       composio: { configured: true, mode: "managed" },
       box: { configured: false },
-      vps: { configured: true, sshAlias: "homelab" },
+      // The config frame keeps the multi-VPS list and its revision (project feature), so status carries them through.
+      vps: { configured: true, sshAlias: "homelab", revision: "", instances: [] },
       rooms: { turnTimeoutMinutes: 20 },
       mcp: { callTimeoutMinutes: 30 },
       threads: { maxConcurrentPerBot: 10 },
@@ -2576,6 +2577,8 @@ describe("live config frames", () => {
 
   it("keeps an OMB Cloud home's flag through live config refreshes, and adds none elsewhere", () => {
     expect(configStatusFromFrame({ ...baseFrame, cloudHome: true }).cloudHome).toBe(true);
+    expect(configStatusFromFrame({ ...baseFrame, awakeLimit: 3, pausedBots: ["scout"] })).toMatchObject({ awakeLimit: 3, pausedBots: ["scout"] });
+    expect(configStatusFromFrame(baseFrame)).not.toHaveProperty("pausedBots");
     expect(configStatusFromFrame(baseFrame)).not.toHaveProperty("cloudHome");
   });
 

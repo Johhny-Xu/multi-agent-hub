@@ -105,6 +105,49 @@ describe("the order: own Jev, own Workers AI, Cloud's included relay, OpenRouter
   });
 });
 
+describe("Gemini's key is its own", () => {
+  const GEMINI_KEY = "AIza-order-gemini-key-0123456789";
+  const explicit: AppConfig = {
+    openrouter: { key: SHARED },
+    decider: {
+      enabled: true, provider: "gemini", geminiKey: GEMINI_KEY,
+      key: JEV_KEY, workersAiToken: CF_TOKEN, workersAiAccountId: ACCOUNT, openrouterKey: OR_KEY,
+    },
+  };
+
+  it("an explicit Gemini uses its own key and never another provider's", async () => {
+    cloud();
+    const fetchImpl = anyYes();
+    await expect(decider(explicit, fetchImpl).testKey()).resolves.toMatchObject({ ok: true, provider: "gemini" });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    const headers = init!.headers as Record<string, string>;
+    expect(String(url)).toBe("https://generativelanguage.googleapis.com/v1beta/decisions");
+    expect(headers["x-goog-api-key"]).toBe(GEMINI_KEY);
+    expect(headers.authorization).toBeUndefined();
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain(JEV_KEY);
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain(OR_KEY);
+  });
+
+  it("without its own key it is nothing, even when every other key is on file", () => {
+    const config: AppConfig = {
+      openrouter: { key: SHARED },
+      decider: { enabled: true, provider: "gemini", key: JEV_KEY, workersAiToken: CF_TOKEN, workersAiAccountId: ACCOUNT, openrouterKey: OR_KEY },
+    };
+    expect(deciderAccount(config)).toBeNull();
+    expect(deciderReady(config, "roomRouting")).toBe(false);
+    expect(describeDecider(config)).toMatchObject({ provider: "gemini", model: "gemini-decision-1", configured: false });
+  });
+
+  it("browser automation stays Jev: a Gemini key never opens that seam", () => {
+    const onlyGemini: AppConfig = { decider: { enabled: true, provider: "gemini", geminiKey: GEMINI_KEY, jobs: { browserAutomation: true } } };
+    expect(deciderAccount(onlyGemini, "browserAutomation")).toBeNull();
+    expect(deciderReady(onlyGemini, "browserAutomation")).toBe(false);
+    const both: AppConfig = { decider: { ...onlyGemini.decider, key: JEV_KEY } };
+    expect(deciderAccount(both, "browserAutomation")).toMatchObject({ provider: "jev" });
+    expect(deciderReady(both, "browserAutomation")).toBe(true);
+  });
+});
+
 describe("Clef on Workers AI", () => {
   const config: AppConfig = { decider: { enabled: true, workersAiToken: CF_TOKEN, workersAiAccountId: ACCOUNT } };
 

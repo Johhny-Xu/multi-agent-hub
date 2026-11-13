@@ -74,6 +74,15 @@ export function decodeWebChatConfig(raw: unknown): WebChatConfig {
 
 // ProviderSnapshot only names "available"/"unavailable", but the workbench check answers "unknown"
 // (present, just not verifiable without opening the page); the wire carries it as-is.
+/**
+ * E100: the CDP endpoint web-chat drives. On this server 127.0.0.1:9222 is Trae CN's own Electron DevTools port, so
+ * the default is the shared browser (mychrome, 9333); OMB_WEBCHAT_CDP_URL (instance environment or process) overrides it.
+ */
+export const DEFAULT_WEBCHAT_CDP_URL = "http://127.0.0.1:9333";
+export function webChatCdpUrl(config: { cdpUrl?: string } | undefined, environment?: Record<string, string | undefined>): string {
+  return config?.cdpUrl || environment?.OMB_WEBCHAT_CDP_URL || process.env.OMB_WEBCHAT_CDP_URL || DEFAULT_WEBCHAT_CDP_URL;
+}
+
 function unknownSnapshot(reason: string): ProviderSnapshot {
   return { state: "unknown" as unknown as ProviderSnapshot["state"], authenticated: false, reason };
 }
@@ -546,7 +555,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
           const bridge = deps.userscriptBridge ?? getDefaultUserscriptBridge();
           const targetOrigin = new URL(config.url || adapter.defaultUrl).origin;
           const checkCdp = deps.checkCdpAvailable ?? checkCdpAvailable;
-          const cdpUrl = config.cdpUrl ?? "http://127.0.0.1:9222";
+          const cdpUrl = webChatCdpUrl(config, environment);
 
           let useUserscript = false;
           let useCdp = false;
@@ -585,7 +594,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                 emit({
                   ...baseEvent,
                   type: "runtime.error",
-                  message: "未检测到可用的真实浏览器传输：请安装油猴脚本并打开 Hark 页面，或以 --remote-debugging-port=9222 启动 Chrome",
+                  message: `未检测到可用的真实浏览器传输：请安装油猴脚本并打开 Hark 页面，或以 --remote-debugging-port 启动 Chrome（默认连 mychrome ${DEFAULT_WEBCHAT_CDP_URL}，可用 OMB_WEBCHAT_CDP_URL 改）`,
                 });
                 emit({ ...baseEvent, type: "turn.completed", ok: false, stopReason: "error" });
                 activeTurns.delete(threadId);
@@ -792,7 +801,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
           const bridge = deps.userscriptBridge ?? getDefaultUserscriptBridge();
           const targetOrigin = new URL(config.url || adapter.defaultUrl).origin;
           const checkCdp = deps.checkCdpAvailable ?? checkCdpAvailable;
-          const cdpUrl = config.cdpUrl ?? "http://127.0.0.1:9222";
+          const cdpUrl = webChatCdpUrl(config, environment);
 
           if (deps.pageFactory) {
             return {
@@ -860,7 +869,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
               return {
                 state: "available",
                 authenticated: true,
-                reason: `已连接外部 Chrome CDP（传输二：CDP 接管，${cdpUrl}）`,
+                reason: `已连接外部 Chrome CDP（传输二：CDP 接管，${cdpUrl}）；需在这个浏览器（mychrome）里登录 ${targetOrigin.replace(/^https?:\/\//, "")}，首次回合时在页面上检查登录`,
               };
             }
 

@@ -31,38 +31,61 @@ export function splitQoderThinking(model: string | undefined, variant: string | 
   return { model: match[1], thinking: match[2]!.toLowerCase() };
 }
 
+/** qodercli 1.1.86 refuses a bare `--thinking enabled` ("requires --thinking-budget <tokens>"); a budget implies enabled. */
+export const QODER_ENABLED_THINKING_BUDGET = "32000";
+export function qoderThinkingArgs(thinking: string | undefined): string[] {
+  if (!thinking) return [];
+  return thinking === "enabled" ? ["--thinking-budget", QODER_ENABLED_THINKING_BUDGET] : ["--thinking", thinking];
+}
+
 const withThinking = <T extends { id: string }>(options: T[]) => options.map((option) => ({ ...option, variants: QODER_THINKING }));
 
 /** Qoder's own model ids. Re-detect replaces this list with whatever the live session advertises. */
 const QODER_MODELS = {
   default: "dfmodel",
   options: withThinking([
-    { id: "dfmodel", label: "DeepSeek Flash" },
-    { id: "dmodel", label: "DeepSeek Pro" },
-    { id: "Kimi-K3.1-Pro", label: "Kimi K3.1 Pro" },
-    { id: "gmodel", label: "GLM" },
-    { id: "qmodel_38max", label: "Qwen 3.8 Max" },
-    // QoDuck is not in the ACP model_selection the CLI advertises (it is served from Qoder's remote catalog), so
-    // it only shows up here while the live probe keeps reporting six. Its id is the display name, as Qoder's own
-    // free-tier model is addressed that way on the command line.
-    { id: "QoDuck", label: "QoDuck (Free)" },
-    // Qoder's own flagship (computer-use oriented, 8x credit multiplier). It is advertised by the remote
-    // catalog rather than by the ACP model_selection, and a free account sees it in the picker but is gated
-    // on use — so it lives here rather than in the live probe, same as QoDuck.
-    { id: "Sonus", label: "Sonus (8×)" },
+    // Live ACP model_selection of qodercli 1.1.86 on 2026-11-11 (the account's own BYOK "qoder-custom-*" entry left out on purpose).
     { id: "auto", label: "Auto" },
+    { id: "ultimate", label: "Ultimate" },
+    { id: "fast", label: "Fast" },
+    { id: "efficient", label: "Efficient" },
+    { id: "qmodel_latest", label: "Qwen4-Max-Preview" },
+    { id: "qmodel_38max", label: "Qwen3.8-Max" },
+    { id: "qfmodel", label: "Qwen3.8-Flash" },
+    { id: "kmodel_latest", label: "Kimi-K3.1-Pro" },
+    { id: "kmodel", label: "Kimi-K2.8-Preview" },
+    { id: "gmodel", label: "GLM-5.3" },
+    { id: "gfmodel", label: "GLM-5.3-Flash" },
+    { id: "dmodel", label: "DeepSeek-V4-Pro" },
+    { id: "dfmodel", label: "DeepSeek-Flash" },
+    { id: "mmodel", label: "MiniMax-M3.1-Flash" },
+    { id: "75513251-b620-4ae0-bae4-25d28cc6c7ec", label: "Mimo-V2.6-Flash" },
+    { id: "cmodel", label: "Cantus" },
+    // QoDuck is not in the ACP model_selection the CLI advertises (it is served from Qoder's remote catalog), so
+    // it only shows up here. Its id is the display name, as Qoder's own free-tier model is addressed that way on the command line.
+    { id: "QoDuck", label: "QoDuck (Free)" },
+    // Qoder's own flagship (computer-use oriented, 8x credit multiplier); the live list calls it smodel, bots keep the name id.
+    { id: "Sonus", label: "Sonus (8×)" },
   ]),
 };
 
 const QODER_CN_MODELS = {
   default: "dfmodel",
   options: withThinking([
-    { id: "Kimi-K3.1-Pro", label: "Kimi K3.1 Pro" },
-    { id: "dfmodel", label: "DeepSeek Flash" },
-    { id: "dmodel", label: "DeepSeek Pro" },
-    { id: "glm", label: "GLM 5.3" },
-    { id: "qwen", label: "Qwen 3.8" },
+    // Live ACP model_selection of qoderclicn 1.1.74 on 2026-11-12 (E89: Qwen4-Max-Preview now on the CN catalog; 1.1.86 fails models.list with 403).
     { id: "auto", label: "Auto" },
+    { id: "fast", label: "Fast" },
+    { id: "qmodel_latest", label: "Qwen4-Max-Preview" },
+    { id: "qmodel_38max", label: "Qwen3.8-Max" },
+    { id: "qfmodel", label: "Qwen3.8-Flash" },
+    { id: "dmodel", label: "DeepSeek-V4-Pro" },
+    { id: "dfmodel", label: "DeepSeek-Flash" },
+    { id: "gmodel", label: "GLM-5.3" },
+    { id: "gfmodel", label: "GLM-5.3-Flash" },
+    { id: "kmodel_latest", label: "Kimi-K3.1-Pro" },
+    { id: "kmodel", label: "Kimi-K2.8-Preview" },
+    { id: "jmodel", label: "Step-5-Preview" },
+    { id: "mmodel", label: "MiniMax-M3.1-Flash" },
   ]),
 };
 
@@ -90,7 +113,7 @@ const intl: AcpSupport = {
   // --acp is the verified entry point; -m carries the model the bot picked, --thinking the picked thinking mode.
   spawnArgs: (_config, turn) => {
     const { model, thinking } = splitQoderThinking(turn.model, turn.variant);
-    return ["--acp", ...(model ? ["-m", model] : []), ...(thinking ? ["--thinking", thinking] : [])];
+    return ["--acp", ...(model ? ["-m", model] : []), ...qoderThinkingArgs(thinking)];
   },
   pickAuthMethod: () => null,
   authFailure: "continue",

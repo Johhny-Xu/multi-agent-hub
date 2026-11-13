@@ -4,8 +4,9 @@ import { userError, type UserError } from "../user-errors.ts";
 import type { AppConfig } from "../config.ts";
 import { deciderCredential } from "../included-services.ts";
 import {
-  helpersOn, includedAccount, jevAccount, openrouterAccount, sharedOpenRouterKey, workersAiAccount, type HelperAccount,
+  geminiAccount, helpersOn, includedAccount, jevAccount, openrouterAccount, sharedOpenRouterKey, workersAiAccount, type HelperAccount,
 } from "./accounts.ts";
+import { GEMINI_DECISION_MODEL, geminiBackend } from "./gemini.ts";
 import { jevBackend } from "./jev.ts";
 import { appendDeciderLog, stateHash } from "./log.ts";
 import { jevProxyUrl, maskProxyUrl, withJevProxy } from "./proxy.ts";
@@ -26,13 +27,16 @@ export const KEY_CHECK_TIMEOUT_MS = 10_000;
 const MIN_TIMEOUT_MS = 50;
 const MAX_TIMEOUT_MS = 30_000;
 
-const BACKENDS: Record<DeciderProvider, DeciderBackend> = { jev: jevBackend, workersai: workersAiBackend, openrouter: openrouterBackend };
+const BACKENDS: Record<DeciderProvider, DeciderBackend> = {
+  jev: jevBackend, workersai: workersAiBackend, openrouter: openrouterBackend, gemini: geminiBackend,
+};
 
 type DeciderConfig = NonNullable<AppConfig["decider"]>;
 
 /** The provider a draft key with no provider named is tested at: the old provider choice, else Jev. */
 function draftProvider(cfg: AppConfig): DeciderProvider {
-  return cfg.decider?.provider === "openrouter" ? "openrouter" : "jev";
+  const chosen = cfg.decider?.provider;
+  return chosen === "openrouter" || chosen === "gemini" ? chosen : "jev";
 }
 
 export function deciderModel(cfg: AppConfig): string {
@@ -45,7 +49,8 @@ export function deciderApi(cfg: AppConfig): OpenRouterApi {
 }
 
 /** In order: the person's own Jev key, their own Workers AI key (Clef), Cloud's included relay (only for seams it
- * accepts), the OpenRouter LLM fallback, nothing. */
+ * accepts), the OpenRouter LLM fallback, nothing. An explicitly chosen Gemini is used alone: with no key it is `no_key`
+ * rather than a quiet fallback to another vendor. */
 export function deciderAccount(cfg: AppConfig, seam?: DeciderSeam): HelperAccount | null {
   const jev = jevAccount(cfg);
   if (seam === "browserAutomation") {
@@ -53,6 +58,7 @@ export function deciderAccount(cfg: AppConfig, seam?: DeciderSeam): HelperAccoun
     if (jev.included && !relaySeam(seam)) return null;
     return jev;
   }
+  if (cfg.decider?.provider === "gemini") return geminiAccount(cfg);
   const candidates = [jev, workersAiAccount(cfg), jev?.included ? null : includedAccount(), openrouterAccount(cfg)];
   return candidates.find((account): account is HelperAccount => Boolean(account) && !(account!.included && seam && !relaySeam(seam))) ?? null;
 }
@@ -100,6 +106,7 @@ export function describeDecider(cfg: AppConfig) {
   return {
     provider,
     ...(provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
+    ...(provider === "gemini" ? { model: GEMINI_DECISION_MODEL } : {}),
     configured: Boolean(account),
     ...(account?.keySource ? { keySource: account.keySource } : {}),
     ...(provider === "openrouter" && deciderSharedKeyUsable(cfg) ? { sharedKey: true as const } : {}),
@@ -122,7 +129,7 @@ export interface DeciderKeyFallback {
   shared?: boolean;
 }
 
-const KEY_FIELDS = ["key", "workersAiToken", "openrouterKey"] as const;
+const KEY_FIELDS = ["key", "geminiKey", "workersAiToken", "openrouterKey"] as const;
 
 /** Jobs merge per job, because saveConfig replaces a section's nested objects whole. Saving any key switches the helper
  * models and their jobs on; clearing the last key with nothing to fall back on switches them off. */
@@ -136,7 +143,7 @@ export function deciderSavePatch(
   const saving = KEY_FIELDS.some((field) => Boolean(next[field]));
   const clearing = KEY_FIELDS.some((field) => next[field] === "");
   const after = (field: (typeof KEY_FIELDS)[number] | "workersAiAccountId") => (typeof next[field] === "string" ? next[field] : current?.[field]?.trim()) || "";
-  const ownAfter = Boolean(after("key") || after("openrouterKey") || (after("workersAiToken") && after("workersAiAccountId")));
+  const ownAfter = Boolean(after("key") || after("geminiKey") || after("openrouterKey") || (after("workersAiToken") && after("workersAiAccountId")));
   const fallbackHere = fallback.included === true || fallback.shared === true;
   if (patch.openrouterModel !== undefined && patch.openrouterApi === undefined) next.openrouterApi = "chat";
   if (next.workersAiToken && !after("workersAiAccountId")) return { ok: false, ...userError("serverError.decider.accountRequired") };
@@ -157,10 +164,14 @@ export function deciderSavePatch(
 export interface DeciderKeyCheck { key: string; provider: DeciderProvider; model?: string; api?: OpenRouterApi; accountId?: string }
 
 /** What Settings says when a save's key check is refused: a fixed sentence, never the vendor's body. */
-export const DECIDER_KEY_ERROR = { jev: "serverError.decider.jevRejected", workersai: "serverError.decider.workersRejected", openrouter: "serverError.decider.routerRejected" } as const;
+export const DECIDER_KEY_ERROR = {
+  jev: "serverError.decider.jevRejected", gemini: "serverError.decider.geminiRejected",
+  workersai: "serverError.decider.workersRejected", openrouter: "serverError.decider.routerRejected",
+} as const;
 
 export const DECIDER_KEY_REJECTED: Record<DeciderProvider, string> = {
   jev: "Jev rejected this key. Check it at typesafe.ai and paste it again.",
+  gemini: "Google rejected this key. Check it at aistudio.google.com/api-keys and paste it again.",
   workersai: "Cloudflare rejected this token. Check that it has Workers AI permission and belongs to this account ID.",
   openrouter: "OpenRouter rejected this key. Check it at openrouter.ai/keys and paste it again.",
 };
@@ -171,6 +182,7 @@ export function deciderPatchKey(
   current: DeciderConfig | undefined,
 ): { provider: DeciderProvider; check: DeciderKeyCheck } | null {
   const jevKey = patch.key?.trim();
+  const geminiKey = patch.geminiKey?.trim();
   const workersAiKey = patch.workersAiToken?.trim();
   const openrouterKey = patch.openrouterKey?.trim();
   if (jevKey) return { provider: "jev", check: { key: jevKey, provider: "jev" } };
@@ -178,6 +190,7 @@ export function deciderPatchKey(
     const accountId = (patch.workersAiAccountId ?? current?.workersAiAccountId)?.trim();
     return { provider: "workersai", check: { key: workersAiKey, provider: "workersai", ...(accountId ? { accountId } : {}) } };
   }
+  if (geminiKey) return { provider: "gemini", check: { key: geminiKey, provider: "gemini" } };
   if (!openrouterKey) return null;
   const savedModel = (patch.openrouterModel ?? current?.openrouterModel)?.trim();
   const api = patch.openrouterModel !== undefined ? patch.openrouterApi : patch.openrouterApi ?? current?.openrouterApi;
@@ -199,6 +212,7 @@ function checkAccount(cfg: AppConfig, input: { key?: string; provider?: DeciderP
   const provider = input.provider ?? draftProvider(cfg);
   if (provider === "workersai") return workersAiAccount(cfg, { token: draft, accountId: input.accountId });
   if (provider === "openrouter") return openrouterAccount(cfg, draft);
+  if (provider === "gemini") return geminiAccount(cfg, draft);
   return jevAccount(cfg, draft) ?? includedAccount();
 }
 
@@ -286,7 +300,7 @@ export function createDecider(deps: DeciderDeps): Decider {
           ...(account.included ? { relaySeam: seam } : {}),
           ...request,
           signal: controller.signal,
-          fetch: provider === "jev" ? withJevProxy(fetchImpl, jevProxyUrl(cfg.decider?.proxyUrl)) : fetchImpl,
+          fetch: provider === "jev" || provider === "gemini" ? withJevProxy(fetchImpl, jevProxyUrl(cfg.decider?.proxyUrl)) : fetchImpl,
         }))
         .catch((): BackendResult => ({ ok: false, reason: "malformed" }));
       outcome = await Promise.race([decided, timedOut]);
@@ -325,9 +339,11 @@ export function createDecider(deps: DeciderDeps): Decider {
     };
   }
 
-  const openrouterRequest = (cfg: AppConfig, account: HelperAccount, input: { model?: string; api?: OpenRouterApi } = {}) =>
-    account.provider !== "openrouter" ? {}
-      : input.model?.trim() ? { model: input.model.trim(), api: input.api ?? "chat" } : { model: deciderModel(cfg), api: deciderApi(cfg) };
+  /** The model named in the request: Gemini always names its one model, so its success and failure logs carry it too. */
+  const modelRequest = (cfg: AppConfig, account: HelperAccount, input: { model?: string; api?: OpenRouterApi } = {}) =>
+    account.provider === "gemini" ? { model: GEMINI_DECISION_MODEL }
+      : account.provider !== "openrouter" ? {}
+        : input.model?.trim() ? { model: input.model.trim(), api: input.api ?? "chat" } : { model: deciderModel(cfg), api: deciderApi(cfg) };
 
   async function ask<Qs extends Record<string, DeciderQuestion>>(
     seam: DeciderSeam,
@@ -342,7 +358,7 @@ export function createDecider(deps: DeciderDeps): Decider {
       const account = deciderAccount(cfg, seam)!;
       // Through the included token, only the exact requests the relay takes.
       if (account.included && !relayAccepts(seam, state, questions)) return { ok: false, reason: "misconfigured" };
-      return await call(cfg, seam, account, { ...openrouterRequest(cfg, account), state, questions }, options);
+      return await call(cfg, seam, account, { ...modelRequest(cfg, account), state, questions }, options);
     } catch {
       return { ok: false, reason: "malformed" };
     }
@@ -375,7 +391,7 @@ export function createDecider(deps: DeciderDeps): Decider {
         if (!account) return { ok: false, reason: "no_key" };
         const questions = { answer: { type: "yesno" as const, instructions: KEY_CHECK_QUESTION } };
         if (account.included && !relayAccepts("keyCheck", KEY_CHECK_STATE, questions)) return { ok: false, reason: "misconfigured" };
-        return single(await call(cfg, "keyCheck", account, { ...openrouterRequest(cfg, account, input), state: KEY_CHECK_STATE, questions }, { timeoutMs: KEY_CHECK_TIMEOUT_MS, ...options }));
+        return single(await call(cfg, "keyCheck", account, { ...modelRequest(cfg, account, input), state: KEY_CHECK_STATE, questions }, { timeoutMs: KEY_CHECK_TIMEOUT_MS, ...options }));
       } catch {
         return { ok: false, reason: "malformed" };
       }

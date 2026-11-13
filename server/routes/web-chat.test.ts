@@ -469,7 +469,7 @@ describe("Web-chat server routes", () => {
       path: "/api/web-chat/connection",
       url: new URL("http://127.0.0.1:8801/api/web-chat/connection"),
       method: "GET",
-      auth: { kind: "session", session: { id: "s1" } } as any,
+      auth: { kind: "session", session: { id: "s1" }, scopes: ["admin", "client"] } as any,
       json: json as any,
       readBody: async () => ({}),
     });
@@ -478,6 +478,38 @@ describe("Web-chat server routes", () => {
     const parsed = JSON.parse(written.body);
     expect(parsed.wsUrl).toBe("ws://127.0.0.1:8801/api/web-chat/ws");
     expect(parsed.token).toBe("conn-token-abc");
+  });
+
+  const connectionCall = async (method: string, auth: unknown, headers: Record<string, string> = { host: "127.0.0.1:8801" }) => {
+    const route = createWebChatRoutes({ token: () => "conn-token-abc" });
+    const { req, res, written, json } = createMockReqRes({ url: "/api/web-chat/connection", headers });
+    await route({
+      req, res, path: "/api/web-chat/connection", url: new URL("http://127.0.0.1:8801/api/web-chat/connection"),
+      method, auth: auth as any, json: json as any, readBody: async () => ({}),
+    });
+    return written;
+  };
+
+  it("serves the same connection details on POST, the app's same-origin way in", async () => {
+    const written = await connectionCall("POST", { kind: "loopback", scopes: [] });
+    expect(written.statusCode).toBe(200);
+    expect(JSON.parse(written.body)).toEqual({ wsUrl: "ws://127.0.0.1:8801/api/web-chat/ws", token: "conn-token-abc" });
+  });
+
+  it("never hands the token to a client-scope session or a shared server's bot shell, even past the gate", async () => {
+    for (const auth of [{ kind: "session", session: { id: "m" }, scopes: ["client"] }, { kind: "loopback", scopes: [], trust: "service" }]) {
+      for (const method of ["GET", "POST"]) {
+        const written = await connectionCall(method, auth);
+        expect(written.statusCode).toBe(403);
+        expect(written.body).not.toContain("conn-token-abc");
+      }
+    }
+  });
+
+  it("names a wss address when the page came over HTTPS through a proxy", async () => {
+    const written = await connectionCall("POST", { kind: "session", session: { id: "o" }, scopes: ["admin"] },
+      { host: "omb.example.test", "x-forwarded-proto": "https" });
+    expect(JSON.parse(written.body).wsUrl).toBe("wss://omb.example.test/api/web-chat/ws");
   });
 
   it("production assembly integration: real HTTP server + upgrades.attach with dispatchRoutes, validates handshake, Origin, token, and rejection cases", async () => {

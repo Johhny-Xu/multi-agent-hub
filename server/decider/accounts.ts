@@ -3,6 +3,7 @@
 import type { AppConfig } from "../config.ts";
 import { deciderCredential, type ServiceCredential } from "../included-services.ts";
 import { WORKERS_AI_ACCOUNT_ID } from "./config.ts";
+import { GEMINI_DECISIONS_DEFAULT_BASE_URL } from "./gemini.ts";
 import { OPENROUTER_DEFAULT_BASE_URL } from "./openrouter.ts";
 import type { DeciderProvider } from "./types.ts";
 import { WORKERS_AI_DEFAULT_BASE_URL } from "./workers-ai.ts";
@@ -43,6 +44,13 @@ export function jevAccount(cfg: AppConfig, draft?: string): HelperAccount | null
   if (!own) return null;
   const credential = deciderCredential(own, cfg.decider?.baseUrl);
   return credential ? { ...credential, provider: "jev" } : null;
+}
+
+/** Gemini's key is its own: never GEMINI_API_KEY, OMB_GEMINI_API_KEY, a TTS or image key, or any CLI's configuration. */
+export function geminiAccount(cfg: AppConfig, draft?: string): HelperAccount | null {
+  const own = draft?.trim() || cfg.decider?.geminiKey?.trim();
+  if (!own) return null;
+  return { provider: "gemini", token: own, api: cfg.decider?.geminiBaseUrl?.trim() || GEMINI_DECISIONS_DEFAULT_BASE_URL, included: false };
 }
 
 /** Cloud's included relay, a Jev base URL whose `/v1/extract` also extracts. */

@@ -68,6 +68,9 @@ export type RuntimeEvent = RuntimeEventBase &
          * one figure the harness accumulates. thread.token-usage.updated means
          * something different per driver and must never be summed. */
         usage?: { input: number; output: number; cachedInput?: number };
+        /** The model id the provider's backend actually answered this turn with, when the driver can read it
+         * (Antigravity: from agy's conversation database). May differ from the picked model's id. */
+        servedModel?: string;
       }
     | {
         /** A resumable terminal: the turn exhausted its model/tool budget and
@@ -125,7 +128,7 @@ export type RuntimeEvent = RuntimeEventBase &
      * store and never forwarded to renderer SSE. `fromTool`: a tool's result
      * returned the image to the engine; the bot did not make or send it. */
     | { type: "item.completed"; itemType: "assistant_image"; data: string; alt?: string; fromTool?: true }
-    | { type: "content.delta"; streamKind: "assistant_text" | "reasoning_text"; delta: string }
+    | { type: "content.delta"; streamKind: "assistant_text" | "reasoning_text"; delta: string; /** A room reply as it goes out: the member speaking. */ botId?: string }
     | {
         type: "request.opened";
         requestType: "permission" | "question";
@@ -204,6 +207,8 @@ export type RuntimeEvent = RuntimeEventBase &
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
     | { type: "runtime.notice"; message: string; text?: ServerText }
+    /** The engine condensed the conversation into its own summary (Claude Code's compact_boundary); the chat marks it. */
+    | { type: "context.compacted" }
   );
 
 export type RuntimeEventListener = (event: RuntimeEvent) => void;

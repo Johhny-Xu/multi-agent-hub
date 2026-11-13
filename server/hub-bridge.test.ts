@@ -265,6 +265,7 @@ describe("the hub bridge origin route", () => {
 describe("the Doubao QR sign-in routes (FEAT-doubao-checkin)", () => {
   function fakeCheckinApi(loggedIn: boolean) {
     const runs: string[] = [];
+    const removed: string[] = [];
     const api = {
       status: async () => ({ ok: true }),
       projects: () => ({ ok: true }),
@@ -273,8 +274,12 @@ describe("the Doubao QR sign-in routes (FEAT-doubao-checkin)", () => {
       config: async () => ({ ok: true }),
       doubaoLoginStart: async () => ({ ok: true, loggedIn: false, qrPng: "iVBORw0K" }),
       doubaoLoginStatus: async () => ({ ok: true, loggedIn }),
+      dumateLoginStart: async () => ({ ok: true, loggedIn: false, qrPng: "iVBORdm" }),
+      dumateLoginStatus: async () => ({ ok: true, loggedIn }),
+      dumateAccounts: async () => ({ ok: true, accounts: [{ id: "dm-1a2b3c4d", name: "号" }] }),
+      dumateRemoveAccount: async (id: string) => { removed.push(id); return { ok: true }; },
     };
-    return { api, runs };
+    return { api, runs, removed };
   }
   async function call(route: any, method: string, path: string) {
     const answers: Array<{ status: number; body: any }> = [];
@@ -308,5 +313,24 @@ describe("the Doubao QR sign-in routes (FEAT-doubao-checkin)", () => {
     expect(a?.body).toEqual({ ok: true, loggedIn: true });
     expect(b?.body).toEqual({ ok: true, loggedIn: true });
     expect(runs).toEqual(["doubao"]);
+  });
+
+  it("serves the DuMate (百度搭子) QR, account list and removal, and checks in once after the scan (FEAT-dumate)", async () => {
+    const { store } = fakeStore();
+    const { api, runs, removed } = fakeCheckinApi(true);
+    const { createHubBridgeRoutes } = await import("./hub-bridge.ts");
+    const route = createHubBridgeRoutes({ store, checkinApi: api });
+    expect(await call(route, "POST", "/hub/checkin/dumate/login")).toEqual({ status: 200, body: { ok: true, loggedIn: false, qrPng: "iVBORdm" } });
+    expect((await call(route, "GET", "/hub/checkin/dumate/login"))?.status).toBe(405);
+    const [a, b] = await Promise.all([
+      call(route, "GET", "/hub/checkin/dumate/login/status"),
+      call(route, "GET", "/hub/checkin/dumate/login/status"),
+    ]);
+    expect(a?.body).toEqual({ ok: true, loggedIn: true });
+    expect(b?.body).toEqual({ ok: true, loggedIn: true });
+    expect(runs).toEqual(["dumate"]);
+    expect((await call(route, "GET", "/hub/checkin/dumate/accounts"))?.body).toEqual({ ok: true, accounts: [{ id: "dm-1a2b3c4d", name: "号" }] });
+    expect((await call(route, "POST", "/hub/checkin/dumate/account/remove"))?.status).toBe(400);
+    expect(removed).toEqual([]);
   });
 });

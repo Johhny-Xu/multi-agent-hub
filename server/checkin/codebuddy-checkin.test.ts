@@ -132,7 +132,8 @@ test('CHECKIN_PLATFORMS 是唯一平台清单，且必须含国际版', () => {
   assert.ok(CHECKIN_PLATFORMS.includes('workbuddy'));
   assert.ok(CHECKIN_PLATFORMS.includes('qoder-cn'));
   assert.ok(CHECKIN_PLATFORMS.includes('doubao'), '豆包（云机浏览器签到，FEAT-doubao-checkin）');
-  assert.equal(CHECKIN_PLATFORMS.length, 9);
+  assert.ok(CHECKIN_PLATFORMS.includes('dumate'), '百度搭子（FEAT-dumate 日常签到）');
+  assert.equal(CHECKIN_PLATFORMS.length, 10);
 });
 
 test('platformNeedsRetry：今天没签 / 失败待重试 要补，已成功不补', () => {

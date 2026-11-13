@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { DurationSequencer } from "./scripts/testing/duration-sequencer.ts";
 import { hostE2eOnly, portableE2eFiles } from "./scripts/testing/host-e2e.ts";
+import { assertNoLocalBuild } from "./scripts/no-local-build.ts";
 import { hostTimeout } from "./server/testing/host-timeout.ts";
 
 // The About dialog's version, inlined at build time: the preload bridge is
@@ -44,7 +45,9 @@ const include = [
   "scripts/**/*.test.ts",
 ];
 
-export default defineConfig({
+export default defineConfig(({ command }) => {
+  assertNoLocalBuild(command);
+  return {
   plugins: [react(), tailwindcss(), railPage()],
   build: {
     rollupOptions: { input: { index: page("./index.html"), rail: page("./rail.html") } },
@@ -98,4 +101,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });

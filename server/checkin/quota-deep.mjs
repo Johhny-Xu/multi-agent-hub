@@ -83,6 +83,40 @@ async function fetchJsonRaw(url, options = {}, timeoutMs = 15_000) {
 }
 
 // ---------------------------------------------------------------- Qoder
+const QODER_QUOTA_PATH = '/api/v2/quota/usage';
+
+/**
+ * 配额接口的两种请求头（完整设备指纹 → 最小四件套）。
+ * 签到侧的回读和这里的展示共用同一套：端点、region、设备身份都必须一致，
+ * 否则「领了 100 分」和「额度没动」会被判成两个账号。
+ */
+async function qoderQuotaProbe(worker, token, device, fetchJson = fetchJsonRaw) {
+  const { qoderHeaders, qoderMinimalHeaders, qoderRegion } = await import('./qoder.mjs');
+  const url = `${qoderRegion(worker).openapi}${QODER_QUOTA_PATH}`;
+  return {
+    url,
+    calls: [
+      () => fetchJson(url, { headers: qoderHeaders(worker, token, device) }),
+      () => fetchJson(url, { headers: qoderMinimalHeaders(token) }),
+    ],
+    headers: (nextToken = token) => qoderHeaders(worker, nextToken, device),
+  };
+}
+
+/**
+ * 只读读取配额接口的原始 JSON，供签到在 claim 前后回读额度。
+ * 不续期令牌、不写凭据；请求失败 / 非 200 / 解析失败一律 null —— 回读失败只影响确认，不能中断签到。
+ */
+export async function readQoderQuotaUsageJson(worker, token, device = null, deps = {}) {
+  const probe = await qoderQuotaProbe(worker, token, device, deps.fetchJson || fetchJsonRaw);
+  for (const call of probe.calls) {
+    let res = null;
+    try { res = await call(); } catch { res = null; }
+    if (res?.status === 200 && res.json && typeof res.json === 'object') return res.json;
+  }
+  return null;
+}
+
 /**
  * Qoder / Qoder-CN 实时配额。
  *
@@ -95,7 +129,7 @@ async function fetchJsonRaw(url, options = {}, timeoutMs = 15_000) {
  * 注：`totalUsagePercentage` 是**已用**占比（0.13 = 用了 13%），不是剩余。
  */
 async function qoderQuota(worker) {
-  const { readQoderCredential, qoderHeaders, qoderMinimalHeaders, qoderRegion, isQoderTokenExpired, refreshQoderToken } =
+  const { readQoderCredential, qoderRegion, isQoderTokenExpired, refreshQoderToken } =
     await import('./qoder.mjs');
   const cred = await readQoderCredential(HOME, worker);
   if (!cred?.ok) {
@@ -126,12 +160,9 @@ async function qoderQuota(worker) {
     device = await resolveQoderDevice(worker, { home: HOME, uid: entry.user?.uid || '' });
   } catch { device = null; }
 
-  const url = `${region.openapi}/api/v2/quota/usage`;
-  const attempt = (headers) => fetchJsonRaw(url, { headers });
-  const calls = [
-    () => attempt(qoderHeaders(worker, token, device)),
-    () => attempt(qoderMinimalHeaders(token)),
-  ];
+  const probe = await qoderQuotaProbe(worker, token, device);
+  const attempt = (headers) => fetchJsonRaw(probe.url, { headers });
+  const calls = probe.calls;
 
   let res = null;
   let lastError = '';
@@ -146,7 +177,7 @@ async function qoderQuota(worker) {
     if (res.ok) break;
     if (res.status === 401 || res.status === 403) {
       if (await renew()) {
-        try { res = await attempt(qoderHeaders(worker, token, device)); } catch (e) { lastError = e?.message || String(e); }
+        try { res = await attempt(probe.headers(token)); } catch (e) { lastError = e?.message || String(e); }
         if (res?.ok) break;
       }
     }

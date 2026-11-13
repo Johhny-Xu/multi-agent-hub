@@ -29,8 +29,11 @@ interface AutoSwitchState {
   limitedUntil: Record<string, Record<string, number>>;
 }
 
-// Quota wordings the classifier misses on its own: the provider quota code and the Chinese wording.
-const EXTRA_QUOTA_PATTERNS = [/\bexceed(?:ed|s)? quota\b/i, /\b1005\b/, /\busage limit\b/i, /额度/];
+// Quota wordings the classifier misses on its own: the provider quota code, the Chinese wording, and Google's
+// RESOURCE_EXHAUSTED family (Antigravity says "You have exhausted your capacity on this model", which the
+// classifier reads as "overloaded" because of "capacity").
+const EXTRA_QUOTA_PATTERNS = [/\bexceed(?:ed|s)? quota\b/i, /\b1005\b/, /\busage limit\b/i, /额度/,
+  /\bRESOURCE_EXHAUSTED\b/, /\bexhausted your (?:capacity|quota)\b/i, /\bresource (?:has been )?exhausted\b/i];
 
 export function isLimitFailure(errorText: string): "quota" | "rate_limited" | null {
   const { reason } = classifyError(new Error(errorText));

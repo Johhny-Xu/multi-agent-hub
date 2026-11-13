@@ -6,6 +6,7 @@ import { usePageVisible } from "@/lib/page-visible";
 import { api, useStore, type Bot } from "@/state/store";
 import { BrowserProfilesManager } from "./BrowserProfilesManager";
 import { ChromeRow, type BrowserNav, type BrowserTab } from "./browser/ChromeRow";
+import { ExtensionsMenu, extensionsOf, type BrowserExtension } from "./browser/ExtensionsMenu";
 import { MoreMenu } from "./browser/MoreMenu";
 import { PasskeyNotice } from "./browser/PasskeyNotice";
 import { StreamSurface, type StreamSurfaceHandle, type SurfaceConnect } from "./browser/StreamSurface";
@@ -54,6 +55,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const [nav, setNav] = useState<BrowserNav>(NO_NAV);
   const [setting, setSetting] = useState<PreviewViewportSetting>({ mode: "fill" });
   const [zoom, setZoom] = useState(1);
+  const [extensions, setExtensions] = useState<BrowserExtension[] | null>(null);
   const [takeStatus, setTakeStatus] = useState<BrowserTakeStatus>("");
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
@@ -107,8 +109,19 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   }, []);
   // Another profile may run on the other engine: it gets the stream again if it has one.
   useEffect(() => { setFallback(false); setOpened(false); }, [bot.id, bot.browserProfile, scopedThread]);
+  // The conversation's browser moved (a sign-in site sends it from a cloud Chrome to this host's mychrome, or back):
+  // the view opens on the new one at once instead of showing the old session closed.
+  const placed = bot.tasks?.find((task) => task.threadId === scopedThread)?.browserPlacement;
+  const placement = placed ? `${placed.machine}\n${placed.browser}\n${placed.cloud}` : "";
+  const placementSeen = useRef({ thread: scopedThread, placement });
+  useEffect(() => {
+    const seen = placementSeen.current;
+    placementSeen.current = { thread: scopedThread, placement };
+    if (seen.thread === scopedThread && seen.placement && placement && seen.placement !== placement) reconnect();
+  }, [scopedThread, placement, reconnect]);
   useEffect(() => {
     setTabs([]);
+    setExtensions(null);
     setNav(stream ? NO_NAV : { ...NO_NAV, canGoBack: true, canGoForward: true });
     setStarting(false);
     setGone(false);
@@ -184,6 +197,8 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
       setNav((current) => ({ ...current, url: message.url as string }));
       pageNow.current = message.url;
       latest.current.openSignInPage();
+    } else if (message.type === "extensions") {
+      setExtensions(extensionsOf(message.extensions));
     } else if (message.type === "viewport") {
       const next = message.setting as PreviewViewportSetting | undefined;
       if (next && (next.mode === "fill" || next.mode === "preset")) setSetting(next);
@@ -330,7 +345,12 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
       onFullscreen={toggleFullscreen}
       onMaximize={toggleMaximize}
       onProfiles={() => { browserControl.current?.handBack(); setShowProfiles(true); }}
-      menu={<MoreMenu
+      menu={<>{stream ? <ExtensionsMenu
+        ready={connected && you}
+        extensions={extensions}
+        onList={() => clientRef.current?.send({ type: "extensions" })}
+        onOpen={(id) => clientRef.current?.send({ type: "openExtension", id })}
+      /> : null}<MoreMenu
         stream={stream}
         ready={connected && you}
         typing={typingReady}
@@ -344,7 +364,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
         onSecret={() => { setMasked(true); setShowTyping(true); }}
         onReconnect={reconnect}
         onRestart={restart}
-      />}
+      /></>}
     />
     {error && <div role="alert" className="flex shrink-0 items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] text-danger"><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={reconnect}>{t("browser.panel.reconnect")}</button>}</div>}
     {takeStatus === "stale" && <div role="status" className="shrink-0 border-b border-hairline/30 px-3 py-1.5 text-[12px] text-accent-text">{t("browser.control.stale", { name: bot.name })}</div>}

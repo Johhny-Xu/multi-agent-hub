@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
 
-const fixture = vi.hoisted(() => ({ state: null as Record<string, unknown> | null }));
+const fixture = vi.hoisted(() => ({ state: null as Record<string, unknown> | null, surfaceMounts: 0 }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({ state: fixture.state ?? original.initialState, dispatch: vi.fn() }) };
@@ -18,7 +18,13 @@ vi.mock("@/lib/browser-pip", () => ({
   supportsBrowserPictureInPicture: () => false,
   useBrowserPictureInPicture: () => "",
 }));
-vi.mock("./browser/StreamSurface", () => ({ StreamSurface: (props: { label: string }) => createElement("div", { "data-stub-surface": props.label }) }));
+vi.mock("./browser/StreamSurface", async () => {
+  const { useEffect } = await import("react");
+  return { StreamSurface: (props: { label: string }) => {
+    useEffect(() => { fixture.surfaceMounts++; }, []);
+    return createElement("div", { "data-stub-surface": props.label });
+  } };
+});
 vi.mock("./browser/BrowserProfilesManager", () => ({ BrowserProfilesManager: () => null }));
 vi.mock("./browser/MoreMenu", () => ({ MoreMenu: () => null }));
 vi.mock("./browser/PasskeyNotice", () => ({ PasskeyNotice: () => null }));
@@ -158,5 +164,31 @@ describe("a My Chrome bot's panel", () => {
     await settle();
     expect(host.textContent).toContain(t("browser.panel.notBrowsing"));
     expect(host.querySelector("[data-stub-surface]")).toBeNull();
+  });
+});
+
+describe("the browser panel when the conversation's browser moves", () => {
+  const placed = (machine: string, browser: string, cloud: boolean, reason = "why"): Bot => ({
+    ...bot, tasks: [{ threadId: "thread-scout", title: "", createdAt: 1, updatedAt: 1, browserPlacement: { machine, browser, cloud, reason } }],
+  } as Bot);
+
+  it("opens the view again when a sign-in site moves it from a cloud Chrome to this host's mychrome", async () => {
+    flushSync(() => root.render(createElement(LiveBrowser, { bot: placed("cloud-a", "mychrome", true) })));
+    await settle();
+    const before = fixture.surfaceMounts;
+    flushSync(() => root.render(createElement(LiveBrowser, { bot: placed("本机", "mychrome（需登录：github.com）", false) })));
+    await settle();
+    expect(fixture.surfaceMounts).toBe(before + 1);
+  });
+
+  it("keeps the view when only the reason changes, or when the placement first appears", async () => {
+    flushSync(() => root.render(createElement(LiveBrowser, { bot })));
+    await settle();
+    const before = fixture.surfaceMounts;
+    flushSync(() => root.render(createElement(LiveBrowser, { bot: placed("cloud-a", "mychrome", true, "first") })));
+    await settle();
+    flushSync(() => root.render(createElement(LiveBrowser, { bot: placed("cloud-a", "mychrome", true, "second") })));
+    await settle();
+    expect(fixture.surfaceMounts).toBe(before);
   });
 });

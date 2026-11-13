@@ -174,7 +174,8 @@ import fnmatch, hashlib, os, shutil
 HUB, OM = os.environ["HUB"], os.environ["OM_WT"]
 skip_dirs = {".git", "node_modules", "dist", "dist-companion", "dist-server", ".run", "logs",
              "__pycache__", ".codeartsdoer", ".vite", "results", ".openmausbot"}
-skip_prefix = ("docs/", "server/hub-compat/", "checkin/", "apps/", "state/", "hub/state/")
+# E97: server/hub-compat/ is NOT skipped: server/hub-bridge.ts imports it, so the om tree must carry it verbatim.
+skip_prefix = ("docs/", "checkin/", "apps/", "state/", "hub/state/")
 skip_globs = ("tests/console_*", "*.log", "*.pyc", ".env", "hub/agents.json")
 skip_files = {"README.md", "README.en.md", "LICENSE", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md",
               "SECURITY.md", "CHANGELOG.md", "RUN_ON_LINUX.md", "package.json", ".gitignore"}

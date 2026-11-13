@@ -23,6 +23,7 @@ async function serve(deps: Partial<AntigravityAccountListDeps> = {}): Promise<st
       antigravity: { driver: "antigravityAgent", displayName: "Google Gemini" },
       [added]: { driver: "antigravityAgent", displayName: "Work" },
     }),
+    persist: async () => {},
     refresh: () => {},
     reclaim: () => {},
     exclusive: (work) => work(),

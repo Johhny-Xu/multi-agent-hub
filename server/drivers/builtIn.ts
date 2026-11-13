@@ -23,6 +23,7 @@ import { MistralDriver } from "./mistral.ts";
 import { CerebrasDriver } from "./cerebras.ts";
 import { GroqDriver } from "./groq.ts";
 import { GreenferenceDriver } from "./greenference.ts";
+import { ModelgoDriver } from "./modelgo.ts";
 import { MetaDriver } from "./meta.ts";
 import { MuseCodeDriver } from "./muse-code.ts";
 import { MinimaxDriver } from "./minimax.ts";
@@ -35,6 +36,8 @@ import { ZcodeAgentDriver } from "./acp/zcode.ts";
 import { PerchAgentDriver } from "./acp/perch.ts";
 import { MimocodeAgentDriver } from "./acp/mimocode.ts";
 import { TraecodeAgentDriver } from "./traecode.ts";
+import { DoubaoAgentDriver } from "./doubao.ts";
+import { DumateDriver } from "./dumate.ts";
 import { HarkWebDriver } from "./web-chat/hark.ts";
 
 export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
@@ -62,6 +65,7 @@ export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
   CerebrasDriver,
   GroqDriver,
   GreenferenceDriver,
+  ModelgoDriver,
   MetaDriver,
   MuseCodeDriver,
   DeepSeekAgentDriver,
@@ -77,5 +81,7 @@ export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
   // only registers the engine and its accounts and explains that turns cannot run headlessly.
   MimocodeAgentDriver,
   TraecodeAgentDriver,
+  DoubaoAgentDriver,
+  DumateDriver,
   HarkWebDriver,
 ];

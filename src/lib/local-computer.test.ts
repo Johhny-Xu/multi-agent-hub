@@ -8,6 +8,7 @@ import {
   localComputerDisabledReason,
   localComputerSelectable,
   persistedComputerSelectionMatches,
+  computerSelectionSettled,
   resolveBoatPanelAction,
   shouldPollCloudPreview,
 } from "./local-computer";
@@ -280,6 +281,32 @@ describe("local computer UI eligibility", () => {
       ...expected,
       persistedBot: { computer: undefined, cloudBackend: "box" },
     })).toBe(false);
+  });
+});
+
+describe("computerSelectionSettled (picking another cloud computer)", () => {
+  const settled = { botId: "b1", computer: "cloud" as const, cloudBackend: "vps" as const, section: "", revision: 0 };
+
+  it("is settled when the saved bot confirmed this exact choice", () => {
+    expect(computerSelectionSettled(settled, settled)).toBe(true);
+  });
+
+  it("is not settled before any PATCH confirmed a choice", () => {
+    expect(computerSelectionSettled(null, settled)).toBe(false);
+  });
+
+  it("un-settles on a new choice that keeps destination and backend (another VPS), so the panel re-resolves after its PATCH", () => {
+    // Regression: choosing simular-box in the cloud picker sent {cloudBackend:"vps", vpsInstanceId} — same computer,
+    // same backend — and the panel stayed "checking" forever because nothing it watched had changed.
+    expect(computerSelectionSettled(settled, { ...settled, revision: 1 })).toBe(false);
+    expect(computerSelectionSettled({ ...settled, revision: 1 }, { ...settled, revision: 1 })).toBe(true);
+  });
+
+  it("still un-settles on a different bot, destination, backend or section", () => {
+    expect(computerSelectionSettled(settled, { ...settled, botId: "b2" })).toBe(false);
+    expect(computerSelectionSettled(settled, { ...settled, computer: "browser" })).toBe(false);
+    expect(computerSelectionSettled(settled, { ...settled, cloudBackend: "box" })).toBe(false);
+    expect(computerSelectionSettled(settled, { ...settled, section: "TEAM" })).toBe(false);
   });
 });
 

@@ -134,6 +134,23 @@ describe("the Jev backend's requests through createDecider", () => {
     expect(fetchImpl.mock.calls[0]![1]?.dispatcher).toBeUndefined();
   });
 
+  it("a Gemini request rides the same proxy, with redirect still refused", async () => {
+    const GEMINI_KEY = "AIza-proxy-key-0123456789";
+    const config: AppConfig = {
+      decider: { enabled: true, provider: "gemini", geminiKey: GEMINI_KEY, proxyUrl: PROXY, jobs: { roomRouting: true } },
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      answers: { answer: { type: "choice", choice: "theo", probabilities: { theo: 0.97, maya: 0.03 } } },
+      usage: { total_input_tokens: 12 },
+    }));
+    await expect(decider(config, fetchImpl).choose("roomRouting", STATE, QUESTION)).resolves.toMatchObject({ ok: true, provider: "gemini" });
+    const [url, init] = undiciCalls[0]! as [unknown, RequestInit & { dispatcher?: unknown; headers?: Record<string, string> }];
+    expect(String(url)).toBe("https://generativelanguage.googleapis.com/v1beta/decisions");
+    expect(isDispatcher(init.dispatcher)).toBe(true);
+    expect(init.redirect).toBe("error");
+    expect(init.headers?.["x-goog-api-key"]).toBe(GEMINI_KEY);
+  });
+
   it("Cloud's included relay rides the same proxy", async () => {
     vi.stubEnv("OMB_CLOUD_DECIDER_URL", "https://cloud.example.test/api/cloud/services/decider");
     vi.stubEnv("OMB_CLOUD_DECIDER_TOKEN", "omb_decide_unit_included_token_0123456789");

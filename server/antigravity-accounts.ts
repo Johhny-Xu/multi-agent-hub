@@ -1,7 +1,8 @@
 // Antigravity's accounts are its instances: the primary `antigravity` plus every `antigravity-<uuid>` added in
 // Settings, each signed in with its own Google profile. This lists them as one account list, switches which
 // account the primary runs as, and leaves removal to the instance route that already owns it.
-import { copyFileSync, mkdirSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { antigravityProfileDirectory, isAddedAntigravityAccount } from "./drivers/antigravity-acp.ts";
@@ -98,6 +99,58 @@ export async function antigravityAccountsView(
     } satisfies AntigravityAccountRow;
   }));
   return { accounts, primaryId };
+}
+
+/** The same Google account: the same email when both files name one, otherwise the very same sign-in bytes. */
+async function sameAccount(left: string, right: string): Promise<boolean> {
+  const [a, b] = await Promise.all([antigravityAccount(left), antigravityAccount(right)]);
+  if (a?.email && b?.email) return a.email.toLowerCase() === b.email.toLowerCase();
+  try {
+    return readFileSync(left).equals(readFileSync(right));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A switch copies another account's sign-in over the primary's. When the primary is signed in with an account no
+ * added account also holds (the one it was first signed in with, say), that copy would erase it: the primary row
+ * starts showing the new account and the old one silently drops out of the list. Before switching, this keeps such
+ * an account as an added account of its own, named for its email, holding a copy of its sign-in, so it stays in the
+ * list and can be switched back to. `instances` gains the new entry; the caller persists it. Returns the new
+ * instance's id, or undefined when nothing needed keeping.
+ */
+export async function keepOutgoingPrimaryAccount(
+  instances: Record<string, { driver?: string; displayName?: string; config?: unknown }>,
+  accountInstanceId: string,
+  options: { primaryId?: string; env?: Env; baseDir?: string; newId?: () => string } = {},
+): Promise<string | undefined> {
+  const primaryId = options.primaryId ?? "antigravity";
+  const env = options.env ?? process.env;
+  const current = antigravityTokenPath(primaryId, env, options.baseDir);
+  // Nothing to keep when the primary has no sign-in, and nothing to switch to when the chosen one has none either.
+  if (!current || accountInstanceId === primaryId || !antigravityTokenPath(accountInstanceId, env, options.baseDir)) return undefined;
+  for (const row of antigravityAccountInstances(instances, primaryId)) {
+    if (row.instanceId === primaryId) continue;
+    const held = antigravityTokenPath(row.instanceId, env, options.baseDir);
+    if (held && await sameAccount(current, held)) return undefined;
+  }
+  const identity = await antigravityAccount(current);
+  const instanceId = options.newId?.() ?? `antigravity-${randomUUID()}`;
+  if (!isAddedAntigravityAccount(instanceId) || instances[instanceId]) throw new Error("Could not keep the current Antigravity account.");
+  // The same kind of file the primary had: the CLI's own sign-in, or the packaged runtime's.
+  const packaged = resolve(current) === resolve(packagedTokenPath(primaryId, options.baseDir));
+  const target = packaged ? packagedTokenPath(instanceId, options.baseDir) : addedCliTokenPath(instanceId, options.baseDir);
+  mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+  copyFileSync(current, target);
+  chmodSync(target, 0o600);
+  const cli = (instances[primaryId]?.config as { cli?: unknown } | undefined)?.cli;
+  instances[instanceId] = {
+    driver: "antigravityAgent",
+    displayName: identity?.email ?? "Antigravity",
+    config: typeof cli === "string" && cli ? { cli } : {},
+  };
+  return instanceId;
 }
 
 /**

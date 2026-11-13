@@ -43,6 +43,7 @@ const EXPECTED: Record<string, EngineCapabilities> = {
   zcodeAgent: replayed,
   codeartsAcpAgent: replayed,
   traecodeAgent: replayed,
+  doubaoAgent: replayed,
   harkWeb: replayed,
   "openai-compat": chat,
   grok: chat,
@@ -51,6 +52,8 @@ const EXPECTED: Record<string, EngineCapabilities> = {
   cerebras: chat,
   groq: chat,
   greenference: chat,
+  modelgo: chat,
+  dumate: chat,
   meta: chat,
 };
 

@@ -64,6 +64,17 @@ export function isRetryNotice(m: any): boolean {
   return m?.role === "user" && m?.kind === "text" && typeof m?.text === "string" && m.text.startsWith(RETRY_NOTICE_PREFIX);
 }
 
+/** E96：8801 关停时给仍在跑的回合写的「回合被重启打断」通知（server/index.ts noteTurnsCutByShutdown → chat.notice.restartInterrupted）。 */
+export const RESTART_NOTICE_KEY = "chat.notice.restartInterrupted";
+export function isRestartNotice(m: any): boolean {
+  if (m?.role !== "bot" || m?.kind !== "activity" || !m?.tool) return false;
+  if (m.tool?.text?.key === RESTART_NOTICE_KEY) return true;
+  return m.tool?.ok === false && /turn interrupted\s*[—-]+\s*OpenMausBot restarted/i.test(String(m.tool?.name ?? ""));
+}
+
+/** E96：重启打断的派活如实记失败（不自动续跑，不记 completed）。 */
+export const RESTART_INTERRUPTED_TEXT = "任务中断: OpenMausBot 重启打断了这一回合，活没有做完（已保留写了一半的回复，未自动续跑）";
+
 /** E11：回合失败后 8801 可能马上自动续跑；先等这么久看有没有续跑，再记失败。 */
 export const RETRY_GRACE_S = 120;
 
@@ -111,8 +122,12 @@ export function endedWithoutReport(text: string): boolean {
 const WORKERS: Record<string, string> = {
   antigravity: "antigravity", codebuddy: "codebuddy", "codebuddy-cn": "codebuddyCn",
   minimaxcode: "mcode", qoder: "qoder", "qoder-cn": "qoderCn", codearts: "codearts",
-  meoo: "meoo", opencode: "opencodeGo", "github-copilot": "githubCopilot",
+  meoo: "meoo", cline: "cline", opencode: "opencodeGo", "github-copilot": "githubCopilot",
   zcode: "zcode",
+  /** 豆包 CLI（driver doubaoAgent，8801 实例 id doubao）：`doubao -p` 一轮一跑，无 ACP/MCP。 */
+  doubao: "doubao",
+  /** 百度搭子 DuMate（driver dumate，8801 实例 id dumate）：网关 chat，账号来自日常页扫码。 */
+  dumate: "dumate",
 };
 
 /** 缺省模型是裸 id（GLM-5.3-Flash），而引擎目录在多个 provider 提供同名模型时只列 `providerId/modelId`：
@@ -131,6 +146,8 @@ const AGENT_ALIASES: Record<string, string> = {
   trae: "traecode", ca: "codearts", "huawei-codearts": "codearts", oc: "opencode",
   intl: "codebuddy", "codebuddy-intl": "codebuddy", cbcnintl: "codebuddy",
   qd: "qoder", qdcn: "qoder-cn", qodercn: "qoder-cn",
+  db: "doubao", "doubao-cli": "doubao", "豆包": "doubao", doubaoagent: "doubao",
+  "搭子": "dumate", "百度搭子": "dumate", "baidu-dumate": "dumate",
 };
 
 function resolveAgent(name: unknown): string {
@@ -369,6 +386,15 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     }
   }
 
+  /**
+   * E101：hub·<agent> 锁定在派给的引擎上（8801 bot 字段 pinnedEngine），额度用完不被「额度接管」换到别的引擎。
+   * 尽力而为：老版 8801 不认这个字段时 PATCH 失败也不挡派活。
+   */
+  async function pinBot(bot: any): Promise<void> {
+    if (!bot?.id || bot.pinnedEngine === true) return;
+    try { await om(`/api/bots/${bot.id}`, { method: "PATCH", body: { pinnedEngine: true } }); } catch { /* 尽力而为 */ }
+  }
+
   /** 8801 当前的 bot 列表。 */
   async function liveBots(): Promise<any[]> {
     const existing = await om("/api/bots");
@@ -391,6 +417,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       if (bot) {
         let unarchived = false;
         if (bot.hidden === true) { await unarchiveBot(agent, bot); unarchived = true; }
+        await pinBot(bot);
         const entry: BotEntry = { botId: registered, model: bot.modelSelection?.model ?? bots[agent]?.model };
         bots[agent] = entry; writeBots(bots);
         return unarchived ? { ...entry, unarchived: true } : entry;
@@ -408,6 +435,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     }
     const bot = created.json?.bot ?? created.json;
     if (!bot?.id) throw new Error(`${agent} 常驻 bot 创建响应缺少 id`);
+    await pinBot(bot);
     const entry = { botId: String(bot.id), model: bot.modelSelection?.model ?? model };
     bots[agent] = entry; writeBots(bots);
     return entry;
@@ -492,6 +520,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     bound: boolean;
     /** E51：终态文本之后还有工具调用、且最后一个工具没收尾（ok 为空）——回合是被打断的，不是做完了。 */
     interrupted: boolean;
+    /** E96：本轮有 8801「重启打断」通知，且通知之后没有新的成功收尾。 */
+    restartCut?: boolean;
   }
 
   /** 这一回合的锚：8801 用 requestMessageId / turnId 标出每条消息属于哪一轮。 */
@@ -600,6 +630,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     let lastTerminalTextAt: number | null = null;
     let lastAnyTextAt: number | null = null;
     let lastActivity: { at: number; ok: unknown } | null = null;
+    let restartCutAt: number | null = null;
+    let lastSucceededAt: number | null = null;
     for (const m of selected.mine) {
       const at = Number(m?.at ?? 0) / 1000;
       // 锚点已经把范围定在本轮；有锚就不再靠墙钟筛，免得时钟偏差把本轮消息筛掉。
@@ -611,8 +643,16 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
         view.errors = [];
         lastTextSucceeded = false;
         lastTerminalTextAt = null; lastActivity = null;
+        restartCutAt = null; lastSucceededAt = null;
         continue;
       }
+      // E96：重启打断通知不是工具调用也不是 worker 产出，只记下时刻。
+      if (isRestartNotice(m)) {
+        if (restartCutAt === null || at >= restartCutAt) restartCutAt = at;
+        if (view.lastMessageAt === null || at >= view.lastMessageAt) view.lastMessageAt = at;
+        continue;
+      }
+      if (m?.turnSucceeded === true && (lastSucceededAt === null || at > lastSucceededAt)) lastSucceededAt = at;
       // 本轮请求行（用户发的那条）只用来读取消/排队标记，不算 worker 输出。
       if (m?.role !== "user" && (view.lastMessageAt === null || at >= view.lastMessageAt)) {
         view.lastMessageAt = at;
@@ -689,6 +729,11 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
       && lastActivity.at > lastTerminalTextAt
       && (lastActivity.ok === null || lastActivity.ok === undefined)
       && (lastAnyTextAt === null || lastAnyTextAt <= lastTerminalTextAt);
+    // E96：重启通知之后没有新的成功收尾——不管 8801 把哪句过程叙述打成了终态，这一轮都是被杀掉的。
+    if (restartCutAt !== null && (lastSucceededAt === null || lastSucceededAt <= restartCutAt)) {
+      view.restartCut = true;
+      view.interrupted = true;
+    }
     return view;
   }
 
@@ -760,7 +805,7 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     | { kind: "running" }
     | { kind: "completed"; text: string }
     /** E51：回合被打断（8801 重启/工具没收尾）。轮询器追问续跑一次，再断就记 WORKER_INTERRUPTED。 */
-    | { kind: "interrupted"; text: string }
+    | { kind: "interrupted"; text: string; restart?: boolean }
     | { kind: "error"; code: string; message: string };
 
   /** 失败原因分类：额度耗尽（E3）、中途拒答（E11，可恢复）、其余为一般失败。 */
@@ -796,6 +841,8 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
     // E11/E6/E10：8801 明说回合还在跑（job.busy）就继续等。中途的失败标记（一次 refusal、一次工具报错、
     // 被重试覆盖的失败）都不是终态，以 worker 实际收尾为准。
     if (turnStatus.running) return { kind: "running" };
+    // E96：8801 重启杀掉了这一轮——记中断，不拿写了一半的回复当交付。
+    if (view.restartCut) return { kind: "interrupted", text: view.lastBotText, restart: true };
     if (view.failed) return failure(view.errors[0] ?? "回合以失败结束");
     if (turnStatus.error) return failure(turnStatus.error);
     // E14：单个工具调用失败是回合里的正常过程；只有回合结束且没成功时才拿工具错误当失败原因。
@@ -988,6 +1035,10 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           return;
         }
         // E51：回合被打断（8801 重启、工具没收尾）——追问续跑一次；已经追问过还被打断，就如实记失败。
+        if (settled.kind === "interrupted" && settled.restart) {
+          updateResult(ref, restartInterruptedPatch(settled.text || lastText));
+          return;
+        }
         if (settled.kind === "interrupted") {
           const before = readResult(ref);
           if (!before?.followup_sent) {
@@ -1288,8 +1339,9 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           const terminalAt = terminalSince(d);
           const freshProgress = terminalAt !== null && view.lastProgressAt !== null && view.lastProgressAt > terminalAt;
           const legacyMislabel = terminalAt === null && d.status === "completed" && !view.settled;
-          const revive = d.error_code !== "WORKER_CANCELLED" && !view.cancelled && view.reachable
-            && (freshProgress || legacyMislabel);
+          // E101：额度用完是终态——8801 若把线程接管到别的引擎继续跑，那已不是派给的这个 worker，不跟着恢复。
+          const revive = d.error_code !== "WORKER_CANCELLED" && d.error_code !== "WORKER_QUOTA_EXHAUSTED"
+            && !view.cancelled && view.reachable && (freshProgress || legacyMislabel);
           if (!revive) return d;
         }
 
@@ -1339,6 +1391,9 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
             updateResult(d.ref, { heartbeat: now() });
             return reapResult(readResult(d.ref));
           }
+          if (settled.kind === "interrupted" && settled.restart) {
+            return updateResult(d.ref, restartInterruptedPatch(settled.text || d.partial_text));
+          }
           if (settled.kind === "interrupted") {
             // E51 续跑追问在轮询器里做：查询本身不发消息。
             const idleS = Number(d.idle_timeout_s ?? DEFAULT_TASK_TIMEOUT_S) || DEFAULT_TASK_TIMEOUT_S;
@@ -1367,7 +1422,9 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
           if (view) {
             // 状态跟文本一起重算：终态变成失败/取消/被打断时，completed 不能留着。
             const settled = settleTurn(view, turnStatus, d.text || d.partial_text);
-            if (settled.kind === "error" || settled.kind === "interrupted") {
+            if (settled.kind === "interrupted" && settled.restart) {
+              d = updateResult(d.ref, restartInterruptedPatch(settled.text || d.text || d.partial_text));
+            } else if (settled.kind === "error" || settled.kind === "interrupted") {
               const code = settled.kind === "error" ? settled.code : "WORKER_INTERRUPTED";
               const message = settled.kind === "error" ? settled.message
                 : "回合被中途打断（OpenMausBot 重启或工具调用没有完成），活没有做完";
@@ -1416,6 +1473,15 @@ export function createDispatchTools(opts: { omBase: string; stateDir: string; re
 
     if (d.status !== "running") return d;
     return reapResult(d);
+  }
+
+  /** E96：重启打断的结算——失败（WORKER_INTERRUPTED），保留半截回复在 partial_text，不写进 text。 */
+  function restartInterruptedPatch(partial?: string): Partial<ResultRecord> {
+    return {
+      status: "error", worker_status: "error", error_code: "WORKER_INTERRUPTED",
+      failure_stage: "worker_execution", text: RESTART_INTERRUPTED_TEXT, exit_code: 1, progress: null,
+      interrupted: true, ...(partial ? { partial_text: partial } : {}),
+    } as Partial<ResultRecord>;
   }
 
   function emptyView(): ThreadView {

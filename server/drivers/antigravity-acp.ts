@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, stat, symlink } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -137,7 +137,7 @@ export async function removeAntigravitySignIn(instanceId: string, baseDir = DATA
 /** Tools an agent turn needs from the person's own HOME (git identity, SSH keys, user-installed CLIs). */
 const SHARED_HOME_ENTRIES = [".gitconfig", ".git-credentials", ".ssh", ".local", ".npm-global", ".npmrc"];
 
-async function prepareIsolatedCliHome(home: string, realHome: string): Promise<void> {
+export async function prepareIsolatedCliHome(home: string, realHome: string): Promise<void> {
   await mkdir(home, { recursive: true, mode: 0o700 });
   if (resolve(realHome) === resolve(home)) return;
   for (const name of SHARED_HOME_ENTRIES) {
@@ -154,6 +154,23 @@ async function prepareIsolatedCliHome(home: string, realHome: string): Promise<v
       await symlink(target, link).catch(() => {});
     }
   }
+  const realPinky = join(realHome, ".config", "pinky");
+  try {
+    await stat(realPinky);
+  } catch {
+    return;
+  }
+  const configDir = join(home, ".config");
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  const pinkyLink = join(configDir, "pinky");
+  try {
+    const existing = await lstat(pinkyLink);
+    if (existing.isSymbolicLink()) return;
+    await rename(pinkyLink, join(configDir, `pinky.isolated-${Date.now()}`));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return;
+  }
+  await symlink(realPinky, pinkyLink).catch(() => {});
 }
 
 /** Accounts added in Settings are `antigravity-<uuid>`; the primary instance is plain `antigravity`. */
@@ -181,12 +198,13 @@ export async function prepareAntigravityProfile(input: {
    * GEMINI_HOME in its profile, otherwise it would inherit the first account's sign-in and never sign in. */
   const sharesCliHome = cli && !isAddedAntigravityAccount(input.instanceId);
   // The agy CLI ignores GEMINI_HOME (it uses $HOME/.gemini) and prefers the desktop keyring over files, so an
-  // added CLI account gets its own HOME under its profile and no session bus: its sign-in lands in that HOME only.
+  // added CLI account gets its own HOME under its profile: its sign-in lands in that HOME only.
   const isolatedCliHome = cli && !sharesCliHome ? join(directory, "home") : undefined;
   const geminiHome = sharesCliHome
     ? resolve((input.baseEnv ?? process.env).GEMINI_HOME?.trim() || join(homedir(), ".gemini"))
     : isolatedCliHome ? join(isolatedCliHome, ".gemini") : directory;
-  if (isolatedCliHome) await prepareIsolatedCliHome(isolatedCliHome, (input.baseEnv ?? process.env).HOME?.trim() || homedir());
+  const realHome = (input.baseEnv ?? process.env).HOME?.trim() || homedir();
+  if (isolatedCliHome) await prepareIsolatedCliHome(isolatedCliHome, realHome);
   await mkdir(acpDirectory, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") {
     const { chmod } = await import("node:fs/promises");
@@ -214,7 +232,11 @@ export async function prepareAntigravityProfile(input: {
   Object.assign(environment, {
     GEMINI_HOME: geminiHome,
     AGY_ACP_FORCE_FILE_STORAGE: "1",
-    ...(isolatedCliHome ? { HOME: isolatedCliHome, DBUS_SESSION_BUS_ADDRESS: "disabled:" } : {}),
+    ...(isolatedCliHome ? { HOME: isolatedCliHome } : {}),
+    // Every CLI account, the primary too, runs without a session bus: with one the agy CLI signs in from the desktop
+    // keyring and ignores antigravity-oauth-token, so a saved-account switch (by hand or automatic) changed the file
+    // while turns kept running on the keyring account (2026-11-10, auto-switch verification).
+    ...(cli ? { DBUS_SESSION_BUS_ADDRESS: "disabled:" } : {}),
     // Only Google's packaged runtime reads this; the CLI carries its own harness behind `agy acp`.
     ...(cli ? {} : { ANTIGRAVITY_HARNESS_PATH: input.runtime.harnessPath }),
     BROWSER: browserCommand,

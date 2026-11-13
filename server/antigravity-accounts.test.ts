@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { antigravityProfileDirectory } from "./drivers/antigravity-acp.ts";
-import { antigravityAccountsView, antigravityTokenPath, switchAntigravityAccount } from "./antigravity-accounts.ts";
+import { antigravityAccountsView, antigravityTokenPath, keepOutgoingPrimaryAccount, switchAntigravityAccount } from "./antigravity-accounts.ts";
 
 let home: string;
 const primary = "antigravity";
@@ -80,5 +80,34 @@ describe("Antigravity's account list", () => {
   it("refuses an instance that is not an Antigravity account", () => {
     expect(() => switchAntigravityAccount(instances(), "other", { env: { HOME: home } }))
       .toThrow(/not set up here/u);
+  });
+  it("keeps the account the primary was signed in with as its own row before a switch overwrites it", async () => {
+    write(addedToken(), tokenJson("work@example.test"));
+    const list = instances() as Record<string, { driver?: string; displayName?: string; config?: unknown }>;
+    const kept = "antigravity-2f1c9a44-0000-4000-8000-0000000000aa";
+    expect(await keepOutgoingPrimaryAccount(list, added, { env: { HOME: home }, baseDir: home, newId: () => kept })).toBe(kept);
+    expect(list[kept]).toEqual({ driver: "antigravityAgent", displayName: "first@example.test", config: {} });
+    const keptToken = antigravityTokenPath(kept, { HOME: home }, home)!;
+    expect(readFileSync(keptToken, "utf8")).toBe(tokenJson("first@example.test"));
+    if (process.platform !== "win32") expect(statSync(keptToken).mode & 0o777).toBe(0o600);
+    switchAntigravityAccount(list, added, { env: { HOME: home }, baseDir: home });
+    const view = await antigravityAccountsView(list, { env: { HOME: home }, baseDir: home });
+    // Every account is still listed once by its own row: nothing dropped out when the primary changed accounts.
+    expect(view.accounts.map((row) => [row.instanceId, row.email])).toEqual([
+      [primary, "work@example.test"], [added, "work@example.test"], [kept, "first@example.test"],
+    ]);
+    // Switching back to it restores the first account on the primary, and keeps nothing new: work@ is held by `added`.
+    expect(await keepOutgoingPrimaryAccount(list, kept, { env: { HOME: home }, baseDir: home, newId: () => "antigravity-never" })).toBeUndefined();
+    switchAntigravityAccount(list, kept, { env: { HOME: home }, baseDir: home });
+    expect((await antigravityAccountsView(list, { env: { HOME: home }, baseDir: home })).accounts[0]!.email).toBe("first@example.test");
+  });
+
+  it("keeps nothing when an added account already holds the primary's account, or the chosen one is not signed in", async () => {
+    const list = instances() as Record<string, { driver?: string; displayName?: string; config?: unknown }>;
+    expect(await keepOutgoingPrimaryAccount(list, added, { env: { HOME: home }, baseDir: home })).toBeUndefined();
+    write(addedToken(), tokenJson("FIRST@example.test"));
+    expect(await keepOutgoingPrimaryAccount(list, added, { env: { HOME: home }, baseDir: home })).toBeUndefined();
+    expect(await keepOutgoingPrimaryAccount(list, primary, { env: { HOME: home }, baseDir: home })).toBeUndefined();
+    expect(Object.keys(list)).toEqual([primary, added, "other"]);
   });
 });

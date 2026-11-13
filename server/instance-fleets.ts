@@ -42,6 +42,7 @@ export const DEFAULT_FLEET: InstanceConfigMap = {
   cerebras: { driver: "cerebras" },
   groq: { driver: "groq" },
   greenference: { driver: "greenference" },
+  modelgo: { driver: "modelgo" },
   meta: { driver: "meta" },
   deepseek: { driver: "deepseekAgent" },
   museCode: { driver: "museCode" },
@@ -56,6 +57,8 @@ export const DEFAULT_FLEET: InstanceConfigMap = {
   // mah 迁移进来的两个引擎只有切号（service-accounts），还没有可跑回合的驱动：
   // registry 会按 unknown driver 保留为 shadow（unavailable），删除注册会让快照重新不可见。
   traecode: { driver: "traecodeAgent" },
+  doubao: { driver: "doubaoAgent" },
+  dumate: { driver: "dumate" },
   mimocode: { driver: "mimocodeAgent" },
   perch: { driver: "perchAgent" },
   zcode: { driver: "zcodeAgent" },
@@ -85,6 +88,7 @@ export const PRODUCT_FLEET_ADDITIONS = {
   cerebras: { driver: "cerebras" },
   groq: { driver: "groq" },
   greenference: { driver: "greenference" },
+  modelgo: { driver: "modelgo" },
   meta: { driver: "meta" },
   deepseek: { driver: "deepseekAgent" },
   museCode: { driver: "museCode" },
@@ -97,6 +101,8 @@ export const PRODUCT_FLEET_ADDITIONS = {
   mcode: { driver: "mcodeAgent" },
   meoo: { driver: "meooAgent" },
   traecode: { driver: "traecodeAgent" },
+  doubao: { driver: "doubaoAgent" },
+  dumate: { driver: "dumate" },
   mimocode: { driver: "mimocodeAgent" },
   perch: { driver: "perchAgent" },
   zcode: { driver: "zcodeAgent" },

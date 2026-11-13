@@ -3,11 +3,13 @@
 // them the account the primary runs as. Adding and removing stay on the routes that already own them.
 import { z } from "zod";
 import type { InstanceConfigMap } from "../contracts.ts";
-import { antigravityAccountsView, isAntigravityAccountInstance, switchAntigravityAccount } from "../antigravity-accounts.ts";
+import { antigravityAccountsView, isAntigravityAccountInstance, keepOutgoingPrimaryAccount, switchAntigravityAccount } from "../antigravity-accounts.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface AntigravityAccountListDeps {
   instances(): InstanceConfigMap;
+  /** Saves an account a switch had to keep (keepOutgoingPrimaryAccount) before overwriting the primary's sign-in. */
+  persist(instanceId: string, instances: InstanceConfigMap): Promise<void>;
   /** The engine list probes each CLI again after a switch. */
   refresh(): void;
   /** After a switch: idle CLI processes still run under the account just switched away from. */
@@ -39,6 +41,9 @@ export function createAntigravityAccountListRoutes(deps: AntigravityAccountListD
         return json(res, 404, { error: "That Antigravity account is gone." });
       }
       try {
+        // Never let the switch erase the account the primary is signed in with now (see keepOutgoingPrimaryAccount).
+        const kept = await keepOutgoingPrimaryAccount(instances, parsed.data.accountInstanceId);
+        if (kept) await deps.persist(kept, instances);
         switchAntigravityAccount(instances, parsed.data.accountInstanceId);
       } catch (error) {
         const status = (error as { status?: number }).status ?? 500;

@@ -59,8 +59,11 @@ export function AntigravityAccounts({ instanceId }: { instanceId: string }) {
   if (!view || view.accounts.length === 0) return null;
   const active = view.accounts.find((account) => account.active);
 
-  const usedBy = (instanceId: string) =>
-    state.bots.filter((bot) => bot.modelSelection?.instanceId === instanceId).length;
+  // The bots whose own model is on this account, by name, so the row says which bot to move first. A conversation
+  // that once picked the account does not count: removing it sends that conversation back to its bot's model.
+  const usersOf = (instanceId: string) =>
+    state.bots.filter((bot) => bot.modelSelection?.instanceId === instanceId).map((bot) => bot.name || bot.id);
+  const inUseText = (users: string[]) => `${t("accounts.inUse", { count: String(users.length) })} (${users.join(", ")})`;
 
   const switchTo = async (account: AntigravityAccountRow) => {
     setBusy(account.instanceId);
@@ -104,7 +107,8 @@ export function AntigravityAccounts({ instanceId }: { instanceId: string }) {
       </div>
       <ul className="mt-2 divide-y divide-hairline/40 rounded-xl border border-hairline/50 bg-panel/40">
         {view.accounts.map((account) => {
-          const used = usedBy(account.instanceId);
+          const users = usersOf(account.instanceId);
+          const used = users.length;
           return (
             <li key={account.instanceId} data-antigravity-account={account.instanceId} data-active={account.active || undefined}
               className="flex min-h-10 items-center gap-2 px-3 py-2">
@@ -114,7 +118,7 @@ export function AntigravityAccounts({ instanceId }: { instanceId: string }) {
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={line(account)}>{line(account)}</span>
               {used > 0 && account.removable && (
-                <span className="shrink-0 text-[11px] text-ink-secondary">{t("accounts.inUse", { count: String(used) })}</span>
+                <span data-antigravity-account-users className="min-w-0 shrink truncate text-[11px] text-ink-secondary" title={inUseText(users)}>{inUseText(users)}</span>
               )}
               {account.active ? (
                 <span className="shrink-0 text-[12px] text-success">{t("antigravityAccounts.active")}</span>
@@ -126,7 +130,7 @@ export function AntigravityAccounts({ instanceId }: { instanceId: string }) {
               )}
               {account.removable && (
                 <button type="button" disabled={busy !== null || used > 0} onClick={() => setRemoving(account)} aria-label={t("accounts.remove")}
-                  title={used > 0 ? t("accounts.inUse", { count: String(used) }) : undefined}
+                  title={used > 0 ? inUseText(users) : undefined}
                   className="shrink-0 rounded-lg px-2 py-1 text-[12px] text-ink-secondary hover:bg-control hover:text-danger disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-ink-secondary">
                   {t("accounts.remove")}
                 </button>

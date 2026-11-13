@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { QODER_THINKING, splitQoderThinking } from "./qoder.ts";
+import { QODER_THINKING, qoderThinkingArgs, splitQoderThinking } from "./qoder.ts";
 
 describe("splitQoderThinking", () => {
   it("prefers the picked variant", () => {
@@ -15,5 +15,15 @@ describe("splitQoderThinking", () => {
   });
   it("offers the four CLI modes", () => {
     expect(QODER_THINKING.map((t) => t.id)).toEqual(["auto", "adaptive", "enabled", "disabled"]);
+  });
+});
+
+describe("qoderThinkingArgs", () => {
+  it("turns enabled into a thinking budget, which qodercli 1.1.86 requires", () => {
+    expect(qoderThinkingArgs("enabled")).toEqual(["--thinking-budget", "32000"]);
+  });
+  it("passes the other modes through and adds nothing without one", () => {
+    expect(qoderThinkingArgs("adaptive")).toEqual(["--thinking", "adaptive"]);
+    expect(qoderThinkingArgs(undefined)).toEqual([]);
   });
 });

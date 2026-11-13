@@ -24,7 +24,7 @@ const PORT = Number(process.env.DOUBAO_CDP_PORT || 9341);
 const CDP = `http://127.0.0.1:${PORT}`;
 const CHROME = process.env.DOUBAO_CHROME || '/usr/bin/chromium';
 const DISPLAY = process.env.DOUBAO_DISPLAY || process.env.DISPLAY || ':1';
-const CLIENT_VER = process.env.DOUBAO_CLIENT_VERSION || '1.42.5';
+const CLIENT_VER = process.env.DOUBAO_CLIENT_VERSION || '2.35.8';
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 const CLIENT_UA = `${CHROME_UA} SamanthaDoubao/${CLIENT_VER}`;
 const BASE = 'https://www.doubao.com';
@@ -104,6 +104,7 @@ async function openPage(ctx, url, ua) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await sleep(1500);
   if (page.url().includes('region-ban')) { await page.close().catch(() => {}); throw new Error('region_ban: 豆包按地区拒绝了当前出口 IP（需国内出口）'); }
+  if (ua.includes('SamanthaDoubao') && (await page.getByText('版本过低', { exact: true }).count().catch(() => 0))) { await page.close().catch(() => {}); throw new Error('client_too_old: 豆包提示客户端版本过低，需调大 DOUBAO_CLIENT_VERSION'); }
   return page;
 }
 

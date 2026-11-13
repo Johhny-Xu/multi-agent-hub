@@ -56,6 +56,7 @@ async function seedPendingState(stateFile: string) {
       minimaxcode: { ...signed },
       meoo: { ...signed },
       doubao: { ...signed },
+      dumate: { ...signed },
       traecode: { status: 'pending', lastDate: '2000-01-01', retryCount: 0 },
     },
     history: [],

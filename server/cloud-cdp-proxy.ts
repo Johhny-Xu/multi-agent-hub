@@ -14,7 +14,7 @@ import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 
 import { DEFAULT_MAX_LOCAL_BYTES, asText, DIRTYING_COMMAND, DIRTYING_EVENT, fromLocalMausUrl, insideRoots, LOCAL_HOST_SUFFIX, mimeOf, rewriteEndpointBody, targetInfosOf, toBuffer, toLocalMausUrl, type Frame } from "./cloud-cdp-local.ts";
-import { ScopeRegistry, ScopeView, scopeOfPath } from "./cloud-cdp-scope.ts";
+import { ScopeRegistry, ScopeView, scopeFilePersist, scopeOfPath } from "./cloud-cdp-scope.ts";
 
 export { DEFAULT_MAX_LOCAL_BYTES, fromLocalMausUrl, insideRoots, LOCAL_HOST_SUFFIX, mimeOf, toLocalMausUrl, type LocalTarget } from "./cloud-cdp-local.ts";
 
@@ -44,6 +44,8 @@ export interface CdpProxyOptions {
   onActivity?: () => void;
   /** Starts the upstream Chrome when it may be down (this host's fallback Chrome is started on first use). */
   ensureUpstream?: () => Promise<unknown>;
+  /** A file keeping the pages each scope owns, so a restart closes the ones the last process left behind. */
+  scopeStateFile?: string;
   log?: (line: string) => void;
   fetchLocal?: (url: string, init: { method: string; headers: Record<string, string>; body?: Buffer }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   /** Test seams for the low-frequency view and the page queue; production uses the defaults. */
@@ -696,8 +698,11 @@ export class CdpProxy {
   readonly #wss: WebSocketServer;
   readonly #pipes = new Set<Pipe>();
   readonly #created = new Set<string>();
-  readonly #scopes = new ScopeRegistry({ closeTarget: (targetId) => this.#closeTarget(targetId), log: (line) => this.log(line) });
+  readonly #scopes: ScopeRegistry;
   readonly #slots: SlotWaiter[] = [];
+  /** When each granted slot was handed out and its page not yet created: concurrent opens must not all see room. */
+  readonly #grants: number[] = [];
+  #createdCount = 0;
   #port: number;
   #closed = false;
 
@@ -705,6 +710,11 @@ export class CdpProxy {
     this.#options = options;
     this.#upstreamBase = new URL(options.upstream);
     this.#port = options.port;
+    this.#scopes = new ScopeRegistry({
+      closeTarget: (targetId) => this.#closeTarget(targetId),
+      log: (line) => this.log(line),
+      ...(options.scopeStateFile === undefined ? {} : { persist: scopeFilePersist(options.scopeStateFile) }),
+    });
     const timing = options.timing ?? {};
     this.#timing = {
       minShotMs: timing.minShotMs ?? 1000,
@@ -769,7 +779,9 @@ export class CdpProxy {
   async #closeTarget(targetId: string): Promise<void> {
     // Chrome answers /json/close with plain text, not JSON.
     this.#created.delete(targetId);
-    await fetch(new URL(`/json/close/${encodeURIComponent(targetId)}`, this.#upstreamBase), { headers: { host: this.#upstreamBase.host } });
+    const response = await fetch(new URL(`/json/close/${encodeURIComponent(targetId)}`, this.#upstreamBase), { headers: { host: this.#upstreamBase.host } });
+    // A page already gone answers 404 or plain text; either way there is nothing left to close.
+    if (!response.ok && response.status !== 404) throw new Error(`the upstream Chrome answered ${response.status} for /json/close`);
   }
 
   async #ensureUpstream(): Promise<void> {
@@ -841,6 +853,14 @@ export class CdpProxy {
 
   createdTarget(targetId: string): void {
     this.#created.add(targetId);
+    this.#createdCount += 1;
+    this.#grants.shift();
+  }
+
+  /** Pages granted but not created yet; a grant whose create failed lapses after 15 s. */
+  #pendingGrants(): number {
+    while (this.#grants.length > 0 && Date.now() - this.#grants[0]! > 15_000) this.#grants.shift();
+    return this.#grants.length;
   }
 
   async #upstreamJson(path: string): Promise<unknown> {
@@ -849,10 +869,13 @@ export class CdpProxy {
   }
 
   async #pageCount(countAll: boolean): Promise<number> {
+    // A page made while the list was on its way is not in it, and its grant is already spent: count it here.
+    const before = this.#createdCount;
     const list = await this.#upstreamJson("/json/list");
     const pages = (Array.isArray(list) ? list : []).filter((target) => (target as { type?: unknown }).type === "page");
-    if (countAll) return pages.length;
-    return pages.filter((target) => this.#created.has(String((target as { id?: unknown }).id))).length;
+    const since = this.#createdCount - before;
+    if (countAll) return pages.length + since;
+    return pages.filter((target) => this.#created.has(String((target as { id?: unknown }).id))).length + since;
   }
 
   /** Wait for a free page slot, first come first served, or give up after the queue's patience runs out. */
@@ -860,7 +883,7 @@ export class CdpProxy {
     const cap = this.#options.pageCap;
     if (!cap) return true;
     const countAll = cap.countAll === true;
-    if (await this.#pageCount(countAll) < cap.max) return true;
+    if (await this.#pageCount(countAll) + this.#pendingGrants() < cap.max) return this.#grants.push(Date.now()) > 0;
     this.log(`页面数已达上限 ${cap.max}，新的页面排队中`);
     const queueMs = cap.queueMs ?? 60_000;
     return await new Promise<boolean>((resolve) => {
@@ -887,9 +910,10 @@ export class CdpProxy {
   }
 
   async #drainSlots(max: number, countAll: boolean): Promise<void> {
-    while (this.#slots.length > 0 && await this.#pageCount(countAll) < max) {
+    while (this.#slots.length > 0 && await this.#pageCount(countAll) + this.#pendingGrants() < max) {
       const waiter = this.#slots.shift();
       clearInterval(waiter?.timer);
+      this.#grants.push(Date.now());
       waiter?.resolve(true);
     }
   }
@@ -954,6 +978,7 @@ export class CdpProxy {
     });
     const address = this.#server.address();
     if (address && typeof address === "object") this.#port = address.port;
+    void this.#scopes.closeOrphans().then((closed) => { if (closed > 0) this.log(`closed ${closed} pages the previous proxy left open`); });
     return this.#port;
   }
 

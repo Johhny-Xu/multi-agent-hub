@@ -12,22 +12,26 @@ const optionalText = z.string().optional();
 
 /** The decision and extraction models (server/decider, server/extractor):
  * fast classifiers and extractors that pick and read things for bots, starting
- * with who answers a room message. `key` is the Jev key, `workersAiToken` a
+ * with who answers a room message. `key` is the Jev key, `geminiKey` the
+ * Google Decisions one, `workersAiToken` a
  * Cloudflare Workers AI token for `workersAiAccountId` (Clef and Clairic), and
  * `openrouterKey` the OpenRouter one: write-only like every credential, and
- * kept apart from each other and from the engine's OpenRouter key. `baseUrl` / `openrouterBaseUrl` point at a compatible
+ * kept apart from each other and from every other Gemini key (TTS, images)
+ * and the engine's OpenRouter key. `baseUrl` / `geminiBaseUrl` /
+ * `openrouterBaseUrl` point at a compatible
  * server instead of the vendor's (operator settings with no UI);
  * `openrouterModel` is an OpenRouter model id and `openrouterApi` says
  * whether it is a chat model or one of OpenRouter's decisions models
  * (`chat` when absent); `jobs` switches each
- * decision on or off. `proxyUrl` is a proxy only the Jev backend's requests
- * go through (or `JEV_PROXY` when absent); empty is direct. Not
+ * decision on or off. `proxyUrl` is a proxy only the Jev and Gemini backends'
+ * requests go through (or `JEV_PROXY` when absent); empty is direct. Not
  * `decisions`: that section is the authorization
  * log's retention. */
 export const deciderConfigSchema = z.object({
   enabled: z.boolean().optional(),
-  provider: z.enum(["jev", "openrouter", "off"]).optional(),
+  provider: z.enum(["jev", "gemini", "openrouter", "off"]).optional(),
   key: optionalText,
+  geminiKey: optionalText,
   openrouterKey: optionalText,
   workersAiToken: optionalText,
   workersAiAccountId: z.string().trim().refine((value) => !value || WORKERS_AI_ACCOUNT_ID.test(value), "a Cloudflare account ID is 32 letters and digits").optional(),
@@ -49,6 +53,12 @@ export const deciderConfigSchema = z.object({
     .trim()
     .max(2048)
     .refine((value) => !value || /^https?:\/\//i.test(value), "the decision model address must start with http:// or https://")
+    .optional(),
+  geminiBaseUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine((value) => !value || /^https?:\/\//i.test(value), "the Gemini decision address must start with http:// or https://")
     .optional(),
   proxyUrl: z
     .string()
@@ -83,10 +93,13 @@ export const deciderConfigSchema = z.object({
 /** The decision model; see `deciderConfigSchema`. */
 export interface DeciderConfig {
   enabled?: boolean;
-  provider?: "jev" | "openrouter" | "off";
+  provider?: "jev" | "gemini" | "openrouter" | "off";
   key?: string;
+  geminiKey?: string;
   baseUrl?: string;
-  /** A proxy only Jev's requests go through, like `http://127.0.0.1:7890`; absent or empty is direct. */
+  /** An operator setting with no UI: the Gemini Decisions API's root, `/decisions` appended. */
+  geminiBaseUrl?: string;
+  /** A proxy only Jev's and Gemini's requests go through, like `http://127.0.0.1:7890`; absent or empty is direct. */
   proxyUrl?: string;
   openrouterKey?: string;
   openrouterModel?: string;

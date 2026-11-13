@@ -2,6 +2,7 @@
 // page it finds, so two sessions on one cloud Chrome would drive the same tab; through a scope each session sees only
 // the pages it opened (and their popups), gets a blank page of its own when it has none, and its pages are closed a
 // little while after its last connection goes away.
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
 /** The path a scoped connection asks the proxy for; the scope is an agent-browser session name. */
 export const SCOPE_PATH_PREFIX = "/devtools/browser/omb-scope/";
@@ -37,17 +38,47 @@ export function cdpUrlPort(url: string | undefined): number | null {
 
 interface ScopeEntry { targets: Set<string>; connections: number; timer: ReturnType<typeof setTimeout> | null }
 
+/** Chrome's target ids use only these characters; anything else in a state file is not an id the proxy may close. */
+const TARGET_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Where a registry keeps the pages its scopes own, so the next process can close what this one leaves behind. */
+export interface ScopePersist {
+  load(): string[];
+  save(targetIds: string[]): void;
+}
+
+/** A scope state file: a JSON array of target ids, landed by rename so a crash mid-write cannot tear the list. */
+export function scopeFilePersist(file: string): ScopePersist {
+  return {
+    load() {
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+        return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && TARGET_ID.test(id)) : [];
+      } catch {
+        return [];
+      }
+    },
+    save(targetIds) {
+      writeFileSync(`${file}.tmp`, JSON.stringify(targetIds), { mode: 0o600 });
+      renameSync(`${file}.tmp`, file);
+    },
+  };
+}
+
 /** Every scope the proxy serves: which pages each one owns, and how many connections still hold it open. */
 export class ScopeRegistry {
   readonly #closeTarget: (targetId: string) => Promise<void>;
   readonly #graceMs: number;
   readonly #log: (line: string) => void;
+  readonly #persist: ScopePersist | null;
   readonly #scopes = new Map<string, ScopeEntry>();
+  #orphansClosed = false;
 
-  constructor(options: { graceMs?: number; closeTarget: (targetId: string) => Promise<void>; log?: (line: string) => void }) {
+  constructor(options: { graceMs?: number; closeTarget: (targetId: string) => Promise<void>; log?: (line: string) => void; persist?: ScopePersist }) {
     this.#closeTarget = options.closeTarget;
     this.#graceMs = options.graceMs ?? 30_000;
     this.#log = options.log ?? (() => {});
+    this.#persist = options.persist ?? null;
   }
 
   join(scope: string): void {
@@ -68,7 +99,7 @@ export class ScopeRegistry {
     entry.timer = setTimeout(() => {
       entry.timer = null;
       this.#scopes.delete(scope);
-      void this.#closeAll([...entry.targets]);
+      void this.#closeAll([...entry.targets]).then(() => this.#save());
     }, this.#graceMs);
     // The proxy must not be held open by a scope nobody is connected to.
     entry.timer.unref?.();
@@ -90,14 +121,43 @@ export class ScopeRegistry {
 
   add(scope: string, targetId: string): void {
     this.#entry(scope).targets.add(targetId);
+    this.#save();
   }
 
   forget(targetId: string): void {
     for (const entry of this.#scopes.values()) entry.targets.delete(targetId);
+    this.#save();
   }
 
   targets(scope: string): string[] {
     return [...(this.#scopes.get(scope)?.targets ?? [])];
+  }
+
+  /** Closes the pages a previous process recorded but no current scope owns, once per registry. Only recorded ids
+   * are touched: on the person's own Chrome, every tab the proxy never opened must stay. */
+  async closeOrphans(): Promise<number> {
+    if (this.#orphansClosed) return 0;
+    this.#orphansClosed = true;
+    let recorded: string[] = [];
+    try {
+      recorded = this.#persist?.load() ?? [];
+    } catch {
+      // An unreadable list names nothing this process is allowed to close.
+      recorded = [];
+    }
+    const owned = new Set(this.#owned());
+    let attempted = 0;
+    for (const targetId of new Set(recorded)) {
+      if (owned.has(targetId)) continue;
+      attempted += 1;
+      try {
+        await this.#closeTarget(targetId);
+      } catch (error) {
+        this.#log(`could not close the orphaned page ${targetId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    this.#save();
+    return attempted;
   }
 
   close(): void {
@@ -114,6 +174,19 @@ export class ScopeRegistry {
     const created: ScopeEntry = { targets: new Set(), connections: 0, timer: null };
     this.#scopes.set(scope, created);
     return created;
+  }
+
+  #owned(): string[] {
+    return [...new Set([...this.#scopes.values()].flatMap((entry) => [...entry.targets]))];
+  }
+
+  #save(): void {
+    if (this.#persist === null) return;
+    try {
+      this.#persist.save(this.#owned());
+    } catch (error) {
+      this.#log(`could not write the scope state: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

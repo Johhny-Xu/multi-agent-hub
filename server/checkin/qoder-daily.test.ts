@@ -4,6 +4,7 @@
 //   2. 活动列表**不能**带 ?forceRefresh=true（带上会被服务端过滤掉每日活动行）
 //   3. 请求要带 UMID 组件给出的设备风控头
 //   4. 组件定位 / 官方包提取（tar + base64 ELF）可用
+import { describe, expect, it, vi } from 'vitest';
 import { test, assert } from './testing/testkit.ts';
 import { mkdtemp, mkdir, writeFile, readFile, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -47,7 +48,7 @@ const DEVICE = {
   clientVersion: '0.4.8',
   machineOs: 'x86_64_linux',
   machineId: 'mid-0123456789abcdef',
-  machineHostname: 'n5095-abcdef12',
+  machineHostname: 'devbox-abcdef12',
   risk: { machineToken: 'tok-abc', machineCode: 'code-abc', machineType: 'type-abc' },
   source: 'qodercli',
   note: '',
@@ -113,7 +114,7 @@ test('主机名带非 ASCII 时退化成「清洗名-哈希」，且稳定', () 
   const b = device.qoderMachineHostname('研发机-01');
   assert.equal(a, b);
   assert.match(a, /^[0-9A-Za-z-]+-[0-9a-f]{8}$/);
-  assert.equal(device.qoderMachineHostname('n5095'), 'n5095');
+  assert.equal(device.qoderMachineHostname('devbox'), 'devbox');
   assert.ok(device.qoderMachineHostname('x'.repeat(200)).length <= 96);
 });
 
@@ -258,7 +259,7 @@ test('本机 CLI 的 runtime-info 能被识别（执行部分仅 Unix）', async
       assert.ok(found, '应找到 UMID 组件');
       assert.equal(found.env, 3, '环境变量显式指定的组件按 app 口径（3）运行');
       if (process.platform === 'win32') {
-        t.diagnostic('Windows 下 .cmd 无法直接 execFile，执行链路由 n5095 实测覆盖');
+        t.diagnostic('Windows 下 .cmd 无法直接 execFile，执行链路由 Linux 开发机实测覆盖');
         return;
       }
       const risk = await device.runQoderUmidComponent(found.path, found.env, 'u1');
@@ -335,4 +336,181 @@ test('没有上一期可等时不产生 pending 窗口', () => {
 test('早上还没开窗时，重试点是今天 10:00（UTC+8）', () => {
   assert.equal(qoderTodayWindowStart(1792598400), 1792634400); // 10-22 00:00 +08 → 10:00 +08
   assert.equal(qoderTodayWindowStart(1792634400 + 60), 1792634400, '开窗后仍是今天这一期');
+});
+
+// ------------------------------------------- 领取后额度回读确认（上游 L0NE-6/Qoder-Daily v1.0.22）
+// claim 只代表「受理了」：只有 claim 前后的额度回读正增长才算签到成功，
+// 否则报「已受理待确认」，既不记成功也不再自动重领（重领会吃 409）。
+
+const { qoderQuotaTotalRemaining, qoderClaimConfirm } = await import('./qoder-activity.mjs');
+const { checkinQoderOne } = (await import('./checkin.mjs')) as unknown as {
+  checkinQoderOne(
+    acct: Record<string, unknown>,
+    deps?: Record<string, unknown>,
+  ): Promise<Record<string, any>>;
+};
+
+// 2026-10-22 11:00 UTC+8：今天这一期已经开窗，领到的就是今天的签到
+const QODER_NOW = 1792634400 + 3600;
+const QODER_ROW = {
+  campaignId: 'c1',
+  actionType: 'CLAIM_BENEFIT',
+  claimStatus: 'CLAIMABLE',
+  benefit: { amount: 100 },
+};
+const QODER_CLAIMED = { status: 200, ok: true, json: { status: 'CLAIMED' }, text: '' };
+
+function qoderAcct(): Record<string, unknown> {
+  return { worker: 'qoder', name: 'acct', user: { id: 'u1' } };
+}
+
+function qoderCampaigns(row: Record<string, unknown> = QODER_ROW) {
+  return async () => ({
+    res: { status: 200, ok: true, json: { campaigns: [row] }, text: '' },
+    token: 'tok',
+    quota: null,
+    device: null,
+    deviceNote: '',
+  });
+}
+
+describe('qoderQuotaTotalRemaining', () => {
+  it('sums every supported remaining bucket', () => {
+    const json = {
+      data: {
+        userQuota: { remaining: 100 },
+        addOnQuota: { remaining: 20 },
+        dedicatedResourcePackages: [{ remaining: 5 }, { remaining: 2.5 }],
+        orgResourcePackage: { remaining: 3 },
+      },
+    };
+    expect(qoderQuotaTotalRemaining(json)).toBe(130.5);
+  });
+
+  it('returns null when no remaining value exists', () => {
+    expect(qoderQuotaTotalRemaining(null)).toBeNull();
+    expect(qoderQuotaTotalRemaining({})).toBeNull();
+    expect(qoderQuotaTotalRemaining({ data: { userQuota: { total: 10, used: 4 } } })).toBeNull();
+  });
+
+  it('accepts numeric strings and ignores invalid amounts', () => {
+    const json = {
+      userQuota: { remaining: '100' },
+      addOnQuota: { remaining: 'n/a' },
+      dedicatedResourcePackages: [{ remaining: '' }],
+      orgResourcePackage: { remaining: 7 },
+    };
+    expect(qoderQuotaTotalRemaining(json)).toBe(107);
+  });
+});
+
+describe('qoderClaimConfirm', () => {
+  it('confirms a positive quota increase', () => {
+    const result = qoderClaimConfirm(1000, 1100, 100);
+    expect(result.confirmed).toBe(true);
+    expect(result.delta).toBe(100);
+    expect(result.message).toContain('+100');
+  });
+
+  it('leaves zero growth awaiting confirmation', () => {
+    const result = qoderClaimConfirm(1000, 1000, 100);
+    expect(result.confirmed).toBe(false);
+    expect(result.delta).toBe(0);
+    expect(result.message).toContain('待确认');
+  });
+
+  it('leaves an unavailable readback awaiting confirmation', () => {
+    const result = qoderClaimConfirm(null, 1100, 100);
+    expect(result.confirmed).toBe(false);
+    expect(result.delta).toBeNull();
+    expect(result.message).toContain('活动面值 100');
+  });
+
+  it('handles concurrent consumption that makes after lower than before', () => {
+    const result = qoderClaimConfirm(1000, 980, 100);
+    expect(result.confirmed).toBe(false);
+    expect(result.delta).toBe(-20);
+    expect(result.message).toContain('1000 → 980');
+  });
+});
+
+describe('checkinQoderOne confirmation', () => {
+  it('reads quota before and after a successful claim', async () => {
+    const order: string[] = [];
+    let reads = 0;
+    const result = await checkinQoderOne(qoderAcct(), {
+      nowSec: QODER_NOW,
+      fetchCampaigns: qoderCampaigns(),
+      claim: async () => { order.push('claim'); return QODER_CLAIMED; },
+      readQuota: async () => {
+        order.push('read');
+        reads += 1;
+        return reads === 1 ? 1000 : 1100;
+      },
+      sleep: async (ms: number) => { order.push(`sleep:${ms}`); },
+    });
+    expect(order).toEqual(['read', 'claim', 'sleep:2000', 'read']);
+    expect(result.status).toBe('success');
+    expect(result.credits).toBe(100);
+  });
+
+  it('uses the observed delta instead of campaign face value', async () => {
+    let reads = 0;
+    const result = await checkinQoderOne(qoderAcct(), {
+      nowSec: QODER_NOW,
+      fetchCampaigns: qoderCampaigns(),
+      claim: async () => QODER_CLAIMED,
+      readQuota: async () => { reads += 1; return reads === 1 ? 500 : 540; },
+      sleep: async () => {},
+    });
+    expect(result.status).toBe('success');
+    expect(result.credits).toBe(40);
+    expect(result.message).toContain('+40');
+    expect(result.message).not.toContain('+100');
+  });
+
+  it('does not retry an awaiting-confirm claim', async () => {
+    let claims = 0;
+    const result = await checkinQoderOne(qoderAcct(), {
+      nowSec: QODER_NOW,
+      fetchCampaigns: qoderCampaigns(),
+      claim: async () => { claims += 1; return QODER_CLAIMED; },
+      readQuota: async () => 1000,
+      sleep: async () => {},
+    });
+    expect(claims).toBe(1);
+    expect(result.status).toBe('pending');
+    expect(result.pendingReason).toBe('awaiting_confirm');
+    expect(result.retryAt).toBeUndefined();
+    expect(result.message).toContain('待确认');
+  });
+
+  it('does not confirm already-claimed campaigns', async () => {
+    const readQuota = vi.fn(async () => 1000);
+    const sleep = vi.fn(async () => {});
+    const result = await checkinQoderOne(qoderAcct(), {
+      nowSec: QODER_NOW,
+      fetchCampaigns: qoderCampaigns(),
+      claim: async () => ({ status: 409, ok: false, json: { status: 'ALREADY_CLAIMED' }, text: '' }),
+      readQuota,
+      sleep,
+    });
+    expect(result.status).toBe('already');
+    expect(result.credits).toBe(0);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(readQuota).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps existing cooldown retry scheduling unchanged', async () => {
+    const result = await checkinQoderOne(qoderAcct(), {
+      nowSec: QODER_NOW,
+      fetchCampaigns: qoderCampaigns(),
+      claim: async () => ({ status: 403, ok: false, json: { code: 112, message: 'pricingUrl' }, text: '' }),
+      readQuota: async () => 1000,
+      sleep: async () => {},
+    });
+    expect(result.status).toBe('pending');
+    expect(result.pendingReason).toBe('quota_cooldown');
+    expect(Number(result.retryAt)).toBeGreaterThanOrEqual(Math.floor(Date.now() / 1000) + 1700);
+  });
 });

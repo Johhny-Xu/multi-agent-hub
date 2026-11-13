@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimatePriceFor, LIST_PRICES, ledgerCost, listPriceFor } from "./model-prices.ts";
+import { estimatePriceFor, ledgerCost, listPriceFor, listPrices } from "./model-prices.ts";
 import type { PriceList } from "./prices.ts";
 
 const OFFICIAL = [
@@ -7,28 +7,41 @@ const OFFICIAL = [
   "https://platform.claude.com/",
   "https://docs.x.ai/",
   "https://ai.google.dev/",
+  "https://aistudio.google.com/",
   "https://platform.minimax.io/",
   "https://openrouter.ai/",
 ];
 
 describe("built-in list prices", () => {
   it("names an official source and the day it was read for every entry, with sane numbers", () => {
-    expect(Object.keys(LIST_PRICES).length).toBeGreaterThan(20);
-    for (const [model, entry] of Object.entries(LIST_PRICES)) {
+    expect(Object.keys(listPrices()).length).toBeGreaterThan(20);
+    for (const [model, entry] of Object.entries(listPrices())) {
       expect(model, "keys are lower-case").toBe(model.toLowerCase());
       expect(entry.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(OFFICIAL.some((prefix) => entry.source.startsWith(prefix)), `${model}: ${entry.source}`).toBe(true);
       for (const period of [entry, ...(entry.changes ?? [])]) {
         expect(period.inputPerMillion).toBeGreaterThan(0);
-        expect(period.outputPerMillion).toBeGreaterThan(0);
+        // The Decisions API produces no output tokens, so that one model is priced at zero on purpose.
+        if (model === "gemini-decision-1") expect(period.outputPerMillion).toBe(0);
+        else expect(period.outputPerMillion).toBeGreaterThan(0);
         expect(period.cachedInputPerMillion ?? 0).toBeLessThanOrEqual(period.inputPerMillion);
       }
     }
   });
 
+  it("prices the Decisions model by its input alone", () => {
+    expect(listPriceFor("gemini-decision-1")).toEqual({ inputPerMillion: 0.1, cachedInputPerMillion: 0.1, outputPerMillion: 0 });
+    expect(listPrices()["gemini-decision-1"]).toMatchObject({
+      source: "https://aistudio.google.com/docs/pricing", asOf: "2026-11-11",
+    });
+  });
+
   it("looks models up case-insensitively, through catalog aliases, and follows announced price changes", () => {
     expect(listPriceFor("MiniMax-M3")).toEqual({ inputPerMillion: 0.3, cachedInputPerMillion: 0.06, outputPerMillion: 1.2 });
     expect(listPriceFor("gpt-5.5")).toEqual({ inputPerMillion: 5, cachedInputPerMillion: 0.5, outputPerMillion: 30 });
+    for (const fable of ["claude-fable-5-2", "anthropic/claude-fable-5.2"]) {
+      expect(listPriceFor(fable), fable).toEqual({ inputPerMillion: 8, cachedInputPerMillion: 0.2, outputPerMillion: 40 });
+    }
     expect(listPriceFor("gemini-3.8-flash-high", new Date("2026-12-31T23:00:00Z"))?.inputPerMillion).toBe(0.75);
     expect(listPriceFor("gemini-3.8-flash", new Date("2027-01-01T00:00:00Z"))).toEqual({ inputPerMillion: 1.5, cachedInputPerMillion: 0.15, outputPerMillion: 7.5 });
   });

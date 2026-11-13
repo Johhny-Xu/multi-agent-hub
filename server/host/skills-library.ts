@@ -12,10 +12,11 @@ import {
   importedSkillListings, importedSkillsFor, importedSkillsPrompt, listedImportedSkills, nativeSkillFolders, readImportedSkillFile,
   readImportedSkills, type ImportedSkillView, type SkillTurnEngine,
 } from "../imported-skills.ts";
+import { isNativeSkillEnabled } from "../native-skill-choices.ts";
 import { nativeSkillListing, nativeSkills, readNativeSkillFile } from "../native-skills.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { readSectionContext } from "../section-context.ts";
-import { listLibrarySkills, readLibrarySkillFile, readSkillLibraryIndex, skillsLibraryEnabled } from "../skill-library.ts";
+import { librarySkillOptOuts, listLibrarySkills, readLibrarySkillFile, readSkillLibraryIndex, skillsLibraryEnabled } from "../skill-library.ts";
 import {
   conversationAssignedSkills,
   prepareShareNote,
@@ -94,7 +95,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     const listed = [...own, ...importedSkillListings(bot.id, new Set(own.map((skill) => skill.name)), aboutBot(bot),
       engineOf(deps.instanceOf?.(bot.modelSelection.instanceId)))];
     const names = new Set(listed.map((skill) => skill.name));
-    return [...listed, ...nativesFor(bot, threadId).filter((skill) => !names.has(skill.name)).map(nativeSkillListing)];
+    return [...listed, ...nativesFor(bot, threadId).filter((skill) => !names.has(skill.name)).map((skill) => nativeSkillListing(skill, isNativeSkillEnabled(bot.id, skill.name)))];
   };
   const readBotSkillFile = (bot: BotRecord, name: string): string | null => {
     const own = readSkillFile(bot.id, name);
@@ -102,7 +103,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     // Private wins collisions: a private skill that no longer verifies must not fall through to a same-named shared one.
     if (listSkills(bot.id).some((skill) => skill.name === name)) return null;
     // The library fallback is by assignment only, never by name alone.
-    if (skillsLibraryEnabled(cfg) && listLibrarySkills().some((skill) => skill.name === name && (skill.everyBot || bot.assignedSkills?.includes(name)))) return readLibrarySkillFile(name);
+    if (skillsLibraryEnabled(cfg) && listLibrarySkills().some((skill) => skill.name === name && (bot.assignedSkills?.includes(name) || (skill.everyBot && !librarySkillOptOuts(bot.id).has(name))))) return readLibrarySkillFile(name);
     if (readImportedSkills()[name] || isEgmSkillName(name)) return readImportedSkillFile(name);
     const native = nativesFor(bot).find((skill) => skill.name === name);
     return native ? readNativeSkillFile(native) : null;
@@ -285,7 +286,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
         // A skill switched off on the Skills page stays off, even when the engine holds one of the same name.
         const switched = new Set([...resolveBotSkills(bot.id, assigned), ...importedSkillListings(bot.id, new Set())]
           .filter((skill) => !skill.enabled).map((skill) => skill.name));
-        add(nativesFor(bot, threadId, instance).filter((skill) => !switched.has(skill.name)));
+        add(nativesFor(bot, threadId, instance).filter((skill) => !switched.has(skill.name) && isNativeSkillEnabled(bot.id, skill.name)));
       }
       return skillCommandTurnText(text, files, typed, ownStart);
     },

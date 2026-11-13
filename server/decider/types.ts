@@ -1,5 +1,5 @@
-/** workersai: Cloudflare's Clef on Workers AI, Jev-compatible. */
-export type DeciderProvider = "jev" | "workersai" | "openrouter";
+/** workersai: Cloudflare's Clef on Workers AI, Jev-compatible. gemini: Google's Decisions API, answers in Jev's shape. */
+export type DeciderProvider = "jev" | "workersai" | "openrouter" | "gemini";
 
 /** chat: a chat model asked for strict JSON; decisions: OpenRouter's Decisions API (output modality `decisions`). */
 export type OpenRouterApi = "chat" | "decisions";
@@ -20,8 +20,10 @@ export type DeciderFailure =
   | "timeout"
   | "cancelled"
   | "unreachable"
-  /** 401 or 403: the key was refused. */
+  /** 401 or 403: the key was refused. Gemini's invalid key arrives as a 400 and lands here too. */
   | "rejected"
+  /** 400 with a safety code: Gemini refused the content. Never retried. */
+  | "blocked"
   /** 429 */
   | "rate_limited"
   /** 529 or 503 */

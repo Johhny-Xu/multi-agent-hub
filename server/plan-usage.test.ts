@@ -298,7 +298,7 @@ describe("a Meoo entitlement", () => {
       label: "Model credits",
       usedPercent: expect.closeTo((22_000 / 45_000) * 100, 2),
       remainingPercent: expect.closeTo(100 - (22_000 / 45_000) * 100, 2),
-      resetsAt: "2026-11-21T00:00:00.000Z",
+      resetsAt: "2026-11-20T16:00:00.000Z",
       amounts: { used: 22_000, total: 45_000 },
     }]);
   });
@@ -546,7 +546,7 @@ describe("plan usage fetcher", () => {
       api: { driver: "grok", displayName: "Grok API" },
       meoo: { driver: "meooAgent", displayName: "Meoo" },
     })).toEqual([
-      { id: "claude", name: "Personal Claude", driver: "claude", environment: {}, configDir: "/tmp/claude" },
+      { id: "claude", name: "Personal Claude", driver: "claude", environment: {}, configDir: "/tmp/claude", noUsage: true },
       { id: "codex", name: "Codex", driver: "codex", environment: {} },
       { id: "grok", name: "Grok", driver: "grok", environment: { GROK_HOME: "/tmp/grok" } },
       { id: "meoo", name: "Meoo", driver: "meoo", environment: {} },
@@ -732,6 +732,25 @@ describe("plan usage fetcher", () => {
       credentials: { read: () => ({ token: SECRET, accountId: null, expired: false }) },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(report.providers.map((row) => row.id)).toEqual(["codex"]);
+  });
+
+  it("never reads a Claude Code login, on any Claude instance, and still reads the other engines", async () => {
+    const accounts = planAccountsFromInstances({
+      claude: { driver: "claudeAgent" },
+      work: { driver: "claudeAgent", displayName: "Work", config: { configDir: "/tmp/claude-work" } },
+      codex: { driver: "codex" },
+    });
+    // Still listed, so a refused turn's hold names the account and fails over.
+    expect(accounts).toEqual([
+      { id: "claude", name: "Claude", driver: "claude", environment: {}, noUsage: true },
+      { id: "work", name: "Work", driver: "claude", environment: {}, configDir: "/tmp/claude-work", noUsage: true },
+      { id: "codex", name: "Codex", driver: "codex", environment: {} },
+    ]);
+    const read = vi.fn((_account: PlanAccount) => ({ token: SECRET, accountId: null, expired: false }));
+    const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse({ rate_limit: { primary_window: { used_percent: 10 } } }));
+    const report = await fetchPlanUsage(accounts, { fetch: fetchImpl, now: () => NOW, credentials: { read } });
+    expect(read.mock.calls.map(([account]) => account.id)).toEqual(["codex"]);
     expect(report.providers.map((row) => row.id)).toEqual(["codex"]);
   });
 });

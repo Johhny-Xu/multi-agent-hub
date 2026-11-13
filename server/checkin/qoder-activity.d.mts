@@ -17,6 +17,15 @@ export interface QoderWindow { start: number; end: number; nextStart: number }
 export interface QoderQuotaCooldown { kind: string; seconds: number }
 export interface QoderPendingWindow { retryAt: number; message: string }
 export interface QoderClaimOutcome { status: string; kind?: string; message?: string; cooldownSeconds?: number; [key: string]: unknown }
+export interface QoderClaimConfirm { confirmed: boolean; delta: number | null; message: string }
+export interface QoderClaimRun {
+  outcome: QoderClaimOutcome;
+  confirmed: boolean;
+  delta: number | null;
+  message: string;
+  before: number | null;
+  after: number | null;
+}
 
 export const QODER_BENEFIT_ACTION: string;
 
@@ -36,6 +45,15 @@ export function qoderOpenWindow(nowSec?: number): QoderWindow;
 export function qoderPollAt(nowSec: number, win?: QoderWindow): number;
 export function qoderResponseMessage(res: unknown): string;
 export function qoderBenefit(item: unknown): number;
+export function qoderQuotaTotalRemaining(json: unknown): number | null;
+export function qoderClaimConfirm(before: number | null, after: number | null, amount: number): QoderClaimConfirm;
+export function qoderClaimWithConfirm(options: {
+  claim: () => Promise<unknown>;
+  readQuota: () => Promise<number | null>;
+  amount: number;
+  sleep?: (ms: number) => Promise<unknown>;
+  waitMs?: number;
+}): Promise<QoderClaimRun>;
 export function qoderQuotaCooldown(res: unknown): QoderQuotaCooldown;
 export function qoderAuthDead(res: unknown): boolean;
 export function qoderClaimOutcome(res: unknown): QoderClaimOutcome;

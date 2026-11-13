@@ -276,8 +276,16 @@ test('Qoder 一键签到会拉取活动并逐个领取（幂等重放不重复�
   // 真实清单两条都有，这里按真实形态给 placements 标题。
   const dailyPlacements = [{ type: 'POPUP', content: { zh: { title: '每日签到领积分' } } }];
   const calls: string[] = [];
+  // 领取后要回读额度才能确认到账（v1.0.22）：第一次读到 1000，领完读到 1100
+  let quotaReads = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls.push(`${options.method || 'GET'} ${url}`);
+    if (/\/api\/v2\/quota\/usage(\?|$)/.test(String(url))) {
+      quotaReads += 1;
+      return new Response(JSON.stringify({
+        data: { userQuota: { remaining: quotaReads > 1 ? 1100 : 1000 } },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     if (/\/me\/campaigns(\?|$)/.test(String(url))) {
       return new Response(JSON.stringify({
         data: {

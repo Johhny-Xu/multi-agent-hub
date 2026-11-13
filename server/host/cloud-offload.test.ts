@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config.ts";
 import type { CloudBrowserDeps, MachineHealth } from "../cloud-browser.ts";
-import { AUTH_STICKY_MS, CLOUD_PAGE_CAP, FALLBACK_PROXY_PORT, MYCHROME_PROXY_PORT, browserLabel, createCloudOffload, isConversationAlias, servableRoots } from "./cloud-offload.ts";
+import { AUTH_STICKY_MS, CLOUD_PAGE_CAP, FALLBACK_PROXY_PORT, MYCHROME_PROXY_PORT, RELAY_IDLE_MS, browserLabel, createCloudOffload, isConversationAlias, servableRoots } from "./cloud-offload.ts";
 
 type FakeTask = { threadId: string; surface?: "cloud" | "vm" | "local" | "browser"; surfaceSource?: "user" | "auto"; browserPlacement?: unknown };
 type FakeBot = { id: string; computer?: string | null; tasks: FakeTask[] };
@@ -348,3 +348,66 @@ describe("cloud offload for an Auto bot's browser (E72)", () => {
     expect(browserLabel(undefined)).toBe("内置");
   });
 });
+
+describe("a relayed box's relay is up only while it is used (E80)", () => {
+  function relayHarness() {
+    let clock = 0;
+    let connections = 0;
+    const calls = { up: 0, light: 0, teardown: [] as string[] };
+    const bots = [{ id: "b1", computer: null, tasks: [{ threadId: "t1" }] }];
+    const store = { bots, bot: (id: string) => bots.find((bot) => bot.id === id), patchTask: () => null };
+    const cloud: CloudBrowserDeps = {
+      now: () => clock,
+      ensureRemote: async (machine) => { if (machine.relayAlias) calls.up++; return { ok: true, load: machine.relayAlias ? 0.05 : 0.6 }; },
+      ensureTunnel: async () => true,
+      probe: async () => true,
+      probeBox: async () => { calls.light++; return { ok: true, load: 0.05 }; },
+      teardown: async (machine) => { calls.teardown.push(machine.name); },
+    };
+    const cfg = {
+      vps: { instances: [{ id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA" }, { id: "box1", name: "box-one", kind: "mcp", adapter: "simular-box", mcpServer: "box-1" }] },
+      cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayUser: "ombrelay" },
+    } as unknown as AppConfig;
+    const offload = createCloudOffload({
+      cfg, dataDir: mkdtempSync(join(tmpdir(), "omb-offload-")), store: () => store as never, cloud, log: () => {},
+      makeProxy: (options) => ({ start: async () => options.port, close: async () => {}, url: `http://127.0.0.1:${options.port}`, connections: () => (options.port === 9351 ? connections : 0) }),
+      fallback: () => ({ ensure: async () => null, touch: () => {}, stop: async () => {}, startIdleSweep: () => () => {} }),
+    });
+    return { offload, calls, tick: (ms: number) => { clock += ms; }, setConnections: (n: number) => { connections = n; } };
+  }
+
+  it("leaves a cold box alone from the guard, brings it up for a browser, keeps it while connected, and ends it idle", async () => {
+    const { offload, calls, tick, setConnections } = relayHarness();
+    await offload.refreshGuard();
+    expect(calls).toMatchObject({ up: 0, light: 0 });
+    expect(offload.guardState().cdpUrl).toBe("http://127.0.0.1:9341");
+
+    expect(await offload.browserFor("b1", "sess", "t1", undefined)).toBe("http://127.0.0.1:9351");
+    expect(calls.up).toBe(1);
+    expect(offload.pool.warmBoxes()).toEqual(["box1"]);
+
+    // Connected: kept however long it lasts.
+    setConnections(1);
+    tick(RELAY_IDLE_MS + 60_000);
+    expect(await offload.sweepRelays()).toEqual([]);
+    // Disconnected: kept until the idle time has passed since its last use, then ended once.
+    setConnections(0);
+    tick(RELAY_IDLE_MS - 60_000);
+    expect(await offload.sweepRelays()).toEqual([]);
+    tick(2 * 60_000);
+    expect(await offload.sweepRelays()).toEqual(["box-one"]);
+    expect(calls.teardown).toEqual(["box-one"]);
+    expect(offload.pool.warmBoxes()).toEqual([]);
+    // The guard was on the box's door: it moved back without asking the box.
+    const up = calls.up;
+    expect(offload.guardState().cdpUrl).toBe("http://127.0.0.1:9341");
+    expect(await offload.sweepRelays()).toEqual([]);
+    expect(calls.teardown).toEqual(["box-one"]);
+    expect(calls.up).toBe(up);
+
+    // The next browser call starts it again.
+    expect(await offload.browserFor("b1", "sess", "t1", undefined)).toBe("http://127.0.0.1:9351");
+    expect(calls.up).toBe(up + 1);
+  });
+});
+

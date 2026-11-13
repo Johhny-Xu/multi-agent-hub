@@ -10,6 +10,13 @@ describe("user errors", () => {
     expect(catalog).toEqual(USER_ERROR);
   });
 
+  it("keeps the Gemini rejection fixed, naming no vendor body", () => {
+    expect(userError("serverError.decider.geminiRejected")).toEqual({
+      error: "Google rejected this key. Check it at aistudio.google.com/api-keys and paste it again.",
+      errorKey: "serverError.decider.geminiRejected",
+    });
+  });
+
   it("fills in the English and keeps the key and params beside it", () => {
     expect(userError("serverError.pair.tooMany", { time: "11:19 UTC" })).toEqual({
       error: "Too many wrong codes. Try again at 11:19 UTC.",

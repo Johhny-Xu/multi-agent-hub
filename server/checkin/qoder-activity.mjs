@@ -183,6 +183,73 @@ export function qoderBenefit(item) {
 }
 
 /**
+ * 账户总剩余额度（对齐 L0NE-6/Qoder-Daily v1.0.22 的 quota_total_remaining）。
+ * claim 响应只说明「受理了」，真正到没到账要看额度回读；这个函数就是回读那一半。
+ * 纯函数：不发请求、不刷新令牌、不落盘。
+ */
+export function qoderQuotaTotalRemaining(json) {
+  const data = json?.data && typeof json.data === 'object' ? json.data : json;
+  if (!data || typeof data !== 'object') return null;
+  let total = 0;
+  let seen = false;
+  const add = (pool) => {
+    if (!pool || typeof pool !== 'object') return;
+    const raw = pool.remaining;
+    if (raw === null || raw === undefined || raw === '') return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount)) return;
+    total += amount;
+    seen = true;
+  };
+  add(data.userQuota);
+  add(data.addOnQuota);
+  for (const pool of Array.isArray(data.dedicatedResourcePackages) ? data.dedicatedResourcePackages : []) add(pool);
+  add(data.orgResourcePackage);
+  return seen ? total : null;
+}
+
+/**
+ * claim 前后的额度回读判定（对齐上游 v1.0.22）：只有正增长才算签到成功。
+ * 零增长/负增长可能是并发消耗，不能虚报成功；回读不可用只能报「已受理」。
+ */
+export function qoderClaimConfirm(before, after, amount) {
+  const asNumber = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const from = asNumber(before);
+  const to = asNumber(after);
+  const face = asNumber(amount) ?? 0;
+  if (from !== null && to !== null) {
+    const delta = to - from;
+    if (delta > 0) return { confirmed: true, delta, message: `签到成功，额度回读 +${delta}（${from} → ${to}）` };
+    return { confirmed: false, delta, message: `签到已受理，额度回读待确认（${from} → ${to}）` };
+  }
+  if (face > 0) {
+    return { confirmed: false, delta: null, message: `签到已受理，额度到账待确认（活动面值 ${face} credits，回读暂不可用）` };
+  }
+  return { confirmed: false, delta: null, message: '签到已受理，积分到账待回读确认' };
+}
+
+const qoderSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 领取一次活动并回读额度确认。依赖全部注入：单测用假 claim / 假回读 / 假 sleep，
+ * 不必真等 2 秒，也不会碰网络。回读异常一律当 null，不能把已受理的 claim 判成失败。
+ */
+export async function qoderClaimWithConfirm({ claim, readQuota, amount, sleep = qoderSleep, waitMs = 2000 }) {
+  let before = null;
+  try { before = await readQuota(); } catch { before = null; }
+  const claimRes = await claim();
+  const outcome = qoderClaimOutcome(claimRes);
+  if (outcome.status !== 'success') {
+    return { outcome, confirmed: false, delta: null, message: outcome.message || '', before, after: null };
+  }
+  await sleep(waitMs);
+  let after = null;
+  try { after = await readQuota(); } catch { after = null; }
+  const confirm = qoderClaimConfirm(before, after, amount);
+  return { outcome, ...confirm, before, after };
+}
+
+/**
  * 额度类 403 分流（对齐参考实现 L0NE-6/Qoder-Daily v1.0.11）。
  *
  * 上游对「额度耗尽」和「每日计费次数上限」也回 403，与凭证被拒同码不同因：

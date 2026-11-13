@@ -464,6 +464,9 @@ describe("VPS computer", () => {
     expect(status.ready).toBe(true);
     const run = provision.calls.find(({ args }) => args[2] === "run")?.args ?? [];
     expect(run).toContain("--memory");
+    expect(run.join(" "), "a VPS desktop has no host mounts, so root may install packages there")
+      .toContain("--cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add FSETID --cap-add SETGID --cap-add SETUID");
+    expect(run).not.toContain("no-new-privileges");
     expect(run[run.indexOf("--pids-limit") + 1], "Firefox needs room for its threads").toBe(String(PIDS_LIMIT));
     expect(run).toContain("--ipc");
     expect(run[run.indexOf("--ipc") + 1]).toBe("private");
@@ -852,6 +855,31 @@ describe("VPS computer", () => {
       await expect(vpsComputerScreenshot(cfg, BOT_ID)).rejects.toThrow(/stopped|running/);
       expect(captures).toBe(2);
     } finally { release(); spawnMock.mockReset(); vi.useRealTimers(); }
+  });
+
+  it("answers a preview poll from a recent status at once and refreshes it behind the answer", async () => {
+    vi.useFakeTimers();
+    const cfg = target("stale-preview-vps");
+    const fake = fixture();
+    mockTransport(async (args, options) => fake.runner(args, options));
+    try {
+      await expect(vpsComputerStatus(cfg, BOT_ID)).resolves.toMatchObject({ ready: true });
+      const images = () => fake.calls.filter(({ args }) => args[2] === "image").length;
+      expect(images()).toBe(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      // Past the 10 s cache: a preview poll still answers from the 15 s old status and refreshes behind it.
+      let answered = false;
+      const preview = vpsComputerStatus(cfg, BOT_ID, undefined, { staleMs: 60_000 }).then((status) => { answered = true; return status; });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(answered).toBe(true);
+      await expect(preview).resolves.toMatchObject({ ready: true });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(images()).toBe(2);
+      // Too old for the preview window: the poll waits for a real inspection.
+      await vi.advanceTimersByTimeAsync(120_000);
+      await expect(vpsComputerStatus(cfg, BOT_ID, undefined, { staleMs: 60_000 })).resolves.toMatchObject({ ready: true });
+      expect(images()).toBe(3);
+    } finally { spawnMock.mockReset(); vi.useRealTimers(); }
   });
 
   it("shares status-first cold inspection with other polls and a preview", async () => {

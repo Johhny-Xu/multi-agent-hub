@@ -2629,17 +2629,17 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("scopes Chief room management to its own department, its peers list and explicit room fields", async () => {
+  it("scopes Chief room management to its own department and explicit room fields", async () => {
     const section = `Chief rooms ${Date.now()}`;
     const bots = await Promise.all(["Chief", "Peer", "Second", "Excluded", "Foreign"].map(async (name, index) => {
       const created = await api("POST", "/api/bots", { name, section: index === 4 ? `${section} foreign` : section });
       expect(created.status).toBe(201);
       return created.body.bot as { id: string; threadId: string };
     }));
-    const [chief, peer, second, excluded, foreign] = bots;
+    const [chief, peer, second, , foreign] = bots;
     const roomIds: string[] = [];
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask", peers: [peer.id, second.id] })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       const token = await mintTestCapability(BASE, chief.id, chief.threadId);
       const create = (body: unknown) => chiefRoomRequest(BASE, token, "create-room", body);
       const managed = await create({ name: "Managed room", memberIds: [peer.id, peer.id], bulletin: "A short brief." });
@@ -2666,10 +2666,8 @@ describe("harness HTTP API", () => {
       expect((await manage({ action: "new_thread", name: "x".repeat(101) })).status).toBe(400);
       expect((await manage({ action: "new_thread", name: "x".repeat(81) })).status).toBe(400);
       expect((await manage({ action: "new_thread", name: "Line one\nLine two" })).status).toBe(400);
-      for (const memberId of [foreign.id, excluded.id, "missing-bot"]) {
-        expect((await create({ name: "Forbidden room", memberIds: [memberId] })).status).toBe(403);
-        expect((await manage({ action: "add_members", memberIds: [memberId] })).status).toBe(403);
-      }
+      expect((await create({ name: "Forbidden room", memberIds: ["missing-bot"] })).status).toBe(403);
+      expect((await manage({ action: "add_members", memberIds: ["missing-bot"] })).status).toBe(403);
       expect((await create({ name: "Foreign section", memberIds: [peer.id], section: `${section} foreign` })).status).toBe(403);
       expect((await manage({ action: "set_section", section: `${section} foreign` })).status).toBe(403);
       expect((await manage({ action: "set_section" })).status).toBe(400);
@@ -2680,7 +2678,7 @@ describe("harness HTTP API", () => {
       for (const body of [{ action: "set_members", memberIds: [] }, { action: "set_bulletin" }, { action: "set_bulletin", bulletin: "x".repeat(12_001) }, { action: "rename", name: "changed", cwd: "/tmp" }]) {
         expect((await manage(body)).status).toBe(400);
       }
-      for (const [memberIds, roomSection] of [[[foreign.id], `${section} foreign`], [[chief.id, foreign.id], section], [[peer.id], section]] as const) {
+      for (const [memberIds, roomSection] of [[[foreign.id], `${section} foreign`], [[peer.id], section]] as const) {
         const otherRoom = (await api("POST", "/api/groups", { name: "Unmanaged room", memberIds, section: roomSection })).body.group;
         roomIds.push(otherRoom.id);
         expect((await manage({ roomId: otherRoom.id, action: "rename", name: "Forbidden" })).status).toBe(403);
@@ -2690,11 +2688,6 @@ describe("harness HTTP API", () => {
       expect((await api("PATCH", `/api/bots/${second.id}`, { hidden: true })).status).toBe(200);
       expect((await create({ name: "Archived member", memberIds: [second.id] })).status).toBe(403);
       expect((await manage({ action: "add_members", memberIds: [second.id] })).status).toBe(403);
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { approvePeerComms: true })).status).toBe(200);
-      expect((await manage({ action: "rename", name: "No review" })).body.error).toMatch(/peer approval is required/);
-      expect((await manage({ action: "new_thread" })).status).toBe(403);
-      expect((await create({ name: "No review", memberIds: [peer.id] })).status).toBe(403);
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { approvePeerComms: false })).status).toBe(200);
       for (let count = 1; count < 4; count += 1) {
         const created = await create({ name: `Bounded room ${count}`, memberIds: [peer.id] });
         expect(created.status).toBe(201);
@@ -3164,6 +3157,15 @@ describe("harness HTTP API", () => {
       await api("DELETE", `/api/bots/${bot.id}`);
       await api("DELETE", `/api/bots/${foreign.id}`);
     }
+  });
+
+  it("takes a bot PATCH from an older computer that still sends a peers list or a peer-approval switch, and keeps neither", async () => {
+    const bot = (await api("POST", "/api/bots")).body.bot;
+    const patched = await api("PATCH", `/api/bots/${bot.id}`, { name: "From an older computer", peers: ["nobody"], approvePeerComms: true });
+    expect(patched.status).toBe(200);
+    expect(patched.body.bot.name).toBe("From an older computer");
+    expect(patched.body.bot).not.toHaveProperty("peers");
+    expect(patched.body.bot).not.toHaveProperty("approvePeerComms");
   });
 
   it("creates, patches, and deletes a bot", async () => {
@@ -6123,7 +6125,6 @@ describe("harness HTTP API", () => {
       title: "Project Lead",
       autoApprove: true,
       alwaysAllow: ["Bash:git"],
-      approvePeerComms: true,
       chiefOfStaff: true,
       composio: true,
       computer: "off",
@@ -6151,7 +6152,6 @@ describe("harness HTTP API", () => {
             autoApprove: true,
                   alwaysAllow: ["Bash"],
             chiefOfStaff: true,
-            approvePeerComms: false,
             composio: true,
             computer: "local",
             cloudBackend: "vps",
@@ -6171,7 +6171,6 @@ describe("harness HTTP API", () => {
     expect(impostor.autoApprove).toBeUndefined();
     expect(impostor.alwaysAllow).toBeUndefined();
     expect(impostor.chiefOfStaff).toBeUndefined();
-    expect(impostor.approvePeerComms).toBeUndefined();
     expect(impostor.composio).toBe(false);
     expect(impostor.computer).toBeUndefined();
     expect(impostor.cloudBackend).toBeUndefined();
@@ -6185,7 +6184,6 @@ describe("harness HTTP API", () => {
       threadId: trusted.threadId,
       autoApprove: true,
       alwaysAllow: ["Bash:git"],
-      approvePeerComms: true,
       chiefOfStaff: true,
       composio: true,
       computer: "off",
@@ -11197,7 +11195,7 @@ describe("harness HTTP API", () => {
       });
       expect(unavailableCloud.status).toBe(409);
       expect(await unavailableCloud.json()).toMatchObject({
-        error: expect.stringMatching(/^Bots here can get their own cloud desktops from Boat, a paid service\. Connect your Boat account in Settings → API keys\./),
+        error: expect.stringMatching(/^Bots here can get their own cloud desktops from Boat, a paid service\. Connect your Boat account in AI › Other services\./),
       });
 
       const proposed = await fetch(`${BASE}/api/internal/trigger-requests`, {
@@ -12205,6 +12203,29 @@ describe("harness HTTP API", () => {
     }
   });
 
+  it("answers a bot's search of the catalog, and suggests what it looked for first, through the real routes", async () => {
+    expect((await api("PUT", "/api/config", { composio: { apiKey: "ak_good" } })).status).toBe(200);
+    const bot = (await api("POST", "/api/bots")).body.bot;
+    try {
+      const token = await mintTestCapability(BASE, bot.id, bot.threadId, { kind: "connectors" });
+      const found = await fetch(`${BASE}/api/internal/connectors/find`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ botId: bot.id, threadId: bot.threadId, query: "something for spreadsheets" }),
+      });
+      expect(found.status).toBe(200);
+      expect(((await found.json()) as { text: string }).text).toContain("- googlesheets: Google Sheets (not connected).");
+      const suggested = await api("GET", `/api/connectors/suggestions?botId=${bot.id}&for=notion&limit=3`);
+      expect(suggested.status).toBe(200);
+      expect(suggested.body.cards.map((card: { slug: string }) => card.slug)).toEqual(["googlesheets", "slack", "googledrive"]);
+      expect(suggested.body.pick).toBe("needs-key");
+      expect((await api("POST", "/api/connectors/suggestions/pick")).body.pick).toBe("needs-key");
+    } finally {
+      await api("PUT", "/api/config", { composio: { apiKey: "" } });
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
   it("keeps connecting an app from its card an admin's, though members reach the card's authorize for MCP sign-ins", async () => {
     expect((await api("PUT", "/api/config", { composio: { apiKey: "ak_good" } })).status).toBe(200);
     const bot = (await api("POST", "/api/bots")).body.bot;
@@ -12276,6 +12297,49 @@ describe("harness HTTP API", () => {
       expect((await poll()).body.connected).toBe(true);
       expect((await api("POST", card(work, "resume"), { threadId: bot.threadId })).status).toBe(409);
       expect((await api("GET", `${card(other, "status")}?threadId=${bot.threadId}`)).body.connected).toBe(false);
+    } finally {
+      connectorAccounts = [];
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
+  it("tells the bot an app it asked to connect without an alias already has an account, and how to add another", async () => {
+    expect((await api("PUT", "/api/config", { composio: { apiKey: "ak_good" } })).status).toBe(200);
+    const bot = (await api("POST", "/api/bots")).body.bot;
+    connectorAccounts = [{ id: "ca_personal", alias: "personal", status: "ACTIVE", toolkit: { slug: "gmail" } }];
+    try {
+      const token = await mintTestCapability(BASE, bot.id, bot.threadId, { kind: "connectors" });
+      const request = async (items: unknown[], resumeKey: string) => {
+        const response = await fetch(`${BASE}/api/internal/connectors/request`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ botId: bot.id, threadId: bot.threadId, resumeKey, items }),
+        });
+        return { status: response.status, body: await response.json() as any };
+      };
+      const plain = await request([{ slug: "gmail" }, { slug: "slack" }], "connected-note-plain");
+      expect(plain.status).toBe(200);
+      const stored = (await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages as any[];
+      const gmailCard = stored.find((message) => message.id === plain.body.messageIds[0]);
+      expect(gmailCard.connector.status).toBe("connected");
+      expect(plain.body.connectedNote).toBe(
+        `${gmailCard.connector.label} is already connected (it has an account, or needs no sign-in), so its card shows it connected and no new account was added. `
+        + `To add another ${gmailCard.connector.label} account, call COMPOSIO_MANAGE_CONNECTIONS again with toolkits: [{"name": "gmail", "alias": "<a short name for the new account>"}].`,
+      );
+      expect(plain.body.nothingToSignIn).toBeUndefined();
+      expect(gmailCard.connector.resumed).toBeUndefined();
+      const only = await request([{ slug: "gmail" }], "connected-note-only");
+      expect(only.status).toBe(200);
+      expect(only.body.nothingToSignIn).toBe(true);
+      const onlyCard = ((await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages as any[]).find((message) => message.id === only.body.messageIds[0]);
+      expect(onlyCard.connector).toMatchObject({ status: "connected", resumed: true });
+      const withAlias = await request([{ slug: "gmail", alias: "work" }], "connected-note-alias");
+      expect(withAlias.status).toBe(200);
+      expect(withAlias.body.connectedNote).toBeUndefined();
+      expect(withAlias.body.nothingToSignIn).toBeUndefined();
+      const fresh = await request([{ slug: "notion" }], "connected-note-fresh");
+      expect(fresh.status).toBe(200);
+      expect(fresh.body.connectedNote).toBeUndefined();
     } finally {
       connectorAccounts = [];
       await api("DELETE", `/api/bots/${bot.id}`);
@@ -13804,13 +13868,12 @@ describe("bot memory API", () => {
     const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker", description: "Files bugs." })).body.bot;
     try {
       // Pin the settings-dependent sentences a fresh record would not guarantee (composio false whatever the connector reports).
-      await api("PATCH", `/api/bots/${bot.id}`, { computer: "off", peers: [], composio: false });
+      await api("PATCH", `/api/bots/${bot.id}`, { computer: "off", composio: false });
 
       const fresh = await api("GET", `/api/bots/${bot.id}/overview`);
       expect(fresh.status).toBe(200);
       expect(fresh.body.who.name).toBe("Kiwi");
       expect(fresh.body.wont).toEqual([
-        "Cannot initiate contact with other bots.",
         "Has no connected apps.",
         "Can't use a computer.",
         "Won't act on a schedule.",

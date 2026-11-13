@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   ADMIN_ALLOW,
+  acceptLegacyOrigins,
   BROWSER_SIGN_IN,
   clearSessionCookie,
   fromBrowser,
@@ -106,6 +107,15 @@ describe("scopes", () => {
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("admin");
   });
 
+  it("keeps a card's \"Use a saved one\" an admin's, since picking one lets a bot use a Vault item", () => {
+    for (const [method, path] of [
+      ["GET", "/api/bots/bot-1/secret-cards/card-1/saved"],
+      ["POST", "/api/bots/bot-1/secret-cards/card-1/use"],
+      ["GET", "/api/bots/bot-1/sign-in-cards/card-1/saved-logins"],
+      ["POST", "/api/bots/bot-1/sign-in-cards/card-1/use-login"],
+    ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("admin");
+  });
+
   it("keeps the attachments clear to the owner: a client may read one file, never empty the store", () => {
     for (const method of ["GET", "POST"]) expect(requiredScope(method, "/api/attachment-storage"), method).toBe("admin");
     expect(requiredScope("GET", "/api/attachments/a1b2.png")).toBe("client");
@@ -167,7 +177,7 @@ describe("scopes", () => {
       ["POST", "/api/bots/x/sign-in-cards/m/provide"], ["POST", "/api/browser-engine/install"],
       ["GET", "/api/logins"], ["POST", "/api/logins"], ["PATCH", "/api/logins/l1"], ["DELETE", "/api/logins/l1"],
       ["POST", "/api/logins/1password"], ["POST", "/api/logins/1password/refresh"], ["DELETE", "/api/logins/1password"],
-      ["GET", "/api/vault"], ["POST", "/api/vault/secrets"], ["PATCH", "/api/vault/secrets/s1"], ["DELETE", "/api/vault/secrets/s1"],
+      ["POST", "/api/vault/secrets"], ["PATCH", "/api/vault/secrets/s1"], ["GET", "/api/vault/secrets/s1"], ["DELETE", "/api/vault/secrets"],
       ["POST", "/api/threads/t/messages/m/app"], ["GET", "/api/bots/x/apps/m/rpc"], ["POST", "/api/bots/x/apps/m/delete"],
       ["POST", "/api/bots/x/apps/m/rpc/extra"], ["DELETE", "/api/bots/x/apps/m/context"],
       ["PATCH", "/api/logins/1password/vaults/v1"], ["GET", "/api/bots/x/sign-in-cards/m/done"],
@@ -180,6 +190,7 @@ describe("scopes", () => {
     for (const [method, path] of [
       ["GET", "/api/team/my-connections"], ["POST", "/api/team/my-connections/apps/gmail/connect"], ["DELETE", "/api/team/my-connections/apps/gmail"],
       ["POST", "/api/team/my-connections/mcp/mail/sign-in"], ["PUT", "/api/team/my-connections/mcp/mail/key"], ["DELETE", "/api/team/my-connections/mcp/mail"],
+      ["GET", "/api/vault"], ["DELETE", "/api/vault/secrets/s1"],
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
     for (const [method, path] of [
       ["PUT", "/api/team/connection-scopes"], ["GET", "/api/team/my-connections/mcp/mail/key"], ["POST", "/api/team/my-connections/apps/gmail"],
@@ -227,7 +238,7 @@ describe("scopes", () => {
   it("lets a bot's maker without the admin scope say who it is and how it looks, never what it may do or whom it directs", () => {
     const profile = { name: "Scout", title: "Trips", soul: "Plans trips.", color: "teal", avatarCrop: "square", voice: "alloy", modelSelection: { instanceId: "claude", model: "m" } };
     expect(adminOnlyBotSetting(profile)).toBeNull();
-    for (const field of ["approvalMode", "autoApprove", "alwaysAllow", "chiefOfStaff", "managedSections", "computer", "cwd", "peers", "approvePeerComms",
+    for (const field of ["approvalMode", "autoApprove", "alwaysAllow", "chiefOfStaff", "managedSections", "computer", "cwd",
       "mcpServers", "browserProfile", "toolScope", "composio", "browser", "section", "visibility", "reportsTo", "preset", "defaultBot", "installedPackage"]) {
       expect(adminOnlyBotSetting({ ...profile, [field]: true }), field).toBe(field);
       expect(botProfileSettings({ ...profile, [field]: true }), field).toEqual(profile);
@@ -345,7 +356,7 @@ describe("resolveRequestAuth", () => {
     const csrf = resolve({ host: "bots.example.com", cookie: `${cookieName}=${token}`, origin: "https://evil.example" }, "/api/bots", "POST");
     expect(csrf.error).toBe("forbidden: cross-origin request");
     expect(sessions.list()[0]?.expiresAt).toBe(session.expiresAt);
-    const overScope = resolve({ authorization: `Bearer ${token}` }, "/api/bots", "POST");
+    const overScope = resolve({ authorization: `Bearer ${token}` }, "/api/webhooks", "POST");
     expect(overScope.status).toBe(403);
     expect(sessions.list()[0]?.expiresAt).toBe(session.expiresAt);
     const { ticket } = sessions.issueStreamTicket(session.id);
@@ -444,6 +455,41 @@ describe("resolveRequestAuth", () => {
     expect(csrf.auth).toBeNull();
     expect(csrf.status).toBe(403);
     expect(csrf.error).toBe("forbidden: cross-origin request");
+  });
+
+  it("takes a moved Cloud home's configured former address as its own, and no other, whatever X-Forwarded-Host says", () => {
+    const token = pairedToken();
+    const { credential } = sessions.openPairing({ browser: true, owner: "ada@example.test" });
+    const browser = sessions.exchange({ code: credential, label: "Chrome on Mac", source: "1.2.3.4", browser: true });
+    if (!browser.ok) throw new Error(browser.error);
+    // What the old address's forwarder sends: Host rewritten to this home's name, the page's own Origin kept.
+    const forwarded = (origin: string, cookie = token, extra: Record<string, string> = {}) => ({
+      host: "omb-u-1.homes.example", "x-forwarded-proto": "https", "x-forwarded-for": "203.0.113.9", "x-forwarded-host": "omb-u-1.fly.dev",
+      cookie: `${cookieName}=${cookie}`, origin, ...extra,
+    });
+    const page = { "sec-fetch-site": "same-origin", "sec-fetch-dest": "empty" };
+    try {
+      acceptLegacyOrigins(["https://omb-u-1.fly.dev"]);
+      expect(resolve(forwarded("https://omb-u-1.fly.dev"), "/api/bots", "POST").auth?.kind).toBe("session");
+      expect(resolve(forwarded("https://OMB-U-1.fly.dev "), "/api/bots", "POST").auth?.kind).toBe("session");
+      expect(resolve(forwarded("https://omb-u-1.fly.dev", browser.token, page), "/api/bots", "POST").auth?.kind).toBe("session");
+      expect(resolve(forwarded("https://omb-u-1.fly.dev"), "/api/events").auth?.kind).toBe("session");
+      expect(isSameOrigin(request({ host: "omb-u-1.homes.example", "x-forwarded-proto": "https", origin: "https://omb-u-1.fly.dev", upgrade: "websocket" }))).toBe(true);
+      expect(provesSameOrigin(request({ host: "omb-u-1.homes.example", "x-forwarded-proto": "https", origin: "https://omb-u-1.fly.dev" }))).toBe(true);
+      // Only the exact origin: not another app on the same provider, its http twin, a port, or a name X-Forwarded-Host gives.
+      for (const origin of ["https://omb-u-2.fly.dev", "http://omb-u-1.fly.dev", "https://omb-u-1.fly.dev:8443", "https://evil.example"]) {
+        const refused = resolve(forwarded(origin), "/api/bots", "POST");
+        expect(refused, origin).toMatchObject({ auth: null, status: 403, error: "forbidden: cross-origin request" });
+      }
+      expect(isSameOrigin(request({ host: "omb-u-1.homes.example", "x-forwarded-proto": "https", "x-forwarded-host": "evil.example", origin: "https://evil.example" }))).toBe(false);
+      // Never loopback trust: the former address is a remote page's, so a request with no session is still refused.
+      expect(resolve({ host: "127.0.0.1:8799", origin: "https://omb-u-1.fly.dev" }).auth).toBeNull();
+    } finally {
+      acceptLegacyOrigins([]);
+    }
+    const unconfigured = resolve(forwarded("https://omb-u-1.fly.dev"), "/api/bots", "POST");
+    expect(unconfigured).toMatchObject({ auth: null, status: 403, error: "forbidden: cross-origin request" });
+    expect(isSameOrigin(request({ host: "omb-u-1.homes.example", "x-forwarded-proto": "https", "x-forwarded-host": "omb-u-1.fly.dev", origin: "https://omb-u-1.fly.dev" }))).toBe(false);
   });
 
   it("lets a browser sign-in's session make changes only when the browser says the request is its own page's", () => {
@@ -675,6 +721,12 @@ describe("loopback trust: owner on one person's machine, service on a shared wor
     }
   });
 
+  it("lets a local check count the engines that can start a bot, as update.sh does, but no caller through a proxy", () => {
+    expect(check("GET", "/api/health/engines", { trust: "service" }).auth).toEqual({ kind: "loopback", scopes: ["client"], trust: "service" });
+    expect(check("POST", "/api/health/engines", { trust: "service" }).auth).toBeNull();
+    expect(check("GET", "/api/health/engines", { trust: "service", headers: { "x-forwarded-for": "203.0.113.9" } }).auth).toBeNull();
+  });
+
   it("still admits a real session with its own scopes on a service-trust server", () => {
     const admin = sessions.issue({ label: "Laptop", scopes: ["admin", "client"] });
     const member = sessions.issue({ label: "Phone", scopes: ["client"] });
@@ -858,6 +910,7 @@ describe("ZBOX-webchat-admin: /api/web-chat/connection scope", () => {
     expect(requiredScope("POST", "/api/web-chat/connection")).toBe("admin");
     // Explicit admin rule exists for GET /api/web-chat/connection
     expect(ADMIN_ALLOW.some((rule) => rule.methods.includes("GET") && rule.path.test("/api/web-chat/connection"))).toBe(true);
+    expect(ADMIN_ALLOW.some((rule) => rule.methods.includes("POST") && rule.path.test("/api/web-chat/connection"))).toBe(true);
     // /api/web-chat/ws is not in ADMIN_ALLOW; retains its original handling
     expect(ADMIN_ALLOW.some((rule) => rule.path.test("/api/web-chat/ws"))).toBe(false);
   });

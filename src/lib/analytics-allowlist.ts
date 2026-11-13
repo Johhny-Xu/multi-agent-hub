@@ -13,8 +13,8 @@ export function allow<const T extends string>(value: unknown, list: readonly T[]
 }
 
 export const KEY_PROVIDER = [
-  "anthropic", "openai", "openrouter", "openai_compat", "xai", "mistral", "cerebras", "groq", "greenference", "meta", "boat", "composio",
-  "opencode_go", "custom_endpoint", "elevenlabs", "fish_audio", "gemini_tts", "jev", "openrouter_decider", "openai_image", "custom_image",
+  "anthropic", "openai", "openrouter", "openai_compat", "xai", "mistral", "cerebras", "groq", "greenference", "modelgo", "meta", "boat", "composio",
+  "opencode_go", "custom_endpoint", "elevenlabs", "fish_audio", "gemini_tts", "jev", "openrouter_decider", "gemini_decider", "openai_image", "custom_image",
   "openai_live", "onepassword", "treg", "deepseek", "postiz", "gemini", "zhipu",
 ] as const;
 export type KeyProvider = (typeof KEY_PROVIDER)[number];
@@ -23,7 +23,7 @@ const CREDENTIAL_PROVIDER = new Map<string, KeyProvider>(Object.entries({
   boxToken: "boat", xaiApiKey: "xai", opencodeGoApiKey: "opencode_go", ttsKey: "elevenlabs", fishAudioKey: "fish_audio", geminiTtsKey: "gemini_tts",
   openaiImageApiKey: "openai_image", onePasswordToken: "onepassword", composioApiKey: "composio", openaiApiKey: "openai",
   anthropicApiKey: "anthropic", openrouterApiKey: "openrouter", mistralApiKey: "mistral", cerebrasApiKey: "cerebras", groqApiKey: "groq",
-  greenferenceApiKey: "greenference", metaApiKey: "meta", deepseekApiKey: "deepseek",
+  greenferenceApiKey: "greenference", modelgoApiKey: "modelgo", metaApiKey: "meta", deepseekApiKey: "deepseek",
 } satisfies Record<CredentialTargetId, KeyProvider>));
 
 export function credentialProvider(target: unknown): KeyProvider | "other" {
@@ -32,7 +32,9 @@ export function credentialProvider(target: unknown): KeyProvider | "other" {
 
 export const ENGINE = [
   "claude", "codex", "gemini", "cursor", "opencode", "qwen", "hermes", "cline", "custom_acp", "pi", "openai_compat", "grok",
-  "grok_api", "kimi", "droid", "antigravity", "minimax", "mistral", "cerebras", "groq", "greenference", "meta", "muse_code", "deepseek", "copilot", "command_code", "kiro",
+  "grok_api", "kimi", "droid", "antigravity", "minimax", "mistral", "cerebras", "groq", "greenference", "modelgo", "meta", "muse_code", "deepseek", "copilot", "command_code", "kiro", "doubao", "dumate",
+  // 本项目自加的国产 CLI / 网页驱动（E91）
+  "zcode", "codebuddy", "codebuddy_cn", "qoder", "qoder_cn", "codearts", "mcode", "meoo", "perch", "mimocode", "traecode", "hark_web",
 ] as const;
 export type Engine = (typeof ENGINE)[number];
 
@@ -40,8 +42,9 @@ const ENGINE_BY_DRIVER = new Map<string, Engine>(Object.entries({
   claudeAgent: "claude", codex: "codex", geminiAgent: "gemini", cursorAgent: "cursor", opencodeGo: "opencode",
   qwenAgent: "qwen", hermesAgent: "hermes", clineAgent: "cline", customAcp: "custom_acp", piAgent: "pi",
   "openai-compat": "openai_compat", grokAgent: "grok", grok: "grok_api", kimiAgent: "kimi", droidAgent: "droid",
-  antigravityAgent: "antigravity", minimax: "minimax", mistral: "mistral", cerebras: "cerebras", groq: "groq", greenference: "greenference",
-  meta: "meta", museCode: "muse_code", deepseekAgent: "deepseek", copilotAgent: "copilot", commandCodeAgent: "command_code", kiroAgent: "kiro",
+  antigravityAgent: "antigravity", minimax: "minimax", mistral: "mistral", cerebras: "cerebras", groq: "groq", greenference: "greenference", modelgo: "modelgo",
+  meta: "meta", museCode: "muse_code", deepseekAgent: "deepseek", copilotAgent: "copilot", commandCodeAgent: "command_code", kiroAgent: "kiro", doubaoAgent: "doubao", dumate: "dumate",
+  zcodeAgent: "zcode", codebuddyAgent: "codebuddy", codebuddyCnAgent: "codebuddy_cn", qoderAgent: "qoder", qoderCnAgent: "qoder_cn", codeartsAcpAgent: "codearts", mcodeAgent: "mcode", meooAgent: "meoo", perchAgent: "perch", mimocodeAgent: "mimocode", traecodeAgent: "traecode", harkWeb: "hark_web",
 } satisfies Record<string, Engine>));
 
 export function engineForDriver(driverKind: unknown): Engine | "other" {

@@ -12,6 +12,7 @@ import { GrokDriver } from "./grok.ts";
 import { MinimaxDriver } from "./minimax.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 import { MistralDriver } from "./mistral.ts";
+import { TRUNCATED_LENGTH } from "./openai-chat.ts";
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 
@@ -961,5 +962,27 @@ describe("createOpenAIChatRuntime rejected keys", () => {
     await turn(instance);
     expect(await instance.snapshot()).toMatchObject({ state: "available", authenticated: true });
     await instance.dispose();
+  });
+});
+
+describe("E104 reasoning-only and cut rounds (shared runtime)", () => {
+  it("keeps a reasoning-only answer that stopped normally (models that answer inside their reasoning)", async () => {
+    const events = await runTurn('data: {"choices":[{"index":0,"delta":{"reasoning_content":"答案在思考里"}}]}\n\n'
+      + 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+    expect(events.filter((e) => e.type === "item.completed").map((e) => (e as { text?: string }).text)).toContain("答案在思考里");
+    expect(events.find((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+
+  it("fails a reasoning-only round cut at the length limit instead of showing the draft", async () => {
+    const events = await runTurn('data: {"choices":[{"index":0,"delta":{"reasoning_content":"写到一半的草稿"}}]}\n\n'
+      + 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n');
+    expect(events.some((e) => e.type === "item.completed" && (e as { itemType?: string }).itemType === "assistant_text")).toBe(false);
+    expect(events.find((e) => e.type === "turn.completed")).toMatchObject({ ok: false, stopReason: "truncated" });
+    expect(JSON.stringify(events)).toContain(TRUNCATED_LENGTH);
+  });
+
+  it("still takes a reply whose stream sent [DONE] without a finish_reason when the provider is not required to say", async () => {
+    const events = await runTurn('data: {"choices":[{"index":0,"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n');
+    expect(events.find((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
   });
 });

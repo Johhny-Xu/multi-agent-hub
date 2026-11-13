@@ -219,4 +219,12 @@ describe("createAccountAutoSwitch", () => {
     expect(isLimitFailure("The model returned an invalid response")).toBeNull();
     expect(isLimitFailure("")).toBeNull();
   });
+
+  it("isLimitFailure reads Google's RESOURCE_EXHAUSTED wordings (Antigravity) as quota, not overload", () => {
+    expect(isLimitFailure("You have exhausted your capacity on this model. Your quota will reset after 2h3m.")).toBe("quota");
+    expect(isLimitFailure("You have exhausted your capacity on this model.")).toBe("quota");
+    expect(isLimitFailure("RESOURCE_EXHAUSTED: Resource has been exhausted (e.g. check quota).")).toBe("quota");
+    expect(isLimitFailure("Resource exhausted")).toBe("quota");
+    expect(isLimitFailure("The server is overloaded, try again")).toBeNull();
+  });
 });

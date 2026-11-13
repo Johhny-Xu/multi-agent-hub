@@ -8,6 +8,7 @@ import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "
 import { ENGINE_LIST_REUSE_MS, ProviderRegistry } from "../harness/registry.ts";
 import { json, readBody } from "../harness/http.ts";
 import { ProviderAuthSessions } from "../provider-auth-sessions.ts";
+import type { RequestAuth } from "../request-auth.ts";
 import { makeFakeDriver } from "../testing/fake-driver.ts";
 import { createInstanceRoutes, type InstanceRouteDeps } from "./instances.ts";
 import { dispatchRoutes } from "./table.ts";
@@ -17,7 +18,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
 });
 
-async function serve(extra: Partial<InstanceRouteDeps> = {}) {
+async function serve(extra: Partial<InstanceRouteDeps> = {}, auth: RequestAuth = { kind: "loopback", scopes: ["admin"] }) {
   const fake = makeFakeDriver();
   const registry = new ProviderRegistry([fake.driver]);
   await registry.load({ a: { driver: "fake" } });
@@ -52,7 +53,7 @@ async function serve(extra: Partial<InstanceRouteDeps> = {}) {
     const url = new URL(req.url ?? "/", "http://localhost");
     const handled = await dispatchRoutes(routes, {
       req, res, url, path: url.pathname, method: req.method ?? "GET",
-      auth: { kind: "loopback", scopes: ["admin"] }, json, readBody,
+      auth, json, readBody,
     });
     if (!handled) json(res, 404, { from: "inline routes" });
   });
@@ -111,6 +112,22 @@ describe("the engine list", () => {
     await call("GET", "/api/instances?fresh=1");
     expect(fake.probes).toHaveLength(2);
     expect(await probesAfterList()).toBe(2);
+  });
+});
+
+describe("whether the server can start a bot", () => {
+  it("counts the engines that are available and names none of them", async () => {
+    const { call } = await serve({
+      describeInstances: async () => [
+        { instanceId: "claude", snapshot: { state: "available" } },
+        { instanceId: "codex", snapshot: { state: "needs-login" } },
+        { instanceId: "custom-1", snapshot: { state: "available" } },
+        { instanceId: "broken" },
+      ],
+    });
+    expect(await call("GET", "/api/health/engines")).toEqual({ app: "openmausbot", engines: 2 });
+    const none = await serve({ describeInstances: async () => [{ instanceId: "codex", snapshot: { state: "unavailable" } }] });
+    expect(await none.call("GET", "/api/health/engines")).toEqual({ app: "openmausbot", engines: 0 });
   });
 });
 
@@ -312,3 +329,92 @@ describe("hiding a provider", () => {
   });
 });
 
+
+describe("looking for Ollama", () => {
+  it("answers what one address said, and refuses an address that is not one", async () => {
+    const ollama = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/api/tags") return response.end(JSON.stringify({ models: [{ name: "qwen3:4b", size: 2_500_000_000, details: { parameter_size: "4.0B" } }] }));
+      if (request.url === "/api/version") return response.end(JSON.stringify({ version: "0.12.6" }));
+      response.statusCode = 404;
+      response.end("{}");
+    });
+    servers.push(ollama);
+    await new Promise<void>((ready) => ollama.listen(0, "127.0.0.1", ready));
+    const address = `http://127.0.0.1:${(ollama.address() as AddressInfo).port}`;
+    const { call, base } = await serve();
+    expect(await call("GET", `/api/instances/ollama?url=${encodeURIComponent(`${address}/v1`)}`)).toEqual({
+      status: { state: "ready", url: address, version: "0.12.6", models: [{ name: "qwen3:4b", bytes: 2_500_000_000, parameters: "4.0B" }] },
+    });
+    const refused = await fetch(`${base}/api/instances/ollama?url=${encodeURIComponent("ftp://127.0.0.1:11434")}`);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: "Enter an http or https address, such as http://127.0.0.1:11434." });
+  });
+
+  it("is only for the owner: a shared server's bot shell or a hosted workspace can't make this server ask an address", async () => {
+    const shell = await serve({}, { kind: "loopback", scopes: ["admin"], trust: "service" });
+    expect((await fetch(`${shell.base}/api/instances/ollama?url=${encodeURIComponent("http://127.0.0.1:9")}`)).status).toBe(403);
+    const hosted = await serve({ hostedModels: true });
+    expect((await fetch(`${hosted.base}/api/instances/ollama`)).status).toBe(403);
+  });
+});
+
+describe("removing an added account", () => {
+  const setup = async (bots: Array<Record<string, unknown>>, tasks: Record<string, Array<Record<string, unknown>>>, busy = new Set<string>()) => {
+    const cfg = { instances: { a: { driver: "fake" }, "claude-work": { driver: "claudeAgent", displayName: "Work" } } };
+    const followed: Array<{ botId: string; threadIds: readonly string[] }> = [];
+    const served = await serve({
+      cfg: cfg as unknown as AppConfig,
+      store: { bots, tasks: (botId: string) => tasks[botId] ?? [], followBotModel: (botId: string, threadIds: readonly string[]) => { followed.push({ botId, threadIds }); return [...threadIds]; } } as never,
+      persistProviderInstance: async (_id: string, instances: Record<string, unknown>) => { (cfg as { instances: unknown }).instances = instances; },
+      threadBusy: (_botId: string, threadId: string) => busy.has(threadId),
+      botForThread: (botId: string, threadId: string) => {
+        const pinned = tasks[botId]?.find((task) => task.threadId === threadId)?.modelSelection;
+        return { modelSelection: pinned ?? bots.find((bot) => bot.id === botId)!.modelSelection } as never;
+      },
+    });
+    const remove = async () => {
+      const response = await fetch(`${served.base}/api/instances/claude-work`, { method: "DELETE" });
+      return { status: response.status, body: await response.json() as { error?: string; usedBy?: string[] } };
+    };
+    return { cfg, followed, remove };
+  };
+  const onWork = { instanceId: "claude-work", model: "m" };
+  const onA = { instanceId: "a", model: "m" };
+
+  it("is not blocked by a finished conversation that once picked it, and sends that conversation back to its bot's model", async () => {
+    const { cfg, followed, remove } = await setup(
+      [{ id: "z1", name: "zcode-box1", modelSelection: onA }, { id: "ar", name: "argon-box3", modelSelection: onA }],
+      { z1: [{ threadId: "old", modelSelection: onWork }, { threadId: "own", modelSelection: onA }], ar: [{ threadId: "x" }] },
+    );
+    const removed = await remove();
+    expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+    expect(cfg.instances).not.toHaveProperty("claude-work");
+    expect(followed).toEqual([{ botId: "z1", threadIds: ["old"] }]);
+  });
+
+  it("refuses while a bot's own model is on it, and names that bot", async () => {
+    const { cfg, followed, remove } = await setup(
+      [{ id: "ar", name: "argon-box3", modelSelection: onWork }, { id: "z1", name: "zcode-box1", modelSelection: onA }], {},
+    );
+    const refused = await remove();
+    expect(refused.status).toBe(409);
+    expect(refused.body.usedBy).toEqual(["argon-box3"]);
+    expect(refused.body.error).toContain("argon-box3");
+    expect(cfg.instances).toHaveProperty("claude-work");
+    expect(followed).toEqual([]);
+  });
+
+  it("refuses while it is a bot's fallback, the default model, or a conversation is running on it right now", async () => {
+    const fallback = await setup([{ id: "fb", name: "fallback-bot", modelSelection: onA, fallback: [onWork] }], {});
+    expect((await fallback.remove()).body.usedBy).toEqual(["fallback-bot"]);
+    const running = await setup([{ id: "z1", name: "zcode-box1", modelSelection: onA }], { z1: [{ threadId: "live", modelSelection: onWork }] }, new Set(["live"]));
+    const refused = await running.remove();
+    expect(refused.status).toBe(409);
+    expect(refused.body.usedBy).toEqual(["zcode-box1"]);
+    expect(running.followed).toEqual([]);
+    const byDefault = await setup([], {});
+    (byDefault.cfg as { defaultModelSelection?: unknown }).defaultModelSelection = onWork;
+    expect((await byDefault.remove()).body.usedBy).toEqual(["default model"]);
+  });
+});

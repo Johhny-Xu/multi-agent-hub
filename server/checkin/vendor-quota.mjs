@@ -13,6 +13,7 @@ import tls from 'node:tls';
 import { homedir, platform as osPlatform, userInfo as osUserInfo } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fetchMiniMaxSignin } from './minimax-checkin.mjs';
+import { fetchDumateQuota } from './dumate.mjs';
 import { fileURLToPath } from 'node:url';
 
 const HOME = homedir();
@@ -33,7 +34,7 @@ export function debugFetchAttempts() { return fetchAttempts; }
 const PROXY_URL = process.env.AGENTHUB_QUOTA_PROXY || 'http://127.0.0.1:7890';
 
 /** 支持原生配额读取的 worker 清单（github-copilot 令牌在系统 keyring，暂不直读） */
-export const QUOTA_WORKERS = ['codebuddy', 'codebuddy-cn', 'github-copilot', 'minimaxcode', 'mimocode', 'antigravity', 'traecode', 'zcode', 'codearts', 'qoder', 'qoder-cn', 'cline', 'perch', '9router'];
+export const QUOTA_WORKERS = ['codebuddy', 'codebuddy-cn', 'github-copilot', 'minimaxcode', 'mimocode', 'antigravity', 'traecode', 'zcode', 'codearts', 'qoder', 'qoder-cn', 'cline', 'perch', '9router', 'dumate'];
 
 /**
  * 需要跨模块协作的 worker（凭据解密与设备指纹在 qoder.mjs / qoder-device.mjs
@@ -1584,6 +1585,8 @@ const FETCHERS = {
   'cline': fetchClineQuota,
   'perch': fetchPerchQuota,
   '9router': fetchNinerouterQuota,
+  // 百度搭子：账号与 cookie 在 dumate.mjs 自己的存储里（日常页扫码登录），不经 TOKEN_READERS
+  'dumate': () => fetchDumateQuota(),
 };
 
 // ---------------------------------------------------------------- 9router（用户 2026-11-08 21:57：9router 的额度就用 ollama 的）

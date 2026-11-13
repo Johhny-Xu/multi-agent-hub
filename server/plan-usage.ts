@@ -74,7 +74,7 @@ export interface PlanAccount {
   driver: PlanDriver;
   environment: Record<string, string | undefined>;
   configDir?: string;
-  /** Signed in through OpenMausBot (ChatGPT plan), not a CLI login on disk, so it has no usage reading. */
+  /** No usage reading: a ChatGPT plan signed in through OpenMausBot has no CLI login on disk, and a Claude Code login is never read, since Anthropic's credential policy covers that token for Claude Code alone (a refused turn still fails over). */
   noUsage?: true;
 }
 
@@ -173,7 +173,7 @@ export function planAccountsFromInstances(instances: InstanceConfigMap): PlanAcc
       environment: { ...entry.environment },
       ...(configDir ? { configDir } : {}),
       // Reading ~/.codex/auth.json for a ChatGPT-plan provider would report (and hold it on) another account's limit.
-      ...(config?.authMode === "chatgpt-plan" ? { noUsage: true as const } : {}),
+      ...(config?.authMode === "chatgpt-plan" || driver === "claude" ? { noUsage: true as const } : {}),
     });
   }
   return accounts;
@@ -281,7 +281,7 @@ export function parseMeooUsage(body: unknown): PlanWindows {
     const used = finiteNumber(benefit.used);
     if (total == null || total <= 0 || used == null) continue;
     extra.push({
-      ...extraLine("Model credits", openWindow((used / total) * 100, isoOrNull(root?.currentPeriodEnd))),
+      ...extraLine("Model credits", openWindow((used / total) * 100, isoOrNull(beijingWallClock(root?.currentPeriodEnd)))),
       amounts: { used, total },
     });
     break;
@@ -411,6 +411,11 @@ function timeMs(value: unknown): number | null {
   if (/^\d+(\.\d+)?$/.test(trimmed)) return timeMs(Number(trimmed));
   const parsed = Date.parse(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Meoo sends wall-clock times with no zone ("2026-11-21T00:00:00"): they are Beijing time, whatever this host's zone is. */
+function beijingWallClock(value: unknown): unknown {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value.trim()) ? `${value.trim()}+08:00` : value;
 }
 
 function isoOrNull(value: unknown): string | null {
@@ -745,7 +750,7 @@ function planUsageCacheKey(accounts: PlanAccount[]): string {
       .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([name, value]) => `${name}=${value}`)
       .join("\n");
-    return [account.id, account.driver, account.name, account.configDir ?? "", environment].join("\u0000");
+    return [account.id, account.driver, account.name, account.configDir ?? "", environment, account.noUsage ? "no-usage" : "usage"].join("\u0000");
   }).join("\n");
 }
 

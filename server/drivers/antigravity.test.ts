@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,6 +25,7 @@ import {
   isValidAntigravityInitializeResult,
   parseAntigravityAuthorizationUrl,
   prepareAntigravityProfile,
+  prepareIsolatedCliHome,
   probeAntigravityModels,
   removeAntigravitySignIn,
   validateAntigravityCallbackUrl,
@@ -711,7 +712,8 @@ describe("official Antigravity runtime", () => {
     expect(added.environment.GEMINI_HOME).toBe(join(added.directory, "home", ".gemini"));
     expect(added.tokenPath).toBe(join(added.directory, "home", ".gemini", "antigravity-cli", "antigravity-oauth-token"));
     expect(primary.environment.HOME).not.toBe(join(primary.directory, "home"));
-    expect(primary.environment.DBUS_SESSION_BUS_ADDRESS).toBeUndefined();
+    // No session bus for the primary either, or the CLI reads the keyring instead of the switched token file.
+    expect(primary.environment.DBUS_SESSION_BUS_ADDRESS).toBe("disabled:");
   });
 
   it("cli runtime: an added account's HOME links the person's git and ssh setup", async () => {
@@ -725,6 +727,63 @@ describe("official Antigravity runtime", () => {
     expect(existsSync(join(home, ".ssh"))).toBe(true);
     expect(existsSync(join(home, ".npmrc"))).toBe(false);
     expect(existsSync(join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token"))).toBe(false);
+  });
+
+  it("prepareIsolatedCliHome links real .config/pinky into isolated HOME", async () => {
+    const root = mkdtempSync(join(tmpdir(), "agy-pinky-link-"));
+    const realHome = join(root, "real");
+    const isoHome = join(root, "iso");
+    mkdirSync(join(realHome, ".config", "pinky"), { recursive: true });
+    writeFileSync(join(realHome, ".config", "pinky", "agent-token"), "real-token");
+
+    await prepareIsolatedCliHome(isoHome, realHome);
+    const link = join(isoHome, ".config", "pinky");
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(link)).toBe(join(realHome, ".config", "pinky"));
+    expect(readFileSync(join(link, "agent-token"), "utf8")).toBe("real-token");
+  });
+
+  it("prepareIsolatedCliHome renames an existing real .config/pinky directory before linking", async () => {
+    const root = mkdtempSync(join(tmpdir(), "agy-pinky-rename-"));
+    const realHome = join(root, "real");
+    const isoHome = join(root, "iso");
+    mkdirSync(join(realHome, ".config", "pinky"), { recursive: true });
+    writeFileSync(join(realHome, ".config", "pinky", "agent-token"), "real-token");
+    mkdirSync(join(isoHome, ".config", "pinky"), { recursive: true });
+    writeFileSync(join(isoHome, ".config", "pinky", "agent-token"), "stale-isolated-token");
+
+    await prepareIsolatedCliHome(isoHome, realHome);
+    const link = join(isoHome, ".config", "pinky");
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(readFileSync(join(link, "agent-token"), "utf8")).toBe("real-token");
+    const backup = readdirSync(join(isoHome, ".config")).find((name) => name.startsWith("pinky.isolated-"));
+    expect(backup).toBeDefined();
+    expect(readFileSync(join(isoHome, ".config", backup!, "agent-token"), "utf8")).toBe("stale-isolated-token");
+  });
+
+  it("prepareIsolatedCliHome skips .config/pinky when real HOME has none", async () => {
+    const root = mkdtempSync(join(tmpdir(), "agy-pinky-skip-"));
+    const realHome = join(root, "real");
+    const isoHome = join(root, "iso");
+    mkdirSync(realHome, { recursive: true });
+
+    await prepareIsolatedCliHome(isoHome, realHome);
+    expect(existsSync(join(isoHome, ".config", "pinky"))).toBe(false);
+  });
+
+  it("prepareIsolatedCliHome leaves an existing .config/pinky symlink untouched", async () => {
+    const root = mkdtempSync(join(tmpdir(), "agy-pinky-keep-"));
+    const realHome = join(root, "real");
+    const customTarget = join(root, "custom-pinky");
+    const isoHome = join(root, "iso");
+    mkdirSync(join(realHome, ".config", "pinky"), { recursive: true });
+    mkdirSync(customTarget, { recursive: true });
+    mkdirSync(join(isoHome, ".config"), { recursive: true });
+    symlinkSync(customTarget, join(isoHome, ".config", "pinky"));
+
+    await prepareIsolatedCliHome(isoHome, realHome);
+    expect(lstatSync(join(isoHome, ".config", "pinky")).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(join(isoHome, ".config", "pinky"))).toBe(customTarget);
   });
 
   it("cli runtime: an added account is not signed in just because the primary is", async () => {

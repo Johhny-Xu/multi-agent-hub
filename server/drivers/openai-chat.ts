@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type {
   DriverCreateInput,
   ModelCatalog,
-  ProviderInstance,
+  ProviderInstance, ProviderSnapshot,
   RuntimeEvent,
   RuntimeEventListener,
   SendTurnInput,
@@ -15,6 +15,7 @@ import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { toolDetailPreview } from "../tool-summary.ts";
 import { ChatToolSessionError, chatToolNotices, mountChatTools, refitChatTools, type ChatToolDefinition, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
+import { attachWorkdirTools } from "./workdir-tools.ts";
 import { noteToolBudget } from "../tool-budgets.ts";
 import { chatToolLimitFor, chatToolLimitKey } from "../tool-count-limit.ts";
 import { assertImageTransport, chatImageBudget, chatToolImages, chatUserContent, type ChatContentPart } from "./chat-images.ts";
@@ -92,8 +93,10 @@ interface RuntimeOptions<Config> {
   apiKey: string;
   apiUrl: string;
   models: () => ModelCatalog;
-  requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean): Record<string, unknown>;
+  requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean, variant?: string): Record<string, unknown>;
   httpErrorLabel: string;
+  /** A refusal this provider words itself: the sentence the person sees instead of the HTTP line, or undefined. */
+  plainRefusal?: (status: number, body: string) => string | undefined;
   missingKeyError: string;
   unavailableReason: string;
   timeoutMs: number;
@@ -113,8 +116,14 @@ interface RuntimeOptions<Config> {
   retryScale?: number;
   tools?: boolean;
   computerUse?: boolean;
+  /** Mounts in-process working-directory tools when the turn has a `cwd` and no `localComputer` tools. */
+  workdirTools?: boolean;
   /** A text-only model keeps the computer and browser tools but never receives a screenshot or attachment. */
   imageInput?: (model: string) => boolean;
+  /** Some models list `variants`; the picked one reaches `requestBody`. */ modelVariants?: boolean;
+  /** False for a model its server says cannot call tools: its turns go without them instead of being refused. */ toolUse?: (model: string) => boolean;
+  /** Why the server cannot answer now (not running, nothing to run), asked before the key is. */
+  serverUnavailable?: () => Promise<Pick<ProviderSnapshot, "reason" | "ollama"> | null>;
   /** The name to send for a model, when its server knows it by another. */
   servedModel?: (model: string) => Promise<string>;
   /** Smaller models announce a step and end the turn without calling a tool; such a reply gets a nudge, at most three
@@ -123,7 +132,21 @@ interface RuntimeOptions<Config> {
   /** A model on this machine or network: read a tool call it wrote as text, stop it repeating itself, and send it back
    * to fix a failed call instead of ending the turn on it. */
   localModel?: boolean;
+  /** Sends every request instead of fetch, for a provider whose bearer is minted per request (DuMate swaps a signed-in
+   * cookie for a short-lived gateway token): it replaces the `Bearer apiKey` header and may retry a refused token. */
+  fetch?: (url: string, init: RequestInit) => Promise<Response>;
+  /** False: a round with no text never shows its reasoning as the reply (DuMate streams a whole draft as reasoning and
+   * no content). Default true: a model that answers inside its reasoning and stops normally keeps working. */
+  reasoningAsReply?: boolean;
+  /** A stream that ends without any finish_reason was cut short upstream (DuMate sends `[DONE]` after one): fail the
+   * round instead of taking what arrived as a finished answer. */
+  requireFinishReason?: boolean;
 }
+
+/** E104: what a round that did not finish says, for a cut at the length limit or a stream that never said it ended. */
+export const TRUNCATED_LENGTH = "上游输出被截断（finish_reason=length），已产生的思考不算答案";
+export const TRUNCATED_NO_FINISH = "上游输出没有正常结束（没有 finish_reason，可能被截断或中断），已产生的思考不算答案";
+export const REASONING_ONLY = "模型只输出了思考、没有给出正文";
 
 const usageFrom = (usage: CompletionJson["usage"]): Usage | null =>
   usage
@@ -237,7 +260,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
   const watchServer = (everyMs: number, stop: (reason: Error) => void) => {
     let misses = 0;
     const timer = setInterval(() => {
-      fetch(`${options.apiUrl}/models`, { headers: { authorization: `Bearer ${options.apiKey}` }, signal: AbortSignal.timeout(everyMs) })
+      (options.fetch ?? fetch)(`${options.apiUrl}/models`, { headers: { authorization: `Bearer ${options.apiKey}` }, signal: AbortSignal.timeout(everyMs) })
         .then((response) => { misses = 0; void response.body?.cancel(); })
         .catch(() => {
           if (++misses === LIVENESS_MISSES) stop(new RuntimeNoticeError(`The model server at ${new URL(options.apiUrl).host} stopped answering, so the reply was stopped.`, "chat.notice.modelServerStoppedAnswering", { host: new URL(options.apiUrl).host }));
@@ -255,7 +278,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     signal?: AbortSignal,
     onDelta?: (delta: string, kind: "assistant_text" | "reasoning_text") => void,
     tools: ChatToolDefinition[] = [],
-    onUsage?: TextGenerationOptions["onUsage"],
+    onUsage?: TextGenerationOptions["onUsage"], variant?: string,
   ): Promise<Completion> => {
     const timeoutController = new AbortController();
     let idleTimer: NodeJS.Timeout | null = null;
@@ -276,13 +299,13 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
       const served = options.servedModel ? await options.servedModel(model) : model;
       const payload = JSON.stringify(route === "responses"
-        ? responsesRequest({ model: served, messages, tools, replay: (message) => responseOutputs.get(message), summaries: routes.summaries(model) })
+        ? responsesRequest({ model: served, messages, tools, replay: (message) => responseOutputs.get(message), summaries: routes.summaries(model), effort: options.requestBody(served, messages, stream, variant).reasoning_effort })
         : {
-          ...options.requestBody(served, messages, stream),
+          ...options.requestBody(served, messages, stream, variant),
           ...(route === "chat-reasoning-off" ? { reasoning_effort: "none" } : {}),
           ...(tools.length ? { tools } : {}),
         });
-      const send = options.timeoutMs > FETCH_LIMIT_MS ? fetchPastLimit : fetch;
+      const send = options.fetch ?? (options.timeoutMs > FETCH_LIMIT_MS ? fetchPastLimit : fetch);
       const response = await send(`${options.apiUrl}/${route === "responses" ? "responses" : "chat/completions"}`, {
         method: "POST",
         ...(messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image_url")) ? { redirect: "error" as const } : {}),
@@ -291,6 +314,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         signal: activeSignal,
       });
       const failure = (status: number, body: string): Error => {
+        const plain = options.plainRefusal?.(status, body); if (plain) return new Error(plain);
         const message = `${options.httpErrorLabel} HTTP ${status}${body ? `: ${httpErrorDetail(body)}` : ""}`;
         const refused = tools.length ? routeRefusal(route, status, body) : null;
         if (refused) return new ModelRouteRefused(refused, message);
@@ -457,7 +481,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     signal?: AbortSignal,
     onDelta?: (delta: string, kind: "assistant_text" | "reasoning_text") => void,
     tools: ChatToolDefinition[] = [],
-    onUsage?: TextGenerationOptions["onUsage"],
+    onUsage?: TextGenerationOptions["onUsage"], variant?: string,
   ): Promise<Completion> => {
     for (;;) {
       let replied = false;
@@ -465,7 +489,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         return await completeOn(routes.routeFor(model, tools.length > 0), messages, model, stream, signal, onDelta && ((text, kind) => {
           replied = true;
           onDelta(text, kind);
-        }), tools, onUsage);
+        }), tools, onUsage, variant);
       } catch (error) {
         if (!(error instanceof ModelRouteRefused) || replied || signal?.aborted) throw error;
         if (!routes.advance(model, error.refusal)) throw new ChatProtocolError(noRouteLeft(error.message));
@@ -511,7 +535,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
   const sendTurn = async (turn: SendTurnInput) => {
     if (!options.apiKey) throw new Error(options.missingKeyError);
     if (active.has(turn.threadId)) throw new Error("a turn is already running on this thread");
-    if (options.computerUse && (turn.images?.length || turn.integrations?.localComputer || turn.integrations?.browser)) assertImageTransport(options.apiUrl);
+    if (options.computerUse && ((turn.images?.length && seesImages(turn)) || turn.integrations?.localComputer || turn.integrations?.browser)) assertImageTransport(options.apiUrl);
 
     const turnId = newId();
     const abort = new AbortController();
@@ -599,11 +623,19 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         const parsed = parseToolScope(turn.toolScope);
         if (!parsed.ok) throw new Error(parsed.error);
         const scope = parsed.scope;
-        tools = await mountChatTools(options.tools === false ? undefined : turn.integrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs,
+        const toolsOff = options.tools === false || options.toolUse?.(model) === false;
+        tools = await mountChatTools(toolsOff ? undefined : turn.integrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs,
           toolSchemaProfileFor({ url: options.apiUrl, model }), turn.cwd ?? turn.toolResultFolder, safeText, chatToolLimitFor(options.apiUrl, model));
+        let workdirDefs: ChatToolDefinition[] = [];
+        const workdir = turn.workdir ?? turn.cwd;
+        if (options.workdirTools && !toolsOff && workdir && !tools.hasLocalComputer) {
+          const attached = attachWorkdirTools(tools, workdir, scope);
+          tools = attached.session;
+          workdirDefs = attached.definitions;
+        }
         noteToolBudget(turn.botId, tools.budget);
         for (const message of chatToolNotices(tools)) emit({ ...base(turn.threadId, turnId), type: "runtime.notice", message: safeText(message) });
-        const questionAllowed = options.tools !== false && allowsTool(scope, { kind: "native", name: ASK_USER_TOOL });
+        const questionAllowed = !toolsOff && allowsTool(scope, { kind: "native", name: ASK_USER_TOOL });
         let optionalQuestionOnly = questionAllowed && tools.definitions.length === 0;
           // An MCP server squatting ask_user cannot shadow it (dispatch intercepts the name); skip its definition.
         if (questionAllowed && !tools.definitions.some((definition) => definition.function.name === ASK_USER_TOOL)) {
@@ -645,7 +677,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 if (streamKind === "assistant_text") answerStreamed = true;
                 const shown = holdback && streamKind === "assistant_text" ? holdback.feed(text) : text;
                 if (shown) delta(shown, streamKind);
-              }, tools.definitions);
+              }, tools.definitions, undefined, turn.variant);
               // A reply cut off at the token limit may be a call cut short; running half of one is worse than saying so.
               const written = holdback && !completion.toolCalls.length && completion.finishReason !== "length" ? textToolCalls(completion.text, tools.definitions) : null;
               unreadable = written?.kind === "unreadable" && !askedAgain;
@@ -666,7 +698,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
               const error = asError(value);
               const verdict = classifyError(error);
               // A provider refuses a request with too many tools before running anything: learn its limit and list fewer.
-              const refit = streamed || seenCalls.size || abort.signal.aborted ? undefined : await refitChatTools(tools, error, chatToolLimitKey(options.apiUrl, model), [ASK_USER_TOOL_DEFINITION]);
+              const refit = streamed || seenCalls.size || abort.signal.aborted ? undefined : await refitChatTools(tools, error, chatToolLimitKey(options.apiUrl, model), [ASK_USER_TOOL_DEFINITION, ...workdirDefs]);
               if (refit) {
                 for (const message of refit) emit({ ...base(turn.threadId, turnId), type: "runtime.notice", message: safeText(message) });
                 noteToolBudget(turn.botId, tools.budget);
@@ -726,8 +758,16 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             emit({ ...base(turn.threadId, turnId), type: "thread.token-usage.updated", ...usage,
               contextTokens: completion.usage.input + completion.usage.output, ...(contextWindow ? { contextWindow } : {}) });
           }
+          // E104: a round cut at the length limit, or (where the provider must say how it ended) one that never said,
+          // is not an answer: fail before its reasoning can be shown as the reply or its half-written calls run.
+          const cut = completion.finishReason === "length" || (options.requireFinishReason === true && !completion.finishReason);
+          if (cut && (options.requireFinishReason === true || !completion.text.trim())) {
+            stopReason = "truncated";
+            throw new ChatProtocolError(completion.finishReason === "length" ? TRUNCATED_LENGTH : TRUNCATED_NO_FINISH);
+          }
           // Reasoning on a tool-call round belongs to the protocol, not a final reply.
-          const reply = completion.text.trim() ? completion.text : completion.toolCalls.length || unreadable ? "" : completion.reasoning;
+          const reply = completion.text.trim() ? completion.text
+            : completion.toolCalls.length || unreadable || options.reasoningAsReply === false ? "" : completion.reasoning;
           if (reply.trim()) emit({ ...base(turn.threadId, turnId), type: "item.completed", itemType: "assistant_text", text: safeText(reply) });
           abort.signal.throwIfAborted();
           if (unreadable) {
@@ -736,7 +776,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             continue;
           }
           if (!completion.toolCalls.length) {
-            if (!reply.trim()) throw new ChatProtocolError("provider returned an empty response");
+            if (!reply.trim()) throw new ChatProtocolError(options.reasoningAsReply === false && completion.reasoning.trim() ? REASONING_ONLY : "provider returned an empty response");
             if (completion.finishReason && completion.finishReason !== "stop") {
               throw new ChatProtocolError(`provider did not finish the response (${completion.finishReason})`);
             }
@@ -932,6 +972,8 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     },
     ...(options.refreshModels ? { refreshModels: options.refreshModels } : {}),
     snapshot: async () => {
+      const down = await options.serverUnavailable?.();
+      if (down) return { state: "unavailable", ...down };
       if (!options.apiKey) return { state: "unavailable", reason: options.unavailableReason };
       if (keyRejected(options.apiUrl, options.apiKey)) return { state: "available", authenticated: false, reason: KEY_REJECTED_REASON, version: null };
       return { state: "available", authenticated: true, version: null, ...(options.billing ? { billing: options.billing } : {}) };
@@ -941,7 +983,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       capabilities: { ...(options.computerUse ? { computerMcp: options.tools !== false,
         localComputerMcp: options.tools !== false,
         browserMcp: options.tools !== false, nativeImageInput: true, images: true } : {}),
-        sessionModelSwitch: "in-session", customMcp: options.tools !== false, agentsMcp: options.tools !== false, composioMcp: options.tools !== false,
+        ...(options.modelVariants ? { modelVariants: true } : {}), sessionModelSwitch: "in-session", customMcp: options.tools !== false, agentsMcp: options.tools !== false, composioMcp: options.tools !== false,
         dataMcp: options.tools !== false,
         emailMcp: options.tools !== false,
         deviceMcp: options.tools !== false,

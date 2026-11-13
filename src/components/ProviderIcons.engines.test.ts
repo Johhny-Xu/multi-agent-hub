@@ -10,6 +10,7 @@ const MARKS: Record<string, string> = {
   meooAgent: "0 0 24 24",
   clineAgent: "0 0 113 113",
   zcodeAgent: "0 0 24 24",
+  dumate: "0 0 24 24",
 };
 
 const render = (driverKind: string) =>

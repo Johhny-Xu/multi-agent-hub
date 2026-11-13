@@ -3,6 +3,7 @@ import { runMcpBridge } from "./mcp-bridge.ts";
 import { vpsContainerMcpArgs, vpsDockerArgs } from "./vps-computer.ts";
 import { DATA_DIR } from "./config.ts";
 import { augmentedPath } from "./env-path.ts";
+import { createVpsExecRelay, spawnVpsExecRun, withVpsExecTools } from "./vps-exec.ts";
 import { ensureVpsSshMaster, prepareVpsSsh } from "./vps-ssh.ts";
 
 const [alias, containerName] = process.argv.slice(2);
@@ -26,12 +27,18 @@ catch (error) {
   process.exit(1);
 }
 
+const env = { ...process.env, PATH: ssh.path };
+// The driver only serves the screen; shell commands run beside it in the same container over the same SSH master.
+const execRelay = createVpsExecRelay({ alias: sshAlias, container: containerName!, run: spawnVpsExecRun(env) });
+
 runMcpBridge({
   command: "docker",
   args,
-  env: { ...process.env, PATH: ssh.path },
+  env,
   label: "VPS Cua Driver",
   // Probe the transport, not the driver: a busy desktop mid-tool-call must never look dead.
   liveness: { command: "docker", args: vpsDockerArgs(sshAlias, ["version", "--format", "{{.Server.Version}}"]) },
   ...(controlUrl && controlToken ? { gate: { url: controlUrl, token: controlToken } } : {}),
+  rewriteResponse: withVpsExecTools,
+  relay: (call) => execRelay(call),
 });

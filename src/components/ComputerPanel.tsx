@@ -8,6 +8,7 @@ import { waitForLocalVmReady } from "@/lib/local-vm-readiness";
 import { CalendarClock, ChevronRight, Columns2, Globe, Hand, Loader2, Maximize2, Monitor, Moon, Power, Settings, X } from "lucide-react";
 import { api, ApiError, currentTaskBot, useStore, type Bot, type ConfigStatus } from "@/state/store";
 import { setAdvancedMode, useAdvancedMode } from "@/lib/interface-mode";
+import { SIMPLE_ONLY } from "@/lib/simple-only";
 import { ComputerFilesPane } from "./ComputerFilesPane";
 import { effectivePlace, isComputerPlace, personPin, placeLabelKey, placeOffered } from "@/lib/place";
 import type { CloudBackend } from "../../shared/wire";
@@ -39,7 +40,7 @@ import { LocalScreenPreview } from "./LocalScreenPreview";
 import { LinuxLocalControl } from "./LinuxLocalControl";
 import { MacLocalControl } from "./MacLocalControl"; import { WindowsLocalControl } from "./WindowsLocalControl";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
-import { busyBoatView, instanceSupportsLocalComputer, localComputerDisabledReason, localComputerSelectable, pageOnRemoteServer, persistedComputerSelectionMatches, isReadyBoatState, resolveBoatPanelAction, shouldPollCloudPreview } from "@/lib/local-computer";
+import { busyBoatView, instanceSupportsLocalComputer, localComputerDisabledReason, localComputerSelectable, pageOnRemoteServer, persistedComputerSelectionMatches, computerSelectionSettled, isReadyBoatState, resolveBoatPanelAction, shouldPollCloudPreview } from "@/lib/local-computer";
 import { moveBetweenTabs, PANEL_TABS, panelTabProps, scrollTabsWithWheel, TAB_PANEL_FOCUS, tabPanelProps, useAndroidTabFallback } from "./computer-panel-tabs";
 import { releaseComputerPanelFocus, useComputerPanelEntry } from "@/lib/computer-panel-focus";
 import { PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, useComputerPanelResize } from "./computer-panel-resize";
@@ -51,8 +52,8 @@ import {
   type ComputerPanelView,
 } from "@/lib/computer-panel-view";
 import { approvalModeFor } from "../../shared/approval-mode";
-import { openPlaceAction, placeBlocked, placeFacts, placeHasIssue, placeViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
-import { cloudRefusal, type PlaceActionId, type PlaceFacts, type PlaceView } from "../../shared/place-view";
+import { openPlaceAction, panelCloudRefusal, placeBlocked, placeFacts, placeHasIssue, placeViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
+import type { PlaceActionId, PlaceFacts, PlaceView } from "../../shared/place-view";
 import { t } from "@/lib/i18n";
 import { LocalizedPanelError, panelErrorText } from "@/lib/computer-messages";
 
@@ -155,12 +156,15 @@ export function ComputerPanel({
   const [localAutoWarningTarget, setLocalAutoWarningTarget] = useState<string | null>(null);
   const localDisabledReason = localComputerDisabledReason({ capabilities, providerSupportsLocal });
   const placeSeat = usePlaceSeat(state.config, capabilities);
+  // Counts the choices made in this panel; kept above `phase` so tests that count hooks from `phase` stay in step.
+  const [selectionRevision, setSelectionRevision] = useState(0);
   const [phase, setPhase] = useState<Phase>("checking");
   const [persistedComputerSelection, setPersistedComputerSelection] = useState<{
     botId: string;
     computer: Bot["computer"];
     cloudBackend: CloudBackend;
     section: string;
+    revision: number;
   } | null>(null);
   const [resolvedComputerSelection, setResolvedComputerSelection] = useState<{
     botId: string;
@@ -175,13 +179,13 @@ export function ComputerPanel({
   const vpsInstances = state.config?.vps?.instances ?? [];
   const hasVps = vpsInstances.length > 0 || Boolean(state.config?.vps?.configured);
   const cloudBackend = bot.cloudBackend === "vps" || (!hasBoat && hasVps) ? "vps" : "box";
-  const computerSelectionPersisted = Boolean(
-    persistedComputerSelection
-      && persistedComputerSelection.botId === bot.id
-      && persistedComputerSelection.computer === profileBot.computer
-      && persistedComputerSelection.cloudBackend === cloudBackend
-      && persistedComputerSelection.section === (bot.section?.trim() ?? ""),
-  );
+  const computerSelectionPersisted = computerSelectionSettled(persistedComputerSelection, {
+    botId: bot.id,
+    computer: profileBot.computer,
+    cloudBackend,
+    section: bot.section?.trim() ?? "",
+    revision: selectionRevision,
+  });
   const computerStatusCurrent = Boolean(
     resolvedComputerSelection
       && resolvedComputerSelection.botId === bot.id
@@ -212,6 +216,9 @@ export function ComputerPanel({
     setResolvedComputerSelection(null);
     setTeamComputer(null);
     setPhase("checking");
+    // A choice that keeps destination and backend (another VPS) changes no other input of the resolving effect:
+    // the revision makes it wait for this PATCH and then resolve again.
+    setSelectionRevision((n) => n + 1);
     dispatch({ type: "updateBot", botId: bot.id, patch });
   }, [bot.id, dispatch]);
   useEffect(() => {
@@ -230,12 +237,13 @@ export function ComputerPanel({
         computer: profileBot.computer,
         cloudBackend,
         section: bot.section?.trim() ?? "",
+        revision: selectionRevision,
       });
     });
     return () => {
       alive = false;
     };
-  }, [bot.id, profileBot.computer, bot.section, cloudBackend, flushBotPatches]);
+  }, [bot.id, profileBot.computer, bot.section, cloudBackend, selectionRevision, flushBotPatches]);
   const [boatState, setBoatState] = useState<string | null>(null);
   const [polledFrame, setPolledFrame] = useState<{ png: string; mime: string } | null>(null);
   const [previewError, setPreviewError] = useState<Error | string | null>(null);
@@ -589,7 +597,7 @@ export function ComputerPanel({
     bot.threadId,
     bot.computer,
     bot.section,
-    bot.autoStartVps, bot.vpsAlias,
+    bot.autoStartVps, bot.vpsAlias, profileBot.vpsInstanceId,
     cloudBackend,
     retry,
     capabilitiesReady,
@@ -1110,7 +1118,7 @@ export function ComputerPanel({
     ...(refusal ? { refusal } : {}),
   });
   const cloudRefused = bot.computer === "cloud" && cloudBackend === "box" && phase === "error" && error && !(error instanceof LocalizedPanelError)
-    ? cloudRefusal({ message: errorText ?? "", status: Number((error as { status?: unknown }).status ?? 0) || undefined }, state.config?.box?.included === true)
+    ? panelCloudRefusal(error, errorText ?? "", state.config?.box?.included === true)
     : undefined;
   const cloudView = viewOf("cloud", cloudRefused);
   const autoView = viewOf("auto");
@@ -1476,12 +1484,11 @@ export function ComputerPanel({
               {!advanced && vpsPhase && (
                 <>
                   <p className="text-[12px]">{t("computer.simple.needsSetup", { name: bot.name })}</p>
-                  {!canProvisionVps && !canReplaceVps && <button
-                    type="button"
-                    onClick={() => setAdvancedMode(true)}
+                  {!canProvisionVps && !canReplaceVps && <button type="button"
+                    onClick={SIMPLE_ONLY ? openConnectionSettings : () => setAdvancedMode(true)}
                     className="mt-1 rounded-lg bg-control px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover"
                   >
-                    {t("computer.simple.showAdvanced")}
+                    {t(SIMPLE_ONLY ? "computer.openVpsSettings" : "computer.simple.showAdvanced")}
                   </button>}
                 </>
               )}

@@ -160,6 +160,23 @@ export function persistedComputerSelectionMatches({
     && (persistedBot.cloudBackend ?? "box") === cloudBackend;
 }
 
+/**
+ * The panel's selection is settled once the saved bot confirmed the latest choice made here. `revision` counts those
+ * choices, so a change that leaves destination and backend equal (another VPS from the cloud picker) still waits for
+ * its PATCH and then re-resolves, instead of leaving the panel in "checking" with nothing left to resolve it.
+ */
+export function computerSelectionSettled(
+  persisted: { botId: string; computer: Bot["computer"]; cloudBackend: NonNullable<Bot["cloudBackend"]>; section: string; revision: number } | null,
+  expected: { botId: string; computer: Bot["computer"]; cloudBackend: NonNullable<Bot["cloudBackend"]>; section: string; revision: number },
+): boolean {
+  return Boolean(persisted
+    && persisted.botId === expected.botId
+    && persisted.computer === expected.computer
+    && persisted.cloudBackend === expected.cloudBackend
+    && persisted.section === expected.section
+    && persisted.revision === expected.revision);
+}
+
 export function autoSelectsLocalComputer({
   platform,
   computer,

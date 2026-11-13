@@ -20,6 +20,7 @@ const CODEARTS_MODELS = {
     { id: "huaweicloud-maas/glm-5.3", label: "GLM 5.3" },
     { id: "huaweicloud-maas/glm-5.3-flash", label: "GLM 5.3 Flash" },
     { id: "huaweicloud-maas/GLM-5.2", label: "GLM 5.2" },
+    { id: "huaweicloud-maas/glm-5.2-sft-harmony", label: "GLM 5.2 SFT Harmony" },
     { id: "huaweicloud-maas/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
     { id: "huaweicloud-maas/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash 1017" },
     { id: "huaweicloud-maas/openpangu-2.0-pro", label: "OpenPangu 2.0 Pro" },

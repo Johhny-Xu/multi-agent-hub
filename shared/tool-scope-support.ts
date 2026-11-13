@@ -3,12 +3,12 @@ import { narrowsNativeTools, parseToolScope, type ToolScope } from "./tool-scope
 /** Native contracts and app-supplied MCP gates are separate capabilities. */
 export const TOOL_SCOPE_SUPPORT = {
   grok: "native-and-mcp", grokAgent: "native-and-mcp", piAgent: "native-and-mcp",
-  "openai-compat": "native-and-mcp", mistral: "native-and-mcp", minimax: "native-and-mcp", cerebras: "native-and-mcp", groq: "native-and-mcp", greenference: "native-and-mcp", meta: "native-and-mcp",
+  "openai-compat": "native-and-mcp", mistral: "native-and-mcp", minimax: "native-and-mcp", cerebras: "native-and-mcp", groq: "native-and-mcp", greenference: "native-and-mcp", modelgo: "native-and-mcp", meta: "native-and-mcp", dumate: "native-and-mcp",
   claudeAgent: "mcp", codex: "mcp", geminiAgent: "mcp", kimiAgent: "mcp", droidAgent: "mcp",
   cursorAgent: "mcp", opencodeGo: "mcp", qwenAgent: "mcp", hermesAgent: "mcp", clineAgent: "mcp", copilotAgent: "mcp", commandCodeAgent: "mcp", kiroAgent: "mcp", deepseekAgent: "mcp", customAcp: "mcp", antigravityAgent: "mcp", museCode: "mcp", zcodeAgent: "mcp",
   codebuddyAgent: "mcp", codebuddyCnAgent: "mcp", qoderAgent: "mcp", qoderCnAgent: "mcp",
   codeartsAcpAgent: "mcp", mcodeAgent: "mcp", meooAgent: "mcp", perchAgent: "mcp",
-  mimocodeAgent: "mcp", traecodeAgent: "mcp",
+  mimocodeAgent: "mcp", traecodeAgent: "mcp", doubaoAgent: "mcp",
   harkWeb: "mcp",
 } as const;
 

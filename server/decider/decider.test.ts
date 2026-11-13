@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config.ts";
-import { createDecider, deciderAccount, deciderJobOn, deciderPatchKey, deciderReady, deciderSavePatch, describeDecider } from "./index.ts";
+import { createDecider, deciderAccount, deciderJobOn, deciderPatchKey, deciderReady, deciderSavePatch, describeDecider, DECIDER_KEY_ERROR } from "./index.ts";
 import { DECIDER_LOG_DIR, flushDeciderLog } from "./log.ts";
 import { jevEndpoint, parseJevResponse } from "./jev.ts";
 import { KEY_CHECK_QUESTION, KEY_CHECK_STATE, RELAY_MAX_STATE_BYTES, relayAccepts } from "./relay.ts";
@@ -736,6 +736,107 @@ describe("OpenRouter as the provider", () => {
   });
 });
 
+describe("Gemini Decision 1 as the provider", () => {
+  const GKEY = "AIza-unit-gemini-key-0123456789";
+  const GEMINI: AppConfig = { decider: { enabled: true, provider: "gemini", geminiKey: GKEY, jobs: { roomRouting: true } } };
+  const geminiBody = (choice: string, probabilities: Record<string, number>) => ({
+    answers: { answer: { type: "choice", choice, confidence: 0.9, probabilities } },
+    usage: { total_input_tokens: 321, total_output_tokens: 0, total_tokens: 321 },
+  });
+  const headerOf = (fetchImpl: FetchMock, index = 0, name = "x-goog-api-key") =>
+    (fetchImpl.mock.calls[index]![1]!.headers as Record<string, string>)[name];
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("an explicit Gemini with no key is no_key, whatever other keys are on file, and never calls", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const config: AppConfig = {
+      openrouter: { key: "sk-or-v1-unit-shared-key-0123456789" },
+      decider: {
+        enabled: true, provider: "gemini", key: KEY, openrouterKey: "sk-or-v1-unit-own-key-0123456789",
+        workersAiToken: "cf-unit-token", workersAiAccountId: "0123456789abcdef0123456789abcdef", jobs: { roomRouting: true },
+      },
+    };
+    expect(deciderAccount(config)).toBeNull();
+    expect(deciderReady(config, "roomRouting")).toBe(false);
+    expect(describeDecider(config)).toMatchObject({ provider: "gemini", model: "gemini-decision-1", configured: false });
+    await expect(decider(config, fetchImpl).choose("roomRouting", STATE, QUESTION)).resolves.toEqual({ ok: false, reason: "no_key" });
+    await expect(decider(config, fetchImpl).testKey()).resolves.toEqual({ ok: false, reason: "no_key" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("with its key, ask and testKey use the Decisions endpoint and the fixed model", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(geminiBody("theo", { theo: 0.97, maya: 0.03 })))
+      .mockResolvedValueOnce(jsonResponse({ answers: { answer: { type: "noul", noul: 0.97 } }, usage: { total_input_tokens: 40 } }));
+    await expect(decider(GEMINI, fetchImpl).choose("roomRouting", STATE, QUESTION))
+      .resolves.toMatchObject({ ok: true, provider: "gemini", model: "gemini-decision-1", inputTokens: 321 });
+    expect(String(fetchImpl.mock.calls[0]![0])).toBe("https://generativelanguage.googleapis.com/v1beta/decisions");
+    expect(headerOf(fetchImpl)).toBe(GKEY);
+    expect(headerOf(fetchImpl, 0, "authorization")).toBeUndefined();
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body)).model).toBe("gemini-decision-1");
+
+    await expect(decider(GEMINI, fetchImpl).testKey()).resolves.toMatchObject({ ok: true, provider: "gemini" });
+    expect(String(fetchImpl.mock.calls[1]![0])).toBe("https://generativelanguage.googleapis.com/v1beta/decisions");
+    expect(JSON.parse(String(fetchImpl.mock.calls[1]![1]?.body)).model).toBe("gemini-decision-1");
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain(KEY);
+  });
+
+  it("status names the model with or without a key, and never the key", () => {
+    expect(describeDecider(GEMINI)).toEqual({
+      provider: "gemini", model: "gemini-decision-1", configured: true, enabled: true, jobs: { roomRouting: true },
+    });
+    expect(describeDecider({ decider: { provider: "gemini" } })).toEqual({
+      provider: "gemini", model: "gemini-decision-1", configured: false, enabled: false, jobs: { roomRouting: true },
+    });
+    expect(JSON.stringify(describeDecider(GEMINI))).not.toContain(GKEY);
+  });
+
+  it("saving the Gemini key trims and turns it on; clearing the last key turns it off; Gemini alone may be enabled", () => {
+    expect(deciderSavePatch({ geminiKey: " AIza-new " }, undefined))
+      .toEqual({ ok: true, patch: { geminiKey: "AIza-new", enabled: true, jobs: { roomRouting: true } } });
+    expect(deciderSavePatch({ geminiKey: "" }, { enabled: true, geminiKey: GKEY }))
+      .toEqual({ ok: true, patch: { geminiKey: "", enabled: false } });
+    expect(deciderSavePatch({ enabled: true }, { geminiKey: GKEY })).toEqual({ ok: true, patch: { enabled: true } });
+  });
+
+  it("picks the Gemini draft to check, and maps an invalid key to the fixed sentence", async () => {
+    expect(deciderPatchKey({ geminiKey: " AIza-draft " }, undefined))
+      .toEqual({ provider: "gemini", check: { key: "AIza-draft", provider: "gemini" } });
+    expect(DECIDER_KEY_ERROR.gemini).toBe("serverError.decider.geminiRejected");
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 400, status: "INVALID_ARGUMENT", details: [{ reason: "API_KEY_INVALID" }] },
+    }), { status: 400 }));
+    const result = await decider({ decider: { provider: "gemini" } }, fetchImpl).testKey({ key: "AIza-bad" });
+    expect(result).toMatchObject({ ok: false, reason: "rejected", status: 400 });
+    expect(JSON.stringify(result)).not.toContain("AIza-bad");
+  });
+
+  it("a draft check does not fall back to Cloud's included relay", async () => {
+    vi.stubEnv("OMB_CLOUD_DECIDER_URL", "https://cloud.example.test/api/cloud/services/decider");
+    vi.stubEnv("OMB_CLOUD_DECIDER_TOKEN", "omb_decide_unit_included_token_0123456789");
+    const fetchImpl = vi.fn<typeof fetch>();
+    await expect(decider({}, fetchImpl).testKey({ provider: "gemini" })).resolves.toEqual({ ok: false, reason: "no_key" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("Logs the Gemini model on success and failure, with no key, input or error body", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "omb-decider-gemini-log-"));
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(geminiBody("theo", { theo: 0.97, maya: 0.03 })))
+      .mockResolvedValueOnce(new Response(`echo ${GKEY} PRIVATE-MESSAGE-TEXT`, { status: 529 }));
+    const d = decider(GEMINI, fetchImpl, dataDir);
+    await d.choose("roomRouting", STATE, QUESTION);
+    await d.choose("roomRouting", STATE, QUESTION);
+    await flushDeciderLog(dataDir);
+    const dir = join(dataDir, DECIDER_LOG_DIR);
+    const text = readdirSync(dir).map((name) => readFileSync(join(dir, name), "utf8")).join("");
+    const rows = text.trim().split("\n").map((line) => JSON.parse(line));
+    expect(rows[0]).toMatchObject({ provider: "gemini", model: "gemini-decision-1", ok: true, choice: "theo", inputTokens: 321 });
+    expect(rows[1]).toMatchObject({ provider: "gemini", model: "gemini-decision-1", ok: false, reason: "overloaded", status: 529 });
+    for (const secret of [GKEY, "PRIVATE-MESSAGE-TEXT"]) expect(text).not.toContain(secret);
+  });
+});
+
 describe("settings rules with two providers", () => {
   it("saving the OpenRouter key switches the decider and its room job on", () => {
     expect(deciderSavePatch({ provider: "openrouter", openrouterKey: " sk-or-new " }, undefined))
@@ -768,7 +869,7 @@ describe("settings rules with two providers", () => {
   it("switching on needs some key, and the error names every kind", () => {
     expect(deciderSavePatch({ provider: "openrouter", enabled: true }, { enabled: false, key: KEY })).toEqual({ ok: true, patch: { provider: "openrouter", enabled: true } });
     expect(deciderSavePatch({ enabled: true }, { provider: "openrouter", openrouterKey: "sk-or" })).toEqual({ ok: true, patch: { enabled: true } });
-    expect(deciderSavePatch({ enabled: true }, {})).toEqual({ ok: false, error: "Save a Cloudflare Workers AI, Jev or OpenRouter key before turning on fast decisions.", errorKey: "serverError.decider.keyRequired" });
+    expect(deciderSavePatch({ enabled: true }, {})).toEqual({ ok: false, error: "Save a Cloudflare Workers AI, Jev, Gemini or OpenRouter key before turning on fast decisions.", errorKey: "serverError.decider.keyRequired" });
     expect(deciderSavePatch({ enabled: true }, { workersAiToken: "cf-token" })).toMatchObject({ ok: false });
     expect(deciderSavePatch({ provider: "openrouter", enabled: true }, {}, { included: true })).toMatchObject({ ok: true });
   });

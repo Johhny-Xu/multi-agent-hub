@@ -18,14 +18,16 @@ import {
 import { resolveQoderDevice } from './qoder-device.mjs';
 import { checkinTraeAccount, readTraeDesktopAuth, readTraeTokenCache, jwtUid } from './trae-checkin.mjs';
 import { checkinDoubao, listDoubaoAccounts, readDoubaoLogin } from './doubao-checkin.mjs';
+import { checkinDumate, listDumateCheckinAccounts, loadStore as loadDumateStore } from './dumate.mjs';
 import { checkinMiniMax, fetchMiniMaxSignin, readMinimaxCredential, readMinimaxCredentialFile, minimaxCredentialVersion, MINIMAX_REGIONS } from './minimax-checkin.mjs';
 // Qoder 活动窗口/领取判定助手（C2-W3 搬到 qoder-activity.mjs，逻辑未改）；对外名字继续从本模块 re-export
 import {
   QODER_BENEFIT_ACTION, extractQoderCampaigns, qoderAuthDead, qoderBenefit, qoderClaimedToday,
-  qoderClaimOutcome, qoderClaimStatus, qoderClock, qoderClockDay, qoderDayKey, qoderEpoch, qoderInWindow,
-  qoderNextWindowStart, qoderOpenWindow, qoderPendingWindow, qoderPollAt, qoderQuotaCooldown,
-  qoderResponseMessage, qoderTodayWindowStart, qoderWindowDay,
+  qoderClaimOutcome, qoderClaimStatus, qoderClaimWithConfirm, qoderClock, qoderClockDay, qoderDayKey,
+  qoderEpoch, qoderInWindow, qoderNextWindowStart, qoderOpenWindow, qoderPendingWindow, qoderPollAt,
+  qoderQuotaCooldown, qoderQuotaTotalRemaining, qoderResponseMessage, qoderTodayWindowStart, qoderWindowDay,
 } from './qoder-activity.mjs';
+import { readQoderQuotaUsageJson } from './quota-deep.mjs';
 
 export {
   extractQoderCampaigns, qoderAuthDead, qoderClaimedToday, qoderClaimOutcome, qoderClock, qoderClockDay,
@@ -169,6 +171,20 @@ export const OPEN_SOURCE_PROJECTS = {
       description: '豆包每日签到参考（MIT）：写接口强制 a_bogus 浏览器签名，必须在真实浏览器页面里 fetch；签到页用 SamanthaDoubao 客户端 UA 点「立即签到」，任务面板只领已完成的任务。本项目把浏览器放在云机，经国内出口访问。',
       tags: ['浏览器实时签名', 'a_bogus', '扫码登录', '云机浏览器']
     }
+  ],
+  dumate: [
+    {
+      name: 'wearetheone777/dumate2api',
+      url: 'https://github.com/wearetheone777/dumate2api',
+      description: '百度搭子 DuMate → OpenAI/Anthropic/Google 网关（MIT）：网页 cookie 换网关 token、每日登录签到、积分总览。本项目的接口路径与判定口径参照它；README 提示积分自动化可能违反上游服务条款，这里只做每日登录签到，不做抽奖与刷任务。',
+      tags: ['网页 cookie', '网关 token', '每日签到', '积分总览']
+    },
+    {
+      name: 'R227BOUT/magpie-plugin-dumate',
+      url: 'https://github.com/R227BOUT/magpie-plugin-dumate',
+      description: 'Magpie / OpenCode 的百度搭子 provider 插件：Cookie → /api/dumate/app/token/get → Bearer 调网关；签到按 loginBonusInfo 前后差值计到账积分，余额显示最近到期的积分包。',
+      tags: ['OpenAI 兼容网关', '签到差值', '到期积分']
+    }
   ]
 };
 
@@ -260,7 +276,9 @@ export async function detectCredentials() {
     // meoo 以前没占位：控制台配了 customTokens.meoo 时下面那个循环会读到 undefined 直接抛错
     meoo: { available: false, source: '', ak: '', token: '' },
     // 豆包没有 CLI 凭据：登录态只在云机浏览器 profile 里，这里只看「是否已扫码登录」的缓存
-    doubao: { available: false, source: '', token: '' }
+    doubao: { available: false, source: '', token: '' },
+    // 百度搭子：账号是日常页扫码登录存下的百度 cookie（~/.agenthub/dumate-accounts.json），不是 worker
+    dumate: { available: false, source: '', token: '' }
   };
 
   const platforms = ['workbuddy', 'codebuddy', 'traecode', 'codearts', 'qoder', 'qoder-cn', 'minimaxcode', 'meoo'];
@@ -311,6 +329,8 @@ export async function detectCredentials() {
 
   const doubaoLogin = await readDoubaoLogin();
   if (doubaoLogin.loggedIn) creds.doubao = { available: true, source: '云机浏览器登录态（豆包 App 扫码）', token: '' };
+  const dumateAccounts = (await loadDumateStore()).accounts;
+  if (dumateAccounts.length) creds.dumate = { available: true, source: `扫码登录（${dumateAccounts.length} 个账号）`, token: '' };
 
   // 兜底：CLI 找不到任何凭据时，才用手工配置的 Token
   const state = await loadState();
@@ -352,6 +372,8 @@ const PLATFORM_WORKERS = {
   meoo: ['meoo'],
   // 豆包不是 worker：账号就是云机浏览器里扫码登录的那一个（listCheckinAccounts 单独处理）
   doubao: [],
+  // 百度搭子同理：账号来自日常页扫码登录（可多个）
+  dumate: [],
 };
 
 /**
@@ -645,6 +667,7 @@ async function readCredFrom(platform, dir, flat = false) {
  */
 export async function listCheckinAccounts(platform) {
   if (platform === 'doubao') return listDoubaoAccounts();
+  if (platform === 'dumate') return listDumateCheckinAccounts();
   const rank = { cli: 2, shared: 1, profile: 0 };
   const scoreOf = (x) => [Number(x.exp) || 0, Number(x.mtime) || 0, rank[x.kind] || 0];
   const betterOf = (a, b) => {
@@ -2309,12 +2332,15 @@ async function fetchQoderCampaigns(acct, device = null, options = {}) {
   return { res, token, quota: qoderQuotaCooldown(res) };
 }
 
-/** 单个 Qoder 账号：解析设备身份 → 拉活动列表 → 逐个领取 → 汇总积分 */
-async function checkinQoderOne(acct) {
+/**
+ * 单个 Qoder 账号：解析设备身份 → 拉活动列表 → 逐个领取 → 汇总积分。
+ * deps 只给单测用（假活动列表 / 假领取 / 假回读 / 假 sleep），线上不传，走真实凭据与请求。
+ */
+export async function checkinQoderOne(acct, deps = {}) {
   const candidates = [acct, ...(Array.isArray(acct.alternates) ? acct.alternates : [])];
   const worker = acct.worker || 'qoder';
   const uid = String(acct.user?.id || acct.user?.uid || acct.uid || '').trim();
-  const nowSec = Math.floor(Date.now() / 1000);
+  const nowSec = deps.nowSec ?? Math.floor(Date.now() / 1000);
   const win = qoderOpenWindow(nowSec);
   // 当前窗口是不是「今天这一期」：00:00–09:59 仍属于昨天开的那一期。
   // 在这一期里领到的分不能记成「今天已签」，否则 10:00 新一期不会触发补签。
@@ -2335,15 +2361,13 @@ async function checkinQoderOne(acct) {
   }
   let fetched = null;
   let winner = null;
+  const fetchCampaigns = deps.fetchCampaigns
+    || ((entry) => (globalRegion ? fetchQoderCampaignsGlobal(entry) : fetchQoderCampaigns(entry, device)));
   for (const candidate of candidates) {
     const entry = { ...candidate, expiresAt: candidate.expiresAt || candidate.exp || 0 };
-    if (globalRegion) {
-      fetched = await fetchQoderCampaignsGlobal(entry);
-      if (fetched.device) device = fetched.device;
-      if (fetched.deviceNote) deviceNote = fetched.deviceNote;
-    } else {
-      fetched = await fetchQoderCampaigns(entry, device);
-    }
+    fetched = await fetchCampaigns(entry);
+    if (fetched.device) device = fetched.device;
+    if (fetched.deviceNote) deviceNote = fetched.deviceNote;
     winner = entry;
     // 额度类 403 是账号级冷却，换一份同账号的旧 token 也只会再吃一次 403；
     // 必须在候选回退前终止，否则最后一个普通 403 会把冷却误报成凭据失效。
@@ -2352,6 +2376,10 @@ async function checkinQoderOne(acct) {
   }
   const { res } = fetched;
   let token = fetched.token;
+  const sleep = deps.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const claimOne = deps.claim || ((campaignId) => claimQoderCampaign(worker, token, campaignId, device));
+  const readQuota = deps.readQuota
+    || (async () => qoderQuotaTotalRemaining(await readQoderQuotaUsageJson(worker, token, device)));
   // 额度类 403（112 / pricingUrl、110 / 每日计费上限）不是凭证失效：单独分流，
   // 既不续期也不判 expired——否则会让用户白登录一次。
   if (fetched.quota?.kind) {
@@ -2525,19 +2553,37 @@ async function checkinQoderOne(acct) {
   }
 
   let credits = 0;
+  let confirmedCredits = 0;
   let successCount = 0;
   let alreadyCount = 0;
+  let acceptedCount = 0;
+  const awaiting = [];
   const failures = [];
   let cooldown = null;
   for (const item of claimable) {
     const campaignId = item.campaignId || item.campaign_id;
     const amount = qoderBenefit(item);
     try {
-      const claim = await claimQoderCampaign(worker, token, campaignId, device);
-      const outcome = qoderClaimOutcome(claim);
+      const run = await qoderClaimWithConfirm({
+        claim: () => claimOne(campaignId),
+        readQuota,
+        amount,
+        sleep,
+      });
+      const outcome = run.outcome;
       if (outcome.status === 'success') {
-        successCount += 1;
-        credits += amount;
+        // claim 只是「受理」：只有额度回读正增长才算签到成功，credits 取真实增量
+        if (run.confirmed) {
+          const delta = run.delta ?? 0;
+          successCount += 1;
+          credits += delta;
+          confirmedCredits += delta;
+        } else {
+          acceptedCount += 1;
+          // 回读不可用时用活动面值展示；零增长/负增长不虚构到账额度
+          if (run.delta === null && amount > 0) credits += amount;
+          awaiting.push(run.message);
+        }
       } else if (outcome.status === 'already') {
         alreadyCount += 1;
       } else if (outcome.status === 'cooldown') {
@@ -2550,7 +2596,7 @@ async function checkinQoderOne(acct) {
     } catch (err) {
       failures.push(`请求异常：${err.message}`);
     }
-    if (claimable.length > 1) await new Promise((r) => setTimeout(r, 800));
+    if (claimable.length > 1) await sleep(800);
   }
 
   if (cooldown) {
@@ -2573,7 +2619,7 @@ async function checkinQoderOne(acct) {
   // 关键：在 00:00–09:59 领到的是**上一期**，不是今天的签到。
   // 如果这里直接返回 success，平台状态会记成今天已签，10:00 新一期彻底不补。
   // 上一期该领的分照领、credits 照报，但今天状态必须是 pending + 等 10:00 开窗。
-  if (!currentPeriod && !failures.length && (successCount || alreadyCount)) {
+  if (!currentPeriod && !failures.length && (successCount || alreadyCount || acceptedCount)) {
     return {
       ok: false,
       status: 'pending',
@@ -2586,18 +2632,28 @@ async function checkinQoderOne(acct) {
   }
 
   const parts = [];
-  if (successCount) parts.push(`领取 ${successCount} 个活动${credits ? `，+${credits} Credits` : ''}`);
+  if (successCount) parts.push(`领取 ${successCount} 个活动${confirmedCredits ? `，+${confirmedCredits} Credits` : ''}`);
+  if (acceptedCount) parts.push(awaiting.join('；'));
   const alreadyTotal = alreadyCount + claimedBefore.length;
   if (alreadyTotal) parts.push(`${alreadyTotal} 个今日已领`);
   if (failures.length) parts.push(`失败 ${failures.length} 个：${failures[0]}`);
   if (!parts.length) parts.push('当前没有可领取的签到活动');
-  const status = failures.length ? 'failed' : (successCount ? 'success' : 'already');
+  // 「已受理待确认」既不是成功也不是失败：不设 retryAt（到点重领会吃 409），
+  // 也不能记成今日已签，否则 UI 会打勾而积分其实还没到账。
+  let status;
+  let pendingReason = '';
+  if (failures.length) status = 'failed';
+  else if (acceptedCount) {
+    status = successCount ? 'partial' : 'pending';
+    pendingReason = 'awaiting_confirm';
+  } else status = successCount ? 'success' : 'already';
   return {
-    ok: !failures.length,
+    ok: status === 'success' || status === 'already',
     status,
     message: parts.join('；'),
     credits,
     consecutiveDays: 0,
+    ...(pendingReason ? { pendingReason } : {}),
   };
 }
 
@@ -3083,7 +3139,7 @@ export async function getCheckinOverview() {
       signedAccounts,
       accountCount: activeRows.length,
       // 需要扫码登录的平台：前端据此显示「扫码登录」入口（二维码由云机浏览器截取）
-      ...(plat === 'doubao' ? { loginKind: 'qr' } : {}),
+      ...(plat === 'doubao' || plat === 'dumate' ? { loginKind: 'qr' } : {}),
     };
   }
 
@@ -3180,6 +3236,7 @@ export const PENDING_REASON_PRIORITY = [
   'await_credits',      // 活跃链路已完成，积分异步到账中（CodeBuddy）
   'awaiting_campaign',  // 上游活动行还没下发：正在窗口内补拉，错过就丢 100 分
   'campaign_closed',    // 上游活动整段关闭
+  'awaiting_confirm',   // 领取已受理，额度回读还没确认到账
   'awaiting_window',    // 下一期还没开窗：什么都不用做
 ];
 
@@ -3350,6 +3407,9 @@ export async function runCheckin(target = 'all') {
   }
   if (want('doubao')) {
     await collect('doubao', () => checkinDoubao());
+  }
+  if (want('dumate')) {
+    await collect('dumate', () => checkinDumate());
   }
 
   await withCheckinStateLock(async () => {

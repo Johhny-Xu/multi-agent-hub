@@ -1,12 +1,13 @@
-// Reads Google Calendar events and Gmail headers from the server through the connected-apps relay, with no AI turn, as
-// the default connected account of each app, or the one the host names when an app has several. Tool names, arguments
-// and answer shapes follow Composio's documentation; the fixtures are not yet checked against the live service, so an
-// answer of any other shape is an error, never an empty list.
+// Reads Google Calendar events, Gmail headers and, for a one-time code, a single Gmail or Outlook message from the server
+// through the connected-apps relay, with no AI turn, as the default connected account of each app, or the one the host
+// names when an app has several. Tool names, arguments and answer shapes follow Composio's documentation; the fixtures are
+// not yet checked against the live service, so an answer of any other shape is an error, never an empty list.
 import { findMeetingLink } from "../shared/meetings.ts";
 import { parseMcpResponse } from "./connector-tools-list.ts";
 
 export const READ_APPS = ["gmail", "googlecalendar"] as const;
 export type ReadApp = (typeof READ_APPS)[number];
+export type MailApp = "gmail" | "outlook";
 
 export interface CalendarEvent {
   id: string;
@@ -48,11 +49,11 @@ const SIGNED_OUT = /\b(?:unauthori[sz]ed|unauthenticated|invalid[_ ]grant|expire
 
 /** A read that failed: the app, what went wrong, and whether reconnecting the app is what fixes it. */
 export class SourceError extends Error {
-  readonly app: ReadApp;
+  readonly app: ReadApp | "outlook";
   readonly signedOut: boolean;
   /** The read named one of the app's several connected accounts, so that account is the one to check. */
   readonly severalAccounts: boolean;
-  constructor(app: ReadApp, message: string, severalAccounts = false) {
+  constructor(app: ReadApp | "outlook", message: string, severalAccounts = false) {
     super(message);
     this.app = app;
     this.signedOut = SIGNED_OUT.test(message);
@@ -67,7 +68,10 @@ export const GMAIL_FETCH_TOOL = "GMAIL_FETCH_EMAILS";
 export const GMAIL_PROFILE_TOOL = "GMAIL_GET_PROFILE";
 export const GMAIL_MESSAGE_TOOL = "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID";
 export const GMAIL_THREAD_TOOL = "GMAIL_FETCH_MESSAGE_BY_THREAD_ID";
+export const OUTLOOK_LIST_TOOL = "OUTLOOK_LIST_MESSAGES";
+export const OUTLOOK_MESSAGE_TOOL = "OUTLOOK_GET_MESSAGE";
 const CALENDAR_READS_AT_ONCE = 4;
+const CALENDAR_PAGES = 20;
 const CALENDAR_NAME_MAX = 80;
 const GOOGLE_NOT_FOUND = /\brequested entity was not found\b/i;
 const MESSAGE_WORD = /\b(?:message|email|thread)\b/i;
@@ -263,9 +267,9 @@ export function emailsFromData(data: unknown): EmailHeader[] {
   return headers;
 }
 
-/** Gmail's page token for more messages, or undefined on the last page. */
+/** Gmail or Calendar's page token for more results, or undefined on the last page. */
 export function nextPageOf(data: unknown): string | undefined {
-  const token = [record(data), record(record(data)?.response_data)].map((body) => body?.nextPageToken).find((value) => typeof value === "string" && value);
+  const token = [record(data), record(record(data)?.response_data)].flatMap((body) => [body?.nextPageToken, body?.next_page_token]).find((value) => typeof value === "string" && value);
   return typeof token === "string" ? token : undefined;
 }
 
@@ -274,6 +278,55 @@ export function messageFromData(data: unknown): EmailHeader {
   const header = emailHeader(record(top?.message) ?? record(top?.response_data) ?? top);
   if (!header) throw new Error("the Gmail message could not be read");
   return header;
+}
+
+type GmailPart = { mimeType?: unknown; body?: { data?: unknown }; parts?: unknown };
+
+/** The text of a Gmail payload's parts, plain text before HTML. Gmail encodes each part's data as base64url. */
+function gmailPartText(part: GmailPart | undefined, mime: string): string {
+  if (!part) return "";
+  if (part.mimeType === mime && typeof part.body?.data === "string") return Buffer.from(part.body.data, "base64url").toString("utf8");
+  return (Array.isArray(part.parts) ? part.parts as GmailPart[] : []).map((child) => gmailPartText(child, mime)).filter(Boolean).join("\n");
+}
+
+/** A Gmail message's body text; a message with none to read is an error. */
+export function gmailBodyFromData(data: unknown): string {
+  const top = record(data);
+  const item = record(top?.message) ?? record(top?.response_data) ?? top;
+  const payload = record(item?.payload) as GmailPart | undefined;
+  const text = gmailPartText(payload, "text/plain") || gmailPartText(payload, "text/html") || (typeof item?.messageText === "string" ? item.messageText : "");
+  if (!text.trim()) throw new Error("the Gmail message had no text to read");
+  return text;
+}
+
+function outlookSender(item: Record<string, unknown>): string {
+  const address = record(record(item.from)?.emailAddress)?.address;
+  return typeof address === "string" ? address.trim() : "";
+}
+
+function outlookReceivedAt(item: Record<string, unknown>): number {
+  const at = typeof item.receivedDateTime === "string" ? Date.parse(item.receivedDateTime) : Number.NaN;
+  return Number.isFinite(at) ? at : 0;
+}
+
+export function outlookMessagesFromData(data: unknown): EmailHeader[] {
+  const list = listIn(data, ["value", "messages"]);
+  if (!list) throw new Error("the Outlook answer had no message list");
+  const headers = list.flatMap((raw): EmailHeader[] => {
+    const item = record(raw);
+    if (!item || typeof item.id !== "string" || !item.id) return [];
+    return [{ id: item.id, threadId: item.id, at: outlookReceivedAt(item), from: outlookSender(item), subject: flat(item.subject), preview: "" }];
+  });
+  if (list.length > 0 && headers.length === 0) throw new Error("none of the Outlook messages could be read");
+  return headers;
+}
+
+/** An Outlook message's body text; a message with none to read is an error. */
+export function outlookBodyFromData(data: unknown): string {
+  const top = record(data);
+  const content = record((record(top?.message) ?? record(top?.response_data) ?? top)?.body)?.content;
+  if (typeof content !== "string" || !content.trim()) throw new Error("the Outlook message had no text to read");
+  return content;
 }
 
 export function threadFromData(data: unknown): ThreadMessage[] {
@@ -330,7 +383,7 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal, onAbort: () =
 }
 
 /** The account to name per app, for apps with several connected. */
-type AppAccounts = Partial<Record<ReadApp, string>>;
+type AppAccounts = Partial<Record<ReadApp | "outlook", string>>;
 
 export interface ConnectedReadDeps {
   /** Null when connected apps are not set up here; else which of the two apps are connected. */
@@ -354,6 +407,15 @@ export interface ReadSession {
   address(): Promise<string>;
 }
 
+/** The reads for a one-time code: a message's body, never kept or passed to a bot. */
+export interface MailBodySession extends ReadSession {
+  /** Null only when Gmail says the message is gone. */
+  messageBody(messageId: string): Promise<string | null>;
+  /** Outlook's inbox since `sinceMs`, newest first, at most `limit`, without bodies. */
+  outlookEmails(sinceMs: number, limit: number): Promise<EmailHeader[]>;
+  outlookBody(messageId: string): Promise<string>;
+}
+
 export interface ConnectedReads {
   connected(): Promise<Record<ReadApp, boolean> | null>;
   session(): ReadSession;
@@ -362,12 +424,12 @@ export interface ConnectedReads {
 const GMAIL_PAGE = 50;
 const GMAIL_PAGES = 6;
 
-const appOf = (slug: string): ReadApp => (slug.startsWith("GMAIL_") ? "gmail" : "googlecalendar");
+const appOf = (slug: string): ReadApp | "outlook" => (slug.startsWith("GMAIL_") ? "gmail" : slug.startsWith("OUTLOOK_") ? "outlook" : "googlecalendar");
 
-export function createConnectedReads(deps: ConnectedReadDeps): ConnectedReads {
+export function createConnectedReads(deps: ConnectedReadDeps): Omit<ConnectedReads, "session"> & { session(): MailBodySession } {
   const readTimeoutMs = deps.readTimeoutMs ?? READ_TIMEOUT_MS;
 
-  function session(): ReadSession {
+  function session(): MailBodySession {
     let opened: Promise<string | undefined> | undefined;
     let accounts: Promise<AppAccounts> | undefined;
 
@@ -419,7 +481,7 @@ export function createConnectedReads(deps: ConnectedReadDeps): ConnectedReads {
       }
     }
 
-    function parsed<T>(app: ReadApp, parse: () => T): T {
+    function parsed<T>(app: ReadApp | "outlook", parse: () => T): T {
       try {
         return parse();
       } catch (error) {
@@ -427,13 +489,24 @@ export function createConnectedReads(deps: ConnectedReadDeps): ConnectedReads {
       }
     }
 
-    function requireFinite(app: ReadApp, ...times: number[]): void {
+    function requireFinite(app: ReadApp | "outlook", ...times: number[]): void {
       if (times.some((time) => !Number.isFinite(time))) throw new SourceError(app, "the time window was not a finite time");
     }
 
-    async function calendars(signal?: AbortSignal): Promise<ReturnType<typeof calendarsFromData>> {
-      const data = await call(CALENDARS_TOOL, {}, signal ? { signal } : {});
-      return parsed("googlecalendar", () => calendarsFromData(data));
+    async function calendarPages<T>(slug: string, args: Record<string, unknown>, parse: (data: unknown) => T[], signal: AbortSignal): Promise<T[]> {
+      const results: T[] = [];
+      const seen = new Set<string>();
+      let page: string | undefined;
+      for (let index = 0; index < CALENDAR_PAGES; index++) {
+        const pageArgs = page ? { ...args, [slug === CALENDARS_TOOL ? "page_token" : "pageToken"]: page } : args;
+        const data = await call(slug, pageArgs, { signal });
+        results.push(...parsed("googlecalendar", () => parse(data)));
+        page = nextPageOf(data);
+        if (!page) return results;
+        if (seen.has(page)) throw new SourceError("googlecalendar", `${slug}: repeated page token`);
+        seen.add(page);
+      }
+      throw new SourceError("googlecalendar", `${slug}: too many pages to read completely`);
     }
 
     return {
@@ -441,15 +514,14 @@ export function createConnectedReads(deps: ConnectedReadDeps): ConnectedReads {
         requireFinite("googlecalendar", fromMs, toMs);
         const failed = new AbortController();
         const signal = AbortSignal.any([AbortSignal.timeout(readTimeoutMs), failed.signal]);
-        const listed = await calendars(signal);
+        const listed = await calendarPages(CALENDARS_TOOL, {}, calendarsFromData, signal);
         const read = [...(listed.some((calendar) => calendar.primary) ? [] : [PRIMARY_CALENDAR]), ...listed.filter((calendar) => calendar.read)];
         const perCalendar = await inParallel(read, CALENDAR_READS_AT_ONCE, async (calendar) => {
           try {
-            const data = await call(CALENDAR_LIST_TOOL, {
+            return await calendarPages(CALENDAR_LIST_TOOL, {
               calendarId: calendar.id, timeMin: new Date(fromMs).toISOString(), timeMax: new Date(toMs).toISOString(),
               singleEvents: true, orderBy: "startTime", maxResults: 100, showDeleted: true,
-            }, { signal });
-            return eventsFromData(data, { id: calendar.id, owned: calendar.owned });
+            }, (data) => eventsFromData(data, { id: calendar.id, owned: calendar.owned }), signal);
           } catch (error) {
             failed.abort();
             throw new SourceError("googlecalendar", `calendar ${calendar.name}: ${errorText(error)}`, error instanceof SourceError && error.severalAccounts);
@@ -477,6 +549,10 @@ export function createConnectedReads(deps: ConnectedReadDeps): ConnectedReads {
         const data = await call(GMAIL_MESSAGE_TOOL, { user_id: "me", message_id: id, format: "metadata" }, { gone: messageGone });
         return data === GONE ? null : parsed("gmail", () => messageFromData(data));
       },
+      async messageBody(id) {
+        const data = await call(GMAIL_MESSAGE_TOOL, { user_id: "me", message_id: id, format: "full" }, { gone: messageGone });
+        return data === GONE ? null : parsed("gmail", () => gmailBodyFromData(data));
+      },
       async thread(threadId) {
         const data = await call(GMAIL_THREAD_TOOL, { user_id: "me", thread_id: threadId });
         return parsed("gmail", () => threadFromData(data));
@@ -484,6 +560,17 @@ export function createConnectedReads(deps: ConnectedReadDeps): ConnectedReads {
       async address() {
         const data = await call(GMAIL_PROFILE_TOOL, { user_id: "me" });
         return parsed("gmail", () => profileFromData(data));
+      },
+      async outlookEmails(sinceMs, limit) {
+        requireFinite("outlook", sinceMs);
+        const data = await call(OUTLOOK_LIST_TOOL, {
+          user_id: "me", folder: "inbox", top: limit, received_date_time_ge: new Date(sinceMs).toISOString(), select: ["id", "subject", "from", "receivedDateTime"],
+        });
+        return parsed("outlook", () => outlookMessagesFromData(data));
+      },
+      async outlookBody(id) {
+        const data = await call(OUTLOOK_MESSAGE_TOOL, { user_id: "me", message_id: id, select: ["id", "body"] });
+        return parsed("outlook", () => outlookBodyFromData(data));
       },
     };
   }

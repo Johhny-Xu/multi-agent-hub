@@ -17,6 +17,14 @@ describe("a saved key's hint", () => {
     ]);
   });
 
+  it("is given for the Gemini decision key too, and comes off a client's copy", () => {
+    const saved = nestedKeyStatus({ decider: { geminiKey: "AIza-gemini-9999" } });
+    expect(saved.geminiDeciderKey).toEqual({ configured: true, last4: "9999" });
+    expect(nestedKeyStatus({}).geminiDeciderKey).toEqual({ configured: false });
+    expect(withoutKeyHints({ decider: { geminiDeciderKey: saved.geminiDeciderKey } }))
+      .toEqual({ decider: { geminiDeciderKey: { configured: true } } });
+  });
+
   it("comes off everything a client session is sent, at any depth", () => {
     const status = {
       openai: { configured: true, last4: "a1b2" },

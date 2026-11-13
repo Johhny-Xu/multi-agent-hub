@@ -2,14 +2,21 @@
 // model/mode configuration and OAuth.
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { antigravityAccount } from "./antigravity-account.ts";
-import type {
-  DriverCreateInput,
-  ModelCatalog,
-  ProviderDriver,
-  ProviderInstance,
-  ProviderSnapshot,
-  SendTurnInput,
+import {
+  newEventId,
+  type DriverCreateInput,
+  type ModelCatalog,
+  type ProviderAdapter,
+  type ProviderDriver,
+  type ProviderInstance,
+  type ProviderSnapshot,
+  type SendTurnInput,
 } from "../contracts.ts";
+import type { RuntimeEvent, RuntimeEventListener } from "../../shared/runtime-events.ts";
+import { DATA_DIR } from "../config.ts";
+import { noticeFailure } from "../chat-notices.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./acp/core.ts";
 import {
   AntigravityAuthController,
@@ -17,6 +24,7 @@ import {
   prepareAntigravityProfile,
   probeAntigravityModels,
   isAddedAntigravityAccount,
+  antigravityProfileDirectory,
   removeAntigravitySignIn,
   validateAntigravityRuntime,
 } from "./antigravity-acp.ts";
@@ -29,21 +37,18 @@ import { resolveAntigravityReleaseAsset } from "./antigravity-release.ts";
 import { VERIFICATION_TEMP_KEY, scheduleAntigravityTempSweep } from "./antigravity-temp.ts";
 import { augmentedPath } from "../env-path.ts";
 import { AntigravityCliLoginController } from "./antigravity-cli-login.ts";
+import {
+  AntigravityBackendBook,
+  ServedModelTracker,
+  allAntigravityConversationDirs,
+  antigravityConversationDirs,
+  catalogWithBackendModels,
+  type ServedModelReport,
+} from "./antigravity-backend-model.ts";
+import { bundledEngineCatalog } from "../model-manifest/bundled.ts";
+import { currentEngineCatalog } from "../model-manifest/manifest.ts";
 
-export const STATIC_ANTIGRAVITY_MODELS: ModelCatalog = {
-  default: "gemini-3.8-flash",
-  options: [
-    {
-      id: "gemini-3.8-flash",
-      label: "Gemini 3.8 Flash",
-      variants: [
-        { id: "low", label: "Low" },
-        { id: "medium", label: "Medium" },
-        { id: "high", label: "High" },
-      ],
-    },
-  ],
-};
+export const STATIC_ANTIGRAVITY_MODELS: ModelCatalog = bundledEngineCatalog("antigravity");
 
 /** Bots saved before the thinking-level option hold ids like `gemini-3.8-flash-medium` or `gemini-4-argon-high`;
  * the official runtime offers only the base model with that option, so run the base at the saved level. A runtime
@@ -82,7 +87,7 @@ const support: AcpSupport = {
   driverKind: "antigravityAgent",
   // Named for what people look for: Google moved personal Gemini subscriptions (free, AI Pro, AI Ultra) from Gemini CLI to Antigravity on 2026-06-18.
   displayName: "Google Gemini (Antigravity)",
-  models: STATIC_ANTIGRAVITY_MODELS,
+  get models() { return currentEngineCatalog("antigravity"); },
   defaultCli: "agy", // migration alias: resolveAntigravityRuntime treats it as managed
   nativeSource: "antigravity.acp",
   loginNote: "Antigravity needs a Google account — choose Sign in with Google in engine setup",
@@ -126,7 +131,7 @@ const support: AcpSupport = {
     return probeAntigravityModels({
       runtime,
       profile,
-      fallbackDefault: STATIC_ANTIGRAVITY_MODELS.default,
+      fallbackDefault: currentEngineCatalog("antigravity").default,
     });
   },
 
@@ -187,10 +192,113 @@ const support: AcpSupport = {
 
 const AcpAntigravityDriver = createAcpDriver(support);
 
+/** Backend ids learned from finished generations, shared by every Antigravity account (one Google backend). */
+export const antigravityBackendBook = new AntigravityBackendBook();
+let backendScan: Promise<unknown> | undefined;
+function learnBackendModelsOnce(): void {
+  backendScan ??= antigravityBackendBook.scan(allAntigravityConversationDirs(DATA_DIR), 400).catch(() => 0);
+}
+
+/** Where this instance's agy process keeps its conversations (see prepareAntigravityProfile for the HOME rules). */
+export function instanceConversationDirs(instanceId: string, environment: Record<string, string | undefined>, baseDir = DATA_DIR): string[] {
+  const profile = antigravityProfileDirectory(instanceId, baseDir);
+  const added = isAddedAntigravityAccount(instanceId);
+  const home = added ? join(profile, "home") : environment.HOME?.trim() || process.env.HOME?.trim() || homedir();
+  return [
+    ...antigravityConversationDirs({ HOME: home, GEMINI_HOME: added ? join(home, ".gemini") : environment.GEMINI_HOME || process.env.GEMINI_HOME }),
+    join(profile, "antigravity-cli", "conversations"),
+    join(profile, "conversations"),
+  ];
+}
+
+/** The per-turn chat line: which backend model answered, flagged when it is not the one the turn asked for. */
+export function servedModelNotice(report: ServedModelReport): { message: string; text: NonNullable<Extract<RuntimeEvent, { type: "runtime.notice" }>["text"]> } {
+  const served = report.served.join(", ");
+  const label = report.label ?? served;
+  return report.mismatch && report.requested
+    ? noticeFailure("chat.notice.antigravityServedModelMismatch", { requested: report.requested, served, label })
+    : noticeFailure("chat.notice.antigravityServedModel", { served, label });
+}
+
+const LATE_READS_MS = [500, 2_000, 5_000];
+
+/**
+ * Adds the backend id to each finished turn (`servedModel` on turn.completed, plus a chat notice only when it differs
+ * from the model the turn asked for) and to each catalog
+ * model the backend has been seen serving. Reads only agy's local conversation database: no sign-in, quota or switch.
+ */
+export function withServedModels(
+  base: Pick<ProviderInstance, "adapter" | "driverKind" | "instanceId">,
+  tracker: ServedModelTracker,
+  schedule: (run: () => void, ms: number) => void = (run, ms) => { setTimeout(run, ms).unref?.(); },
+): ProviderAdapter {
+  const listeners = new Set<RuntimeEventListener>();
+  const shownFor = new Map<string, RuntimeEvent[]>();
+  const notice = (completed: RuntimeEvent, report: ServedModelReport): RuntimeEvent => ({
+    eventId: newEventId(),
+    provider: completed.provider,
+    ...(completed.providerInstanceId ? { providerInstanceId: completed.providerInstanceId } : {}),
+    threadId: completed.threadId,
+    turnId: completed.turnId,
+    createdAt: new Date().toISOString(),
+    type: "runtime.notice",
+    ...servedModelNotice(report),
+  });
+  // agy may still be writing the last generation when the turn ends: look again a few times, then let it go.
+  const readLate = (completed: RuntimeEvent, attempt = 0) => {
+    const turnId = completed.turnId!;
+    if (attempt >= LATE_READS_MS.length) return tracker.forget(turnId);
+    schedule(() => {
+      let report: ServedModelReport | null = null;
+      try { report = tracker.report(turnId); } catch { /* unreadable this time */ }
+      if (!report) return readLate(completed, attempt + 1);
+      if (!report.mismatch) return;
+      const line = notice(completed, report);
+      for (const listener of listeners) listener(line);
+    }, LATE_READS_MS[attempt]!);
+  };
+  const present = (event: RuntimeEvent): RuntimeEvent[] => {
+    if (event.type !== "session.started" && event.type !== "turn.completed") return [event];
+    const seen = shownFor.get(event.eventId);
+    if (seen) return seen;
+    let shown: RuntimeEvent[] = [event];
+    try {
+      if (event.type === "session.started" && event.turnId) {
+        tracker.started(event.turnId, event.sessionId, event.model);
+      } else if (event.type === "turn.completed" && event.turnId && tracker.watching(event.turnId)) {
+        const report = tracker.report(event.turnId);
+        // servedModel always rides on the event; the chat line only appears when the backend did not serve what was asked.
+        if (report) shown = [...(report.mismatch ? [notice(event, report)] : []), { ...event, servedModel: report.served[report.served.length - 1]! }];
+        else if (event.ok) readLate(event);
+        else tracker.forget(event.turnId);
+      }
+    } catch { /* the report is extra: never let it break the turn's own events */ }
+    shownFor.set(event.eventId, shown);
+    if (shownFor.size > 400) shownFor.delete(shownFor.keys().next().value!);
+    return shown;
+  };
+  return {
+    ...base.adapter,
+    onEvent: (listener) => {
+      listeners.add(listener);
+      const off = base.adapter.onEvent((item) => { for (const shown of present(item)) listener(shown); });
+      return () => { listeners.delete(listener); off(); };
+    },
+  };
+}
+
 export const AntigravityDriver: ProviderDriver<AcpConfig> = {
   ...AcpAntigravityDriver,
   async create(input: DriverCreateInput<AcpConfig>): Promise<ProviderInstance> {
     const base = await AcpAntigravityDriver.create(input);
+    learnBackendModelsOnce();
+    const withBackend = catalogWithBackendModels();
+    const tracker = new ServedModelTracker({
+      dirs: () => instanceConversationDirs(input.instanceId, input.environment),
+      book: antigravityBackendBook,
+      catalog: () => base.models,
+    });
+    const adapter = withServedModels(base, tracker);
     scheduleAntigravityTempSweep(input.instanceId);
     scheduleAntigravityTempSweep(VERIFICATION_TEMP_KEY);
     const auth = new AntigravityAuthController(() => void base.refreshModels?.());
@@ -211,8 +319,9 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
     };
     return {
       ...base,
+      adapter,
       get models() {
-        return base.models;
+        return withBackend(base.models, antigravityBackendBook);
       },
       get modelsUnconfirmed() {
         return base.modelsUnconfirmed;

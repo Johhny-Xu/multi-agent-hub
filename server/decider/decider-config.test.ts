@@ -16,10 +16,12 @@ describe("decider config", () => {
     rmSync(DATA_DIR, { recursive: true, force: true });
     mkdirSync(DATA_DIR, { recursive: true });
     delete process.env.OMB_JEV_API_KEY;
+    delete process.env.OMB_GEMINI_DECISION_KEY;
     delete process.env.OMB_OPENROUTER_DECIDER_KEY;
   });
   afterEach(() => {
     delete process.env.OMB_JEV_API_KEY;
+    delete process.env.OMB_GEMINI_DECISION_KEY;
     delete process.env.OMB_OPENROUTER_DECIDER_KEY;
   });
 
@@ -30,7 +32,8 @@ describe("decider config", () => {
 
   it("engines never inherit the key, nor Cloud Pro's included token", () => {
     const childEnv: Record<string, string | undefined> = {
-      OMB_JEV_API_KEY: KEY, OMB_OPENROUTER_DECIDER_KEY: OR_KEY, OMB_CLOUD_DECIDER_TOKEN: "omb_decide_included", PATH: "/usr/bin",
+      OMB_JEV_API_KEY: KEY, OMB_GEMINI_DECISION_KEY: "AIza-included-child", OMB_OPENROUTER_DECIDER_KEY: OR_KEY,
+      OMB_CLOUD_DECIDER_TOKEN: "omb_decide_included", PATH: "/usr/bin",
     };
     stripWorkspaceCredentialEnv(childEnv);
     expect(childEnv).toEqual({ PATH: "/usr/bin" });
@@ -149,6 +152,35 @@ describe("decider config", () => {
       expect(() => parseConfigPatch({ decider: { openrouterModel: bad } }), bad).toThrow();
     }
     expect(() => parseConfigPatch({ decider: { openrouterBaseUrl: "file:///etc/passwd" } })).toThrow();
+  });
+
+  it("the Gemini decision key is its own: env wins over the file, a save keeps env in step, no other Gemini key fills it", () => {
+    writeFileSync(join(DATA_DIR, "config.json"), JSON.stringify({
+      decider: { provider: "gemini", geminiKey: "" }, tts: { geminiKey: "tts-gemini" }, imageGen: { geminiKey: "image-gemini" },
+    }));
+    vi.stubEnv("GEMINI_API_KEY", "plain-gemini");
+    vi.stubEnv("OMB_GEMINI_API_KEY", "tts-gemini-env");
+    try {
+      expect(loadConfig().decider?.geminiKey ?? "").toBe("");
+      expect(loadConfig().decider?.geminiKey).not.toBe("plain-gemini");
+      expect(loadConfig().decider?.geminiKey).not.toBe("tts-gemini-env");
+      process.env.OMB_GEMINI_DECISION_KEY = "AIza-config-secret-0123456789";
+      expect(loadConfig().decider?.geminiKey).toBe("AIza-config-secret-0123456789");
+      syncCredentialEnv({ decider: { geminiKey: "AIza-new" } });
+      expect(process.env.OMB_GEMINI_DECISION_KEY).toBe("AIza-new");
+      expect(process.env.OMB_JEV_API_KEY).toBeUndefined();
+      syncCredentialEnv({ decider: { geminiKey: "" } });
+      expect(process.env.OMB_GEMINI_DECISION_KEY).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("validates the Gemini provider and its address", () => {
+    expect(parseConfigPatch({ decider: { provider: "gemini", geminiBaseUrl: " http://127.0.0.1:9000/v1beta " } }).decider)
+      .toEqual({ provider: "gemini", geminiBaseUrl: "http://127.0.0.1:9000/v1beta" });
+    expect(() => parseConfigPatch({ decider: { geminiBaseUrl: "file:///etc/passwd" } })).toThrow();
+    expect(() => parseConfigPatch({ decider: { provider: "google" } })).toThrow();
   });
 
   it("validates the section: a base URL must be http(s), the provider known", () => {

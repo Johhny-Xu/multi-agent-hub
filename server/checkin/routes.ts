@@ -9,6 +9,7 @@ import {
   updateCheckinConfig,
 } from "./checkin.mjs";
 import { doubaoLoginPoll, doubaoLoginStart } from "./doubao-checkin.mjs";
+import { dumateLoginPoll, dumateLoginStart, listDumateAccounts, removeDumateAccount } from "./dumate.mjs";
 
 export interface CheckinApi {
   status(): Promise<unknown>;
@@ -19,6 +20,12 @@ export interface CheckinApi {
   /** Doubao QR sign-in in the cloud browser (FEAT-doubao-checkin): start shows a QR, status polls for the scan. */
   doubaoLoginStart(): Promise<{ ok: boolean; loggedIn: boolean; qrPng?: string; error?: string }>;
   doubaoLoginStatus(): Promise<{ ok: boolean; loggedIn: boolean; error?: string }>;
+  /** DuMate (百度搭子) QR sign-in in the shared browser (FEAT-dumate): start hands back the Baidu login page's QR, status
+   * polls until the scan lands and the cookie is saved on this server. Accounts never leave the server with a cookie. */
+  dumateLoginStart(): Promise<{ ok: boolean; loggedIn: boolean; qrPng?: string; error?: string }>;
+  dumateLoginStatus(): Promise<{ ok: boolean; loggedIn: boolean; error?: string; stage?: string }>;
+  dumateAccounts(): Promise<{ ok: boolean; accounts: Array<Record<string, unknown>> }>;
+  dumateRemoveAccount(id: string): Promise<{ ok: boolean }>;
 }
 
 export function createCheckinApi(): CheckinApi {
@@ -30,6 +37,10 @@ export function createCheckinApi(): CheckinApi {
     config: (body) => updateCheckinConfig(body),
     doubaoLoginStart: () => doubaoLoginStart(),
     doubaoLoginStatus: () => doubaoLoginPoll(),
+    dumateLoginStart: () => dumateLoginStart(),
+    dumateLoginStatus: () => dumateLoginPoll(),
+    dumateAccounts: async () => ({ ok: true, accounts: await listDumateAccounts() }),
+    dumateRemoveAccount: (id) => removeDumateAccount(id),
   };
 }
 
