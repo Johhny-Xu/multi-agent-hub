@@ -11,13 +11,19 @@ import { browserEngineAttachCdpUrl, type AppConfig } from "../config.ts";
 import { chosenPlace } from "../computer-selection.ts";
 import { CdpProxy, type CdpProxyOptions } from "../cloud-cdp-proxy.ts";
 import { cdpUrlPort, scopedCdpUrl } from "../cloud-cdp-scope.ts";
-import { CloudBrowserPool, authDomainOf, authDomains, cloudBrowserMachines, cloudOffloadActive, sshCloudBrowserDeps, type BoxShell, type CloudBrowserDeps, type CloudBrowserMachine } from "../cloud-browser.ts";
+import {
+  CloudBrowserPool, RELAY_SINGLE_REQUEST_WAIT_MS, RelayError, authDomainOf, authDomains,
+  cloudBrowserMachines, cloudOffloadActive, sshCloudBrowserDeps,
+  type BoxShell, type CloudBrowserDeps, type CloudBrowserMachine,
+} from "../cloud-browser.ts";
 import { RemoteMcpClient } from "../mcp-http.ts";
 import { isRemoteMcpServer, parseStoredMcpServer } from "../mcp-registry.ts";
 import { guardedBotEnv, startHeadlessChromeSweep, writeChromeShims, writeGuardState, type GuardState } from "../local-chrome-guard.ts";
 import { LOCAL_CHROME_PORT, LocalChromePool, realLocalChromeDeps } from "../local-chrome-pool.ts";
 import { setBotSpawnEnvHook } from "../procs.ts";
+import { myChromeUnit } from "./mychrome-unit.ts";
 import type { Store } from "../store.ts";
+import { listVpsTargets, vpsSshAliasForBot } from "../vps-hosts.ts";
 import type { BrowserPlacement } from "../../shared/wire.ts";
 
 /** The pick a guard refresh keeps for itself, apart from any bot's session. */
@@ -37,6 +43,10 @@ export const AUTH_STICKY_MS = 30 * 60_000;
  * (E80: a link held open keeps the relay host and the box from ever idling). */
 export const RELAY_IDLE_MS = 10 * 60_000;
 const RELAY_SWEEP_MS = 60_000;
+/** E115: a relayed box's door waits at most this long for a bring-up or repair of the box under way before passing a
+ * browser call on, and gives the relay this long to answer a call before failing it (instead of hanging on a dead relay). */
+export const RELAY_REBUILD_WAIT_MS = 60_000;
+export const RELAY_UPSTREAM_TIMEOUT_MS = 20_000;
 /** Tools whose url argument opens a page. */
 const OPENING_TOOLS = new Set(["agent_browser_open", "agent_browser_navigate", "agent_browser_tab_new"]);
 
@@ -60,6 +70,19 @@ export interface CloudOffloadDeps {
 export function browserLabel(profile: string | undefined): string {
   if (profile === "guest") return "临时";
   return profile?.trim() || "内置";
+}
+
+/** E73: what every bot engine's spawn env gets on top, so a CLI that starts its own Chrome is sent to the cloud Chrome
+ * (or, with none up, runs the real one niced) instead of rendering on this host. `armed` is false until the shims are
+ * written, and the guard is off entirely when the person turned it off. */
+export function guardedEnvHook(input: {
+  armed(): boolean;
+  guard(): GuardState;
+  shimDir: string;
+  stateFile: string;
+  off(): boolean;
+}): (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv {
+  return (env) => (input.armed() && !input.off() ? guardedBotEnv(env, input.shimDir, input.stateFile, input.guard()) : env);
 }
 
 /** Folders a cloud Chrome may be served from: the bots' own and their conversations', never the home folder itself or
@@ -106,14 +129,22 @@ export function mcpBoxShell(cfg: Pick<AppConfig, "mcpServers">): BoxShell {
 export function createCloudOffload(deps: CloudOffloadDeps) {
   const { cfg } = deps;
   const log = deps.log ?? ((line: string) => console.warn(line));
+  const isV2 = () => cfg.cloudOffload?.relayRecoveryV2 === true;
+  const closingController = new AbortController();
   let pool: CloudBrowserPool;
-  const cloud = deps.cloud ?? sshCloudBrowserDeps({ log, box: mcpBoxShell(cfg), onTunnelExit: (machine) => {
-    // A dead tunnel is opened again by the next pick; the guard's pick comes soon so CLIs are not left on it.
-    pool.invalidate(machine.id);
-    const retry = setTimeout(() => void refreshGuard().catch(() => {}), 3_000);
-    retry.unref?.();
-  } });
-  pool = new CloudBrowserPool(cloud);
+  const cloud = deps.cloud ?? sshCloudBrowserDeps({
+    log,
+    box: mcpBoxShell(cfg),
+    relayRecoveryV2: isV2,
+    onTunnelExit: (machine, generation) => {
+      // A dead tunnel is opened again by the next pick; the guard's pick comes soon so CLIs are not left on it.
+      if (isV2()) pool.invalidate(machine.id, generation);
+      else pool.invalidate(machine.id);
+      const retry = setTimeout(() => void refreshGuard().catch(() => {}), 3_000);
+      retry.unref?.();
+    },
+  });
+  pool = new CloudBrowserPool(cloud, { relayRecoveryV2: isV2 });
   const makeProxy = deps.makeProxy ?? ((options: CdpProxyOptions) => new CdpProxy(options));
   const guardDir = join(deps.dataDir, "cloud-offload");
   const shimDir = join(guardDir, "bin");
@@ -145,8 +176,14 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
   };
   const authDomain = (url: string) => authDomainOf(url, authDomains(cfg));
 
-  /** Starts a proxy once per port; a port it cannot take (an old tunnel still on it) leaves `fallbackUrl` in use. */
-  function door(key: string, options: CdpProxyOptions, fallbackUrl: string, onStarted?: (proxy: ProxyHandle) => void): Promise<string> {
+  /** Starts a proxy once per port; V1 falls back to `fallbackUrl` on bind error, V2 fails closed with `RelayError`. */
+  function door(
+    key: string,
+    options: CdpProxyOptions,
+    fallbackUrl: string,
+    onStarted?: (proxy: ProxyHandle) => void,
+    rejectOnFailure = false,
+  ): Promise<string> {
     let open = proxies.get(key);
     if (!open) {
       const proxy = makeProxy(options);
@@ -157,7 +194,17 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
         return proxy.url;
       }, (error: unknown) => {
         proxies.delete(key);
-        log(`cloud offload: CDP proxy on ${options.port} not started (${error instanceof Error ? error.message : String(error)}); using ${fallbackUrl} directly`);
+        const detail = error instanceof Error ? error.message : String(error);
+        if (rejectOnFailure) {
+          log(`cloud offload: CDP proxy on ${options.port} not started (${detail})`);
+          throw new RelayError("RELAY_UNAVAILABLE", {
+            phase: "proxy",
+            waitedSec: 0,
+            sent: false,
+            message: `CDP proxy on ${options.port} not started: ${detail}`,
+          });
+        }
+        log(`cloud offload: CDP proxy on ${options.port} not started (${detail}); using ${fallbackUrl} directly`);
         return fallbackUrl;
       });
       proxies.set(key, open);
@@ -165,8 +212,22 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
     return open;
   }
 
+  function combinedSignal(signal?: AbortSignal): AbortSignal {
+    return signal ? AbortSignal.any([closingController.signal, signal]) : closingController.signal;
+  }
+
   function cloudDoor(machine: CloudBrowserMachine, tunnelUrl: string): Promise<string> {
-    if (!machine.proxyPort) return Promise.resolve(tunnelUrl);
+    if (!machine.proxyPort) {
+      if (isV2()) {
+        return Promise.reject(new RelayError("RELAY_UNAVAILABLE", {
+          phase: "proxy",
+          waitedSec: 0,
+          sent: false,
+          message: `${machine.name} 缺少 CDP 代理端口`,
+        }));
+      }
+      return Promise.resolve(tunnelUrl);
+    }
     return door(`cloud:${machine.id}`, {
       upstream: tunnelUrl, port: machine.proxyPort,
       scopeStateFile: join(guardDir, `scoped-pages-${machine.proxyPort}.json`),
@@ -175,9 +236,46 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       onAuthBlocked: (domain, url) => log(`cloud offload: ${new URL(url).host} needs a sign-in (${domain}); a CLI was sent to mychrome`),
       pageCap: { max: cfg.cloudOffload?.cloudPageCap ?? CLOUD_PAGE_CAP, countAll: false },
       lowFpsLive: true,
-      ...(machine.relayAlias ? { onActivity: () => touchRelay(machine) } : {}),
+      relayRecoveryV2: isV2,
+      ...(machine.relayAlias ? {
+        onActivity: () => touchRelay(machine),
+        // E115: a call that arrives while the box's relay is being brought up or repaired waits for that (capped), and a
+        // relay that does not answer fails the call within RELAY_UPSTREAM_TIMEOUT_MS; the next pick checks the box again.
+        ensureUpstream: async (ctx?: { deadline?: number; signal?: AbortSignal }) => {
+          if (isV2()) {
+            await pool.awaitRelayReady(machine, {
+              ...(ctx?.deadline !== undefined ? { deadline: ctx.deadline } : {}),
+              signal: combinedSignal(ctx?.signal),
+            });
+            return;
+          }
+          await waitSettled(machine.id);
+        },
+        upstreamTimeoutMs: RELAY_UPSTREAM_TIMEOUT_MS,
+        wsCommandTimeoutMs: RELAY_SINGLE_REQUEST_WAIT_MS,
+        onUpstreamSuccess: () => {
+          pool.noteCdpSuccess(machine.id, pool.generationOf(machine.id));
+        },
+        acquireLease: () => {
+          const lease = pool.acquireLease(machine.id);
+          return lease ? lease.release : undefined;
+        },
+        onUpstreamTimeout: () => {
+          log(`cloud offload: ${machine.name} relay did not answer a browser call in ${RELAY_UPSTREAM_TIMEOUT_MS / 1000} s; it is checked again on the next pick (E115)`);
+          pool.invalidate(machine.id);
+        },
+      } : {}),
       log,
-    }, tunnelUrl, machine.relayAlias ? (proxy) => relayDoors.set(machine.id, proxy) : undefined);
+    }, tunnelUrl, machine.relayAlias ? (proxy) => relayDoors.set(machine.id, proxy) : undefined, isV2());
+  }
+
+  /** E115: waits for a check of the machine under way, at most RELAY_REBUILD_WAIT_MS; never rejects. */
+  function waitSettled(machineId: string): Promise<void> {
+    return new Promise<void>((done) => {
+      const cap = setTimeout(done, RELAY_REBUILD_WAIT_MS);
+      cap.unref?.();
+      void pool.settled(machineId).then(() => { clearTimeout(cap); done(); });
+    });
   }
 
   /** E80: ends the relay of every relayed box that has had no CDP connection and no use for RELAY_IDLE_MS. A box with
@@ -188,13 +286,29 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
     const machines = cloudBrowserMachines(cfg);
     for (const id of pool.warmBoxes()) {
       const machine = machines.find((candidate) => candidate.id === id);
-      if ((relayDoors.get(id)?.connections() ?? 0) > 0) {
+      const activeConns = (relayDoors.get(id)?.connections() ?? 0) > 0;
+      const activePool = isV2() && (pool.leaseCount(id) > 0 || pool.waiterCount(id) > 0);
+      if (activeConns || activePool) {
         relayUse.set(id, now);
         continue;
       }
       const last = relayUse.get(id) ?? now;
       if (!relayUse.has(id)) relayUse.set(id, now);
       if (machine && now - last < RELAY_IDLE_MS) continue;
+      if (isV2()) {
+        const drained = await pool.requestDrain(id, "idle", undefined, machine);
+        if (!drained) {
+          relayUse.set(id, cloud.now());
+          continue;
+        }
+        relayUse.delete(id);
+        ended.push(machine?.name ?? id);
+        if (machine) {
+          log(`cloud offload: ${machine.name} relay idle ${Math.round((now - last) / 60_000)} min, ended (E80)`);
+        }
+        if (machine?.proxyPort && guard.cdpUrl === `http://127.0.0.1:${machine.proxyPort}`) await refreshGuard().catch(() => {});
+        continue;
+      }
       pool.release(id);
       relayUse.delete(id);
       ended.push(machine?.name ?? id);
@@ -217,6 +331,8 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       upstream, port: MYCHROME_PROXY_PORT,
       scopeStateFile: join(guardDir, `scoped-pages-${MYCHROME_PROXY_PORT}.json`),
       pageCap: { max: LOCAL_PAGE_CAP, countAll: false }, log,
+      // omb-mychrome no longer restarts itself: a connection starts it, and traffic keeps it from the idle stop.
+      ...(myChromeUnit.enabled && myChromeUnit.serves(upstream) ? { ensureUpstream: async () => { await myChromeUnit.ensure(); }, onActivity: () => myChromeUnit.touch() } : {}),
     }, upstream);
   }
 
@@ -311,7 +427,13 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
 
   /** The DevTools URL a bot's browser attaches to this turn, or undefined for this host's own browser as configured.
    * Only Auto picks: a place the person chose (a pin, the bot's Works on) keeps the browser it names. */
-  async function browserFor(botId: string, session: string, threadId: string | undefined, profile: string | undefined): Promise<string | undefined> {
+  async function browserFor(
+    botId: string,
+    session: string,
+    threadId: string | undefined,
+    profile: string | undefined,
+    ctx?: { deadline?: number; signal?: AbortSignal },
+  ): Promise<string | undefined> {
     const store = deps.store();
     const bot = store.bot(botId);
     if (!bot) return undefined;
@@ -327,6 +449,24 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       record(undefined);
       return undefined;
     }
+    const v2 = isV2();
+    const signal = v2 ? combinedSignal(ctx?.signal) : ctx?.signal;
+    const enteredAt = cloud.now();
+    let readyEnd: number | undefined;
+    if (v2) {
+      if (ctx?.signal?.aborted || closingController.signal.aborted) {
+        throw new RelayError("RELAY_CANCELLED", { phase: "select", waitedSec: 0, sent: false });
+      }
+      if (ctx?.deadline !== undefined) {
+        const responseEnd = ctx.deadline - 1_000;
+        readyEnd = Math.min(enteredAt + RELAY_SINGLE_REQUEST_WAIT_MS, responseEnd - 5_000);
+        if (readyEnd <= enteredAt) {
+          throw new RelayError("RELAY_RECOVERY_TIMEOUT", { phase: "budget", waitedSec: 0, sent: false });
+        }
+      } else {
+        readyEnd = enteredAt + RELAY_SINGLE_REQUEST_WAIT_MS;
+      }
+    }
     // A conversation's own session reaches the Chrome through its own scope, so its pages are the only ones it drives.
     const scoped = (url: string) => isConversationAlias(session) && startedDoors.has(url) ? scopedCdpUrl(url, session) : url;
     const auth = profile === "guest" ? null : authFor(botId, threadId);
@@ -336,17 +476,98 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       return scoped(url);
     }
     const machines = cloudBrowserMachines(cfg);
-    const pick = await pool.pick(machines, session);
-    if (pick.cdpUrl) {
-      touchRelay(machines.find((machine) => machine.name === pick.machine));
-      const url = await doorFor(pick.cdpUrl);
+    // Pure relay/proxy SSH hosts (e.g. boxRelayVia or forward-only VPS entries) only carry traffic for relayed boxes;
+    // they must neither count as a browser binding target nor enter the cloud browser pool (E72).
+    const relayIds = new Set<string>();
+    const relayAliases = new Set<string>();
+    const rawInstances = (cfg.vps as { instances?: Array<Record<string, unknown>> } | undefined)?.instances ?? [];
+    for (const inst of rawInstances) {
+      if (inst.relayOnly === true || inst.proxyOnly === true || inst.forwardOnly === true || inst.browser === false || inst.role === "relay" || inst.role === "proxy") {
+        if (typeof inst.id === "string" && inst.id) relayIds.add(inst.id);
+        if (typeof inst.sshAlias === "string" && inst.sshAlias) relayAliases.add(inst.sshAlias);
+      }
+    }
+    const via = cfg.cloudOffload?.boxRelayVia?.trim();
+    if (via) {
+      if (via.startsWith("ssh:")) {
+        const sshOnly = via.slice(4);
+        if (sshOnly) relayAliases.add(sshOnly);
+      } else {
+        relayAliases.add(via);
+        for (const machine of machines) {
+          if (machine.kind === "ssh" && (machine.id === via || machine.name === via || machine.sshAlias === via)) {
+            relayIds.add(machine.id);
+            if (machine.sshAlias) relayAliases.add(machine.sshAlias);
+          }
+        }
+      }
+    }
+    const isRelayMachine = (machine: CloudBrowserMachine): boolean =>
+      machine.kind === "ssh" && (relayIds.has(machine.id) || (machine.sshAlias !== undefined && relayAliases.has(machine.sshAlias)));
+    const poolMachines = machines.filter((machine) => !isRelayMachine(machine));
+
+    // E72: an Auto bot's browser runs on the cloud machine that bot is bound to (by vpsInstanceId or vpsAlias) before
+    // any other, so a bot's own computer is where its pages are; the idlest machine is only the fallback when that one
+    // does not answer. Reuse vps-hosts.ts for alias validation/lookup and omit hostnames/aliases from fallback logs.
+    let own: CloudBrowserMachine | undefined;
+    if (bot.vpsInstanceId) {
+      own = poolMachines.find((machine) => machine.id === bot.vpsInstanceId);
+      if (!own && machines.some((machine) => machine.id === bot.vpsInstanceId && isRelayMachine(machine))) {
+        log(`cloud offload: bot ${bot.id} binding points to a relay-only host; treating browser as unbound (E72)`);
+      }
+    } else if (typeof bot.vpsAlias === "string" && bot.vpsAlias.trim().length > 0) {
+      const alias = vpsSshAliasForBot({} as AppConfig, bot);
+      const targets = alias ? listVpsTargets(cfg) : [];
+      const targetId = alias
+        ? (
+            targets.find((t) => t.instance.kind === "ssh" && t.instance.sshAlias === alias)
+            ?? targets.find((t) => t.instance.id === alias || t.instance.name === alias || (t.instance.kind === "mcp" && t.instance.mcpServer === alias))
+          )?.instance.id
+        : undefined;
+      const matched = alias
+        ? (
+            (targetId !== undefined ? machines.find((machine) => machine.id === targetId) : undefined)
+            ?? machines.find((machine) => machine.sshAlias === alias)
+            ?? machines.find((machine) => machine.id === alias || machine.name === alias || machine.mcpServer === alias)
+          )
+        : undefined;
+      if ((alias !== null && relayAliases.has(alias)) || (matched !== undefined && isRelayMachine(matched))) {
+        log(`cloud offload: bot ${bot.id} vpsAlias points to a relay-only host; treating browser as unbound (E72)`);
+      } else if (matched) {
+        own = matched;
+      } else {
+        log(`cloud offload: bot ${bot.id} vpsAlias did not match any cloud browser machine; treating browser as unbound (E72)`);
+      }
+    }
+    const pickOpts = v2 ? { ...(readyEnd !== undefined ? { deadline: readyEnd } : {}), ...(signal ? { signal } : {}) } : undefined;
+    const pick = own ? await pool.pick([own], session, "本机", pickOpts) : await pool.pick(poolMachines, session, "本机", pickOpts);
+    const chosen = pick.cdpUrl || !own ? pick : await pool.pick(poolMachines, session, "本机", pickOpts);
+    if (v2) {
+      if (ctx?.signal?.aborted) {
+        throw new RelayError("RELAY_CANCELLED", { phase: "select", waitedSec: Math.round((cloud.now() - enteredAt) / 1000), sent: false });
+      }
+      if (!chosen.cdpUrl && readyEnd !== undefined && cloud.now() >= readyEnd) {
+        throw new RelayError("RELAY_RECOVERY_TIMEOUT", { phase: "select", waitedSec: Math.round((cloud.now() - enteredAt) / 1000), sent: false });
+      }
+    }
+    if (chosen.cdpUrl) {
+      const pickedMachine = (chosen.machineId ? machines.find((machine) => machine.id === chosen.machineId) : undefined)
+        ?? machines.find((machine) => machine.name === chosen.machine);
+      if (v2 && pickedMachine?.relayAlias) {
+        await pool.awaitRelayReady(pickedMachine, {
+          ...(readyEnd !== undefined ? { deadline: readyEnd } : {}),
+          ...(signal ? { signal } : {}),
+        });
+      }
+      touchRelay(pickedMachine);
+      const url = await doorFor(chosen.cdpUrl);
       noteGuard(url);
-      record({ machine: pick.machine, browser: browserLabel(profile), cloud: true, reason: pick.reason });
+      record({ machine: chosen.machine, browser: browserLabel(profile), cloud: true, reason: chosen.reason });
       return scoped(url);
     }
     // No cloud Chrome: mychrome bots keep the person's Chrome (capped), the rest share one capped fallback Chrome.
     const url = usesMyChromeProfile(profile) ? await mychromeDoor() : await fallbackDoor();
-    record({ machine: pick.machine, browser: usesMyChromeProfile(profile) ? "mychrome" : "回落 Chrome", cloud: false, reason: `${pick.reason}（本机最多 ${LOCAL_PAGE_CAP} 页${usesMyChromeProfile(profile) ? "" : "，空闲 90 秒关闭"}）` });
+    record({ machine: chosen.machine, browser: usesMyChromeProfile(profile) ? "mychrome" : "回落 Chrome", cloud: false, reason: `${chosen.reason}（本机最多 ${LOCAL_PAGE_CAP} 页${usesMyChromeProfile(profile) ? "" : "，空闲 90 秒关闭"}）` });
     return scoped(url);
   }
 
@@ -403,7 +624,13 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
         }
         if (!stopSweep && cfg.cloudOffload?.guard !== false) stopSweep = startHeadlessChromeSweep({ log });
       };
-      setBotSpawnEnvHook((env) => shims && cloudOffloadActive(cfg) && cfg.cloudOffload?.guard !== false ? guardedBotEnv(env, shimDir, stateFile, guard) : env);
+      setBotSpawnEnvHook(guardedEnvHook({
+        armed: () => shims,
+        guard: () => guard,
+        shimDir,
+        stateFile,
+        off: () => !cloudOffloadActive(cfg) || cfg.cloudOffload?.guard === false,
+      }));
       const tick = () => {
         arm();
         void refreshGuard().catch(() => {});
@@ -415,6 +642,8 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       relayTimer.unref?.();
     },
     close(): void {
+      closingController.abort();
+      pool.close();
       stopSweep?.();
       stopIdle?.();
       if (timer) clearInterval(timer);
@@ -424,7 +653,11 @@ export function createCloudOffload(deps: CloudOffloadDeps) {
       const machines = cloudBrowserMachines(cfg);
       for (const id of pool.warmBoxes()) {
         const machine = machines.find((candidate) => candidate.id === id);
-        if (machine) void cloud.teardown?.(machine).catch(() => {});
+        if (isV2()) {
+          void pool.requestDrain(id, "close", undefined, machine).catch(() => {});
+        } else if (machine) {
+          void cloud.teardown?.(machine).catch(() => {});
+        }
       }
       setBotSpawnEnvHook(null);
       cloud.close?.();

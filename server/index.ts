@@ -93,7 +93,8 @@ import { runtimeRequestCardFields } from "./request-card.ts";
 import type { DirectSendInput, DirectSendReceipt } from "./direct-send.ts";
 import { finishedWithoutSummaryLine, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts";
 import { chosenPlace, pickComputer } from "./computer-selection.ts";
-import { createCloudOffload } from "./host/cloud-offload.ts"; import { cloudOffloadSettings } from "./cloud-browser.ts";
+import { createCloudOffload } from "./host/cloud-offload.ts"; import { RelayError, cloudOffloadSettings, formatRelayError } from "./cloud-browser.ts";
+import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
 import { hostLoad, type HostLoad } from "./host-load.ts";
 import * as boat from "./boat.ts"; import { keyHint, keyStatus, nestedKeyStatus, withoutKeyHints } from "./key-hint.ts";
 import { cloudComputerRpc } from "./cloud-computer-tools.ts";
@@ -2414,7 +2415,7 @@ const {
   browserRuntime, browserLive, usedBrowserSessions, browserSweep, temporaryBrowserSessions,
   currentBrowserSession, forgetTemporaryBrowser, myChromeAvailable, usesMyChrome, lentChromeSummary, browserSessionSpec, browserIntegration,
   browserReady, currentBrowserSpec, loginInput, browserSystemPrompt, closeBrowser, browserEngineSwitched, eraseDeletedBrowser, engineSummary, browserSessionsOf, signedInSitesTarget, uploadPaths, eraseAudienceBrowsers, threadBrowserSession,
-} = createBrowserHost({ cfg, store: () => store, cloudBrowser: (botId, session, threadId, profile) => cloudOffload.browserFor(botId, session, threadId, profile), cloudAuthRefusal: (session, cdpUrl, params, who) => cloudOffload.authRefusal(session, cdpUrl, params, who), cloudSession: (botId, threadId, base, close) => cloudOffload.conversationSession(botId, threadId, base, close), cloudPeekSession: (botId, threadId, base) => cloudOffload.peekSession(botId, threadId, base), releaseBrowserSeat: (session, owner) => turnResources.releaseOne(`browser:${session}`, owner), turnResources, activeInternalGenerationByThread, mintInternalCapability, DESKTOP_MANAGED, CLOUD_HOME, HOSTED_WORKSPACE, PORT, engineMemory, decider, audienceOf: teamHost.browserAudience, ...(CLOUD_TEAM ? { browserBox: (fd: number, ro: readonly string[]) => botBox.browserBox(fd, ro) } : {}), lendRefusal: (turn) => cloudLendingRefusal({ botId: store.botByThread(turn.threadId)?.id ?? "", threadId: turn.threadId, generation: turn.generation }), device: () => deviceLinks.route(CLOUD_HOME_LENDER) ?? sharedComputers.internetAway(CLOUD_HOME_LENDER) ?? { unshared: true as const }, lentChrome: CLOUD_PERSONAL ? { route: () => deviceLinks.chromeRoute(CLOUD_HOME_LENDER), lender: () => sharedComputers.chromeLender(CLOUD_HOME_LENDER) } : undefined });
+} = createBrowserHost({ cfg, store: () => store, cloudBrowser: (botId, session, threadId, profile, options) => cloudOffload.browserFor(botId, session, threadId, profile, options), cloudAuthRefusal: (session, cdpUrl, params, who) => cloudOffload.authRefusal(session, cdpUrl, params, who), cloudSession: (botId, threadId, base, close) => cloudOffload.conversationSession(botId, threadId, base, close), cloudPeekSession: (botId, threadId, base) => cloudOffload.peekSession(botId, threadId, base), releaseBrowserSeat: (session, owner) => turnResources.releaseOne(`browser:${session}`, owner), turnResources, activeInternalGenerationByThread, mintInternalCapability, DESKTOP_MANAGED, CLOUD_HOME, HOSTED_WORKSPACE, PORT, engineMemory, decider, audienceOf: teamHost.browserAudience, ...(CLOUD_TEAM ? { browserBox: (fd: number, ro: readonly string[]) => botBox.browserBox(fd, ro) } : {}), lendRefusal: (turn) => cloudLendingRefusal({ botId: store.botByThread(turn.threadId)?.id ?? "", threadId: turn.threadId, generation: turn.generation }), device: () => deviceLinks.route(CLOUD_HOME_LENDER) ?? sharedComputers.internetAway(CLOUD_HOME_LENDER) ?? { unshared: true as const }, lentChrome: CLOUD_PERSONAL ? { route: () => deviceLinks.chromeRoute(CLOUD_HOME_LENDER), lender: () => sharedComputers.chromeLender(CLOUD_HOME_LENDER) } : undefined });
 
 const dataSheets = new DataSheetRegistry({
   broadcast: (frame) => broadcast({ ...frame }),
@@ -13472,39 +13473,61 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         if (!bot || bot.browser === false || bot.computer === "off" || !builtInBrowserEnabled(cfg)) {
           return json(res, 403, { error: "browser tools are not enabled for this bot" });
         }
-        const browser = await browserIntegration(bot.id, bot.browserProfile, undefined, teamHost.browserAudience(internalCapability.threadId), internalCapability.threadId);
-        if (!browser || browser.tokenSession !== internalCapability.browserSession) {
-          return json(res, 409, { error: "this browser profile changed; start a new turn" });
-        }
-        if (body?.method !== "tools/list" && body?.method !== "tools/call") {
-          return json(res, 400, { error: "unsupported browser method" });
-        }
-        if (body.method === "tools/call") {
-          const abort = new AbortController(); res.once("close", () => { if (!res.writableEnded) abort.abort(); });
-          const refused = await browserSeats.take(internalCapability, browser.session, abort.signal); requireActiveInternalCapability();
-          if (refused) return json(res, 200, { result: { isError: true, content: [{ type: "text", text: refused }] } });
-        }
-        let params = body.params;
-        if (body.method === "tools/call" && params?.name === BROWSER_UPLOAD_TOOL) {
-          const upload = uploadableFiles(params.arguments?.files, messageFileRootsForThread(bot.id, internalCapability.threadId));
-          if ("error" in upload) return json(res, 200, { result: { isError: true, content: [{ type: "text", text: upload.error }] } });
-          try {
-            params = { ...params, arguments: { ...params.arguments, files: await uploadPaths(upload.files.map((file, i) => ({ file, name: attachmentNameInThread(internalCapability.threadId, params.arguments.files[i]) })), browser.session, browser.spec) } };
-          } catch (error) { requireActiveInternalCapability(); if (!(error instanceof BrowserUploadRefusal)) throw error; return json(res, 200, { result: { isError: true, content: [{ type: "text", text: error.message }] } }); }
-        }
-        const result = await browserRuntime.agentRpc(browser.session, browser.spec, body.method, params, () => {
-          requireActiveInternalCapability();
-          const current = store.bot(bot.id);
-          if (!current || current.browser === false || current.computer === "off" || !builtInBrowserEnabled(cfg) ||
-              currentBrowserSession(current.id, current.browserProfile, teamHost.browserAudience(internalCapability.threadId)) !== browser.tokenSession) {
-            throw Object.assign(new Error("Browser access changed while connecting."), { status: 409 });
+        const isRelayV2 = cfg.cloudOffload?.relayRecoveryV2 === true;
+        const callDeadline = Date.now() + HARNESS_CALL_BUDGET_MS;
+        const mcpAbort = new AbortController();
+        res.once("close", () => { if (!res.writableEnded) mcpAbort.abort(); });
+        try {
+          const browser = await browserIntegration(
+            bot.id,
+            bot.browserProfile,
+            undefined,
+            teamHost.browserAudience(internalCapability.threadId),
+            internalCapability.threadId,
+            isRelayV2 ? { deadline: callDeadline, signal: mcpAbort.signal } : undefined,
+          );
+          if (!browser || browser.tokenSession !== internalCapability.browserSession) {
+            return json(res, 409, { error: "this browser profile changed; start a new turn" });
           }
-          if (body.method === "tools/call" && !claimTurnResource(internalCapability, `browser:${browser.session}`)) {
-            throw Object.assign(new Error("another thread is using this browser — pause browser work until that thread finishes"), { status: 409 });
+          if (body?.method !== "tools/list" && body?.method !== "tools/call") {
+            return json(res, 400, { error: "unsupported browser method" });
           }
-        }, stepContext(bot, internalCapability, () => liveTurnByThread.get(internalCapability.threadId) ?? null));
-        requireActiveInternalCapability(); if (body.method === "tools/call") browserSeats.used(internalCapability, browser.session);
-        return json(res, 200, { result });
+          if (body.method === "tools/call") {
+            const refused = await browserSeats.take(internalCapability, browser.session, mcpAbort.signal); requireActiveInternalCapability();
+            if (refused) return json(res, 200, { result: { isError: true, content: [{ type: "text", text: refused }] } });
+          }
+          let params = body.params;
+          if (body.method === "tools/call" && params?.name === BROWSER_UPLOAD_TOOL) {
+            const upload = uploadableFiles(params.arguments?.files, messageFileRootsForThread(bot.id, internalCapability.threadId));
+            if ("error" in upload) return json(res, 200, { result: { isError: true, content: [{ type: "text", text: upload.error }] } });
+            try {
+              params = { ...params, arguments: { ...params.arguments, files: await uploadPaths(upload.files.map((file, i) => ({ file, name: attachmentNameInThread(internalCapability.threadId, params.arguments.files[i]) })), browser.session, browser.spec) } };
+            } catch (error) { requireActiveInternalCapability(); if (!(error instanceof BrowserUploadRefusal)) throw error; return json(res, 200, { result: { isError: true, content: [{ type: "text", text: error.message }] } }); }
+          }
+          const ctx = {
+            ...stepContext(bot, internalCapability, () => liveTurnByThread.get(internalCapability.threadId) ?? null),
+            ...(isRelayV2 ? { deadline: callDeadline, signal: mcpAbort.signal } : {}),
+          };
+          const result = await browserRuntime.agentRpc(browser.session, browser.spec, body.method, params, () => {
+            requireActiveInternalCapability();
+            const current = store.bot(bot.id);
+            if (!current || current.browser === false || current.computer === "off" || !builtInBrowserEnabled(cfg) ||
+                currentBrowserSession(current.id, current.browserProfile, teamHost.browserAudience(internalCapability.threadId)) !== browser.tokenSession) {
+              throw Object.assign(new Error("Browser access changed while connecting."), { status: 409 });
+            }
+            if (body.method === "tools/call" && !claimTurnResource(internalCapability, `browser:${browser.session}`)) {
+              throw Object.assign(new Error("another thread is using this browser — pause browser work until that thread finishes"), { status: 409 });
+            }
+          }, ctx);
+          requireActiveInternalCapability(); if (body.method === "tools/call") browserSeats.used(internalCapability, browser.session);
+          return json(res, 200, { result });
+        } catch (error) {
+          if (error instanceof RelayError) {
+            requireActiveInternalCapability();
+            return json(res, 200, { result: { isError: true, content: [{ type: "text", text: formatRelayError(error) }] } });
+          }
+          throw error;
+        }
       }
       // The turn's capability names its Boat; the Boat credential stays here.
       if (await dispatchRoutes([savedSteps.journalRoutes({ capability: internalCapability, readBody: readInternalBody }), createAppFindRoute({ host: appSuggestions, botId: internalSender.id, readBody: readInternalBody, bot: (botId) => { const bot = connectorThread(botId, internalCapability.threadId)?.bot; return bot && bot.composio !== false && composio.configured(cfg) ? bot : null; }, refusal: (slug) => managedConnectorUnavailableReason(composio.connectionMode(cfg), slug) ?? managedPolicy.appRefusal(slug) ?? teamConnections.connectRefusal(internalCapability, [slug]) })], { req, res, url, path, method, auth, json, readBody })) return; if (method === "POST" && path === "/api/internal/computer/mcp") {

@@ -2527,3 +2527,19 @@ describe("a key the desktop app hands the server as an environment variable", ()
     expect(instanceConfigs(loadConfig())[instanceId]?.environment?.[engineEnv]).toBe(`fixture-${variable}`);
   });
 });
+
+describe("cloudOffload.relayRecoveryV2 schema and reload", () => {
+  it("accepts, persists, and reloads cloudOffload.relayRecoveryV2 without touching other keys", () => {
+    const path = join(DATA_DIR, "config.json");
+    mkdirSync(DATA_DIR, { recursive: true });
+    try {
+      expect(parseStoredConfig({ cloudOffload: { enabled: true } }).cloudOffload?.relayRecoveryV2).toBeUndefined();
+      saveConfig({ cloudOffload: { relayRecoveryV2: true } });
+      expect(loadConfig().cloudOffload?.relayRecoveryV2).toBe(true);
+      saveConfig({ cloudOffload: { relayRecoveryV2: false } });
+      expect(loadConfig().cloudOffload?.relayRecoveryV2).toBe(false);
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+});

@@ -22,6 +22,8 @@ export interface StepContext {
   turnId: () => string | null;
   record: boolean;
   label?: string;
+  deadline?: number;
+  signal?: AbortSignal;
 }
 
 export function stepContext(bot: { id: string; name: string; recordBrowserSteps?: boolean }, turn: { threadId: string; generation: string }, turnId: () => string | null): StepContext {

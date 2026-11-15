@@ -22,7 +22,8 @@ import { isUnanswered } from "./cdp/errors.ts";
 import type { CdpPage } from "./cdp/page.ts";
 import { browserRoot, profileDir, profileHash, profileKind, removeProfile, workspaceId } from "./chrome/profile.ts";
 import { BROWSER_CONTROL_REFUSAL, ProfileControl, type TakeResult } from "./control.ts";
-import { executeTool, personUrl, toolFailure, type ToolContext } from "./dispatch.ts";
+import { FOLLOW_UP_MS, executeTool, personUrl, toolFailure, type ToolContext } from "./dispatch.ts";
+import { RelayError, formatRelayError } from "../cloud-browser.ts";
 import { installedExtensions } from "./extensions.ts";
 import { HealthShown, pageHealthLine } from "./health.ts";
 import type { HoldLimits } from "./hold.ts";
@@ -412,18 +413,21 @@ export class BrowserService {
 
   // Bot calls.
 
-  async agentRpc(target: BrowserTarget, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void): Promise<unknown> {
+  async agentRpc(target: BrowserTarget, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: { deadline?: number; signal?: AbortSignal }): Promise<unknown> {
     if (method === "tools/list") return { tools: TOOL_LIST.map((tool) => ({ ...tool })) };
     if (method !== "tools/call") throw new Error("Unsupported browser method.");
+    if (ctx?.signal?.aborted) {
+      return errorResult(formatRelayError(new RelayError("RELAY_CANCELLED", { phase: "dispatch", waitedSec: 0, sent: false }), false));
+    }
     const profile = this.profile(target);
     for (let stopping = profile.stopping; stopping; stopping = profile.stopping) await stopping;
     profile.calls++;
     const name = toolNameOf(params) ?? "browser";
-    const deadline = Date.now() + this.#options.callBudgetMs;
+    const deadline = ctx?.deadline !== undefined ? Math.min(ctx.deadline, Date.now() + this.#options.callBudgetMs) : Date.now() + this.#options.callBudgetMs;
     const started = performance.now();
     let result: ToolResult | null;
     try {
-      const work = () => this.#call(profile, params, deadline, beforeDispatch);
+      const work = () => this.#call(profile, params, deadline, beforeDispatch, ctx);
       const call = name === RESTART_TOOL || profile.control.uncertain ? work() : this.#lanes.run(profile.key, work, this.#options.laneWaitMs);
       result = await this.#withinBudget(profile, name, call, deadline);
     } finally {
@@ -452,9 +456,12 @@ export class BrowserService {
     return profile.control.lostCall === null ? errorResult(BROWSER_STUCK) : lostCallResult(call);
   }
 
-  async #call(profile: ProfileState, params: unknown, deadline: number, beforeDispatch?: () => void): Promise<ToolResult> {
+  async #call(profile: ProfileState, params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: { deadline?: number; signal?: AbortSignal }): Promise<ToolResult> {
     const name = toolNameOf(params);
     const control = profile.control;
+    if (ctx?.signal?.aborted) {
+      return errorResult(formatRelayError(new RelayError("RELAY_CANCELLED", { phase: "dispatch", waitedSec: 0, sent: false }), false));
+    }
     if (name === RESTART_TOOL) {
       beforeDispatch?.();
       await this.#agentRestart(profile);
@@ -470,11 +477,20 @@ export class BrowserService {
     }
     const parsed = parseToolCall(name, (params as { arguments?: unknown } | null)?.arguments);
     if (!parsed.ok) return errorResult(parsed.error);
+    if (ctx?.deadline !== undefined && deadline - Date.now() - FOLLOW_UP_MS <= 0) {
+      return errorResult(formatRelayError(new RelayError("RELAY_RECOVERY_TIMEOUT", { phase: "dispatch", waitedSec: 0, sent: false }), false));
+    }
     let run: Running;
     try {
       run = await this.running(profile);
     } catch (error) {
       return errorResult(`The browser could not start: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (ctx?.signal?.aborted) {
+      return errorResult(formatRelayError(new RelayError("RELAY_CANCELLED", { phase: "dispatch", waitedSec: 0, sent: false }), false));
+    }
+    if (ctx?.deadline !== undefined && deadline - Date.now() - FOLLOW_UP_MS <= 0) {
+      return errorResult(formatRelayError(new RelayError("RELAY_RECOVERY_TIMEOUT", { phase: "dispatch", waitedSec: 0, sent: false }), false));
     }
     beforeDispatch?.();
     if (control.owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);

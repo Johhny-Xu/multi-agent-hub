@@ -1,14 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { createServer } from "node:http";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BOX_INITIAL_PROBE_MS,
+  BOX_QUARANTINE_MS,
+  BOX_RECHECK_DELAY_MS,
+  BOX_SLOW_PROBE_MS,
   CloudBrowserPool,
   LOCAL_CDP_BASE,
+  RELAY_BRINGUP_BUDGET_MS,
+  RELAY_DRAIN_GRACE_MS,
+  RELAY_SINGLE_REQUEST_WAIT_MS,
+  RelayError,
   TUNNEL_CDP_BASE,
   DEFAULT_AUTH_DOMAINS,
   authDomainOf,
   authDomains,
   cloudOffloadSettings,
   cloudBrowserMachines,
+  probeRelayUrl,
+  readCfAccessToken,
+  DEFAULT_CF_TOKEN_FILE,
   cloudOffloadOn,
   cloudOffloadActive,
   parseRemoteAnswer,
@@ -335,6 +347,34 @@ describe("relayed boxes only while they are used (E80, E88)", () => {
     ],
   };
 
+  it("goes through the relay host's Cloudflare tunnel hostname when one is set, with the token file it names (E88)", () => {
+    const machines = cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayUser: "ombrelay", boxRelayCfHostname: "relay-ssh.example.net" } } as never);
+    expect(machines[1]).toMatchObject({ relayAlias: "relay-host", relayUser: "ombrelay", relayCfHostname: "relay-ssh.example.net", relayCfTokenFile: DEFAULT_CF_TOKEN_FILE });
+    expect(machines[0]!.relayCfHostname).toBeUndefined();
+    expect(cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayCfHostname: "relay-ssh.example.net", boxRelayCfTokenFile: "/etc/omb/cf.env" } } as never)[1]!.relayCfTokenFile).toBe("/etc/omb/cf.env");
+    expect(cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayCfHostname: "relay-ssh.example.net", boxRelayCfTokenFile: "~/../x" } } as never)[1]!.relayCfTokenFile).toBe(DEFAULT_CF_TOKEN_FILE);
+    // An unsafe hostname is dropped (the box dials the relay host's SSH port as before), and no relay means no route.
+    expect(cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayCfHostname: "x;rm" } } as never)[1]!.relayCfHostname).toBeUndefined();
+    expect(cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayCfHostname: "relay-ssh.example.net" } } as never)[1]).toEqual({ id: "box1", name: "box-one", kind: "mcp" });
+  });
+
+  it("reads the Access token from its file under this host's home, and gives null when it is missing or malformed (E88)", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const home = mkdtempSync(join(tmpdir(), "omb-cf-"));
+    try {
+      expect(readCfAccessToken(DEFAULT_CF_TOKEN_FILE, home)).toBeNull();
+      mkdirSync(join(home, ".config/omb-relay"), { recursive: true });
+      writeFileSync(join(home, ".config/omb-relay/cf-access.env"), "TUNNEL_SERVICE_TOKEN_ID=abcdefgh12.access\nTUNNEL_SERVICE_TOKEN_SECRET=0123456789abcdef\n");
+      expect(readCfAccessToken(DEFAULT_CF_TOKEN_FILE, home)).toEqual({ id: "abcdefgh12.access", secret: "0123456789abcdef" });
+      writeFileSync(join(home, "bad.env"), "TUNNEL_SERVICE_TOKEN_ID=only\n");
+      expect(readCfAccessToken(join(home, "bad.env"), home)).toBeNull();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("relays through a relay-only ssh host that is neither a VPS computer nor a browser machine, as a dedicated account", () => {
     const machines = cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayUser: "ombrelay" } } as never);
     expect(machines.map((m) => m.name)).toEqual(["cloud-a", "box-one"]);
@@ -428,6 +468,7 @@ describe("relayed boxes only while they are used (E80, E88)", () => {
       async probe() { return false; },
       async probeBox() { return { ok: true, load: 0.1 }; },
       async teardown(machine) { ended.push(machine.name); },
+      sleep: async () => {},
     };
     const pick = await new CloudBrowserPool(base).pick([box], "s1");
     expect(pick).toMatchObject({ cloud: false });
@@ -437,5 +478,304 @@ describe("relayed boxes only while they are used (E80, E88)", () => {
     const asleep = await new CloudBrowserPool({ ...base, probeBox: async () => ({ ok: false, detail: "休眠中" }) }).pick([box], "s1");
     expect(asleep.reason).toContain("休眠中");
     expect(ended).toEqual([]);
+  });
+});
+
+describe("a relayed box's check that fails once (E115)", () => {
+  const VPS_RELAY = {
+    instances: [{ id: "box1", name: "box-one", kind: "mcp", adapter: "simular-box", mcpServer: "box-1" }],
+  };
+  const box = () => cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayUser: "ombrelay" } } as never)[0]!;
+
+  function relayDeps(probes: boolean[]) {
+    let clock = 0;
+    const log = { repaired: 0, ended: 0, slept: [] as number[], remote: 0, probeTimeouts: [] as Array<number | undefined> };
+    const deps: CloudBrowserDeps & { tick(ms: number): void } = {
+      tick: (ms) => { clock += ms; },
+      now: () => clock,
+      async ensureRemote() { log.remote += 1; return { ok: true, load: 0.1 }; },
+      async ensureTunnel() { return true; },
+      async probe(_url, timeoutMs) { log.probeTimeouts.push(timeoutMs); return probes.length ? probes.shift()! : true; },
+      async probeBox() { return { ok: true, load: 0.1 }; },
+      async teardown() { log.ended += 1; },
+      async repair() { log.repaired += 1; },
+      sleep: async (ms) => { log.slept.push(ms); },
+    };
+    return { deps, log };
+  }
+
+  it("repairs and rechecks a warm box whose tunnel misses one check, and keeps it when the recheck answers", async () => {
+    const { deps, log } = relayDeps([]);
+    const pool = new CloudBrowserPool(deps);
+    expect((await pool.pick([box()], "s1")).machine).toBe("box-one");
+    expect(pool.warmBoxes()).toEqual(["box1"]);
+    // Its answer goes stale; the next browser call checks it, the first probe fails, the recheck answers.
+    deps.tick(6 * 60_000);
+    let probes = [false, true];
+    deps.probe = async (_url, timeoutMs) => { log.probeTimeouts.push(timeoutMs); return probes.length ? probes.shift()! : true; };
+    const again = await pool.pick([box()], "s1");
+    expect(again).toMatchObject({ machine: "box-one", cloud: true });
+    expect(log.repaired).toBe(1);
+    expect(log.slept).toEqual([BOX_RECHECK_DELAY_MS]);
+    expect(log.ended).toBe(0);
+    expect(pool.warmBoxes()).toEqual(["box1"]);
+    // A relayed tunnel is given the slow probe's time, not the quick 3 s.
+    expect(log.probeTimeouts.every((t) => t === BOX_SLOW_PROBE_MS)).toBe(true);
+    probes = [];
+  });
+
+  it("tears a warm box down only after the recheck fails too", async () => {
+    const { deps, log } = relayDeps([]);
+    const pool = new CloudBrowserPool(deps);
+    await pool.pick([box()], "s1");
+    deps.tick(6 * 60_000);
+    deps.probe = async () => false;
+    const pick = await pool.pick([box()], "s1");
+    expect(pick.cloud).toBe(false);
+    expect(log.repaired).toBe(1);
+    expect(log.ended).toBe(1);
+    expect(pool.warmBoxes()).toEqual([]);
+  });
+
+  it("does not repair a box that is asleep or whose relay host refused it: those are not a stuck relay", async () => {
+    const { deps, log } = relayDeps([]);
+    deps.ensureRemote = async () => ({ ok: false, detail: "休眠中" });
+    const pick = await new CloudBrowserPool(deps).pick([box()], "s1");
+    expect(pick.cloud).toBe(false);
+    expect(log.repaired).toBe(0);
+    expect(log.slept).toEqual([]);
+  });
+
+  it("lets a browser call wait for a check under way, and returns at once when none is", async () => {
+    const { deps } = relayDeps([]);
+    let release: () => void = () => {};
+    deps.ensureRemote = () => new Promise<MachineHealth>((resolve) => { release = () => resolve({ ok: true, load: 0.1 }); });
+    const pool = new CloudBrowserPool(deps);
+    await pool.settled("box1");
+    const picking = pool.pick([box()], "s1");
+    await new Promise((r) => setTimeout(r, 10));
+    let settled = false;
+    const waiting = pool.settled("box1").then(() => { settled = true; });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(settled).toBe(false);
+    release();
+    await waiting;
+    expect(settled).toBe(true);
+    expect((await picking).machine).toBe("box-one");
+  });
+});
+
+describe("E115 relay recovery V2", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const VPS_RELAY_V2 = {
+    instances: [{ id: "box1", name: "box-one", kind: "mcp", adapter: "simular-box", mcpServer: "simular-box" }],
+  };
+  const box = () => cloudBrowserMachines({ vps: VPS_RELAY_V2, cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayUser: "ombrelay" } } as never)[0]!;
+
+  function relayV2Deps(overrides: Partial<CloudBrowserDeps> = {}) {
+    let clock = 0;
+    const events: string[] = [];
+    const probeTimeouts: Array<number | undefined> = [];
+    const slept: number[] = [];
+    const stats = { repaired: 0, ended: 0, remote: 0, probeBoxCalls: 0 };
+    const deps: CloudBrowserDeps & { tick(ms: number): void } = {
+      relayRecoveryV2: true,
+      tick: (ms) => { clock += ms; },
+      now: () => clock,
+      async ensureRemote() { stats.remote += 1; events.push("ensureRemote"); return { ok: true, load: 0.1 }; },
+      async ensureTunnel() { events.push("ensureTunnel"); return true; },
+      async probe(_url, timeoutMs) { probeTimeouts.push(timeoutMs); events.push(`probe:${timeoutMs}`); return true; },
+      async probeBox() { stats.probeBoxCalls += 1; events.push("probeBox"); return { ok: true, load: 0.1 }; },
+      async teardown() { stats.ended += 1; events.push("teardown"); },
+      async repair() { stats.repaired += 1; events.push("repair"); },
+      sleep: async (ms) => { slept.push(ms); events.push(`sleep:${ms}`); },
+      ...overrides,
+    };
+    return { deps, events, probeTimeouts, slept, stats };
+  }
+
+  it("deduplicates concurrent cold light probes", async () => {
+    let releaseBox!: () => void;
+    const { deps, stats } = relayV2Deps({
+      probeBox: () => new Promise<MachineHealth>((resolve) => {
+        stats.probeBoxCalls += 1;
+        releaseBox = () => resolve({ ok: true, load: 0.2 });
+      }),
+    });
+    const pool = new CloudBrowserPool(deps);
+    const p1 = pool.pick([box(), { id: "ssh2", name: "ssh2", kind: "ssh", sshAlias: "ssh2", localPort: 19341 }], "s1");
+    const p2 = pool.pick([box(), { id: "ssh2", name: "ssh2", kind: "ssh", sshAlias: "ssh2", localPort: 19341 }], "s2");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(stats.probeBoxCalls).toBe(1);
+    releaseBox();
+    await Promise.all([p1, p2]);
+  });
+
+  it("recovers on first health miss with 3s -> 3s -> 10s read-only probes without calling repair or teardown", async () => {
+    let probes = [true, false, true];
+    const { deps, probeTimeouts, slept, stats } = relayV2Deps({
+      async probe(_url, timeoutMs) {
+        probeTimeouts.push(timeoutMs);
+        return probes.length ? probes.shift()! : true;
+      },
+    });
+    const pool = new CloudBrowserPool(deps);
+    expect((await pool.pick([box()], "s1")).cloud).toBe(true);
+    const genAfterBringup = pool.generationOf("box1");
+    deps.tick(6 * 60_000);
+    const second = await pool.pick([box()], "s1");
+    expect(second.cloud).toBe(true);
+    expect(pool.phaseOf("box1")).toBe("ready");
+    expect(pool.generationOf("box1")).toBe(genAfterBringup);
+    expect(stats.repaired).toBe(0);
+    expect(stats.ended).toBe(0);
+    expect(slept).toEqual([BOX_RECHECK_DELAY_MS]);
+    expect(probeTimeouts).toEqual([BOX_INITIAL_PROBE_MS, BOX_INITIAL_PROBE_MS, BOX_SLOW_PROBE_MS]);
+    probes = [];
+  });
+
+  it("quarantines for 30s after consecutive health failures, skips remote calls during quarantine, and resets after expiry", async () => {
+    const { deps, stats } = relayV2Deps();
+    const pool = new CloudBrowserPool(deps);
+    expect((await pool.pick([box()], "s1")).cloud).toBe(true);
+    const genBeforeQuarantine = pool.generationOf("box1");
+    deps.tick(6 * 60_000);
+    deps.probe = async () => false;
+
+    const failed = await pool.pick([box()], "s1");
+    expect(failed.cloud).toBe(false);
+    expect(stats.repaired).toBe(0);
+    expect(stats.ended).toBe(1);
+    expect(pool.phaseOf("box1")).toBe("quarantined");
+    expect(pool.generationOf("box1")).toBeGreaterThan(genBeforeQuarantine);
+    expect(pool.quarantineRemainingMs("box1")).toBe(BOX_QUARANTINE_MS);
+
+    const remoteBefore = stats.remote;
+    const probeBoxBefore = stats.probeBoxCalls;
+    const duringQuarantine = await pool.pick([box()], "s2");
+    expect(duringQuarantine.cloud).toBe(false);
+    expect(stats.remote).toBe(remoteBefore);
+    expect(stats.probeBoxCalls).toBe(probeBoxBefore);
+
+    // Passive pick stays cold/idle after quarantine expires without waking the box.
+    deps.tick(BOX_QUARANTINE_MS + 1);
+    expect(pool.quarantineRemainingMs("box1")).toBe(0);
+    const passivePick = await pool.pick([box()], "guard", "本机", { passive: true });
+    expect(passivePick.cloud).toBe(false);
+    expect(stats.remote).toBe(remoteBefore);
+
+    deps.probe = async () => true;
+    const recovered = await pool.pick([box()], "s3");
+    expect(recovered.cloud).toBe(true);
+    expect(pool.phaseOf("box1")).toBe("ready");
+    expect(stats.remote).toBeGreaterThan(remoteBefore);
+  });
+
+  it("heals suspect/ready via noteCdpSuccess only for matching generation", async () => {
+    const { deps } = relayV2Deps();
+    const pool = new CloudBrowserPool(deps);
+    await pool.pick([box()], "s1");
+    const gen = pool.generationOf("box1");
+    expect(pool.noteCdpSuccess("box1", gen - 1)).toBe(false);
+    expect(pool.noteCdpSuccess("box1", gen + 99)).toBe(false);
+    expect(pool.noteCdpSuccess("box1", gen)).toBe(true);
+    expect(pool.phaseOf("box1")).toBe("ready");
+  });
+
+  it("grants 5s drain grace for active leases, tears down on release using snapshot, and cancels idle drain when waiter arrives", async () => {
+    vi.useFakeTimers();
+    const { deps, stats } = relayV2Deps();
+    const pool = new CloudBrowserPool(deps);
+    await pool.pick([box()], "s1");
+    expect(pool.leaseCount("box1")).toBe(0);
+
+    const lease = pool.acquireLease("box1");
+    expect(lease).not.toBeNull();
+    expect(pool.leaseCount("box1")).toBe(1);
+
+    // Cancel idle drain immediately if a lease is active at request time.
+    const skipped = await pool.requestDrain("box1", "idle");
+    expect(skipped).toBe(false);
+    expect(stats.ended).toBe(0);
+
+    // Release lease, acquire a short-lived lease during health drain grace, and verify grace wait.
+    lease!.release();
+    const healthLease = pool.acquireLease("box1");
+    expect(healthLease).not.toBeNull();
+    deps.probe = async () => false;
+    const draining = pool.requestDrain("box1", "health");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(stats.ended).toBe(0);
+    healthLease!.release();
+    const drained = await draining;
+    expect(drained).toBe(true);
+    expect(stats.ended).toBe(1);
+
+    // Even if passed no machineSnapshot later, snapshot from earlier pick lets teardown run cleanly.
+    deps.probe = async () => true;
+    deps.tick(BOX_QUARANTINE_MS + 1);
+    await pool.pick([box()], "s2");
+    expect(await pool.requestDrain("box1", "idle")).toBe(true);
+    expect(stats.ended).toBe(2);
+    expect(pool.phaseOf("box1")).toBe("cold");
+  });
+
+  it("bounds single waiter in awaitRelayReady at 45s without exceeding bringup budget", async () => {
+    vi.useFakeTimers();
+    let releaseRemote!: () => void;
+    const { deps } = relayV2Deps({
+      ensureRemote: () => new Promise<MachineHealth>((resolve) => {
+        releaseRemote = () => resolve({ ok: true, load: 0.1 });
+      }),
+    });
+    const pool = new CloudBrowserPool(deps);
+    const waiter = pool.awaitRelayReady(box()).catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(RELAY_SINGLE_REQUEST_WAIT_MS);
+    const err = await waiter;
+    expect(err).toBeInstanceOf(RelayError);
+    expect((err as RelayError).code).toBe("RELAY_RECOVERY_TIMEOUT");
+    expect((err as RelayError).sent).toBe(false);
+    expect(RELAY_BRINGUP_BUDGET_MS).toBeGreaterThan(RELAY_SINGLE_REQUEST_WAIT_MS);
+    expect(RELAY_DRAIN_GRACE_MS).toBe(5_000);
+    releaseRemote();
+  });
+
+  it("probeRelayUrl fails cleanly on HTTP 500, malformed JSON, missing wsUrl, and hung body timeout", async () => {
+    let mode: "500" | "bad-json" | "no-ws" | "hang-body" | "ok" = "500";
+    const srv = createServer((_req, res) => {
+      if (mode === "500") {
+        res.writeHead(500);
+        res.end("err");
+      } else if (mode === "bad-json") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("{not-json");
+      } else if (mode === "no-ws") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ Browser: "Fake" }));
+      } else if (mode === "hang-body") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.write("{");
+      } else {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ webSocketDebuggerUrl: "ws://127.0.0.1:9999/devtools/browser/1" }));
+      }
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+    try {
+      expect((await probeRelayUrl(url, { timeoutMs: 300 })).outcome).toBe("refused");
+      mode = "bad-json";
+      expect((await probeRelayUrl(url, { timeoutMs: 300 })).outcome).toBe("invalid");
+      mode = "no-ws";
+      expect((await probeRelayUrl(url, { timeoutMs: 300 })).outcome).toBe("invalid");
+      mode = "hang-body";
+      expect((await probeRelayUrl(url, { timeoutMs: 120 })).outcome).toBe("timeout");
+      mode = "ok";
+      expect((await probeRelayUrl(url, { timeoutMs: 300 })).outcome).toBe("ok");
+    } finally {
+      srv.closeAllConnections?.();
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
+    }
   });
 });

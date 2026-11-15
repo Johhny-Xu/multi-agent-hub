@@ -5,15 +5,17 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config.ts";
-import type { CloudBrowserDeps, MachineHealth } from "../cloud-browser.ts";
-import { AUTH_STICKY_MS, CLOUD_PAGE_CAP, FALLBACK_PROXY_PORT, MYCHROME_PROXY_PORT, RELAY_IDLE_MS, browserLabel, createCloudOffload, isConversationAlias, servableRoots } from "./cloud-offload.ts";
+import { RelayError, type CloudBrowserDeps, type MachineHealth } from "../cloud-browser.ts";
+import type { CdpProxyOptions } from "../cloud-cdp-proxy.ts";
+import { AUTH_STICKY_MS, CLOUD_PAGE_CAP, FALLBACK_PROXY_PORT, MYCHROME_PROXY_PORT, RELAY_IDLE_MS, RELAY_UPSTREAM_TIMEOUT_MS, browserLabel, createCloudOffload, guardedEnvHook, isConversationAlias, servableRoots } from "./cloud-offload.ts";
 
 type FakeTask = { threadId: string; surface?: "cloud" | "vm" | "local" | "browser"; surfaceSource?: "user" | "auto"; browserPlacement?: unknown };
-type FakeBot = { id: string; computer?: string | null; tasks: FakeTask[] };
+type FakeBot = { id: string; computer?: string | null; vpsInstanceId?: string; vpsAlias?: string; tasks: FakeTask[] };
 
 function harness(options: { computer?: string | null; task?: Partial<FakeTask>; answers?: Record<string, MachineHealth>; cfg?: Partial<AppConfig>; bots?: FakeBot[]; failProxy?: boolean } = {}) {
   const bots = options.bots ?? [{ id: "b1", computer: options.computer ?? null, tasks: [{ threadId: "t1", ...options.task }] }];
   const patches: Array<{ threadId: string; patch: Record<string, unknown> }> = [];
+  const logs: string[] = [];
   const store = {
     bots,
     bot: (id: string) => bots.find((candidate) => candidate.id === id),
@@ -35,14 +37,14 @@ function harness(options: { computer?: string | null; task?: Partial<FakeTask>; 
   const proxies: Array<{ port: number; upstream: string; local?: unknown; pageCap?: unknown; authDomain?: (url: string) => string | null }> = [];
   const fallback = { ensured: 0, stopped: 0 };
   const offload = createCloudOffload({
-    cfg, dataDir: mkdtempSync(join(tmpdir(), "omb-offload-")), store: () => store as never, cloud, log: () => {},
+    cfg, dataDir: mkdtempSync(join(tmpdir(), "omb-offload-")), store: () => store as never, cloud, log: (line) => { logs.push(line); },
     makeProxy: (proxyOptions) => {
       proxies.push(proxyOptions as never);
       return { start: async () => { if (options.failProxy) throw new Error("port taken"); return proxyOptions.port; }, close: async () => {}, url: `http://127.0.0.1:${proxyOptions.port}`, connections: () => 0 };
     },
     fallback: () => ({ ensure: async () => { fallback.ensured++; return "http://127.0.0.1:9339"; }, touch: () => {}, stop: async () => { fallback.stopped++; }, startIdleSweep: () => () => {} }),
   });
-  return { offload, bot: bots[0]!, bots, patches, proxies, fallback };
+  return { offload, bot: bots[0]!, bots, patches, proxies, fallback, logs };
 }
 
 /** The closer a conversation's own session is closed with, and every session it closed. */
@@ -58,6 +60,131 @@ describe("cloud offload for an Auto bot's browser (E72)", () => {
     expect(url).toBe("http://127.0.0.1:9341");
     expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudA", browser: "mychrome", cloud: true });
     expect(offload.guardState().cdpUrl).toBe("http://127.0.0.1:9341");
+  });
+
+  it("runs an Auto bot's browser on the cloud machine that bot is bound to, not the idlest one (E72)", async () => {
+    // cloudB is idler, so a load-only pick would take it; the bot is bound to cloudA.
+    const { offload, bot } = harness({
+      bots: [{ id: "b1", vpsInstanceId: "i1", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { cloudA: { ok: true, load: 0.9 }, cloudB: { ok: true, load: 0.01 } },
+      cfg: { vps: { instances: [
+        { id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA" },
+        { id: "i2", name: "cloudB", kind: "ssh", sshAlias: "cloudB" },
+      ] } } as never,
+    });
+    expect(await offload.browserFor("b1", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9341");
+    expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudA", cloud: true });
+  });
+
+  it("falls back to the idlest cloud machine when the bot's own does not answer (E72)", async () => {
+    const { offload, bot } = harness({
+      bots: [{ id: "b1", vpsInstanceId: "i1", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { cloudA: { ok: false, detail: "SSH 不通" }, cloudB: { ok: true, load: 0.01 } },
+      cfg: { vps: { instances: [
+        { id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA" },
+        { id: "i2", name: "cloudB", kind: "ssh", sshAlias: "cloudB" },
+      ] } } as never,
+    });
+    expect(await offload.browserFor("b1", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9342");
+    expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudB", cloud: true });
+  });
+
+  it("prioritizes the cloud machine bound via vpsAlias over an idler machine (E72-VPSALIAS)", async () => {
+    const { offload, bot, logs } = harness({
+      bots: [{ id: "b1", vpsAlias: "cloudA-ssh", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { cloudA: { ok: true, load: 0.9 }, cloudB: { ok: true, load: 0.01 } },
+      cfg: { vps: { version: 2, instances: [
+        { id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA-ssh" },
+        { id: "i2", name: "cloudB", kind: "ssh", sshAlias: "cloudB-ssh" },
+      ] } } as never,
+    });
+    expect(await offload.browserFor("b1", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9341");
+    expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudA", cloud: true });
+    expect(logs).toEqual([]);
+  });
+
+  it("falls back to the remaining cloud pool when the vpsAlias-bound machine is unreachable (E72-VPSALIAS)", async () => {
+    const { offload, bot, logs } = harness({
+      bots: [{ id: "b1", vpsAlias: "cloudA-ssh", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { cloudA: { ok: false, detail: "SSH 不通" }, cloudB: { ok: true, load: 0.05 } },
+      cfg: { vps: { version: 2, instances: [
+        { id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA-ssh" },
+        { id: "i2", name: "cloudB", kind: "ssh", sshAlias: "cloudB-ssh" },
+      ] } } as never,
+    });
+    expect(await offload.browserFor("b1", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9342");
+    expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudB", cloud: true });
+    expect(logs).toEqual([]);
+  });
+
+  it("excludes pure relay/proxy hosts from vpsAlias binding and pool selection and logs without hostnames (E72-VPSALIAS)", async () => {
+    // Case 1: boxRelayVia references an SSH entry in vps.instances that also has the lowest load (0.001); neither
+    // vpsAlias binding nor fallback pool selection may pick it, and the log must not expose the relay hostname/alias.
+    const relayInstance = harness({
+      bots: [{ id: "b1", vpsAlias: "secret-relay-alias", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { "secret-relay.example.net": { ok: true, load: 0.001 }, cloudB: { ok: true, load: 0.5 } },
+      cfg: {
+        vps: { version: 2, instances: [
+          { id: "r1", name: "secret-relay.example.net", kind: "ssh", sshAlias: "secret-relay-alias" },
+          { id: "i2", name: "cloudB", kind: "ssh", sshAlias: "cloudB-ssh" },
+        ] },
+        cloudOffload: { boxRelayVia: "r1" },
+      } as never,
+    });
+    expect(await relayInstance.offload.browserFor("b1", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9342");
+    expect(relayInstance.bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudB", cloud: true });
+    expect(relayInstance.logs).toHaveLength(1);
+    expect(relayInstance.logs[0]).toContain("relay-only");
+    expect(relayInstance.logs.join("\n")).not.toContain("secret-relay");
+    expect(relayInstance.logs.join("\n")).not.toContain("example.net");
+
+    // Case 2: boxRelayVia uses "ssh:<alias>" (not in vps.instances) and bot.vpsAlias points to that relay alias.
+    const sshRelayOnly = harness({
+      bots: [{ id: "b2", vpsAlias: "secret-jump.example.org", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { cloudA: { ok: true, load: 0.2 } },
+      cfg: {
+        vps: { version: 2, instances: [{ id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA" }] },
+        cloudOffload: { boxRelayVia: "ssh:secret-jump.example.org" },
+      } as never,
+    });
+    expect(await sshRelayOnly.offload.browserFor("b2", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9341");
+    expect(sshRelayOnly.logs).toHaveLength(1);
+    expect(sshRelayOnly.logs[0]).toContain("relay-only");
+    expect(sshRelayOnly.logs.join("\n")).not.toContain("secret-jump");
+    expect(sshRelayOnly.logs.join("\n")).not.toContain("example.org");
+
+    // Case 3: unresolvable vpsAlias logs one sanitized line without exposing the alias/hostname and treats as unbound.
+    const missingAlias = harness({
+      bots: [{ id: "b3", vpsAlias: "missing-box.internal.corp", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: { cloudA: { ok: true, load: 0.2 } },
+      cfg: { vps: { version: 2, instances: [{ id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA" }] } } as never,
+    });
+    expect(await missingAlias.offload.browserFor("b3", "sess", "t1", "mychrome")).toBe("http://127.0.0.1:9341");
+    expect(missingAlias.logs).toHaveLength(1);
+    expect(missingAlias.logs.join("\n")).not.toContain("missing-box");
+    expect(missingAlias.logs.join("\n")).not.toContain("internal.corp");
+  });
+
+  it("keeps vpsInstanceId binding behavior unchanged even when vpsAlias is also present (E72-VPSALIAS)", async () => {
+    let failA = false;
+    const { offload, bot } = harness({
+      bots: [{ id: "b1", vpsInstanceId: "i1", vpsAlias: "cloudB", tasks: [{ threadId: "t1", surface: "browser", surfaceSource: "auto" }] }],
+      answers: {
+        get cloudA() { return failA ? { ok: false, detail: "SSH 不通" } : { ok: true, load: 0.9 }; },
+        cloudB: { ok: true, load: 0.01 },
+      },
+      cfg: { vps: { version: 2, instances: [
+        { id: "i1", name: "cloudA", kind: "ssh", sshAlias: "cloudA" },
+        { id: "i2", name: "cloudB", kind: "ssh", sshAlias: "cloudB" },
+      ] } } as never,
+    });
+    expect(await offload.browserFor("b1", "sess1", "t1", "mychrome")).toBe("http://127.0.0.1:9341");
+    expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudA", cloud: true });
+
+    failA = true;
+    offload.pool.invalidate("i1");
+    expect(await offload.browserFor("b1", "sess2", "t1", "mychrome")).toBe("http://127.0.0.1:9342");
+    expect(bot.tasks[0]!.browserPlacement).toMatchObject({ machine: "cloudB", cloud: true });
   });
 
   it("does not patch the task again when the placement is the same", async () => {
@@ -347,6 +474,17 @@ describe("cloud offload for an Auto bot's browser (E72)", () => {
     expect(browserLabel("guest")).toBe("临时");
     expect(browserLabel(undefined)).toBe("内置");
   });
+
+  it("sends every bot engine's Chrome to the cloud one, and leaves the env alone while unarmed or off (E73)", () => {
+    const hook = (armed: boolean, off: boolean) => guardedEnvHook({
+      armed: () => armed, off: () => off, shimDir: "/x/shim", stateFile: "/x/state",
+      guard: () => ({ cdpUrl: "http://127.0.0.1:9341" }),
+    });
+    const env = { PATH: "/usr/bin" };
+    expect(hook(true, false)(env)).toMatchObject({ PUPPETEER_EXECUTABLE_PATH: "/x/shim/chrome", OMB_CLOUD_CDP_URL: "http://127.0.0.1:9341" });
+    expect(hook(false, false)(env)).toBe(env);
+    expect(hook(true, true)(env)).toBe(env);
+  });
 });
 
 describe("a relayed box's relay is up only while it is used (E80)", () => {
@@ -354,6 +492,7 @@ describe("a relayed box's relay is up only while it is used (E80)", () => {
     let clock = 0;
     let connections = 0;
     const calls = { up: 0, light: 0, teardown: [] as string[] };
+    const proxyOptions: CdpProxyOptions[] = [];
     const bots = [{ id: "b1", computer: null, tasks: [{ threadId: "t1" }] }];
     const store = { bots, bot: (id: string) => bots.find((bot) => bot.id === id), patchTask: () => null };
     const cloud: CloudBrowserDeps = {
@@ -370,10 +509,10 @@ describe("a relayed box's relay is up only while it is used (E80)", () => {
     } as unknown as AppConfig;
     const offload = createCloudOffload({
       cfg, dataDir: mkdtempSync(join(tmpdir(), "omb-offload-")), store: () => store as never, cloud, log: () => {},
-      makeProxy: (options) => ({ start: async () => options.port, close: async () => {}, url: `http://127.0.0.1:${options.port}`, connections: () => (options.port === 9351 ? connections : 0) }),
+      makeProxy: (options) => { proxyOptions.push(options); return { start: async () => options.port, close: async () => {}, url: `http://127.0.0.1:${options.port}`, connections: () => (options.port === 9351 ? connections : 0) }; },
       fallback: () => ({ ensure: async () => null, touch: () => {}, stop: async () => {}, startIdleSweep: () => () => {} }),
     });
-    return { offload, calls, tick: (ms: number) => { clock += ms; }, setConnections: (n: number) => { connections = n; } };
+    return { offload, calls, cloud, proxyOptions, tick: (ms: number) => { clock += ms; }, setConnections: (n: number) => { connections = n; } };
   }
 
   it("leaves a cold box alone from the guard, brings it up for a browser, keeps it while connected, and ends it idle", async () => {
@@ -409,5 +548,117 @@ describe("a relayed box's relay is up only while it is used (E80)", () => {
     expect(await offload.browserFor("b1", "sess", "t1", undefined)).toBe("http://127.0.0.1:9351");
     expect(calls.up).toBe(up + 1);
   });
-});
 
+  it("gives a relayed box's door a time limit, waits there for a rebuild under way, and rechecks the box after a timeout (E115)", async () => {
+    const { offload, calls, cloud, proxyOptions } = relayHarness();
+    expect(await offload.browserFor("b1", "sess", "t1", undefined)).toBe("http://127.0.0.1:9351");
+    const door = proxyOptions.find((options) => options.port === 9351)!;
+    expect(door.upstreamTimeoutMs).toBe(RELAY_UPSTREAM_TIMEOUT_MS);
+    expect(typeof door.ensureUpstream).toBe("function");
+    // The SSH machine's door keeps waiting as before.
+    await offload.refreshGuard();
+    expect(proxyOptions.find((options) => options.port === 9341)?.upstreamTimeoutMs).toBeUndefined();
+
+    // Nothing under way: the door passes the call on at once.
+    await door.ensureUpstream!();
+    // A timeout forgets the box's answer, so the next browser call checks (and if need be repairs) it.
+    const before = calls.up;
+    door.onUpstreamTimeout!();
+    let release: () => void = () => {};
+    const original = cloud.ensureRemote;
+    cloud.ensureRemote = (machine) => new Promise((resolve) => { release = () => void original(machine).then(resolve); });
+    const picking = offload.browserFor("b1", "sess", "t1", undefined);
+    await new Promise((r) => setTimeout(r, 10));
+    let passed = false;
+    const waiting = Promise.resolve(door.ensureUpstream!()).then(() => { passed = true; });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(passed).toBe(false);
+    release();
+    await waiting;
+    expect(passed).toBe(true);
+    expect(await picking).toBe("http://127.0.0.1:9351");
+    expect(calls.up).toBe(before + 1);
+  });
+
+  it("enforces V2 readiness deadline, rejects proxy bind failures, uses requestDrain on idle sweep, and supports hot-reload", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = {
+        bots: [{ id: "b1", computer: null, vpsInstanceId: "box1", tasks: [{ threadId: "t1" }] }],
+        bot: (id: string) => store.bots.find((b) => b.id === id),
+        patchTask: () => null,
+      };
+      let clock = 0;
+      let teardownCalls = 0;
+      const cfg = {
+        vps: {
+          instances: [
+            { id: "box1", name: "box-one", kind: "mcp", adapter: "simular-box", mcpServer: "box-1" },
+            { id: "ssh2", name: "ssh-two", kind: "ssh", sshAlias: "ssh-two" },
+          ],
+        },
+        cloudOffload: { boxRelayVia: "ssh:relay-host", boxRelayUser: "ombrelay", relayRecoveryV2: true },
+      } as unknown as AppConfig;
+
+      let failRemote = true;
+      const cloud: CloudBrowserDeps = {
+        now: () => clock,
+        ensureRemote: async (machine) => {
+          if (machine.id === "box1") return failRemote ? { ok: false, detail: "休眠中" } : { ok: true, load: 0.1 };
+          return { ok: true, load: 0.2 };
+        },
+        ensureTunnel: async () => true,
+        probe: async () => true,
+        probeBox: async () => ({ ok: true, load: 0.1 }),
+        teardown: async () => { teardownCalls += 1; },
+      };
+
+      let rejectProxy = true;
+      const offload = createCloudOffload({
+        cfg,
+        dataDir: mkdtempSync(join(tmpdir(), "omb-offload-v2-")),
+        store: () => store as never,
+        cloud,
+        log: () => {},
+        makeProxy: (options) => ({
+          start: async () => {
+            if (rejectProxy) throw new Error("EADDRINUSE");
+            return options.port;
+          },
+          close: async () => {},
+          url: `http://127.0.0.1:${options.port}`,
+          connections: () => 0,
+        }),
+        fallback: () => ({ ensure: async () => null, touch: () => {}, stop: async () => {}, startIdleSweep: () => () => {} }),
+      });
+
+      // V2 rejects proxy bind failure with RelayError instead of exposing bare tunnel URL.
+      await expect(offload.browserFor("b1", "s1", "t1", undefined)).rejects.toThrow(RelayError);
+
+      // Allow proxy start and bring up box1; tight budget (<5s reserve) rejects before dispatching.
+      rejectProxy = false;
+      failRemote = false;
+      clock += 5 * 60_000 + 1_000;
+      await expect(offload.browserFor("b1", "s2", "t1", undefined, { deadline: clock + 4_000 })).rejects.toMatchObject({ code: "RELAY_RECOVERY_TIMEOUT", sent: false });
+      expect(await offload.browserFor("b1", "s2", "t1", undefined)).toBe("http://127.0.0.1:9351");
+
+      // Active lease prevents idle teardown; once released and idle elapsed, requestDrain tears down exactly once even after config removal.
+      const lease = offload.pool.acquireLease("box1");
+      expect(lease).not.toBeNull();
+      clock += RELAY_IDLE_MS + 10_000;
+      expect(await offload.sweepRelays()).toEqual([]);
+      expect(teardownCalls).toBe(0);
+      lease!.release();
+      (cfg.vps as { instances: unknown[] }).instances = [];
+      clock += RELAY_IDLE_MS + 10_000;
+      expect(await offload.sweepRelays()).toEqual(["box1"]);
+      expect(teardownCalls).toBe(1);
+
+      // Hot-reload toggle off restores legacy fallback behavior.
+      cfg.cloudOffload!.relayRecoveryV2 = false;
+      expect(offload.pool.phaseOf("box1")).toBe("cold");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

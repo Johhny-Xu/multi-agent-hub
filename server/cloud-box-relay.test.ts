@@ -15,8 +15,10 @@ import {
   RELAY_SCRIPT,
   SOCKS_CONNECT_SCRIPT,
   boxDownScript,
+  boxKickScript,
   boxSshConfig,
   boxUpScript,
+  parseCfAccessEnv,
   parseBoxPub,
   parseSshG,
   relayHostDownScript,
@@ -288,6 +290,50 @@ describe("the box's ssh config and up script", () => {
   });
 });
 
+describe("the Cloudflare tunnel route (E88)", () => {
+  const TOKEN = { id: "0123456789abcdef0123456789abcdef.access", secret: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" };
+
+  it("dials the tunnel's ssh hostname through cloudflared over the box's HTTP proxy, not the relay host's SSH port", () => {
+    const config = boxSshConfig({ hostname: "relay.example", user: "ombrelay", port: 2222 }, 1080, { hostname: "relay-ssh.example.net", httpProxyPort: 3128 });
+    expect(config).toContain("HostName relay-ssh.example.net");
+    expect(config).toContain("User ombrelay");
+    expect(config).toContain("Port 22");
+    expect(config).toContain("cloudflared access ssh --hostname %h");
+    expect(config).toContain("HTTPS_PROXY=http://127.0.0.1:3128");
+    expect(config).toContain(". ~/.omb-relay/cf.env");
+    expect(config).not.toContain("relay.example\n");
+    expect(config).not.toContain("socks-connect");
+    expect(config).not.toContain("2222");
+    expect(() => boxSshConfig({ hostname: "relay.example", user: "ombrelay", port: 2222 }, 1080, { hostname: "x; rm -rf /", httpProxyPort: 3128 })).toThrow();
+  });
+
+  it("reads an Access service token from a cloudflared env file and refuses a malformed one", () => {
+    expect(parseCfAccessEnv(`TUNNEL_SERVICE_TOKEN_ID=${TOKEN.id}\nTUNNEL_SERVICE_TOKEN_SECRET=${TOKEN.secret}\n`)).toEqual(TOKEN);
+    expect(parseCfAccessEnv(`export TUNNEL_SERVICE_TOKEN_ID="${TOKEN.id}"\nexport TUNNEL_SERVICE_TOKEN_SECRET='${TOKEN.secret}'\n`)).toEqual(TOKEN);
+    expect(parseCfAccessEnv(`TUNNEL_SERVICE_TOKEN_ID=${TOKEN.id}\n`)).toBeNull();
+    expect(parseCfAccessEnv(`TUNNEL_SERVICE_TOKEN_ID=a;rm\nTUNNEL_SERVICE_TOKEN_SECRET=${TOKEN.secret}\n`)).toBeNull();
+    expect(parseCfAccessEnv("")).toBeNull();
+  });
+
+  it("writes the token only in base64 to a 0600 file, fetches cloudflared once, and stays valid bash", () => {
+    const sshConfig = boxSshConfig({ hostname: "relay.example", user: "ombrelay", port: 2222 }, 1080, { hostname: "relay-ssh.example.net", httpProxyPort: 3128 });
+    const script = boxUpScript({ cdpPort: 9335, relayPort: 19400, httpProxyPort: 3128, socksPort: 1080 }, sshConfig, { token: TOKEN });
+    expect(script).not.toContain(TOKEN.secret);
+    expect(script).not.toContain(TOKEN.id);
+    expect(script).toContain(Buffer.from(`TUNNEL_SERVICE_TOKEN_ID=${TOKEN.id}\nTUNNEL_SERVICE_TOKEN_SECRET=${TOKEN.secret}\n`).toString("base64"));
+    expect(script).toContain('chmod 600 "$D/cf.env.new"');
+    expect(script).toContain('[ -x "$D/cloudflared" ] ||');
+    expect(script).toContain("--proxy http://127.0.0.1:3128");
+    expect(script).toContain("OMB_ERR 装不上 cloudflared");
+    expect(script.indexOf("cf.env.new")).toBeLessThan(script.indexOf("omb-relay-loop-"));
+    expect(spawnSync("bash", ["-n"], { input: script, encoding: "utf8" }).status).toBe(0);
+    // Without the Cloudflare route nothing about cloudflared is written, and a bad token or url is refused.
+    expect(boxUpScript({ cdpPort: 9335, relayPort: 19400, httpProxyPort: 3128, socksPort: 1080 }, sshConfig)).not.toContain("cloudflared");
+    expect(() => boxUpScript({ cdpPort: 9335, relayPort: 19400, httpProxyPort: 3128, socksPort: 1080 }, sshConfig, { token: { id: "x y", secret: TOKEN.secret } })).toThrow();
+    expect(() => boxUpScript({ cdpPort: 9335, relayPort: 19400, httpProxyPort: 3128, socksPort: 1080 }, sshConfig, { token: TOKEN, cloudflaredUrl: "http://x/$(id)" })).toThrow();
+  });
+});
+
 describe("the relay host", () => {
   it("reads the host out of ssh -G and refuses a user it cannot trust", () => {
     expect(parseSshG("host relay-a\nhostname relay.example\nuser user-x\nport 2222\n")).toEqual({
@@ -435,4 +481,68 @@ describe("a dedicated relay account (E88)", () => {
       rmSync(home, { recursive: true, force: true });
     }
   }, hostTimeout(15_000));
+
+  it("kicks a box's relay loop out of its backoff sleep, ending a dead session only when asked, and leaves the loop running (E115)", async () => {
+    const port = 50000 + Math.floor(Math.random() * 9000);
+    const loop = spawn("bash", ["-c", "while true; do sleep 60; done", `omb-relay-loop-${port}`], { stdio: "ignore", detached: true });
+    children.push(loop);
+    const session = spawn("bash", ["-c", "sleep 60; true", `node cdp-relay.mjs box ${port} --`], { stdio: "ignore", detached: true });
+    children.push(session);
+    await new Promise((r) => setTimeout(r, 300));
+    const sleeps = () => spawnSync("pgrep", ["-P", String(loop.pid), "-x", "sleep"], { encoding: "utf8" }).stdout.trim();
+    try {
+      const before = sleeps();
+      expect(before).not.toBe("");
+      const plain = boxKickScript(port);
+      expect(plain).not.toContain(`omb-relay-loop-${port}`);
+      expect(plain).not.toContain("cdp-relay.mjs box");
+      const run = spawnSync("bash", ["-c", plain], { encoding: "utf8" });
+      expect(run.stdout).toMatch(/OMB_KICK 1/);
+      // The loop goes on, in a fresh sleep, and the session was not touched.
+      await waitFor(() => sleeps() !== "" && sleeps() !== before, 5_000);
+      expect(loop.exitCode).toBeNull();
+      expect(session.exitCode).toBeNull();
+      expect(session.signalCode).toBeNull();
+      const hard = spawnSync("bash", ["-c", boxKickScript(port, { session: true })], { encoding: "utf8" });
+      expect(hard.stdout).toMatch(/OMB_KICK 1/);
+      await waitFor(() => session.exitCode !== null || session.signalCode !== null, 5_000);
+      expect(loop.exitCode).toBeNull();
+      // No loop for the port: nothing to kick, still valid bash.
+      expect(spawnSync("bash", ["-c", boxKickScript(port + 1)], { encoding: "utf8" }).stdout).toMatch(/OMB_KICK 0/);
+      expect(() => boxKickScript(80)).toThrow();
+    } finally {
+      try { process.kill(-loop.pid!, "SIGKILL"); } catch {}
+    }
+  }, hostTimeout(20_000));
+
+  it("refuses unowned or differently-owned teardown/kick when owner is specified, and kills only owned processes (E115 V2)", async () => {
+    const port = 50000 + Math.floor(Math.random() * 9000);
+    const home = mkdtempSync(join(tmpdir(), "omb-home-owner-"));
+    const loop = spawn("bash", ["-c", "sleep 60; true", `omb-relay-loop-${port}`], { stdio: "ignore", detached: true });
+    children.push(loop);
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      mkdirSyncCompat(join(home, ".omb-relay"));
+      writeFileSync(join(home, ".omb-relay", `owner.${port}`), "omb-other\n");
+      const refusedDown = spawnSync("bash", ["-c", boxDownScript(port, { owner: "omb-mine" })], { encoding: "utf8", env: { ...process.env, HOME: home } });
+      expect(refusedDown.stdout).toMatch(/OMB_DOWN_SKIPPED/);
+      expect(loop.exitCode).toBeNull();
+      const refusedKick = spawnSync("bash", ["-c", boxKickScript(port, { owner: "omb-mine" })], { encoding: "utf8", env: { ...process.env, HOME: home } });
+      expect(refusedKick.stdout).toMatch(/OMB_KICK 0/);
+      expect(loop.exitCode).toBeNull();
+
+      writeFileSync(join(home, ".omb-relay", `owner.${port}`), "omb-mine\n");
+      const ownedDown = spawnSync("bash", ["-c", boxDownScript(port, { owner: "omb-mine" })], { encoding: "utf8", env: { ...process.env, HOME: home } });
+      expect(ownedDown.stdout).toMatch(/OMB_DOWN 0/);
+      await waitFor(() => loop.exitCode !== null || loop.signalCode !== null, 5_000);
+      expect(() => boxDownScript(port, { owner: "bad;id" })).toThrow();
+      expect(() => boxKickScript(port, { owner: "bad;id" })).toThrow();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, hostTimeout(15_000));
 });
+
+function mkdirSyncCompat(path: string): void {
+  spawnSync("mkdir", ["-p", path]);
+}

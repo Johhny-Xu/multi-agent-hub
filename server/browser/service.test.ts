@@ -670,3 +670,13 @@ describe("a view of a browser that is not running", () => {
     await viewer.close();
   });
 });
+
+describe("deadline exhaustion before dispatch (E115 V2)", () => {
+  it("fails closed before starting Chrome or executing actions when caller deadline has no budget past follow-up reserve", async () => {
+    const { service, backend, target } = setup();
+    const res = await service.agentRpc(target, "tools/call", { name: "agent_browser_open", arguments: { url: "https://example.com" } }, undefined, { deadline: Date.now() + 1_000 }) as { isError?: boolean; content: Array<{ text: string }> };
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toContain("尚未发送");
+    expect(backend.chromes).toHaveLength(0);
+  });
+});

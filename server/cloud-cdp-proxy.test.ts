@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 
 import { CdpProxy, DEFAULT_MAX_LOCAL_BYTES, fromLocalMausUrl, insideRoots, mimeOf, toLocalMausUrl, type CdpProxyOptions } from "./cloud-cdp-proxy.ts";
+import { RelayError } from "./cloud-browser.ts";
 import { scopedCdpUrl } from "./cloud-cdp-scope.ts";
 
 type Command = { method: string; sessionId?: string; params: Record<string, unknown> };
@@ -996,6 +997,225 @@ describe("transparency", () => {
       link.close();
     } finally {
       await shutdown();
+    }
+  });
+});
+
+// E115: a relayed box whose relay died accepts connections and never answers; a browser call must fail, not hang.
+describe("an upstream that never answers (E115)", () => {
+  it("fails HTTP with 502 and a WebSocket with 1011 within upstreamTimeoutMs, and says so", async () => {
+    const { createServer: createTcp } = await import("node:net");
+    const held: import("node:net").Socket[] = [];
+    const hole = createTcp((socket) => { held.push(socket); socket.on("error", () => {}); });
+    await new Promise<void>((resolve) => hole.listen(0, "127.0.0.1", () => resolve()));
+    const holePort = (hole.address() as { port: number }).port;
+    let timeouts = 0;
+    let waited = false;
+    const proxy = new CdpProxy({
+      upstream: `http://127.0.0.1:${holePort}`, port: 0, host: "127.0.0.1", log: () => {},
+      upstreamTimeoutMs: 300,
+      onUpstreamTimeout: () => { timeouts += 1; },
+      ensureUpstream: async () => { await new Promise((r) => setTimeout(r, 50)); waited = true; },
+    });
+    const port = await proxy.start();
+    try {
+      const started = Date.now();
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+      expect(response.status).toBe(502);
+      expect(waited).toBe(true);
+      expect(Date.now() - started).toBeLessThan(3_000);
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/devtools/page/P1`);
+      const code = await new Promise<number>((resolve) => {
+        socket.on("close", (c) => resolve(c));
+        socket.on("error", () => resolve(1006));
+      });
+      expect(code).toBe(1011);
+      expect(Date.now() - started).toBeLessThan(5_000);
+      expect(timeouts).toBe(2);
+      await waitFor(() => proxy.connections() === 0, "the failed connection to go");
+    } finally {
+      await proxy.close();
+      for (const socket of held) socket.destroy();
+      await new Promise<void>((resolve) => hole.close(() => resolve()));
+    }
+  });
+
+  it("keeps waiting as before when no limit is set", async () => {
+    const proxy = new CdpProxy({ upstream: "http://127.0.0.1:1", port: 0, host: "127.0.0.1", log: () => {} });
+    expect(proxy.upstreamTimeoutMs).toBeUndefined();
+    const limited = new CdpProxy({ upstream: "http://127.0.0.1:1", port: 0, host: "127.0.0.1", log: () => {}, upstreamTimeoutMs: 20_000 });
+    expect(limited.upstreamTimeoutMs).toBe(20_000);
+  });
+});
+
+describe("E115 V2 proxy hardening", () => {
+  it("maps quarantine to 503 and recovery timeout or hung HTTP body to 504 on pre-upgrade HTTP and WS upgrade", async () => {
+    const quarantinedProxy = new CdpProxy({
+      upstream: "http://127.0.0.1:1",
+      port: 0,
+      host: "127.0.0.1",
+      log: () => {},
+      relayRecoveryV2: true,
+      ensureUpstream: async () => {
+        throw new RelayError("RELAY_QUARANTINED", { phase: "quarantined", waitedSec: 0, sent: false });
+      },
+    });
+    const qPort = await quarantinedProxy.start();
+    try {
+      const res = await fetch(`http://127.0.0.1:${qPort}/json/version`);
+      expect(res.status).toBe(503);
+      const wsStatus = await new Promise<number>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${qPort}/devtools/browser/B1`);
+        ws.on("unexpected-response", (_req, resp) => resolve(resp.statusCode ?? 0));
+        ws.on("error", () => {});
+      });
+      expect(wsStatus).toBe(503);
+    } finally {
+      await quarantinedProxy.close();
+    }
+
+    // Hung response body (headers 200 sent, body stalls forever) must abort within upstreamTimeoutMs with 504.
+    const stallServer = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write("{");
+    });
+    await new Promise<void>((resolve) => stallServer.listen(0, "127.0.0.1", resolve));
+    const stallPort = (stallServer.address() as { port: number }).port;
+    const timeoutProxy = new CdpProxy({
+      upstream: `http://127.0.0.1:${stallPort}`,
+      port: 0,
+      host: "127.0.0.1",
+      log: () => {},
+      relayRecoveryV2: true,
+      upstreamTimeoutMs: 180,
+      wsCommandTimeoutMs: 250,
+    });
+    const tPort = await timeoutProxy.start();
+    try {
+      const res = await fetch(`http://127.0.0.1:${tPort}/json/version`);
+      expect(res.status).toBe(504);
+    } finally {
+      await timeoutProxy.close();
+      stallServer.closeAllConnections?.();
+      await new Promise<void>((resolve) => stallServer.close(() => resolve()));
+    }
+  });
+
+  it("retries idempotent GET /json/version once after ensureUpstream, but never retries /json/new", async () => {
+    let versionCalls = 0;
+    let newCalls = 0;
+    let healthy = false;
+    const srv = createServer((req, res) => {
+      const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      if (pathname === "/json/version") {
+        versionCalls += 1;
+        if (!healthy) {
+          req.socket.destroy();
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ Browser: "Fake/1.0", webSocketDebuggerUrl: `ws://127.0.0.1:${srvPort}/devtools/browser/B1` }));
+        return;
+      }
+      if (pathname === "/json/new") {
+        newCalls += 1;
+        req.socket.destroy();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("[]");
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const srvPort = (srv.address() as { port: number }).port;
+    let ensured = 0;
+    const proxy = new CdpProxy({
+      upstream: `http://127.0.0.1:${srvPort}`,
+      port: 0,
+      host: "127.0.0.1",
+      log: () => {},
+      relayRecoveryV2: true,
+      ensureUpstream: async () => {
+        ensured += 1;
+        if (ensured >= 2) healthy = true;
+      },
+    });
+    const port = await proxy.start();
+    try {
+      const ok = await fetch(`http://127.0.0.1:${port}/json/version`);
+      expect(ok.status).toBe(200);
+      expect(versionCalls).toBe(2);
+      const noRetry = await fetch(`http://127.0.0.1:${port}/json/new`);
+      expect(noRetry.status).toBe(502);
+      expect(newCalls).toBe(1);
+    } finally {
+      await proxy.close();
+      srv.closeAllConnections?.();
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
+    }
+  });
+
+  it("retries pre-first-frame WS upstream failure once cleanly, keeps idle WS open, and fails hung WS command with 1011", async () => {
+    const httpSrv = createServer();
+    const upstreamWss = new WebSocketServer({ noServer: true });
+    let upgradeCount = 0;
+    let hangCommands = false;
+    httpSrv.on("upgrade", (req, socket, head) => {
+      upgradeCount += 1;
+      if (upgradeCount === 1) {
+        socket.destroy();
+        return;
+      }
+      upstreamWss.handleUpgrade(req, socket, head, (ws) => {
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(String(raw)) as { id?: number; method?: string };
+          if (hangCommands) return;
+          ws.send(JSON.stringify({ id: msg.id, result: { echoed: msg.method } }));
+        });
+      });
+    });
+    await new Promise<void>((resolve) => httpSrv.listen(0, "127.0.0.1", resolve));
+    const upstreamPort = (httpSrv.address() as { port: number }).port;
+
+    const proxy = new CdpProxy({
+      upstream: `http://127.0.0.1:${upstreamPort}`,
+      port: 0,
+      host: "127.0.0.1",
+      log: () => {},
+      relayRecoveryV2: true,
+      wsCommandTimeoutMs: 180,
+      upstreamTimeoutMs: 500,
+    });
+    const pPort = await proxy.start();
+    try {
+      // Pre-first-frame upstream drop recovers transparently with 1-shot retry.
+      const ws = new WebSocket(`ws://127.0.0.1:${pPort}/devtools/browser/B1`);
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", () => resolve());
+        ws.once("error", reject);
+      });
+      const reply1 = await new Promise<string>((resolve) => {
+        ws.once("message", (data) => resolve(String(data)));
+        ws.send(JSON.stringify({ id: 1, method: "Browser.getVersion", params: {} }));
+      });
+      expect(JSON.parse(reply1)).toMatchObject({ id: 1, result: { echoed: "Browser.getVersion" } });
+      expect(upgradeCount).toBe(2);
+
+      // Healthy idle WS with zero pending commands stays open longer than wsCommandTimeoutMs.
+      await new Promise((r) => setTimeout(r, 260));
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+
+      // Hung in-flight command receives JSON-RPC error + WS closes 1011 within wsCommandTimeoutMs.
+      hangCommands = true;
+      const messages: string[] = [];
+      ws.on("message", (data) => messages.push(String(data)));
+      const closed = new Promise<number>((resolve) => ws.once("close", (code) => resolve(code)));
+      ws.send(JSON.stringify({ id: 2, method: "Page.navigate", params: { url: "https://example.com" } }));
+      expect(await closed).toBe(1011);
+      expect(messages.some((m) => JSON.parse(m).id === 2 && JSON.parse(m).error)).toBe(true);
+    } finally {
+      await proxy.close();
+      httpSrv.closeAllConnections?.();
+      await new Promise<void>((resolve) => upstreamWss.close(() => httpSrv.close(() => resolve())));
     }
   });
 });

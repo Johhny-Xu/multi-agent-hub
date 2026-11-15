@@ -91,7 +91,7 @@ export class RelayPorts {
 
   /** From the `.stream` file the daemon writes and deletes on exit, confirmed by `session_info` once per daemon: a port a
    * dead daemon left behind may already belong to another bot's browser. A daemon too busy to confirm trips the session. */
-  async port(target: RelayTarget): Promise<number | null> {
+  async port(target: RelayTarget, timeoutMs = PROBE_MS * 4): Promise<number | null> {
     const text = this.readFile(browserDaemonFile(target.env, ".stream"))?.trim() ?? "";
     const port = /^\d{1,5}$/.test(text) ? Number(text) : 0;
     if (port < 1 || port > 65_535) { this.known.delete(target.session); return null; }
@@ -99,7 +99,7 @@ export class RelayPorts {
     if (known?.port === port && (known.daemonPid === null || this.alive(known.daemonPid))) return port;
     this.known.delete(target.session);
     try {
-      const info = await relay(port, { action: "session_info" }, { timeoutMs: PROBE_MS * 4, maxBytes: 65_536 });
+      const info = await relay(port, { action: "session_info" }, { timeoutMs: Math.max(1, Math.min(PROBE_MS * 4, timeoutMs)), maxBytes: 65_536 });
       if (!info.success || info.data?.session !== target.session) return null;
       const daemonPid = typeof info.data.backgroundPid === "number" ? info.data.backgroundPid : null;
       this.known.set(target.session, { port, daemonPid });
@@ -144,11 +144,25 @@ export class RelayPorts {
 }
 
 /** Real input into the focused field; the text travels only in this request's body, never on a command line, and only into a running browser. */
-async function openPort(ports: RelayPorts, target: RelayTarget): Promise<number> {
-  const port = await ports.port(target);
+async function openPort(ports: RelayPorts, target: RelayTarget, deadline?: number): Promise<number> {
+  const budgetLeft = () => (deadline === undefined ? 15_000 : deadline - Date.now());
+  if (deadline !== undefined && budgetLeft() <= 0) {
+    throw new Error("The browser call ran out of time before opening its local input channel; action not sent.");
+  }
+  const port = await ports.port(target, Math.max(1, budgetLeft()));
   if (port !== null) return port;
-  let status = await inRunningBrowser(target.binaryPath, target.env, ["stream", "status"]);
-  if (status && status.enabled !== true) status = await inRunningBrowser(target.binaryPath, target.env, ["stream", "enable"]);
+  const remStatus = budgetLeft();
+  if (deadline !== undefined && remStatus <= 0) {
+    throw new Error("The browser call ran out of time before opening its local input channel; action not sent.");
+  }
+  let status = await inRunningBrowser(target.binaryPath, target.env, ["stream", "status"], remStatus);
+  if (status && status.enabled !== true) {
+    const remEnable = budgetLeft();
+    if (deadline !== undefined && remEnable <= 0) {
+      throw new Error("The browser call ran out of time before opening its local input channel; action not sent.");
+    }
+    status = await inRunningBrowser(target.binaryPath, target.env, ["stream", "enable"], remEnable);
+  }
   const value = status?.port;
   if (status?.enabled !== true || typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 65_535) {
     throw new Error("The browser did not open its local input channel. Restart the browser and try again.");
@@ -165,8 +179,13 @@ export async function typeText(ports: RelayPorts, target: RelayTarget, text: str
 }
 
 export async function runCommand(ports: RelayPorts, target: RelayTarget, command: Record<string, unknown>, timeoutMs: number): Promise<RelayAnswer> {
-  const port = await openPort(ports, target);
-  try { return await relay(port, command, { timeoutMs, maxBytes: 65_536 }); }
+  const deadline = Date.now() + Math.max(1, timeoutMs);
+  const port = await openPort(ports, target, deadline);
+  const rem = deadline - Date.now();
+  if (rem <= 0) {
+    throw new Error("The browser call ran out of time before sending the action; action not sent.");
+  }
+  try { return await relay(port, command, { timeoutMs: rem, maxBytes: 65_536 }); }
   catch (error) {
     if (error instanceof RelayTimeout) ports.trip(target.session);
     throw error;

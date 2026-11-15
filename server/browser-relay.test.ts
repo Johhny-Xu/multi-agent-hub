@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { RelayPorts, RelayTimeout, captureFrame, relay, relayTarget, typeText } from "./browser-relay.ts";
+import { RelayPorts, RelayTimeout, captureFrame, relay, relayTarget, runCommand, typeText } from "./browser-relay.ts";
 import { FakeRelay } from "./testing/fake-relay.ts";
 
 const relays: FakeRelay[] = [];
@@ -158,5 +158,13 @@ describe("typing over the relay", () => {
     await typeText(new RelayPorts(), daemon.target, "fake-S3cret!");
     expect(daemon.typed).toEqual(["fake-S3cret!"]);
     expect(daemon.commands).toEqual([{ action: "session_info" }, { action: "keyboard", subaction: "insertText", text: "fake-S3cret!" }]);
+  });
+
+  it("bounds openPort probes inside runCommand's timeout and refuses without sending if budget runs out", async () => {
+    const daemon = await fake();
+    const ports = new RelayPorts();
+    daemon.hang.add("session_info");
+    await expect(runCommand(ports, daemon.target, { action: "hover", selector: "@e1" }, 40)).rejects.toThrow();
+    expect(daemon.commands.some((c) => c.action === "hover")).toBe(false);
   });
 });

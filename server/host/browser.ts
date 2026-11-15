@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { Audience } from "../audience.ts";
 import type { CloudLendingRefusal } from "../cloud-lending.ts";
 import type { AppConfig } from "../config.ts";
+import { RelayError } from "../cloud-browser.ts";
 import type { Decider } from "../decider/index.ts";
 import { browserEngineAttachCdpUrl, browserProfilePartitionId, browserProfilePartitionTarget, builtInBrowserEnabled, DATA_DIR } from "../config.ts";
 import { BrowserRuntime, TransportError, attachesToChrome, browserRuntimeEnv, formatBrowserTiming, type BrowserSpawnSpec } from "../browser-runtime.ts";
@@ -55,7 +56,9 @@ import type { FillLoginDeps } from "../login-fill.ts";
 import { AGENTS_NODE_FLAG, SPAWNED_PROXIES } from "../proxy-paths.ts";
 import type { Store } from "../store.ts";
 import type { TurnOwner, TurnResources } from "../turn-resources.ts";
-import { isConversationAlias } from "./cloud-offload.ts";
+import { isConversationAlias, MYCHROME_PROXY_PORT } from "./cloud-offload.ts";
+import { myChromeUnit } from "./mychrome-unit.ts";
+import { cdpUrlPort } from "../cloud-cdp-scope.ts";
 
 export interface BrowserHostDeps {
   cfg: AppConfig;
@@ -91,7 +94,7 @@ export interface BrowserHostDeps {
   decider?: Decider;
   /** FEAT-cloud-offload (host/cloud-offload.ts): the cloud browser an Auto bot's turn attaches to, or undefined to keep
    * this host's own. */
-  cloudBrowser?(botId: string, session: string, threadId: string | undefined, profile: string | undefined): Promise<string | undefined>;
+  cloudBrowser?(botId: string, session: string, threadId: string | undefined, profile: string | undefined, options?: { deadline?: number; signal?: AbortSignal }): Promise<string | undefined>;
   /** PLAN-C2 T2: refuses a call opening a sign-in site in a cloud Chrome and moves its conversation to mychrome, and
    * only that one; null lets the call through. */
   cloudAuthRefusal?(session: string, cdpUrl: string | undefined, params: unknown, who: { botId: string; threadId: string } | undefined): string | null;
@@ -299,6 +302,17 @@ export function createBrowserHost(deps: BrowserHostDeps) {
   });
   const browserLive = new LiveRouter(agentBrowserLive, chromeEngine);
   const usedBrowserSessions = new Map<string, Spec>();
+  // The shared My Chrome (omb-mychrome) is started on demand and stopped once no turn has used it for a while.
+  const manageMyChrome = !DESKTOP_MANAGED && !CLOUD_HOME && myChromeUnit.enabled;
+  const myChromeAttached = (url: string | undefined) => myChromeUnit.serves(url) || (Boolean(url) && cdpUrlPort(url) === MYCHROME_PROXY_PORT);
+  const myChromeSessions = () => [...usedBrowserSessions].filter(([, spec]) => myChromeAttached(spec.env?.AGENT_BROWSER_CDP));
+  if (manageMyChrome) {
+    myChromeUnit.addBusy(() => myChromeSessions().some(([session]) => !turnResources.free(`browser:${session}`)));
+    // agent-browser keeps its connection across turns: an idle one is closed before Chrome stops, and its next turn reopens it.
+    myChromeUnit.beforeStop(async () => {
+      for (const [session] of myChromeSessions()) if (turnResources.free(`browser:${session}`)) await closeForSwitch(session).catch(() => undefined);
+    });
+  }
   const audiences = new AudienceBrowsers(join(DATA_DIR, "browser", "audiences.json"));
   const browserAudience = (threadId: string | undefined): Audience => (threadId && deps.audienceOf ? deps.audienceOf(threadId) : "team");
   const device = deps.device && lentDevice(deps.device, (session) => turnResources.holder(`browser:${session}`), mayLend);
@@ -331,6 +345,7 @@ export function createBrowserHost(deps: BrowserHostDeps) {
   const browserSweep = {
     start() {
       agentBrowserSweep.start();
+      if (manageMyChrome) myChromeUnit.startIdleSweep();
       chromeEngine.start({ inUse: browserEngineKind(cfg) === "chrome", prepare: builtInBrowserEnabled(cfg) });
       return browserSweep;
     },
@@ -449,7 +464,14 @@ export function createBrowserHost(deps: BrowserHostDeps) {
       },
     };
   }
-  async function browserIntegration(botId: string, profile: string | undefined, turn?: { threadId: string; generation: string }, audience = browserAudience(turn?.threadId), threadId = turn?.threadId) {
+  async function browserIntegration(
+    botId: string,
+    profile: string | undefined,
+    turn?: { threadId: string; generation: string },
+    audience = browserAudience(turn?.threadId),
+    threadId = turn?.threadId,
+    cloudOptions?: { deadline?: number; signal?: AbortSignal },
+  ) {
     const profileTarget = profile && profile !== "guest" ? browserProfilePartitionTarget(cfg, profile) : null;
     const partitionId = profile === "guest" ? "guest" : (profileTarget?.partitionId ?? "");
     const browserProfileId = profileTarget?.profileId ?? profile;
@@ -466,7 +488,15 @@ export function createBrowserHost(deps: BrowserHostDeps) {
     const base = currentBrowserSession(botId, profile, audience);
     const session = threadId && deps.cloudSession && !lentChromeSession(browserProfileId) ? deps.cloudSession(botId, threadId, base, closeForSwitch) : base;
     const cdpUrl = lentChromeSession(browserProfileId) ? await lentChromeDoor(base)
-      : deps.cloudBrowser ? await deps.cloudBrowser(botId, session, threadId, browserProfileId).catch(() => undefined) : undefined;
+      : deps.cloudBrowser ? await (
+        cloudOptions !== undefined
+          ? deps.cloudBrowser(botId, session, threadId, browserProfileId, cloudOptions)
+          : deps.cloudBrowser(botId, session, threadId, browserProfileId)
+      ).catch((error: unknown) => {
+        if (error instanceof RelayError) throw error;
+        return undefined;
+      }) : undefined;
+    if (manageMyChrome && myChromeAttached(cdpUrl ?? (usesMyChrome(browserProfileId) ? browserEngineAttachCdpUrl(cfg) ?? undefined : undefined))) await myChromeUnit.ensure();
     const spec = browserSessionSpec(status.binaryPath, session, browserProfileId, usesMyChrome(browserProfileId) || cdpUrl ? undefined : await browserEgress.open(session), cdpUrl);
     usedBrowserSessions.set(session, spec);
     await prepareBrowserSessionState(status.binaryPath, session, { env: spec.env, persistent: profile !== "guest" && !attachesToChrome(spec.env), isCurrent: () => {

@@ -119,13 +119,42 @@ export interface BoxRelayTarget {
   socksPort: number;
 }
 
-/** The ssh client config the box uses to reach the relay host; `host` names it only inside the box. */
-export function boxSshConfig(relay: { hostname: string; user: string; port: number }, socksPort: number): string {
+/** E88: a relay host the box reaches through a Cloudflare tunnel's ssh hostname (port 443 via the box's HTTP proxy)
+ * instead of its own SSH port, which the box's proxy refuses. Access guards the hostname with a service token. */
+export interface BoxRelayCf {
+  /** The tunnel's public ssh hostname (cloudOffload.boxRelayCfHostname). */
+  hostname: string;
+  /** The box's HTTP proxy, which cloudflared goes out through. */
+  httpProxyPort: number;
+}
+
+export interface CfAccessToken {
+  id: string;
+  secret: string;
+}
+
+const CF_HOSTNAME = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+const CF_TOKEN_PART = /^[A-Za-z0-9._-]{8,128}$/;
+/** The cloudflared the box downloads when it has none, pinned to the version the relay host's tunnel runs. */
+export const BOX_CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64";
+
+/** Reads an Access service token from a cloudflared env file (TUNNEL_SERVICE_TOKEN_ID / _SECRET); null if malformed. */
+export function parseCfAccessEnv(text: string): CfAccessToken | null {
+  const value = (name: string) => new RegExp(`^\\s*(?:export\\s+)?${name}=["']?([^"'\\s]*)["']?\\s*$`, "m").exec(text)?.[1] ?? "";
+  const id = value("TUNNEL_SERVICE_TOKEN_ID");
+  const secret = value("TUNNEL_SERVICE_TOKEN_SECRET");
+  return CF_TOKEN_PART.test(id) && CF_TOKEN_PART.test(secret) ? { id, secret } : null;
+}
+
+/** The ssh client config the box uses to reach the relay host; `host` names it only inside the box. With `cf`, ssh
+ * goes through `cloudflared access ssh` to the tunnel's hostname, the token read from the box's 0600 cf.env. */
+export function boxSshConfig(relay: { hostname: string; user: string; port: number }, socksPort: number, cf?: BoxRelayCf): string {
+  if (cf && (!CF_HOSTNAME.test(cf.hostname) || !Number.isInteger(cf.httpProxyPort))) throw new Error("not a relay hostname");
   return [
     "Host omb-relay",
-    `  HostName ${relay.hostname}`,
+    `  HostName ${cf ? cf.hostname : relay.hostname}`,
     `  User ${relay.user}`,
-    `  Port ${relay.port}`,
+    `  Port ${cf ? 22 : relay.port}`,
     `  IdentityFile ~/${RELAY_DIR}/id`,
     "  IdentitiesOnly yes",
     "  BatchMode yes",
@@ -134,20 +163,42 @@ export function boxSshConfig(relay: { hostname: string; user: string; port: numb
     "  ServerAliveInterval 15",
     "  ServerAliveCountMax 3",
     "  LogLevel ERROR",
-    `  ProxyCommand node ~/${RELAY_DIR}/socks-connect.mjs ${socksPort} %h %p`,
+    cf
+      ? `  ProxyCommand sh -c 'set -a; . ~/${RELAY_DIR}/cf.env; HTTPS_PROXY=http://127.0.0.1:${cf.httpProxyPort}; exec ~/${RELAY_DIR}/cloudflared access ssh --hostname %h'`
+      : `  ProxyCommand node ~/${RELAY_DIR}/socks-connect.mjs ${socksPort} %h %p`,
     "",
   ].join("\n");
 }
 
+const RELAY_OWNER = /^[A-Za-z0-9._-]{1,64}$/;
+function assertRelayOwner(owner: string): string {
+  if (!RELAY_OWNER.test(owner)) throw new Error("not a relay owner");
+  return owner;
+}
+
 /** The box-side script, run over MCP: files are (re)written when their hash changed, then Chrome and the relay are
  * kept up. Prints "OMB_OK <load1> <cores>" or "OMB_ERR <why>", like the SSH machines' script. */
-export function boxUpScript(target: BoxRelayTarget, sshConfig: string): string {
+export function boxUpScript(target: BoxRelayTarget, sshConfig: string, cf?: { token: CfAccessToken; cloudflaredUrl?: string }, options: { owner?: string } = {}): string {
+  const owner = options.owner !== undefined ? assertRelayOwner(options.owner) : undefined;
   const d = `$HOME/${RELAY_DIR}`;
   const b64 = (text: string) => Buffer.from(text).toString("base64");
+  if (cf && (!CF_TOKEN_PART.test(cf.token.id) || !CF_TOKEN_PART.test(cf.token.secret))) throw new Error("not an Access token");
+  const url = cf?.cloudflaredUrl ?? BOX_CLOUDFLARED_URL;
+  if (!/^https:\/\/[A-Za-z0-9./_-]+$/.test(url)) throw new Error("not a cloudflared url");
+  // E88 Cloudflare route: the token goes in base64 into a 0600 file (a new token restarts the relay, like a new
+  // config), and cloudflared is fetched once through the box's proxy.
+  const cfLines = cf ? [
+    `echo ${b64(`TUNNEL_SERVICE_TOKEN_ID=${cf.token.id}\nTUNNEL_SERVICE_TOKEN_SECRET=${cf.token.secret}\n`)} | base64 -d > "$D/cf.env.new"; chmod 600 "$D/cf.env.new"; cmp -s "$D/cf.env.new" "$D/cf.env" && rm -f "$D/cf.env.new" || { mv "$D/cf.env.new" "$D/cf.env"; pkill -f "cdp-relay.mjs box $P" 2>/dev/null; }`,
+    `[ -x "$D/cloudflared" ] || { curl -fsSL -m 180 --proxy http://127.0.0.1:${target.httpProxyPort} -o "$D/cloudflared.tmp" ${url} && chmod 755 "$D/cloudflared.tmp" && mv "$D/cloudflared.tmp" "$D/cloudflared"; } || { rm -f "$D/cloudflared.tmp"; echo "OMB_ERR 装不上 cloudflared"; exit 0; }`,
+  ] : [];
+  const ownerWrite = owner ? [`printf '%s\\n' ${shq(owner)} > "$D/owner.$P"; chmod 600 "$D/owner.$P"`] : [];
+  const ownerEnv = owner ? `OMB_RELAY_OWNER=${shq(owner)} ` : "";
   return [
     `D=${d}; mkdir -p "$D"; chmod 700 "$D"; P=${target.cdpPort}`,
+    ...ownerWrite,
     `if [ "$(cat "$D/.hash" 2>/dev/null)" != ${scriptsHash} ]; then echo ${b64(RELAY_SCRIPT)} | base64 -d > "$D/cdp-relay.mjs"; echo ${b64(SOCKS_CONNECT_SCRIPT)} | base64 -d > "$D/socks-connect.mjs"; echo ${scriptsHash} > "$D/.hash"; pkill -f "cdp-relay.mjs box $P" 2>/dev/null; fi`,
     `echo ${b64(sshConfig)} | base64 -d > "$D/ssh_config.new"; chmod 600 "$D/ssh_config.new"; cmp -s "$D/ssh_config.new" "$D/ssh_config" && rm -f "$D/ssh_config.new" || { mv "$D/ssh_config.new" "$D/ssh_config"; pkill -f "cdp-relay.mjs box $P" 2>/dev/null; }`,
+    ...cfLines,
     `[ -f "$D/id" ] || ssh-keygen -q -t ed25519 -N "" -C omb-relay -f "$D/id"`,
     `up() { curl -s -m 3 --noproxy '*' "http://127.0.0.1:$P/json/version" | grep -q webSocketDebuggerUrl; }`,
     `B=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)`,
@@ -156,7 +207,7 @@ export function boxUpScript(target: BoxRelayTarget, sshConfig: string): string {
     // The loop is named by its $0 so a check between two of its ssh sessions still finds it; a relay host that keeps
     // refusing is retried less and less often (up to 2 min), since SSH gateways rate-limit and cool a machine down.
     // A session that ended idle (9, E80) ends the loop and the box's Chrome with it: the next pick starts both again.
-    `if ! pgrep -f "omb-relay-loop-$P" >/dev/null; then D="$D" P="$P" R=${target.relayPort} OMB_RELAY_IDLE_S=${BOX_RELAY_IDLE_S} setsid nohup bash -c 'n=1; while true; do s=$(date +%s); node "$D/cdp-relay.mjs" box "$P" -- ssh -F "$D/ssh_config" omb-relay node ${RELAY_DIR}/cdp-relay.mjs cloud "$R"; [ $? -eq 9 ] && { pkill -f -- "--remote-debugging-port=$P" 2>/dev/null; exit 0; }; [ $(( $(date +%s) - s )) -gt 120 ] && n=1 || n=$(( n * 2 > 120 ? 120 : n * 2 )); sleep $n; done' "omb-relay-loop-$P" >"$D/relay.log" 2>&1 </dev/null & sleep 2; fi`,
+    `if ! pgrep -f "omb-relay-loop-$P" >/dev/null; then ${ownerEnv}D="$D" P="$P" R=${target.relayPort} OMB_RELAY_IDLE_S=${BOX_RELAY_IDLE_S} setsid nohup bash -c 'n=1; while true; do s=$(date +%s); node "$D/cdp-relay.mjs" box "$P" -- ssh -F "$D/ssh_config" omb-relay node ${RELAY_DIR}/cdp-relay.mjs cloud "$R"; [ $? -eq 9 ] && { pkill -f -- "--remote-debugging-port=$P" 2>/dev/null; rm -f "$D/owner.$P"; exit 0; }; [ $(( $(date +%s) - s )) -gt 120 ] && n=1 || n=$(( n * 2 > 120 ? 120 : n * 2 )); sleep $n; done' "omb-relay-loop-$P" >"$D/relay.log" 2>&1 </dev/null & sleep 2; fi`,
     `pgrep -f "omb-relay-loop-$P" >/dev/null || { echo "OMB_ERR 中继起不来"; exit 0; }`,
     // The box's own relay key, public half only: a relay host with a dedicated account authorizes it for this box.
     `echo "OMB_PUB $(cut -d' ' -f1,2 "$D/id.pub")"`,
@@ -211,13 +262,38 @@ export function relayHostScript(restricted?: RestrictedRelay): string {
 
 /** Stops a box's relay and Chrome (idle teardown, E80). Patterns name the port through $P so the shell running this
  * never matches them itself. Prints "OMB_DOWN <left>": how many of those processes are still there. */
-export function boxDownScript(cdpPort: number): string {
+export function boxDownScript(cdpPort: number, options: { owner?: string } = {}): string {
+  const owner = options.owner !== undefined ? assertRelayOwner(options.owner) : undefined;
+  const ownerGuard = owner
+    ? `[ -f "$D/owner.$P" ] && [ "$(cat "$D/owner.$P" 2>/dev/null)" = ${shq(owner)} ] || { echo "OMB_DOWN_SKIPPED unowned"; echo "OMB_DOWN $(pgrep -fc "omb-relay-loop-$P|cdp-relay.mjs box $P|ssh -F $D/ssh_config omb-relay|--remote-debugging-port=$P")"; exit 0; }`
+    : null;
   return [
     `P=${cdpPort}; D=$HOME/${RELAY_DIR}`,
+    ...(ownerGuard ? [ownerGuard] : []),
     `pkill -f "omb-relay-loop-$P" 2>/dev/null; pkill -f "cdp-relay.mjs box $P" 2>/dev/null; pkill -f "ssh -F $D/ssh_config omb-relay" 2>/dev/null; pkill -f -- "--remote-debugging-port=$P" 2>/dev/null`,
     `for i in 1 2 3 4 5 6; do pgrep -f "omb-relay-loop-$P|cdp-relay.mjs box $P|ssh -F $D/ssh_config omb-relay|--remote-debugging-port=$P" >/dev/null || break; sleep 0.5; done`,
     `pgrep -f "omb-relay-loop-$P|cdp-relay.mjs box $P|ssh -F $D/ssh_config omb-relay|--remote-debugging-port=$P" >/dev/null && pkill -9 -f "omb-relay-loop-$P|cdp-relay.mjs box $P|ssh -F $D/ssh_config omb-relay|--remote-debugging-port=$P" 2>/dev/null`,
+    ...(owner ? [`rm -f "$D/owner.$P"`] : []),
     `echo "OMB_DOWN $(pgrep -fc "omb-relay-loop-$P|cdp-relay.mjs box $P|ssh -F $D/ssh_config omb-relay|--remote-debugging-port=$P")"`,
+  ].join("\n");
+}
+
+/**
+ * E115: makes the box's relay loop dial the relay host now instead of after its backoff (up to 2 min). The loop's
+ * pending `sleep` is ended; with `session`, the box's current relay session is ended first too (a session the health
+ * check found dead, e.g. half-open after the relay host's side went away). Chrome and its pages are left alone.
+ * Prints "OMB_KICK <n>": how many sleeps were cut short (0 when the loop was mid-dial or not running).
+ */
+export function boxKickScript(cdpPort: number, options: { session?: boolean; owner?: string } = {}): string {
+  if (!Number.isInteger(cdpPort) || cdpPort < 1024 || cdpPort > 65535) throw new Error("not a CDP port");
+  const owner = options.owner !== undefined ? assertRelayOwner(options.owner) : undefined;
+  return [
+    `P=${cdpPort}; D=$HOME/${RELAY_DIR}; K=0`,
+    ...(owner ? [`[ -f "$D/owner.$P" ] && [ "$(cat "$D/owner.$P" 2>/dev/null)" = ${shq(owner)} ] || { echo "OMB_KICK 0"; exit 0; }`] : []),
+    ...(options.session ? [`pkill -f "cdp-relay.mjs box $P" 2>/dev/null`] : []),
+    `L=$(pgrep -f "omb-relay-loop-$P" | head -n 1)`,
+    `if [ -n "$L" ]; then for i in 1 2 3 4 5 6; do pkill -P "$L" -x sleep 2>/dev/null && { K=1; break; }; sleep 0.5; done; fi`,
+    `echo "OMB_KICK $K"`,
   ].join("\n");
 }
 

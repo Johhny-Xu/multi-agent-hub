@@ -1546,4 +1546,27 @@ describe("one time budget per bot call", () => {
       daemon.cleanup();
     }
   });
+
+  it("fails closed before dispatching an action when caller deadline has no budget past followUpReserveMs", async () => {
+    const value = runtime({ requestTimeoutMs: 10_000, laneWaitMs: 1_000, callBudgetMs: 10_000, followUpReserveMs: 2_000 });
+    const daemon = daemonSpec();
+    try {
+      const ctx = {
+        botId: "b",
+        botName: "b",
+        threadId: "t",
+        generation: "g",
+        turnId: () => null,
+        record: false,
+        deadline: Date.now() + 500,
+      };
+      const res = await value.agentRpc("s", daemon.spec, "tools/call", { name: "agent_browser_click", arguments: { selector: "@e1" } }, undefined, ctx);
+      expect(res).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("尚未发送") }] });
+      expect(daemon.calls()).toEqual([]);
+      expect(value.interrupted("s")).toBe(false);
+    } finally {
+      await value.closeAll();
+      daemon.cleanup();
+    }
+  });
 });

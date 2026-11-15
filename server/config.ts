@@ -338,7 +338,7 @@ const autoPlacementSchema = z.object({
   memMinMb: z.number().int().min(0).max(1_000_000).optional(),
 }).strict();
 /** FEAT-cloud-offload: Auto bots' browser on a cloud machine first; `guard` keeps the bots' own headless Chrome off this host. */
-const cloudOffloadSchema = z.object({ enabled: z.boolean().optional(), guard: z.boolean().optional(), authDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)).max(200).optional(), requireAuthBots: z.array(z.string().max(128)).max(500).optional(), cloudPageCap: z.number().int().min(1).max(50).optional(), boxRelayVia: z.string().trim().min(1).max(128).optional(), boxRelayUser: z.string().regex(/^[a-z_][a-z0-9_-]{0,31}$/).optional() }).strict();
+const cloudOffloadSchema = z.object({ enabled: z.boolean().optional(), guard: z.boolean().optional(), relayRecoveryV2: z.boolean().optional(), authDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)).max(200).optional(), requireAuthBots: z.array(z.string().max(128)).max(500).optional(), cloudPageCap: z.number().int().min(1).max(50).optional(), boxRelayVia: z.string().trim().min(1).max(128).optional(), boxRelayUser: z.string().regex(/^[a-z_][a-z0-9_-]{0,31}$/).optional(), boxRelayCfHostname: z.string().trim().toLowerCase().max(253).regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/).optional(), boxRelayCfTokenFile: z.string().trim().max(256).regex(/^(~\/|\/)[A-Za-z0-9._\/-]+$/).optional() }).strict();
 const threadsConfigSchema = z.object({
   maxConcurrentPerBot: z.number().int().min(1).max(MAX_CONCURRENT_BOT_THREADS),
   /** Byte cap for each thread's events/ and native/ log; absent means unbounded. */
@@ -510,7 +510,7 @@ export interface AppConfig extends HelperConfig {
   /** Auto placement: which local load sends a turn to the cloud. Absent = defaults, enabled. */
   autoPlacement?: { enabled?: boolean; cpuHigh?: number; cpuLow?: number; memHighPct?: number; memLowPct?: number; memMinMb?: number };
   /** FEAT-cloud-offload; absent = on. */
-  cloudOffload?: { enabled?: boolean; guard?: boolean; authDomains?: string[]; requireAuthBots?: string[]; cloudPageCap?: number; boxRelayVia?: string; boxRelayUser?: string };
+  cloudOffload?: { enabled?: boolean; guard?: boolean; relayRecoveryV2?: boolean; authDomains?: string[]; requireAuthBots?: string[]; cloudPageCap?: number; boxRelayVia?: string; boxRelayUser?: string; boxRelayCfHostname?: string; boxRelayCfTokenFile?: string };
   /** UI creation template. Saving it never mutates a bot or grants access. */
   newBotDefaults?: NewBotDefaults;
   newBots?: { effort?: EffortLevel; browserProfile?: string };

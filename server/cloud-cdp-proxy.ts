@@ -13,6 +13,7 @@ import type { Duplex } from "node:stream";
 
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 
+import { RelayError, RELAY_SINGLE_REQUEST_WAIT_MS } from "./cloud-browser.ts";
 import { DEFAULT_MAX_LOCAL_BYTES, asText, DIRTYING_COMMAND, DIRTYING_EVENT, fromLocalMausUrl, insideRoots, LOCAL_HOST_SUFFIX, mimeOf, rewriteEndpointBody, targetInfosOf, toBuffer, toLocalMausUrl, type Frame } from "./cloud-cdp-local.ts";
 import { ScopeRegistry, ScopeView, scopeFilePersist, scopeOfPath } from "./cloud-cdp-scope.ts";
 
@@ -43,7 +44,20 @@ export interface CdpProxyOptions {
   onAuthBlocked?: (domain: string, url: string) => void;
   onActivity?: () => void;
   /** Starts the upstream Chrome when it may be down (this host's fallback Chrome is started on first use). */
-  ensureUpstream?: () => Promise<unknown>;
+  ensureUpstream?: (ctx?: { deadline?: number; signal?: AbortSignal }) => Promise<unknown>;
+  /** E115: how long an upstream request or a WebSocket's opening may take before the call fails (502/504 / close 1011)
+   * instead of hanging, e.g. on a relayed box whose relay died; unset waits as long as the network does. */
+  upstreamTimeoutMs?: number;
+  /** Per-command response limit for in-flight WS CDP commands under relayRecoveryV2 (defaults to 45 s). */
+  wsCommandTimeoutMs?: number;
+  /** E115: told each time an upstream request or opening ran past upstreamTimeoutMs. */
+  onUpstreamTimeout?: () => void;
+  /** Called when an upstream HTTP response or WS open/message succeeds. */
+  onUpstreamSuccess?: () => void;
+  /** Acquires a machine lease while a proxy HTTP request or WS Pipe is active. */
+  acquireLease?: () => (() => void) | void;
+  /** Enables V2 relay recovery error mapping (503/504/1011), 1-shot idempotent retries, and per-command WS timeouts. */
+  relayRecoveryV2?: boolean | (() => boolean);
   /** A file keeping the pages each scope owns, so a restart closes the ones the last process left behind. */
   scopeStateFile?: string;
   log?: (line: string) => void;
@@ -197,31 +211,118 @@ class Pipe {
   #work: Promise<void> = Promise.resolve();
   #nextId = PROXY_ID_BASE;
   #closed = false;
+  #sentWireFrame = false;
+  #preFrameRetried = false;
+  readonly #connectDeadline: number | undefined;
+  readonly #releaseLease: (() => void) | undefined;
+  readonly #clientPending = new Map<number | string, { timer: ReturnType<typeof setTimeout>; sessionId?: string }>();
 
-  constructor(proxy: CdpProxy, client: WebSocket, upstreamUrl: string, scope: ScopeView | null) {
+  constructor(proxy: CdpProxy, client: WebSocket, upstreamUrl: string, scope: ScopeView | null, connectDeadline?: number) {
     this.#proxy = proxy;
     this.#client = client;
     this.#upstreamUrl = upstreamUrl;
     this.#scope = scope;
+    this.#connectDeadline = connectDeadline;
+    const released = proxy.acquireLease();
+    this.#releaseLease = typeof released === "function" ? released : undefined;
     // The scope is held for as long as this connection is, and a little after it goes.
     scope?.join();
-    this.#connectUpstream();
-  }
-
-  #connectUpstream(): void {
-    const upstream = new WebSocket(this.#upstreamUrl);
-    this.#upstream = upstream;
-    upstream.on("open", () => {
-      const waiting = this.#outbox;
-      this.#outbox = [];
-      for (const data of waiting) upstream.send(asText(data));
-    });
-    upstream.on("message", (data: RawData) => this.#onUpstreamData(data));
-    upstream.on("error", () => this.#closeBoth());
-    upstream.on("close", () => this.#closeBoth());
     this.#client.on("message", (data: RawData) => this.#onClientData(data));
     this.#client.on("error", () => this.#closeBoth());
     this.#client.on("close", () => this.#closeBoth());
+    this.#connectUpstream();
+  }
+
+  #armClientPending(id: number | string, sessionId: string | undefined): void {
+    const timeoutMs = this.#proxy.wsCommandTimeoutMs;
+    if (!timeoutMs || this.#closed) return;
+    const prev = this.#clientPending.get(id);
+    if (prev) clearTimeout(prev.timer);
+    const timer = setTimeout(() => {
+      if (this.#closed || !this.#clientPending.has(id)) return;
+      this.#clientPending.delete(id);
+      this.#proxy.upstreamTimedOut(`CDP 命令 #${String(id)} 超过 ${Math.round(timeoutMs / 1000)} s`);
+      this.sendToClient({
+        id,
+        ...(sessionId === undefined ? {} : { sessionId }),
+        error: { code: REFUSED, message: "云端浏览器命令响应超时（状态未知，请确认后再重试）" },
+      });
+      this.#upstream?.terminate();
+      this.close(1011, "upstream CDP command timeout");
+    }, timeoutMs);
+    timer.unref?.();
+    this.#clientPending.set(id, { timer, ...(sessionId === undefined ? {} : { sessionId }) });
+  }
+
+  #clearClientPending(id: number | string | undefined): void {
+    if (id === undefined) return;
+    const entry = this.#clientPending.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    this.#clientPending.delete(id);
+  }
+
+  #connectUpstream(): void {
+    if (this.#closed) return;
+    const limit = this.#proxy.upstreamTimeoutMs;
+    const remainingBudget = this.#connectDeadline !== undefined ? this.#connectDeadline - Date.now() : undefined;
+    const effectiveLimit = limit !== undefined && remainingBudget !== undefined
+      ? Math.max(1, Math.min(limit, remainingBudget))
+      : limit ?? (remainingBudget !== undefined ? Math.max(1, remainingBudget) : undefined);
+
+    const upstream = effectiveLimit
+      ? new WebSocket(this.#upstreamUrl, { handshakeTimeout: effectiveLimit })
+      : new WebSocket(this.#upstreamUrl);
+    this.#upstream = upstream;
+    let retrying = false;
+
+    const retryPreFrame = (reason: string): boolean => {
+      if (retrying || this.#closed || this.#sentWireFrame || this.#preFrameRetried) return false;
+      if (!this.#proxy.isV2 || this.#client.readyState !== WebSocket.OPEN) return false;
+      if (this.#connectDeadline !== undefined && Date.now() >= this.#connectDeadline) return false;
+      retrying = true;
+      this.#preFrameRetried = true;
+      settle();
+      upstream.removeAllListeners();
+      upstream.terminate();
+      this.#proxy.upstreamTimedOut(reason);
+      void this.#proxy.ensureUpstreamStrict({ deadline: this.#connectDeadline }).then(
+        () => { if (!this.#closed) this.#connectUpstream(); },
+        () => { if (!this.#closed) this.close(1011, "upstream reconnect failed"); },
+      );
+      return true;
+    };
+
+    // E115: an upstream that never opens (a dead relay) fails the CLI's connection instead of leaving it hanging.
+    const opening = effectiveLimit ? setTimeout(() => {
+      if (this.#closed || upstream.readyState === WebSocket.OPEN) return;
+      const msg = `WebSocket 打开超过 ${Math.round(effectiveLimit / 1000)} s`;
+      if (retryPreFrame(msg)) return;
+      this.#proxy.upstreamTimedOut(msg);
+      upstream.terminate();
+      this.close(1011, "upstream open timeout");
+    }, effectiveLimit) : null;
+    opening?.unref?.();
+    const settle = () => { if (opening) clearTimeout(opening); };
+    upstream.on("close", settle);
+    upstream.on("open", () => {
+      if (this.#closed || retrying) return;
+      settle();
+      this.#proxy.notifyUpstreamSuccess();
+      const waiting = this.#outbox;
+      this.#outbox = [];
+      for (const data of waiting) {
+        this.#sentWireFrame = true;
+        upstream.send(asText(data));
+      }
+    });
+    upstream.on("message", (data: RawData) => this.#onUpstreamData(data));
+    upstream.on("error", () => {
+      if (!retryPreFrame("WebSocket 建连失败")) this.#closeBoth();
+    });
+    upstream.on("close", () => {
+      if (!retryPreFrame("WebSocket 建连关闭")) this.#closeBoth();
+    });
   }
 
   /** Every client message is handled in arrival order: one that must prepare something holds the ones behind it. */
@@ -247,6 +348,9 @@ class Pipe {
     if (!message || typeof message !== "object" || typeof message.method !== "string") {
       this.#toUpstreamRaw(data);
       return;
+    }
+    if (this.#proxy.isV2 && (typeof message.id === "number" || typeof message.id === "string")) {
+      this.#armClientPending(message.id, typeof message.sessionId === "string" ? message.sessionId : undefined);
     }
     await this.#command(message, data);
   }
@@ -478,6 +582,7 @@ class Pipe {
   }
 
   #onUpstreamData(data: RawData): void {
+    this.#proxy.notifyUpstreamSuccess();
     let message: UpstreamMessage;
     try {
       message = JSON.parse(toBuffer(data).toString("utf8")) as UpstreamMessage;
@@ -495,6 +600,9 @@ class Pipe {
       this.#proxyIds.delete(message.id);
       waiter.answer(message);
       return;
+    }
+    if (typeof message.id === "number" || typeof message.id === "string") {
+      this.#clearClientPending(message.id);
     }
     // A scoped connection hears about the pages of its own session, and nothing about anybody else's.
     if (this.#scope !== null && message.sessionId === undefined && this.#scope.filterUpstream(message) !== "pass") return;
@@ -574,6 +682,9 @@ class Pipe {
   }
 
   sendToClient(message: Record<string, unknown>): void {
+    if (typeof message.id === "number" || typeof message.id === "string") {
+      this.#clearClientPending(message.id);
+    }
     if (this.#closed || this.#client.readyState !== WebSocket.OPEN) return;
     this.#client.send(JSON.stringify(message));
   }
@@ -592,25 +703,52 @@ class Pipe {
       this.#outbox.push(data);
       return;
     }
+    this.#sentWireFrame = true;
     this.#upstream.send(asText(data));
   }
 
   /** One end going away takes the other with it; an unreachable upstream tells the CLI with 1011. */
   #closeBoth(): void {
-    this.close(1011);
+    this.close(1011, "upstream closed");
   }
 
-  close(code = 1000): void {
+  close(code = 1000, reason?: string): void {
     if (this.#closed) return;
     this.#closed = true;
     this.#scope?.leave();
+    this.#releaseLease?.();
     for (const shot of this.#shots.values()) shot.stop();
     this.#shots.clear();
+    for (const [id, entry] of this.#clientPending) {
+      clearTimeout(entry.timer);
+      if (code === 1011 && this.#client.readyState === WebSocket.OPEN) {
+        this.#client.send(JSON.stringify({
+          id,
+          ...(entry.sessionId === undefined ? {} : { sessionId: entry.sessionId }),
+          error: { code: REFUSED, message: "云端浏览器连接已断开（动作是否执行未知）" },
+        }));
+      }
+    }
+    this.#clientPending.clear();
     for (const waiter of this.#pending.values()) waiter.fail(new Error("the proxy closed"));
     this.#pending.clear();
     this.#proxyIds.clear();
-    this.#upstream?.close();
-    this.#client.close(code);
+    const closeSocket = (ws: WebSocket | null, closeCode?: number, closeReason?: string) => {
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) return;
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          if (closeCode !== undefined && closeReason) ws.close(closeCode, closeReason);
+          else if (closeCode !== undefined) ws.close(closeCode);
+          else ws.close();
+        } else {
+          ws.terminate();
+        }
+      } catch {
+        try { ws.terminate(); } catch {}
+      }
+    };
+    closeSocket(this.#upstream);
+    closeSocket(this.#client, code, reason);
   }
 }
 
@@ -689,6 +827,18 @@ async function answerPaused(proxy: CdpProxy, request: Record<string, unknown>, p
   ], body);
 }
 
+function rejectUpgradeSocket(socket: Duplex, status: 502 | 503 | 504, text: string): void {
+  const statusText = status === 503 ? "Service Unavailable" : status === 504 ? "Gateway Timeout" : "Bad Gateway";
+  const body = Buffer.from(text, "utf8");
+  try {
+    socket.end(
+      `HTTP/1.1 ${status} ${statusText}\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${body.length}\r\n\r\n${text}`,
+    );
+  } catch {
+    try { socket.destroy(); } catch {}
+  }
+}
+
 /** The local stand-in for Chrome's DevTools endpoint: transparent to a CLI, guarded for the cloud browser. */
 export class CdpProxy {
   readonly #options: CdpProxyOptions;
@@ -702,6 +852,7 @@ export class CdpProxy {
   readonly #slots: SlotWaiter[] = [];
   /** When each granted slot was handed out and its page not yet created: concurrent opens must not all see room. */
   readonly #grants: number[] = [];
+  readonly #closingController = new AbortController();
   #createdCount = 0;
   #port: number;
   #closed = false;
@@ -730,29 +881,61 @@ export class CdpProxy {
         return;
       }
       this.activity();
-      // An upstream that stops answering mid-upgrade must not become an unhandled rejection that takes the server down.
-      void this.#ensureUpstream().then(() => this.#upgrade(req, socket, head, req.url ?? "/")).catch(() => socket.destroy());
+      const ctrl = new AbortController();
+      const abort = () => ctrl.abort();
+      socket.once("close", abort);
+      const onClosing = () => ctrl.abort();
+      this.#closingController.signal.addEventListener("abort", onClosing, { once: true });
+      const deadline = this.isV2 ? Date.now() + (this.wsCommandTimeoutMs ?? RELAY_SINGLE_REQUEST_WAIT_MS) : undefined;
+      const runUpgrade = this.isV2
+        ? this.ensureUpstreamStrict({ deadline, signal: ctrl.signal }).then(() => this.#upgrade(req, socket, head, req.url ?? "/", { deadline, signal: ctrl.signal }))
+        : this.#ensureUpstream().then(() => this.#upgrade(req, socket, head, req.url ?? "/"));
+      void runUpgrade.catch((error: unknown) => {
+        if (this.isV2 && error instanceof RelayError) {
+          const status: 503 | 504 = error.code === "RELAY_QUARANTINED" ? 503 : 504;
+          rejectUpgradeSocket(socket, status, `${error.message}\n`);
+          return;
+        }
+        if (this.isV2) {
+          rejectUpgradeSocket(socket, 504, "上游 Chrome 没有及时响应\n");
+          return;
+        }
+        socket.destroy();
+      }).finally(() => {
+        socket.removeListener("close", abort);
+        this.#closingController.signal.removeEventListener("abort", onClosing);
+      });
     });
   }
 
   /** A scoped connection talks to the browser itself, so that its own pages are the only ones it can reach. */
-  async #upgrade(req: IncomingMessage, socket: Duplex, head: Buffer, path: string): Promise<void> {
+  async #upgrade(req: IncomingMessage, socket: Duplex, head: Buffer, path: string, ctx?: { deadline?: number; signal?: AbortSignal }): Promise<void> {
+    if (this.#closed || ctx?.signal?.aborted) {
+      socket.destroy();
+      return;
+    }
     const scope = scopeOfPath(path);
     let upstreamUrl = this.#webSocketUrl(path);
     let view: ScopeView | null = null;
     if (scope !== null) {
-      const browserUrl = await this.#browserUrl();
+      let browserUrl = await this.#browserUrl(ctx).catch(() => null);
+      if (browserUrl === null && this.isV2 && (!ctx?.deadline || Date.now() < ctx.deadline) && !ctx?.signal?.aborted) {
+        this.upstreamTimedOut("scoped /json/version failed, retrying once");
+        await this.ensureUpstreamStrict(ctx);
+        browserUrl = await this.#browserUrl(ctx).catch(() => null);
+      }
       // A scope only exists behind a browser-level address, so without one there is nothing to give it.
       if (browserUrl === null) {
         this.log(`the upstream Chrome named no browser-level DevTools address, so scope ${scope} was refused`);
-        socket.destroy();
+        if (this.isV2) rejectUpgradeSocket(socket, 504, "上游 Chrome 未提供浏览器级地址\n");
+        else socket.destroy();
         return;
       }
       upstreamUrl = browserUrl;
       view = new ScopeView(scope, this.#scopes);
     }
     this.#wss.handleUpgrade(req, socket, head, (client) => {
-      const pipe = new Pipe(this, client, upstreamUrl, view);
+      const pipe = new Pipe(this, client, upstreamUrl, view, ctx?.deadline);
       this.#pipes.add(pipe);
       client.on("close", () => this.#pipes.delete(pipe));
     });
@@ -765,8 +948,8 @@ export class CdpProxy {
   }
 
   /** The upstream Chrome's own browser-level address, which is the only one a scoped connection may be sent to. */
-  async #browserUrl(): Promise<string | null> {
-    const version = await this.#upstreamJson("/json/version") as { webSocketDebuggerUrl?: unknown } | null;
+  async #browserUrl(ctx?: { deadline?: number; signal?: AbortSignal }): Promise<string | null> {
+    const version = await this.#upstreamJson("/json/version", ctx) as { webSocketDebuggerUrl?: unknown } | null;
     try {
       const named = version?.webSocketDebuggerUrl;
       return typeof named === "string" ? this.#webSocketUrl(new URL(named).pathname) : null;
@@ -779,9 +962,22 @@ export class CdpProxy {
   async #closeTarget(targetId: string): Promise<void> {
     // Chrome answers /json/close with plain text, not JSON.
     this.#created.delete(targetId);
-    const response = await fetch(new URL(`/json/close/${encodeURIComponent(targetId)}`, this.#upstreamBase), { headers: { host: this.#upstreamBase.host } });
+    const response = await this.#timedFetch(new URL(`/json/close/${encodeURIComponent(targetId)}`, this.#upstreamBase), { headers: { host: this.#upstreamBase.host } });
     // A page already gone answers 404 or plain text; either way there is nothing left to close.
     if (!response.ok && response.status !== 404) throw new Error(`the upstream Chrome answered ${response.status} for /json/close`);
+  }
+
+  get isV2(): boolean {
+    const v = this.#options.relayRecoveryV2;
+    return typeof v === "function" ? v() : v === true;
+  }
+
+  async ensureUpstreamStrict(ctx?: { deadline?: number; signal?: AbortSignal }): Promise<void> {
+    if (!this.#options.ensureUpstream) return;
+    await this.#options.ensureUpstream({
+      ...(ctx?.deadline !== undefined ? { deadline: ctx.deadline } : {}),
+      signal: ctx?.signal ?? this.#closingController.signal,
+    });
   }
 
   async #ensureUpstream(): Promise<void> {
@@ -794,6 +990,105 @@ export class CdpProxy {
 
   get url(): string {
     return `http://${this.#options.host ?? "127.0.0.1"}:${this.#port}`;
+  }
+
+  /** E115: the configured upstream time limit, or undefined. */
+  get upstreamTimeoutMs(): number | undefined {
+    const limit = this.#options.upstreamTimeoutMs;
+    return typeof limit === "number" && limit > 0 ? limit : undefined;
+  }
+
+  get wsCommandTimeoutMs(): number | undefined {
+    if (!this.isV2) return undefined;
+    const limit = this.#options.wsCommandTimeoutMs;
+    return typeof limit === "number" && limit > 0 ? limit : RELAY_SINGLE_REQUEST_WAIT_MS;
+  }
+
+  notifyUpstreamSuccess(): void {
+    try {
+      this.#options.onUpstreamSuccess?.();
+    } catch {}
+  }
+
+  acquireLease(): (() => void) | void {
+    return this.#options.acquireLease?.();
+  }
+
+  upstreamTimedOut(what: string): void {
+    this.log(`上游 Chrome 没有响应（${what}）`);
+    try {
+      this.#options.onUpstreamTimeout?.();
+    } catch {}
+  }
+
+  /** fetch to the upstream, failed after upstreamTimeoutMs when one is set (E115). */
+  async #timedFetch(target: URL, init: RequestInit, ctx?: { deadline?: number; signal?: AbortSignal }): Promise<Response> {
+    const limit = this.upstreamTimeoutMs;
+    const remaining = ctx?.deadline !== undefined ? ctx.deadline - Date.now() : undefined;
+    const effective = limit !== undefined && remaining !== undefined
+      ? Math.min(limit, remaining)
+      : limit ?? remaining;
+    if (effective === undefined && !ctx?.signal) return fetch(target, init);
+    if (effective !== undefined && effective <= 0) {
+      const err = new Error("upstream fetch deadline elapsed");
+      err.name = "TimeoutError";
+      this.upstreamTimedOut(`${target.pathname} 超过剩余期限`);
+      throw err;
+    }
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const onAbort = () => ctrl.abort();
+    ctx?.signal?.addEventListener("abort", onAbort, { once: true });
+    this.#closingController.signal.addEventListener("abort", onAbort, { once: true });
+    const timer = effective !== undefined ? setTimeout(() => { timedOut = true; ctrl.abort(); }, effective) : null;
+    timer?.unref?.();
+    try {
+      return await fetch(target, { ...init, signal: ctrl.signal });
+    } catch (error) {
+      if (timedOut || (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") && !ctx?.signal?.aborted)) {
+        this.upstreamTimedOut(`${target.pathname} 超过 ${Math.round((effective ?? limit ?? 0) / 1000)} s`);
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+      ctx?.signal?.removeEventListener("abort", onAbort);
+      this.#closingController.signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  async #timedFetchText(target: URL, init: RequestInit, ctx?: { deadline?: number; signal?: AbortSignal }): Promise<{ status: number; contentType: string | null; text: string }> {
+    const limit = this.upstreamTimeoutMs;
+    const remaining = ctx?.deadline !== undefined ? ctx.deadline - Date.now() : undefined;
+    const effective = limit !== undefined && remaining !== undefined
+      ? Math.min(limit, remaining)
+      : limit ?? remaining;
+    if (effective !== undefined && effective <= 0) {
+      const err = new Error("upstream fetch deadline elapsed");
+      err.name = "TimeoutError";
+      this.upstreamTimedOut(`${target.pathname} 超过剩余期限`);
+      throw err;
+    }
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const onAbort = () => ctrl.abort();
+    ctx?.signal?.addEventListener("abort", onAbort, { once: true });
+    this.#closingController.signal.addEventListener("abort", onAbort, { once: true });
+    const timer = effective !== undefined ? setTimeout(() => { timedOut = true; ctrl.abort(); }, effective) : null;
+    timer?.unref?.();
+    try {
+      const response = await fetch(target, { ...init, signal: ctrl.signal });
+      const text = await response.text();
+      return { status: response.status, contentType: response.headers.get("content-type"), text };
+    } catch (error) {
+      if (timedOut || (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") && !ctx?.signal?.aborted)) {
+        this.upstreamTimedOut(`${target.pathname} 超过 ${Math.round((effective ?? limit ?? 0) / 1000)} s`);
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+      ctx?.signal?.removeEventListener("abort", onAbort);
+      this.#closingController.signal.removeEventListener("abort", onAbort);
+    }
   }
 
   get timing(): ResolvedTiming {
@@ -863,9 +1158,11 @@ export class CdpProxy {
     return this.#grants.length;
   }
 
-  async #upstreamJson(path: string): Promise<unknown> {
-    const response = await fetch(new URL(path, this.#upstreamBase), { headers: { host: this.#upstreamBase.host, "accept-encoding": "identity" } });
-    return response.status === 200 ? await response.json() : null;
+  async #upstreamJson(path: string, ctx?: { deadline?: number; signal?: AbortSignal }): Promise<unknown> {
+    const response = await this.#timedFetchText(new URL(path, this.#upstreamBase), { headers: { host: this.#upstreamBase.host, "accept-encoding": "identity" } }, ctx);
+    if (response.status !== 200) return null;
+    this.notifyUpstreamSuccess();
+    return JSON.parse(response.text);
   }
 
   async #pageCount(countAll: boolean): Promise<number> {
@@ -889,7 +1186,9 @@ export class CdpProxy {
     return await new Promise<boolean>((resolve) => {
       const waiter: SlotWaiter = {
         done: false,
-        timer: setInterval(() => void this.#drainSlots(cap.max, countAll), this.#timing.queuePollMs),
+        // A poll whose /json/list fetch fails or is aborted (proxy closing, upstream timeout) just waits for the next tick;
+        // left unhandled it surfaced as an unhandled AbortError once close() aborted the in-flight fetch (E115 V2).
+        timer: setInterval(() => { this.#drainSlots(cap.max, countAll).catch(() => {}); }, this.#timing.queuePollMs),
         timeout: setTimeout(() => {
           if (waiter.done) return;
           waiter.done = true;
@@ -933,8 +1232,52 @@ export class CdpProxy {
       return;
     }
     const query = new URL(req.url ?? "/", "http://127.0.0.1").searchParams;
-    await this.#ensureUpstream();
+    if (!this.isV2) {
+      await this.#ensureUpstream();
+      try {
+        if (path === "/json/new") {
+          const url = query.get("url") ?? "";
+          if (this.localAddress(url) !== null) {
+            res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+            res.end("请用 CDP Target.createTarget 打开本机页面\n");
+            return;
+          }
+          const domain = this.blockedDomain(url);
+          if (domain !== null) {
+            this.authBlocked(domain, url);
+            res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+            res.end(`${this.authMessage(domain)}\n`);
+            return;
+          }
+        }
+        const target = new URL(`${path}${new URL(req.url ?? "/", "http://127.0.0.1").search}`, this.#upstreamBase);
+        const headers: Record<string, string> = { host: this.#upstreamBase.host, "accept-encoding": "identity" };
+        for (const [name, value] of Object.entries(req.headers)) {
+          const lower = name.toLowerCase();
+          if (lower === "host" || lower === "accept-encoding") continue;
+          headers[lower] = Array.isArray(value) ? value.join(", ") : String(value);
+        }
+        const response = await this.#timedFetch(target, { method: req.method, headers });
+        const body = rewriteEndpointBody(await response.text(), this.#port);
+        const sent: Record<string, string> = { "content-type": response.headers.get("content-type") ?? "application/json" };
+        res.writeHead(response.status, sent);
+        res.end(body);
+      } catch {
+        res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+        res.end("上游 Chrome 没有响应\n");
+      }
+      return;
+    }
+
+    const ctrl = new AbortController();
+    const onClose = () => { if (!res.writableEnded) ctrl.abort(); };
+    req.once("close", onClose);
+    res.once("close", onClose);
+    let release: (() => void) | void;
+    const deadline = Date.now() + (this.wsCommandTimeoutMs ?? RELAY_SINGLE_REQUEST_WAIT_MS);
     try {
+      await this.ensureUpstreamStrict({ deadline, signal: ctrl.signal });
+      release = this.acquireLease();
       if (path === "/json/new") {
         const url = query.get("url") ?? "";
         if (this.localAddress(url) !== null) {
@@ -957,14 +1300,35 @@ export class CdpProxy {
         if (lower === "host" || lower === "accept-encoding") continue;
         headers[lower] = Array.isArray(value) ? value.join(", ") : String(value);
       }
-      const response = await fetch(target, { method: req.method, headers });
-      const body = rewriteEndpointBody(await response.text(), this.#port);
-      const sent: Record<string, string> = { "content-type": response.headers.get("content-type") ?? "application/json" };
+      const idempotentRead = (req.method ?? "GET").toUpperCase() === "GET" && (path === "/json/version" || path === "/json/list" || path === "/json");
+      let response: { status: number; contentType: string | null; text: string };
+      try {
+        response = await this.#timedFetchText(target, { method: req.method, headers }, { deadline, signal: ctrl.signal });
+      } catch (firstErr) {
+        if (!idempotentRead || ctrl.signal.aborted || this.#closed || Date.now() >= deadline) throw firstErr;
+        await this.ensureUpstreamStrict({ deadline, signal: ctrl.signal });
+        response = await this.#timedFetchText(target, { method: req.method, headers }, { deadline, signal: ctrl.signal });
+      }
+      this.notifyUpstreamSuccess();
+      const body = rewriteEndpointBody(response.text, this.#port);
+      const sent: Record<string, string> = { "content-type": response.contentType ?? "application/json" };
       res.writeHead(response.status, sent);
       res.end(body);
-    } catch {
-      res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
-      res.end("上游 Chrome 没有响应\n");
+    } catch (error) {
+      if (res.writableEnded) return;
+      if (error instanceof RelayError) {
+        const status = error.code === "RELAY_QUARANTINED" ? 503 : 504;
+        res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+        res.end(`${error.message}\n`);
+        return;
+      }
+      const isTimeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      res.writeHead(isTimeout ? 504 : 502, { "content-type": "text/plain; charset=utf-8" });
+      res.end(isTimeout ? "上游 Chrome 响应超时\n" : "上游 Chrome 没有响应\n");
+    } finally {
+      if (typeof release === "function") release();
+      req.removeListener("close", onClose);
+      res.removeListener("close", onClose);
     }
   }
 
@@ -985,6 +1349,7 @@ export class CdpProxy {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#closingController.abort();
     this.#scopes.close();
     for (const waiter of this.#slots) {
       waiter.done = true;
@@ -992,7 +1357,7 @@ export class CdpProxy {
       clearTimeout(waiter.timeout);
     }
     this.#slots.length = 0;
-    for (const pipe of Array.from(this.#pipes)) pipe.close();
+    for (const pipe of Array.from(this.#pipes)) pipe.close(1001, "proxy closing");
     this.#pipes.clear();
     this.#server.closeAllConnections?.();
     await new Promise<void>((resolvePromise) => this.#server.close(() => resolvePromise()));

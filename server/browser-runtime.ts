@@ -6,6 +6,7 @@ import { PageSizes, type PageSize } from "./browser-page-size.ts";
 import { SECRET_ON_PAGE, SecretHolds, type SecretHold } from "./browser-secret-hold.ts";
 import type { BrowserSteps, StepCall, StepContext } from "./browser-steps.ts";
 import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
+import { RelayError, formatRelayError } from "./cloud-browser.ts";
 import { launchSettingsKey } from "./browser-launch-key.ts";
 
 export interface BrowserSpawnSpec {
@@ -450,12 +451,17 @@ export class BrowserRuntime {
   /** Every tool result, recovery notes included, is scrubbed of held secrets. */
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
     if (method === "tools/call" && readsAroundBrowser(params)) return { isError: true, content: [{ type: "text", text: READ_OPEN_PAGE_ONLY }] };
+    if (ctx?.signal?.aborted) {
+      const cancelled = new RelayError("RELAY_CANCELLED", { phase: "dispatch", waitedSec: 0, sent: false });
+      if (method === "tools/call") return { isError: true, content: [{ type: "text", text: formatRelayError(cancelled, false) }] };
+      throw cancelled;
+    }
     // Counted in the same event-loop turn, so no idle close can start under a call.
     for (let closing = this.gates.get(session)?.idleClose; closing; closing = this.gates.get(session)?.idleClose) await closing;
     const gate = this.gate(session);
     gate.spec = spec;
     gate.calls++;
-    const deadline = Date.now() + this.options.callBudgetMs;
+    const deadline = ctx?.deadline !== undefined ? Math.min(ctx.deadline, Date.now() + this.options.callBudgetMs) : Date.now() + this.options.callBudgetMs;
     let result: unknown;
     try {
       const request = () => this.agentRequest(session, spec, method, params, deadline, beforeDispatch, ctx);
@@ -510,7 +516,22 @@ export class BrowserRuntime {
     }
     const followUpMs = () => Math.min(this.options.requestTimeoutMs, deadline - Date.now());
     const phases: Partial<BrowserTiming> = {};
+    const failBeforeSend = () => {
+      if (ctx?.signal?.aborted) {
+        const cancelled = new RelayError("RELAY_CANCELLED", { phase: "dispatch", waitedSec: 0, sent: false });
+        if (method === "tools/call") return { isError: true, content: [{ type: "text", text: formatRelayError(cancelled, false) }] };
+        throw cancelled;
+      }
+      if (ctx?.deadline !== undefined && deadline - Date.now() - this.options.followUpReserveMs <= 0) {
+        const expired = new RelayError("RELAY_RECOVERY_TIMEOUT", { phase: "dispatch", waitedSec: 0, sent: false });
+        if (method === "tools/call") return { isError: true, content: [{ type: "text", text: formatRelayError(expired, false) }] };
+        throw expired;
+      }
+      return undefined;
+    };
     const invoke = async () => {
+      const earlyFail = failBeforeSend();
+      if (earlyFail !== undefined) return earlyFail;
       const launchStarted = performance.now();
       let dispatched = false;
       if (method === "tools/call") await this.launchReady(spec);
@@ -565,9 +586,12 @@ export class BrowserRuntime {
           beforeDispatch?.();
           if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
         }
+        const preSendFail = failBeforeSend();
+        if (preSendFail !== undefined) return preSendFail;
+        const rawRemainingMs = deadline - Date.now() - this.options.followUpReserveMs;
         const engineStarted = performance.now();
         if (method === "tools/call") { dispatched = true; gate.dispatched++; }
-        const engineTimeoutMs = Math.max(1, Math.min(this.options.requestTimeoutMs, deadline - Date.now() - this.options.followUpReserveMs));
+        const engineTimeoutMs = Math.max(1, Math.min(this.options.requestTimeoutMs, rawRemainingMs));
         const relayed = method === "tools/call" && toolName !== undefined ? RELAYED_TOOLS.get(toolName) : undefined;
         let result = relayed
           ? await this.relayTool(session, spec, relayed, args, engineTimeoutMs)

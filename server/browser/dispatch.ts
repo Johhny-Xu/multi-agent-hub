@@ -22,7 +22,7 @@ import { targetOf, type ToolCall, type ToolInput } from "./tools.ts";
 
 export const DEFAULT_ACTION_MS = 15_000;
 /** Kept back from a call's budget for the reads after its action. */
-const FOLLOW_UP_MS = 5_000;
+export const FOLLOW_UP_MS = 5_000;
 const OBSERVE_TEXT_CHARS = 200_000;
 /** The longest an action's answer waits for a navigation the page asked for to show its next page. */
 const NAVIGATION_FOLLOW_MS = 10_000;

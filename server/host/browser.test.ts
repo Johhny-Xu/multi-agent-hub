@@ -22,6 +22,7 @@ import { chromeLauncher } from "../browser/chrome/launcher.ts";
 import type { CdpSession, Params } from "../browser/cdp/connection.ts";
 import { FileChoosers } from "../browser/cdp/files.ts";
 import { uploadableFiles } from "../browser-upload.ts";
+import { RelayError } from "../cloud-browser.ts";
 import { createBrowserHost, type BrowserHostDeps } from "./browser.ts";
 import { getWorkbenchBotIdsForInstance } from "../drivers/web-chat/workbench-page.ts";
 
@@ -515,6 +516,17 @@ describe("a Cloud home's browser for a conversation that needs a sign-in (C2 T2)
     const viewed = (await host.browserIntegration("scout", undefined, undefined, "team", turn.threadId))!;
     expect(viewed.session).toBe("bot-scout.auth-thread-1");
     expect(viewed.tokenSession).toBe("bot-scout");
+  });
+
+  it("rethrows RelayError instead of falling back to local Chrome when cloudBrowser rejects with RelayError", async () => {
+    vi.mocked(browserEngineStatus).mockReturnValue({ kind: "ready", binaryPath: "/usr/local/bin/agent-browser", version: "0.37.0", managed: false });
+    const cloudBrowser = vi.fn(async () => {
+      throw new RelayError("RELAY_RECOVERY_TIMEOUT", { phase: "probe", waitedSec: 45, sent: false });
+    });
+    const { host } = setup(undefined, { cloudHome: true, cloudBrowser });
+    const deadline = Date.now() + 60_000;
+    await expect(host.browserIntegration("scout", undefined, undefined, "team", turn.threadId, { deadline })).rejects.toThrow(RelayError);
+    expect(cloudBrowser).toHaveBeenCalledWith("scout", "bot-scout", "thread-1", undefined, { deadline });
   });
 
   it("shows a conversation the browser its own cloud session runs in, without starting one", async () => {
