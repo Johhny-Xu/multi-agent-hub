@@ -162,7 +162,7 @@ function linuxDescendantsStopped(child: ChildProcess): boolean {
   }
   const groups = linuxGroups.get(child);
   if (groups) {
-    for (const [pgid, leaderStart] of [...groups]) {
+    for (const [pgid, leaderStart] of groups) {
       if (linuxGroupHasLiveMembers(pgid, leaderStart)) return false;
       groups.delete(pgid);
     }
@@ -184,7 +184,7 @@ function signalLinuxDescendants(child: ChildProcess, value: NodeJS.Signals): voi
   const signaledGroups = new Set<number>();
   const groups = linuxGroups.get(child);
   if (groups) {
-    for (const [pgid, leaderStart] of [...groups]) {
+    for (const [pgid, leaderStart] of groups) {
       if (!linuxGroupHasLiveMembers(pgid, leaderStart)) {
         groups.delete(pgid);
         continue;

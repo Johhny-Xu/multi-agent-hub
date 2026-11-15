@@ -324,7 +324,7 @@ export function cloudBrowserMachines(cfg: Pick<AppConfig, "vps"> & Partial<Pick<
   const cfHost = cfg.cloudOffload?.boxRelayCfHostname;
   const relayCfHostname = typeof cfHost === "string" && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(cfHost) ? cfHost : undefined;
   const cfFile = cfg.cloudOffload?.boxRelayCfTokenFile;
-  const relayCf = relayCfHostname ? { relayCfHostname, relayCfTokenFile: typeof cfFile === "string" && /^(~\/|\/)[A-Za-z0-9._\/-]+$/.test(cfFile) && !cfFile.includes("..") ? cfFile : DEFAULT_CF_TOKEN_FILE } : {};
+  const relayCf = relayCfHostname ? { relayCfHostname, relayCfTokenFile: typeof cfFile === "string" && /^(~\/|\/)[A-Za-z0-9._/-]+$/.test(cfFile) && !cfFile.includes("..") ? cfFile : DEFAULT_CF_TOKEN_FILE } : {};
   let ssh = 0;
   let boxes = 0;
   const machines: CloudBrowserMachine[] = [];
@@ -931,7 +931,6 @@ export class CloudBrowserPool {
     try {
       const sharedStart = this.#sharedBringupStarted.get(machine.id) ?? enteredAt;
       const sharedDeadline = sharedStart + timing.bringupBudgetMs;
-      const workDeadline = Math.min(callerDeadline, sharedDeadline);
 
       const waitWithCallerRace = async <T>(work: Promise<T>): Promise<T> => {
         const remaining = Math.max(0, callerDeadline - this.#deps.now());
