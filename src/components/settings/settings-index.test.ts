@@ -10,7 +10,7 @@ import {
 beforeEach(() => setLocale("en"));
 
 const ids = (ctx: SettingsContext) => visiblePages(ctx).map((page) => page.id);
-const PLACE_PAGES = ["overview", "phone", "ai", "bots", "desktops", "vault", "usage", "data", "hub", "daily"];
+const PLACE_PAGES = ["overview", "phone", "ai", "bots", "desktops", "vault", "usage", "data", "daily"];
 const find = (query: string, ctx: SettingsContext = fullContext()) => searchSettings(query, ctx, (entry) => t(entry.labelKey), (page) => t(page.labelKey));
 const first = (query: string, ctx?: SettingsContext) => find(query, ctx)[0]?.entry;
 
@@ -30,16 +30,30 @@ describe("the pages", () => {
 
   it.each(Object.entries(PEOPLE))("keeps the same place pages, in the same order, for %s", (who, ctx) => {
     // A team's member is offered none of the installation's admin pages (AI, Desktops, Spending, Data).
-    const expected = who === "a team member" ? PLACE_PAGES.filter((id) => !["ai", "desktops", "usage", "data", "hub", "daily"].includes(id)) : PLACE_PAGES;
+    const expected = who === "a team member" ? PLACE_PAGES.filter((id) => !["ai", "desktops", "usage", "data", "daily"].includes(id)) : PLACE_PAGES;
     expect(ids(ctx).filter((id) => PLACE_PAGES.includes(id))).toEqual(expected);
   });
 
   // Owner decision (Nov 11): Simple shows eight entries; Advanced adds You and your bots, Desktops & browser, Spending,
-  // Data and General in their places.
+  // Data and General in their places. HUB-HIDE keeps Hub out of both, which leaves nine simple entries.
   it.each(["local only", "This computer, with My Cloud", "My Cloud's page in the desktop window", "My Cloud in a browser (owner)"] as const)(
-    "shows Simple's eight entries for %s", (who) => {
-      expect(ids({ ...PEOPLE[who], advanced: false })).toEqual(["overview", "phone", "ai", "vault", "hub", "daily", "account", "plan", "app", "appearance"]);
+    "shows Simple's nine entries for %s", (who) => {
+      expect(ids({ ...PEOPLE[who], advanced: false })).toEqual(["overview", "phone", "ai", "vault", "daily", "account", "plan", "app", "appearance"]);
     });
+
+  it("never offers the Hub page, in Simple or in Advanced, and keeps Daily in both", () => {
+    for (const advanced of [false, true]) {
+      const ctx = fullContext({ advanced });
+      expect(ids(ctx)).not.toContain("hub");
+      expect(ids(ctx)).toContain("daily");
+    }
+  });
+
+  it("lands a saved hub target on Overview before Advanced could turn on for it", () => {
+    for (const advanced of [false, true]) {
+      expect(resolveSettingsTarget("hub", fullContext({ advanced }))).toEqual({ page: "overview", missing: "hub" });
+    }
+  });
 
   it("is shorter in Simple: the five Advanced pages come back in Advanced, in place", () => {
     const simple = ids(fullContext({ advanced: false }));
@@ -186,6 +200,13 @@ describe("search", () => {
   it("finds nothing for nonsense, and never a row whose page can't show here", () => {
     expect(find("zzqx")).toEqual([]);
     for (const hit of find("people", PEOPLE["a team member"])) expect(hit.entry.page).not.toBe("people");
+  });
+
+  it("never answers with the hidden Hub page, and sends check-in to Daily", () => {
+    expect(find("hub").some((hit) => hit.entry.page === "hub")).toBe(false);
+    const checkin = find("checkin");
+    expect(checkin.some((hit) => hit.entry.page === "hub")).toBe(false);
+    expect(checkin[0]?.entry.page).toBe("daily");
   });
 
   it("has a label in English for every row, and every row's page is a real page", () => {

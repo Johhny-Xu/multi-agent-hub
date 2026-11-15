@@ -53,6 +53,10 @@ const advancedOnly = (when: (ctx: SettingsContext) => boolean) => (ctx: Settings
  * This app (Appearance). Advanced adds You and your bots, Desktops & browser, Spending, Data and General. */
 export const ADVANCED_PAGES: readonly SettingsPageId[] = ["bots", "desktops", "usage", "data", "general"];
 
+/** HUB-HIDE: pages registered above but kept out of the nav, page search and every saved target.
+ * Their metadata stays, so an old "hub" link still resolves and reports where it went. */
+const HIDDEN_SETTINGS_PAGES: readonly SettingsPageId[] = ["hub"];
+
 export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: "overview", owner: "place", labelKey: "settings.page.overview", synonyms: ["overview", "place", "status", "version", "domain", "address", "sidebar"], when: () => true },
   { id: "phone", owner: "place", labelKey: "settings.section.phoneDevices", icon: Smartphone, when: notClient,
@@ -96,7 +100,7 @@ export const OWNERS: readonly SettingsOwner[] = ["place", "account", "app"];
 export const pageById = (id: SettingsPageId): SettingsPage => SETTINGS_PAGES.find((page) => page.id === id)!;
 
 export function visiblePages(ctx: SettingsContext): SettingsPage[] {
-  return SETTINGS_PAGES.filter((page) => page.when(ctx));
+  return SETTINGS_PAGES.filter((page) => !HIDDEN_SETTINGS_PAGES.includes(page.id) && page.when(ctx));
 }
 
 export interface SettingsTarget {
@@ -140,6 +144,8 @@ export function needsAdvanced(target: SettingsTarget, ctx: SettingsContext): boo
  * section to scroll to. A page or row only Advanced mode shows comes back with `advanced`: opening it turns Advanced on. */
 export function resolveSettingsTarget(requested: AppSettingsSection, ctx: SettingsContext): SettingsTarget & { missing?: SettingsPageId; advanced?: true } {
   const target = isPage(requested) ? { page: requested } : LEGACY_SETTINGS[requested](ctx);
+  // A hidden page must land before needsAdvanced(): otherwise Simple would turn Advanced on for a page nobody can see.
+  if (HIDDEN_SETTINGS_PAGES.includes(target.page)) return { page: "overview", missing: target.page };
   if (needsAdvanced(target, ctx)) return { ...target, advanced: true };
   if (pageById(target.page).when(ctx)) return target;
   return { page: "overview", missing: target.page };

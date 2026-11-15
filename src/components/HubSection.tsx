@@ -204,7 +204,11 @@ function DispatchedTasks() {
   );
 }
 
-export function HubSection() {
+// HUB-HIDE: the Hub settings page is hidden from Settings, so nothing here may mount: a CSS hide would
+// still run the health check, the 5s task poll and the task SSE streams.
+const SHOW_HUB_SETTINGS = false;
+
+function HubSectionContent() {
   const [health, setHealth] = useState<HubHealth | null>(null);
   const [open, setOpen] = useState<HubPanel | null>(null);
   const narrow = useNarrowScreen();
@@ -284,4 +288,9 @@ export function HubSection() {
       </Card>
     </>
   );
+}
+
+/** The only export: mounts the cards only when the panel is switched back on. */
+export function HubSection() {
+  return SHOW_HUB_SETTINGS ? <HubSectionContent /> : null;
 }

@@ -55,7 +55,7 @@ describe("the Settings window", () => {
   it("opens with the place, Your account and This app, each headed by an identity row", () => {
     fixture.advanced = true;
     const html = render();
-    expect(navPages(html)).toEqual(["overview", "phone", "ai", "bots", "desktops", "vault", "usage", "data", "hub", "daily", "account", "app", "general", "appearance"]);
+    expect(navPages(html)).toEqual(["overview", "phone", "ai", "bots", "desktops", "vault", "usage", "data", "daily", "account", "app", "general", "appearance"]);
     expect(html).toContain("This computer");
     expect(html).toContain("Your account");
     expect(html).toContain("This app");
@@ -77,16 +77,16 @@ describe("the Settings window", () => {
     expect(render("appearance")).toContain("MausBot on this device");
   });
 
-  // Owner decision (Nov 11): Simple's nav is shorter. Eight entries, the same for every person and every rail.
-  // This project adds its Hub and Daily check-in pages after Vault.
-  const SIMPLE_NAV = ["overview", "phone", "ai", "vault", "hub", "daily", "account", "plan", "app", "appearance"];
+  // Owner decision (Nov 11): Simple's nav is shorter. Nine entries, the same for every person and every rail.
+  // This project adds its Daily check-in page after Vault; HUB-HIDE keeps Hub out of both modes.
+  const SIMPLE_NAV = ["overview", "phone", "ai", "vault", "daily", "account", "plan", "app", "appearance"];
   const SIMPLE_PEOPLE: Array<[string, () => void]> = [
     ["a person with only this computer", () => vi.stubGlobal("window", desktopHere({ cloudAccount: { state: () => new Promise(() => {}), onState: () => () => {} } }))],
     ["This computer's rail, with My Cloud", () => vi.stubGlobal("window", desktopHere({ cloudAccount: { state: () => new Promise(() => {}), onState: () => () => {} }, workspaces: { state: () => new Promise(() => {}), places: () => new Promise(() => {}) } }))],
     ["My Cloud's rail in the desktop window", () => { vi.stubGlobal("window", { ogb: { platform: "darwin", cloudPlan: { state: () => new Promise(() => {}) }, workspaces: { state: () => new Promise(() => {}), places: () => new Promise(() => {}) } } }); fixture.config = { cloudHome: true }; }],
     ["My Cloud in a browser", () => { vi.stubGlobal("window", {}); fixture.config = { cloudHome: true }; }],
   ];
-  it.each(SIMPLE_PEOPLE)("shows Simple's eight entries for %s", (_who, set) => {
+  it.each(SIMPLE_PEOPLE)("shows Simple's nine entries for %s", (_who, set) => {
     set();
     fixture.advanced = false;
     expect(navPages(render("overview"))).toEqual(SIMPLE_NAV);
@@ -110,6 +110,17 @@ describe("the Settings window", () => {
     fixture.advanced = false;
     expect(render("general")).toMatch(/data-settings-page-open="general"/);
     expect(render("backups")).toMatch(/data-settings-page-open="data"/);
+  });
+
+  it("opens a saved Hub target on Overview, with no Hub page body and no Hub in the nav", () => {
+    for (const advanced of [false, true]) {
+      fixture.advanced = advanced;
+      const html = render("hub");
+      expect(html).toMatch(/data-settings-page-open="overview"/);
+      expect(html).not.toContain('data-settings-page-body="hub"');
+      expect(navPages(html)).not.toContain("hub");
+    }
+    expect(fixture.setAdvancedMode).not.toHaveBeenCalled();
   });
 
   it("adds rows in Advanced on the pages both modes show", () => {

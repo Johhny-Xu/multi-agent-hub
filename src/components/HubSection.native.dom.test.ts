@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setLocale, t } from "@/lib/i18n";
+import { setLocale } from "@/lib/i18n";
 
 const mocks = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock("@/state/store", () => ({ api: mocks.api }));
@@ -50,43 +50,25 @@ const show = async () => {
   await settle();
 };
 
-const nativeCardOf = (el: Element | null | undefined) => {
-  let node = el?.parentElement;
-  while (node) {
-    if (node.classList.contains("rounded-[12px]")) return node;
-    node = node.parentElement;
-  }
-  return undefined;
-};
-
-describe("the hub section's native rows", () => {
-  it("lays each hub panel on a native SettingRow behind a standard open button", async () => {
+// HUB-HIDE: the section is hidden, so it must mount nothing and start no request. These replace the old
+// visibility tests on purpose: the requirement changed from "show both cards" to "show nothing".
+describe("the hidden hub section", () => {
+  it("renders nothing and asks the hub for nothing", async () => {
     await show();
-    const labels = [...document.querySelectorAll("[role='group']")].map(
-      (group) => document.getElementById(group.getAttribute("aria-labelledby") ?? "")?.textContent);
-    expect(labels).toContain(t("settings.hub.checkin"));
-    expect(labels).toContain(t("settings.hub.webui"));
-    const openButtons = [...document.querySelectorAll("button.ui-button")]
-      .filter((button) => button.textContent === t("settings.hub.open"));
-    expect(openButtons.length).toBe(2);
-    for (const button of openButtons) {
-      const card = nativeCardOf(button);
-      expect(card?.classList.contains("bg-menu")).toBe(true);
-    }
+    expect(container.innerHTML).toBe("");
+    expect(mocks.api).not.toHaveBeenCalled();
   });
 
-  it("frames a dispatched task in the native simple card, keeping its data-hub-task", async () => {
+  it("stays empty even when the hub would report a dispatched task", async () => {
     mocks.api.mockImplementation(async (path: string) => {
       if (path === "/hub/health") return health;
       if (path === "/api/hub/tasks") return { tasks: [task("T-1")] };
       return {};
     });
     await show();
-    const row = document.querySelector<HTMLElement>('[data-hub-task="T-1"]');
-    expect(row).toBeTruthy();
-    expect(row?.classList.contains("rounded-[12px]")).toBe(true);
-    expect(row?.classList.contains("bg-menu")).toBe(true);
-    expect(row?.textContent).toContain("zcode-n2");
-    expect(row?.textContent).toContain("step 2 of 4");
+    expect(container.innerHTML).toBe("");
+    expect(document.querySelector('[data-hub-task="T-1"]')).toBeNull();
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(mocks.api).not.toHaveBeenCalled();
   });
 });
