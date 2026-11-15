@@ -19,7 +19,7 @@ export type SshRunner = (
 
 /** `BatchMode` keeps a password prompt from blocking the check, and the command runs `true` on the host. */
 export function sshRoundTripArgs(alias: string): string[] {
-  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", alias, "true"];
+  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", alias, "exit 0"];
 }
 
 const MAX_OUTPUT_CHARS = 4_000;

@@ -23,7 +23,7 @@ describe("SSH health check", () => {
     expect(trip.latencyMs).toBeGreaterThanOrEqual(25);
     expect(calls[0]).toEqual(sshRoundTripArgs("alpha-vps"));
     expect(calls[0]).toContain("alpha-vps");
-    expect(calls[0]).toContain("true");
+    expect(calls[0]).toContain("exit 0");
     expect(calls[0]).toContain("BatchMode=yes");
   });
 
