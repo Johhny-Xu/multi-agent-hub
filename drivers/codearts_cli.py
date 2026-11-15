@@ -30,6 +30,9 @@ MAX_OUTPUT = 16 * 1024 * 1024
 # 生成多文件页面）实测 5 分钟不够，会以 CODEARTS_TIMEOUT 收尾——文件都写完了却报失败。
 # 与 traecode(900) / zcode(1000) 对齐；Hub 侧还有自己的「无进展超时」兜底。
 DEFAULT_TIMEOUT_SEC = 900
+# E116：上面的 900s 现在是「无进展」上限（距最后一条 CLI 事件），不再是总时长；
+# 一直在调工具、出文本的任务不会因为写得久被杀。总时长另设硬上限。
+MAX_TOTAL_SEC = float(os.environ.get("AGENTHUB_CODEARTS_MAX_SEC") or 3600)
 
 # 工具调用审批模式。
 #   --pure 是无交互 headless，没有任何人可以批权限：CLI 会把每次 write/edit/bash
@@ -350,27 +353,100 @@ def _terminate_owned(child: subprocess.Popen):
     child.wait(timeout=5)
 
 
-def _capture(command, *, cwd, env, timeout, stdin=""):
-    # Disk-backed private capture bounds memory and prevents raw vendor logs or
-    # credentials from reaching the Hub output stream.
+def _capture(command, *, cwd, env, timeout, stdin="", on_line: Callable | None = None, max_total: float | None = None):
+    """Run the CLI with disk-backed capture.
+
+    `timeout` is an idle limit: it is measured from the last stdout line, so a
+    task that keeps producing events (tool calls, text parts) is never killed
+    for being long (E116). `max_total` is the absolute cap. `on_line` sees each
+    stdout line as it arrives so the caller can report progress live.
+    """
+    import threading
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         private_group = os.name != "nt" and not _inherits_hub_group()
         child = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE,
-                                 stdout=out, stderr=err, shell=False,
+                                 stdout=subprocess.PIPE, stderr=err, shell=False,
                                  start_new_session=private_group,
                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         child._agenthub_pgid = child.pid if private_group else None
+        last = [time.monotonic()]
+        size = [0]
+
+        def pump():
+            for raw in iter(child.stdout.readline, b""):
+                last[0] = time.monotonic()
+                size[0] += len(raw)
+                if size[0] <= MAX_OUTPUT:
+                    out.write(raw)
+                if on_line is not None:
+                    try:
+                        on_line(raw.decode("utf-8", errors="replace"))
+                    except Exception:
+                        pass
+
+        reader = threading.Thread(target=pump, daemon=True)
+        reader.start()
+        started = time.monotonic()
         try:
-            child.communicate(stdin.encode("utf-8"), timeout=timeout)
-        except subprocess.TimeoutExpired:
-            raise AdapterError("CODEARTS_TIMEOUT", "timeout") from None
+            try:
+                if stdin:
+                    child.stdin.write(stdin.encode("utf-8"))
+                child.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+            while child.poll() is None:
+                now = time.monotonic()
+                if now - last[0] > timeout or (max_total is not None and now - started > max_total):
+                    raise AdapterError("CODEARTS_TIMEOUT", "timeout")
+                time.sleep(0.05)
+            # A grandchild may still hold stdout after the CLI exits; never wait on it for long.
+            reader.join(timeout=1)
         finally:
             _terminate_owned(child)
-        if out.tell() + err.tell() > MAX_OUTPUT:
+            reader.join(timeout=0.5)
+        if size[0] + err.tell() > MAX_OUTPUT:
             raise AdapterError("CODEARTS_OUTPUT_LIMIT")
         out.seek(0)
         err.seek(0)
         return out.read().decode("utf-8", errors="replace"), err.read().decode("utf-8", errors="replace"), child.returncode
+
+
+def progress_from_line(line: str) -> dict | None:
+    """Turn one CLI event into a sanitized progress record (E116).
+
+    Only the tool's name, its one-line title and status, and the model's own
+    text parts are reported; tool input/output and vendor logs never are.
+    """
+    try:
+        record = json.loads(line)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    part = record.get("part")
+    if not isinstance(part, dict):
+        return None
+    typ = record.get("type")
+    if typ == "tool_use":
+        state = part.get("state") if isinstance(part.get("state"), dict) else {}
+        status = state.get("status")
+        metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+        title = state.get("title") or metadata.get("description")
+        tool = part.get("tool") if isinstance(part.get("tool"), str) else "tool"
+        return {"type": "progress", "event": "tool", "id": str(part.get("callID") or part.get("id") or ""),
+                "tool": tool, "title": str(title or tool)[:200],
+                "status": status if status in {"pending", "running", "completed", "error"} else "running"}
+    if typ == "text" and isinstance(part.get("text"), str) and part["text"].strip():
+        return {"type": "progress", "event": "text", "id": str(part.get("id") or ""), "text": part["text"][:8000]}
+    if typ == "step_start":
+        return {"type": "progress", "event": "step"}
+    return None
+
+
+def _print_progress(line: str):
+    value = progress_from_line(line)
+    if value is not None:
+        print(json.dumps(value, ensure_ascii=False), flush=True)
 
 
 def _validate_files(attachments):
@@ -397,7 +473,8 @@ def _validate_files(attachments):
     return paths
 
 
-def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="off", thinking="default", attachments=(), cwd=None, capture: Callable | None = None, env=None):
+def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="off", thinking="default", attachments=(), cwd=None, capture: Callable | None = None, env=None, progress: bool = False):
+    live = capture is None
     capture = capture or _capture
     try:
         if not isinstance(task, str) or not task.strip():
@@ -423,12 +500,13 @@ def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="o
         permission_auto = auto_permission(env)
         # 放开审批时补一句环境说明：write/edit 一定被拒，落盘只能走 bash。
         prompt = f"{task}\n\n{SHELL_ONLY_NOTE}" if permission_auto else task
-        deadline = time.monotonic() + timeout
+        # 模型目录查询仍按 timeout 计；正式任务的 timeout 是无进展上限（E116）。
+        deadline = time.monotonic() + (MAX_TOTAL_SEC if live else timeout)
         with tempfile.TemporaryDirectory(prefix="agenthub-codearts-task-") as temp:
             runtime = Path(temp)
             child_env = runtime_environment(path, runtime, env=env)
             if model:
-                stdout, stderr, code = capture([str(path), "models", "--pure"], cwd=str(workdir), env=child_env, timeout=max(0.001, deadline - time.monotonic()))
+                stdout, stderr, code = capture([str(path), "models", "--pure"], cwd=str(workdir), env=child_env, timeout=max(0.001, min(timeout, deadline - time.monotonic())))
                 error = diagnostic_error(stdout + "\n" + stderr)
                 if error:
                     raise error
@@ -449,7 +527,11 @@ def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="o
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise AdapterError("CODEARTS_TIMEOUT", "timeout")
-            stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=remaining, stdin=prompt)
+            if live:
+                stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=timeout, stdin=prompt,
+                                               on_line=_print_progress if progress else None, max_total=remaining)
+            else:
+                stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=remaining, stdin=prompt)
             return parse_events(stdout, stderr, code, model, permission_is_fatal=not permission_auto)
     except AdapterError as error:
         return envelope(error.status, code=error.code, model=model)
@@ -468,15 +550,28 @@ def main(argv=None):
     parser.add_argument("--attach", action="append", default=[])
     parser.add_argument("--cwd")
     parser.add_argument("--probe", action="store_true")
+    parser.add_argument("--progress", action="store_true", help="print sanitized progress lines before the result envelope (E116)")
     args = parser.parse_args(argv)
     if args.probe:
         print(json.dumps(describe_runtime(args.cli), ensure_ascii=False))
         return 0
     result = run_task(task=args.task, cli=args.cli, model=args.model, timeout=args.timeout,
-                      stream=args.stream, thinking=args.thinking, attachments=args.attach, cwd=args.cwd)
+                      stream=args.stream, thinking=args.thinking, attachments=args.attach, cwd=args.cwd, progress=args.progress)
     print(json.dumps(result, ensure_ascii=False), flush=True)
     return 1 if result["is_error"] else 0
 
 
+def _install_signal_cleanup():
+    if os.name == "nt":
+        return
+
+    def _raise_exit(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _raise_exit)
+    signal.signal(signal.SIGINT, _raise_exit)
+
+
 if __name__ == "__main__":
+    _install_signal_cleanup()
     raise SystemExit(main())

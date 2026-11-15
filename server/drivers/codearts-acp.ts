@@ -9,6 +9,10 @@
 //
 // The adapter has no token streaming and a task can legitimately take 5-10 minutes, so the
 // bridge keeps the ACP session alive with a periodic heartbeat and allows 900 s per task.
+// E116: the adapter now runs with `--progress` and prints sanitized progress lines (tool name +
+// title + status, and the model's own text parts) while the task runs; the bridge forwards them as
+// `tool_call` / `agent_thought_chunk` updates so the WebUI shows live work instead of 13 silent
+// minutes. The 900 s is an idle limit measured from the last progress line, not a total cap.
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -17,8 +21,12 @@ import { isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
+import { AdapterProcessGroups, installAdapterShutdown } from "./adapter-process-group.ts";
+
 const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
+/** Absolute cap per task (adapter enforces it too: AGENTHUB_CODEARTS_MAX_SEC). */
+const MAX_TOTAL_SEC = Math.max(60, Number(process.env.AGENTHUB_CODEARTS_MAX_SEC ?? 3600) || 3600);
 const REPLY_CHUNK = 4_000;
 
 const LOGIN_NOTE =
@@ -149,7 +157,7 @@ export function startBridge(): void {
 
   const sessions = new Map<string, Session>();
   const running = new Map<string, RunningTask>();
-  const children = new Set<ChildProcess>();
+  const groups = new AdapterProcessGroups();
 
   const send = (message: unknown): void => {
     process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -164,29 +172,8 @@ export function startBridge(): void {
     send({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
   };
 
-  const killTree = (child: ChildProcess): void => {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    if (process.platform !== "win32" && typeof child.pid === "number") {
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch {
-        // Already gone, or never became its own group leader.
-      }
-      const force = setTimeout(() => {
-        try {
-          process.kill(-child.pid!, "SIGKILL");
-        } catch {
-          // Already gone.
-        }
-      }, 3_000);
-      force.unref?.();
-      return;
-    }
-    child.kill();
-  };
-
   const runTask = (session: Session, text: string): Promise<RunResult> => new Promise((resolveRun) => {
-    const args = [script, "--task", text, "--cwd", session.cwd, "--timeout", String(timeoutSec)];
+    const args = [script, "--task", text, "--cwd", session.cwd, "--timeout", String(timeoutSec), "--progress"];
     const model = session.model ?? launchModel;
     if (model) args.push("--model", model);
     if (cli && isAbsolute(cli)) args.push("--cli", cli);
@@ -194,17 +181,23 @@ export function startBridge(): void {
     const env: Record<string, string | undefined> = { ...process.env };
     if (home) env.HOME = home;
     if (autoPermission) env.AGENTHUB_CODEARTS_AUTO = "1";
+    // Keep `codearts run` inside `python`'s own detached session/group (`_inherits_hub_group()` in
+    // `codearts_cli.py`), so signaling `-child.pid` reaches the CLI even if Python exits first.
+    if (process.platform !== "win32") env.AGENTHUB_OWNED_POSIX_GROUP = "1";
 
     let stdout = "";
     let settled = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let hardStop: ReturnType<typeof setTimeout> | null = null;
+    let totalStop: ReturnType<typeof setTimeout> | null = null;
+    let pending = "";
 
     const finish = (result: RunResult): void => {
       if (settled) return;
       settled = true;
       if (heartbeat) clearInterval(heartbeat);
       if (hardStop) clearTimeout(hardStop);
+      if (totalStop) clearTimeout(totalStop);
       if (running.get(session.id)?.child === child) running.delete(session.id);
       resolveRun(result);
     };
@@ -222,32 +215,76 @@ export function startBridge(): void {
       resolveRun({ kind: "error", message: errorText("CODEARTS_CLI_NOT_FOUND") });
       return;
     }
-    children.add(child);
+    groups.track(child, process.platform !== "win32");
     running.set(session.id, { child, cancelled: false, settle: finish });
     heartbeat = setInterval(() => update(session.id, { sessionUpdate: "codearts_bridge_heartbeat" }), HEARTBEAT_MS);
     heartbeat.unref?.();
-    // The adapter enforces its own deadline; this is the backstop if it cannot.
-    hardStop = setTimeout(() => {
-      killTree(child);
+    // The adapter enforces its own deadlines; these are the backstops if it cannot. The idle
+    // backstop restarts on every progress line (E116); the total one never does.
+    const stopForTimeout = (): void => {
+      void groups.kill(child);
       finish({ kind: "error", message: errorText("CODEARTS_TIMEOUT") });
-    }, (timeoutSec + 60) * 1_000);
-    hardStop.unref?.();
+    };
+    const armIdle = (): void => {
+      if (hardStop) clearTimeout(hardStop);
+      hardStop = setTimeout(stopForTimeout, (timeoutSec + 60) * 1_000);
+      hardStop.unref?.();
+    };
+    armIdle();
+    totalStop = setTimeout(stopForTimeout, (MAX_TOTAL_SEC + 120) * 1_000);
+    totalStop.unref?.();
+    const seenTools = new Set<string>();
+    const onProgress = (line: string): void => {
+      let value: Record<string, unknown>;
+      try {
+        value = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      if (!value || value.type !== "progress" || settled) return;
+      armIdle();
+      if (value.event === "tool") {
+        const status = value.status === "completed" ? "completed" : value.status === "error" ? "failed"
+          : value.status === "pending" ? "pending" : "in_progress";
+        const toolCallId = typeof value.id === "string" && value.id ? `codearts-${value.id}` : undefined;
+        const title = String(value.title ?? value.tool ?? "tool").slice(0, 200);
+        if (toolCallId && seenTools.has(toolCallId)) {
+          update(session.id, { sessionUpdate: "tool_call_update", toolCallId, status });
+        } else {
+          if (toolCallId) seenTools.add(toolCallId);
+          update(session.id, { sessionUpdate: "tool_call", ...(toolCallId ? { toolCallId } : {}), title, kind: "execute", status });
+        }
+      } else if (value.event === "text" && typeof value.text === "string" && value.text.trim()) {
+        // Interim narration is shown as thinking; the final reply still comes from the envelope.
+        update(session.id, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: `${value.text}\n` } });
+      }
+    };
 
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
       stdout += chunk;
       if (stdout.length > 32 * 1024 * 1024) stdout = stdout.slice(-8 * 1024 * 1024);
+      pending += chunk;
+      let newline = pending.indexOf("\n");
+      while (newline >= 0) {
+        const line = pending.slice(0, newline).trim();
+        pending = pending.slice(newline + 1);
+        if (line) onProgress(line);
+        newline = pending.indexOf("\n");
+      }
+      if (pending.length > 1024 * 1024) pending = "";
     });
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", () => {
       // The adapter's diagnostics can carry vendor log text; never forward them.
     });
     child.once("error", () => {
-      children.delete(child);
+      void groups.kill(child);
       finish({ kind: "error", message: errorText("CODEARTS_CLI_NOT_FOUND") });
     });
     child.once("close", () => {
-      children.delete(child);
+      // Reap any helper left in the task's group after the wrapper exits; no-op if already gone.
+      void groups.kill(child);
       const task = running.get(session.id);
       if (task?.cancelled) return finish({ kind: "cancelled" });
       const envelope = lastEnvelope(stdout);
@@ -284,7 +321,7 @@ export function startBridge(): void {
     const task = running.get(sessionId);
     if (!task) return;
     task.cancelled = true;
-    killTree(task.child);
+    void groups.kill(task.child);
     // Answer at once; the process group is being reclaimed in the background.
     task.settle({ kind: "cancelled" });
   };
@@ -334,17 +371,9 @@ export function startBridge(): void {
     }
   };
 
-  const shutdown = (): void => {
-    for (const task of running.values()) {
-      task.cancelled = true;
-      killTree(task.child);
-    }
-    for (const child of children) killTree(child);
-  };
-  process.once("SIGTERM", () => { shutdown(); process.exit(0); });
-  process.once("SIGINT", () => { shutdown(); process.exit(0); });
-  process.once("exit", shutdown);
-  process.stdin.once("end", () => { shutdown(); process.exit(0); });
+  installAdapterShutdown(groups, () => {
+    for (const task of running.values()) task.cancelled = true;
+  });
 
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   lines.on("line", (line) => {
