@@ -1131,6 +1131,25 @@ describe("OpenCode inject model output limit", () => {
   });
 });
 
+describe("OpenCode inject small_model", () => {
+  const configOf = (env: Record<string, string | undefined>) =>
+    JSON.parse(env.OPENCODE_CONFIG_CONTENT!) as { small_model?: string };
+
+  it("pins small_model to the injected model so titles and summaries cannot fall back to OpenCode's free model", () => {
+    const env: Record<string, string | undefined> = {};
+    expect(ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env)).toBe("omlx/GLM-5.2-fp8");
+    expect(configOf(env).small_model).toBe("omlx/GLM-5.2-fp8");
+  });
+
+  it("keeps a small_model the person declared instead of overwriting it", () => {
+    const env: Record<string, string | undefined> = {
+      OPENCODE_CONFIG_CONTENT: JSON.stringify({ small_model: "omlx/mine-small" }),
+    };
+    ensureOpenCodeInjectModel("omlx::GLM-5.2-fp8", env);
+    expect(configOf(env).small_model).toBe("omlx/mine-small");
+  });
+});
+
 describe("OpenCode catalog probes", () => {
   afterEach(() => resetOpenCodeModelCache());
 
