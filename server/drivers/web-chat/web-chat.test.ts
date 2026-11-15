@@ -16,12 +16,15 @@ import {
   createWebChatPageFromViewerHub,
   extractLatestAssistantText,
   resolveProfileDir,
+  probeWebChatSubmitted,
   runWebChatTurn,
   setWorkbenchBrowserService,
   setWorkbenchBrowserTargetResolver,
   WebChatSessionStore,
+  WebChatSubmittedError,
+  webChatStabilityMs,
 } from "./core.ts";
-import { HARK_ADAPTER, HarkWebDriver } from "./hark.ts";
+import { captureHarkBaseline, extractHarkReply, HARK_ADAPTER, HarkWebDriver, harkReplyFromEntries, harkSubmittedFromEntries } from "./hark.ts";
 import { setWorkbenchBotIdsForInstance } from "./workbench-page.ts";
 import type { WebChatPage } from "./types.ts";
 
@@ -192,8 +195,8 @@ class WebChatFakeChrome extends FakeChrome {
         return elRole === "button" || elSel.includes("button");
       }
 
-      // Assistant message
-      if (p.includes("assistant")) {
+      // Assistant message（hark.com 真站选择器是 [data-testid="message-text"]，fixture 仍用 .assistant-message 元素）
+      if (p.includes("assistant") || p.includes("message-text")) {
         return elSel.includes("assistant") || elName.includes("assistant");
       }
 
@@ -601,6 +604,10 @@ describe("Web-chat driver (Hark)", () => {
 
       const itemCompleted = events.find((e) => e.type === "item.completed") as { text?: string };
       expect(itemCompleted?.text).toBe("Recovered reply");
+      // E114: the timeout came after the submit, so the retry only kept waiting — the prompt was typed and sent once.
+      expect(mockPage.fills).toHaveLength(1);
+      expect(mockPage.clicks.filter((c) => c === HARK_ADAPTER.selectors.submitButton)).toHaveLength(1);
+      expect(retryEvent.reason).toContain("不重发");
     });
 
     it("refuses turn when logged-out indicator is visible on page", async () => {
@@ -1601,16 +1608,17 @@ describe("Web-chat driver (Hark)", () => {
         };
 
         const mockPage = new MockWebChatPage("https://hark.com");
-        mockPage.setElement('textarea', { visible: true });
-        mockPage.setElement('button[type="submit"]', { visible: true });
-        mockPage.setElement('[data-message-author="assistant"]', { visible: true, text: "Delayed reply" });
+        mockPage.setElement(HARK_ADAPTER.selectors.input, { visible: true });
+        mockPage.setElement(HARK_ADAPTER.selectors.submitButton!, { visible: true });
+        mockPage.setElement(HARK_ADAPTER.selectors.assistantMessage, { visible: true, text: "Delayed reply" });
 
         const sessionStore = new WebChatSessionStore(join(tempDir, "delay-sessions.json"));
 
         await runWebChatTurn({
           page: mockPage,
           adapter: HARK_ADAPTER,
-          config: {},
+          // 只测默认打字延迟；稳定窗口压短，免得 Hark 默认 8s 稳定窗口拖慢用例。
+          config: { stabilitySec: 0.1 },
           sessionStore,
           threadId: "th-delay",
           turnId: "turn-delay",
@@ -1894,5 +1902,253 @@ describe("E100 web-chat CDP target", () => {
     } finally {
       if (saved === undefined) delete process.env.OMB_WEBCHAT_CDP_URL; else process.env.OMB_WEBCHAT_CDP_URL = saved;
     }
+  });
+});
+
+// 2026-11-14 hark.com 真机 DOM：消息无角色属性、主聊天是连续对话、一次回复可拆多条气泡。
+describe("harkWeb real hark.com DOM (2026-11-14)", () => {
+  type Entry = { id: string; text: string };
+  class HarkDomPage implements WebChatPage {
+    entries: Entry[];
+    fills: string[] = [];
+    clicks: string[] = [];
+    onSubmit: (page: HarkDomPage) => void = () => {};
+    constructor(entries: Entry[]) {
+      this.entries = entries;
+    }
+    url() { return "https://hark.com/chat"; }
+    async navigate() {}
+    async waitForSelector(selector: string) { return selector === HARK_ADAPTER.selectors.input; }
+    async fill(_selector: string, text: string) { this.fills.push(text); }
+    async click(selector: string) {
+      this.clicks.push(selector);
+      if (selector === HARK_ADAPTER.selectors.submitButton) this.onSubmit(this);
+    }
+    async evaluate<T = unknown>(script: string): Promise<T> {
+      if (script.includes('getAttribute("data-message-id") || ""))')) return this.entries.map((e) => e.id) as T;
+      return this.entries.map((e) => ({ ...e })) as T;
+    }
+    async isVisible(selector: string) {
+      return selector === HARK_ADAPTER.selectors.input || selector === HARK_ADAPTER.selectors.submitButton;
+    }
+    async getText() { return this.entries.at(-1)?.text ?? ""; }
+  }
+
+  it("uses the real hark.com selectors and never clicks the dictation-state send button", () => {
+    const s = HARK_ADAPTER.selectors;
+    expect(s.input).toBe('textarea[data-testid="chat-input"]');
+    expect(s.submitButton).toContain('button[data-testid="send-button"]');
+    expect(s.submitButton).toContain(':not([aria-label*="听写"])');
+    expect(s.submitButton).toContain(':not([aria-label*="ictat"])');
+    expect(s.assistantMessage).toBe('[data-message-id][data-entry-kind="message"] [data-testid="message-text"]');
+    expect(s.loggedInSelector).toBe('[data-testid="chat-input"]');
+    // 真站上首页卡片里有手机号输入框（tel、无 name），不能被当成未登录
+    expect(s.loggedOutSelector).not.toContain("input");
+    expect(HARK_ADAPTER.defaultStabilitySec).toBeGreaterThanOrEqual(5);
+    expect(HARK_ADAPTER.defaultTimeoutMs).toBeGreaterThanOrEqual(120_000);
+  });
+
+  it("reply = messages that appeared after the baseline, minus the prompt echo, in order", () => {
+    const entries = [
+      { id: "old-user", text: "我的电脑断网了" },
+      { id: "old-reply", text: "先看看手机……" },
+      { id: "temp-echo", text: "  回复 OK  两个字母 " },
+      { id: "new-1", text: "OK" },
+      { id: "new-2", text: "还要别的吗？" },
+      { id: "empty-card", text: "" },
+    ];
+    expect(harkReplyFromEntries(entries, ["old-user", "old-reply"], "回复 OK 两个字母")).toBe("OK\n\n还要别的吗？");
+    expect(harkReplyFromEntries(entries.slice(0, 3), ["old-user", "old-reply"], "回复 OK 两个字母")).toBe("");
+    expect(harkReplyFromEntries([null, 3, { id: 5 }], [], "x")).toBe("");
+  });
+
+  it("captureHarkBaseline keeps only non-empty ids; extractHarkReply without a baseline returns nothing", async () => {
+    const page = new HarkDomPage([{ id: "a", text: "x" }, { id: "", text: "y" }]);
+    expect(await captureHarkBaseline(page)).toEqual(["a"]);
+    expect(await extractHarkReply(page, { prompt: "p" })).toBe("");
+    const opaque = new HarkDomPage([]);
+    opaque.evaluate = (async () => true) as WebChatPage["evaluate"];
+    expect(await captureHarkBaseline(opaque)).toBeUndefined();
+  });
+
+  it("a turn on the continuous chat returns only the new reply, never the previous one", async () => {
+    const page = new HarkDomPage([
+      { id: "u0", text: "上一轮问题" },
+      { id: "r0", text: "上一轮的旧回复，绝不能当成本轮答案" },
+    ]);
+    let polls = 0;
+    page.onSubmit = (p) => {
+      p.entries.push({ id: "u1", text: "回复 OK 两个字母" });
+    };
+    const events: RuntimeEvent[] = [];
+    let clock = 0;
+    const text = await runWebChatTurn({
+      page,
+      adapter: HARK_ADAPTER,
+      config: { minDelayMs: 0, maxDelayMs: 0, stabilitySec: 1 },
+      sessionStore: new WebChatSessionStore(join(mkdtempSync(join(tmpdir(), "hark-dom-")), "s.json")),
+      threadId: "th-hark-dom",
+      turnId: "turn-hark-dom",
+      prompt: "回复 OK 两个字母",
+      emit: (e) => events.push(e),
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+        polls += 1;
+        if (polls === 3) page.entries.push({ id: "r1", text: "OK" });
+        if (polls === 5) page.entries.push({ id: "r2", text: "第二条气泡" });
+      },
+    });
+    expect(page.fills).toEqual(["回复 OK 两个字母"]);
+    expect(page.clicks).toEqual([HARK_ADAPTER.selectors.submitButton]);
+    expect(text).toBe("OK\n\n第二条气泡");
+    expect(text).not.toContain("旧回复");
+    const completed = events.find((e) => e.type === "turn.completed") as { ok?: boolean } | undefined;
+    expect(completed?.ok).toBe(true);
+  });
+});
+
+// E114（2026-11-14）：已发出的提示在重试时绝不重打；hark.com 没有生成中标志，静默窗口放宽并随分段回复延长。
+describe("E114 harkWeb: no duplicate send on retry, longer silence window", () => {
+  type Entry = { id: string; text: string };
+  class HarkPage implements WebChatPage {
+    entries: Entry[] = [{ id: "old-u", text: "旧问题" }, { id: "old-r", text: "旧回复" }];
+    fills: string[] = [];
+    submits = 0;
+    onSubmit: (p: HarkPage) => void = () => {};
+    url() { return "https://hark.com/chat"; }
+    async navigate() {}
+    async waitForSelector(selector: string) { return selector === HARK_ADAPTER.selectors.input; }
+    async fill(_s: string, text: string) { this.fills.push(text); }
+    async click(selector: string) {
+      if (selector === HARK_ADAPTER.selectors.submitButton) { this.submits += 1; this.onSubmit(this); }
+    }
+    async evaluate<T = unknown>(script: string): Promise<T> {
+      if (script.includes('getAttribute("data-message-id") || ""))')) return this.entries.map((e) => e.id) as T;
+      return this.entries.map((e) => ({ ...e })) as T;
+    }
+    async isVisible(selector: string) { return selector === HARK_ADAPTER.selectors.input || selector === HARK_ADAPTER.selectors.submitButton; }
+    async getText() { return ""; }
+  }
+
+  async function drive(page: HarkPage, sleepHook: (clock: number, calls: number) => void, config: Record<string, unknown> = {}) {
+    let clock = 0;
+    let calls = 0;
+    const driver = createWebChatDriver(HARK_ADAPTER, {
+      pageFactory: async () => page,
+      now: () => clock,
+      sleep: async (ms) => { clock += ms; calls += 1; sleepHook(clock, calls); },
+    });
+    const home = mkdtempSync(join(tmpdir(), "e114-"));
+    const instance = await driver.create({
+      instanceId: "hark-e114",
+      displayName: "Hark",
+      enabled: true,
+      environment: { HOME: home },
+      config: { minDelayMs: 0, maxDelayMs: 0, ...config },
+    });
+    const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent((e) => events.push(e));
+    await instance.adapter.sendTurn({ threadId: "t-e114", turnId: "turn-e114", text: "查一下天气", botId: "bot-e114" } as SendTurnInput & { turnId: string });
+    for (let i = 0; i < 200 && !events.some((e) => e.type === "turn.completed"); i++) await new Promise((r) => setTimeout(r, 5));
+    rmSync(home, { recursive: true, force: true });
+    return events;
+  }
+
+  it("a reply that misses the first time window is waited for again, without sending the prompt a second time", async () => {
+    const page = new HarkPage();
+    let submittedAt = -1;
+    page.onSubmit = (p) => { p.entries.push({ id: "u1", text: "查一下天气" }); submittedAt = 0; };
+    // 第一次窗口（timeoutMs 5 s）内没有回复；重试期间回复才到。
+    const events = await drive(page, (clock) => {
+      if (submittedAt === 0 && clock > 8_000 && !page.entries.some((e) => e.id === "r1")) page.entries.push({ id: "r1", text: "上海今天有雨" });
+    }, { timeoutMs: 5_000, stabilitySec: 1 });
+    expect(page.fills).toEqual(["查一下天气"]);
+    expect(page.submits).toBe(1);
+    const retry = events.find((e) => e.type === "turn.retrying") as { reason?: string } | undefined;
+    expect(retry?.reason).toContain("不重发");
+    expect((events.find((e) => e.type === "item.completed") as { text?: string } | undefined)?.text).toBe("上海今天有雨");
+    expect((events.find((e) => e.type === "turn.completed") as { ok?: boolean }).ok).toBe(true);
+  });
+
+  it("a failed click whose message already shows up is not sent again", async () => {
+    const page = new HarkPage();
+    page.onSubmit = (p) => { p.entries.push({ id: "u1", text: "查一下天气" }); throw new Error("click timed out"); };
+    const events = await drive(page, (_c, calls) => {
+      if (calls > 4 && !page.entries.some((e) => e.id === "r1")) page.entries.push({ id: "r1", text: "有雨" });
+    }, { stabilitySec: 1 });
+    expect(page.fills).toHaveLength(1);
+    expect(page.submits).toBe(1);
+    expect((events.find((e) => e.type === "item.completed") as { text?: string } | undefined)?.text).toBe("有雨");
+  });
+
+  it("a failed click with nothing new on the page is safe to type again", async () => {
+    const page = new HarkPage();
+    let n = 0;
+    page.onSubmit = (p) => {
+      n += 1;
+      if (n === 1) throw new Error("click detached");
+      p.entries.push({ id: "u1", text: "查一下天气" });
+      p.entries.push({ id: "r1", text: "晴" });
+    };
+    const events = await drive(page, () => {}, { stabilitySec: 1 });
+    expect(page.fills).toHaveLength(2);
+    expect(page.submits).toBe(2);
+    const retry = events.find((e) => e.type === "turn.retrying") as { reason?: string } | undefined;
+    expect(retry?.reason).not.toContain("不重发");
+    expect((events.find((e) => e.type === "item.completed") as { text?: string } | undefined)?.text).toBe("晴");
+  });
+
+  it("harkSubmittedFromEntries: echo = sent, nothing new = not sent, something unrelated = unknown", () => {
+    const base = ["a", "b"];
+    expect(harkSubmittedFromEntries([{ id: "a", text: "x" }, { id: "n", text: "  查一下\n天气 " }], base, "查一下 天气")).toBe(true);
+    expect(harkSubmittedFromEntries([{ id: "a", text: "x" }, { id: "b", text: "y" }], base, "p")).toBe(false);
+    expect(harkSubmittedFromEntries([{ id: "n", text: "别的" }], base, "p")).toBeUndefined();
+    const long = "长".repeat(120);
+    expect(harkSubmittedFromEntries([{ id: "n", text: long.slice(0, 90) }], base, long)).toBe(true);
+  });
+
+  it("generic probe reads the input box: empty = sent, still holding the prompt = not sent, unreadable = unknown", async () => {
+    const generic = { ...HARK_ADAPTER, wasSubmitted: undefined };
+    const page = (value: unknown) => ({ evaluate: async () => value }) as unknown as WebChatPage;
+    const ctx = { prompt: "hello  world", baseline: undefined };
+    expect(await probeWebChatSubmitted(page(""), generic, HARK_ADAPTER.selectors, ctx)).toBe(true);
+    expect(await probeWebChatSubmitted(page("hello world"), generic, HARK_ADAPTER.selectors, ctx)).toBe(false);
+    expect(await probeWebChatSubmitted(page(true), generic, HARK_ADAPTER.selectors, ctx)).toBeUndefined();
+    const broken = { evaluate: async () => { throw new Error("target closed"); } } as unknown as WebChatPage;
+    expect(await probeWebChatSubmitted(broken, generic, HARK_ADAPTER.selectors, ctx)).toBeUndefined();
+    expect(new WebChatSubmittedError("x", { baseline: [], emittedText: "" }).resume.emittedText).toBe("");
+  });
+
+  it("hark waits 20 s of silence, stretching to 40 s while the reply keeps coming in pieces", async () => {
+    expect(HARK_ADAPTER.defaultStabilitySec).toBe(20);
+    expect(HARK_ADAPTER.maxStabilitySec).toBe(40);
+    expect(webChatStabilityMs(20_000, 40_000, 1)).toBe(20_000);
+    expect(webChatStabilityMs(20_000, 40_000, 2)).toBe(25_000);
+    expect(webChatStabilityMs(20_000, 40_000, 9)).toBe(40_000);
+    expect(webChatStabilityMs(1_500, undefined, 5)).toBe(1_500);
+
+    // 第一段回复后 Hark 调工具静默 18 s（旧的 8 s 会在这里截断），再来第二段；之后又静默 22 s（>20 s 但 <25 s）出第三段。
+    const page = new HarkPage();
+    page.onSubmit = (p) => { p.entries.push({ id: "u1", text: "查一下天气" }); };
+    let clock = 0;
+    const text = await runWebChatTurn({
+      page,
+      adapter: HARK_ADAPTER,
+      config: { minDelayMs: 0, maxDelayMs: 0 },
+      sessionStore: new WebChatSessionStore(join(mkdtempSync(join(tmpdir(), "e114-st-")), "s.json")),
+      threadId: "t",
+      turnId: "turn",
+      prompt: "查一下天气",
+      emit: () => {},
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+        if (clock >= 1_000 && !page.entries.some((e) => e.id === "r1")) page.entries.push({ id: "r1", text: "我查一下。" });
+        if (clock >= 19_000 && !page.entries.some((e) => e.id === "r2")) page.entries.push({ id: "r2", text: "上海今天有雨" });
+        if (clock >= 41_000 && !page.entries.some((e) => e.id === "r3")) page.entries.push({ id: "r3", text: "记得带伞" });
+      },
+    });
+    expect(text).toBe("我查一下。\n\n上海今天有雨\n\n记得带伞");
   });
 });

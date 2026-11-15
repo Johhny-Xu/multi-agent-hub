@@ -22,7 +22,7 @@ import { profileDir } from "../../browser/chrome/profile.ts";
 import { DATA_DIR } from "../../config.ts";
 import type { ViewerHub } from "../../browser/viewers/core.ts";
 import type { BrowserService, BrowserTarget } from "../../browser/service.ts";
-import type { SiteAdapter, WebChatConfig, WebChatPage, WebChatSelectors } from "./types.ts";
+import type { SiteAdapter, WebChatConfig, WebChatPage, WebChatSelectors, WebChatTurnContext } from "./types.ts";
 import { checkCdpAvailable, createWebChatPageFromCdpEndpoint, resolveConnectOverCDP } from "./cdp-transport.ts";
 import type { CdpTransportDeps } from "./cdp-transport.ts";
 import { getDefaultUserscriptBridge, WebChatUserscriptBridge } from "./userscript-bridge.ts";
@@ -178,6 +178,60 @@ export class WebChatSessionStore {
   }
 }
 
+/** E114: what a retry needs to keep waiting on a prompt that already went out, instead of typing it again. */
+export interface WebChatResume {
+  /** The conversation snapshot taken right before the original submit. */
+  baseline: unknown;
+  /** Text already streamed to listeners as content.delta, so a resumed read does not stream it twice. */
+  emittedText: string;
+}
+
+/**
+ * E114: the turn failed after its prompt was (or may have been) submitted. Retrying must not type the prompt again — that
+ * sends a duplicate message on the site — so the driver resumes: same baseline, no fill/submit, just wait for and read the reply.
+ */
+export class WebChatSubmittedError extends Error {
+  readonly resume: WebChatResume;
+  constructor(message: string, resume: WebChatResume, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "WebChatSubmittedError";
+    this.resume = resume;
+  }
+}
+
+/**
+ * E114: after the submit step, did the prompt go out? Adapter answer first; otherwise the generic reading of the input box
+ * (empty = sent, still holding the prompt = not sent). undefined = can't tell, which callers treat as "maybe sent".
+ */
+export async function probeWebChatSubmitted(
+  page: WebChatPage,
+  adapter: SiteAdapter,
+  selectors: WebChatSelectors,
+  context: WebChatTurnContext,
+): Promise<boolean | undefined> {
+  try {
+    if (adapter.wasSubmitted) return await adapter.wasSubmitted(page, selectors, context);
+    const value = await page.evaluate<unknown>(`(() => {
+      const el = document.querySelector(${JSON.stringify(selectors.input)});
+      if (!el) return null;
+      return typeof el.value === "string" ? el.value : (el.textContent || "");
+    })()`);
+    if (typeof value !== "string") return undefined;
+    const norm = (t: string) => t.replace(/\s+/g, " ").trim();
+    if (norm(value) === "") return true;
+    if (norm(value) === norm(context.prompt)) return false;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** E114: the stability window after `growths` pieces of reply (first piece = base; each later one adds a quarter, capped). */
+export function webChatStabilityMs(baseMs: number, maxMs: number | undefined, growths: number): number {
+  if (!maxMs || maxMs <= baseMs || growths <= 1) return baseMs;
+  return Math.min(maxMs, baseMs + Math.round(baseMs * 0.25) * (growths - 1));
+}
+
 export interface WebChatTurnOptions {
   page: WebChatPage;
   adapter: SiteAdapter;
@@ -192,6 +246,8 @@ export interface WebChatTurnOptions {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   resolveConnectOverCDP?: (deps?: any) => Promise<any>;
+  /** E114: the prompt already went out on an earlier attempt — skip typing/submitting and only wait for the reply. */
+  resume?: WebChatResume;
 }
 
 export async function runWebChatTurn(options: WebChatTurnOptions): Promise<string> {
@@ -208,6 +264,7 @@ export async function runWebChatTurn(options: WebChatTurnOptions): Promise<strin
     emit,
     now = Date.now,
     sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+    resume,
   } = options;
 
   const selectors: WebChatSelectors = {
@@ -263,110 +320,148 @@ export async function runWebChatTurn(options: WebChatTurnOptions): Promise<strin
     }
   }
 
-  // 3. Ensure input is ready: 出现输入框=已登录
-  const inputReady = await page.waitForSelector(selectors.input, { timeoutMs: 15_000 });
-  if (!inputReady) {
-    throw new Error(
-      `[${adapter.displayName}] Selector "${selectors.input}" (input) failed to match any element on ${page.url()}. ` +
-      `The site layout may have changed; you can override this selector in instance config.`
-    );
-  }
+  let baseline: unknown = resume?.baseline;
+  const turnContext: WebChatTurnContext = { baseline, prompt };
 
-  // 4. Random delay to mimic natural human typing (defaults to 1000–3000ms)
-  const minDelay = config.minDelayMs ?? 1000;
-  const maxDelay = config.maxDelayMs ?? 3000;
-  if (maxDelay > 0 && maxDelay >= minDelay) {
-    const randomDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-    if (randomDelay > 0) await sleep(randomDelay);
-  }
-
-  if (abortSignal?.aborted) {
-    if (selectors.stopButton && (await page.isVisible(selectors.stopButton))) {
-      await page.click(selectors.stopButton).catch(() => {});
+  if (!resume) {
+    // 3. Ensure input is ready: 出现输入框=已登录
+    const inputReady = await page.waitForSelector(selectors.input, { timeoutMs: 15_000 });
+    if (!inputReady) {
+      throw new Error(
+        `[${adapter.displayName}] Selector "${selectors.input}" (input) failed to match any element on ${page.url()}. ` +
+        `The site layout may have changed; you can override this selector in instance config.`
+      );
     }
-    throw new Error("Turn was cancelled");
-  }
 
-  // 5. Fill prompt & submit
-  await page.fill(selectors.input, prompt, { timeoutMs: 10_000 });
+    // 4. Random delay to mimic natural human typing (defaults to 1000–3000ms)
+    const minDelay = config.minDelayMs ?? 1000;
+    const maxDelay = config.maxDelayMs ?? 3000;
+    if (maxDelay > 0 && maxDelay >= minDelay) {
+      const randomDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+      if (randomDelay > 0) await sleep(randomDelay);
+    }
 
-  if (selectors.submitButton && (await page.isVisible(selectors.submitButton))) {
-    await page.click(selectors.submitButton, { timeoutMs: 10_000 });
-  } else {
-    await page.evaluate(`(() => {
-      const el = document.querySelector(${JSON.stringify(selectors.input)});
-      if (el) {
-        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-      }
-    })()`);
-  }
-
-  // 5. Poll / observe DOM until generation finishes
-  const stabilityMs = (config.stabilitySec ?? 1.5) * 1000;
-  const timeoutMs = config.timeoutMs ?? 60_000;
-  const startTime = now();
-  let lastText = "";
-  let stableSince: number | null = null;
-  let generationStarted = false;
-
-  while (now() - startTime < timeoutMs) {
     if (abortSignal?.aborted) {
       if (selectors.stopButton && (await page.isVisible(selectors.stopButton))) {
         await page.click(selectors.stopButton).catch(() => {});
       }
-      throw new Error("Turn was cancelled by user.");
+      throw new Error("Turn was cancelled");
     }
 
-    const isGenerating = adapter.isGenerating
-      ? await adapter.isGenerating(page, selectors)
-      : selectors.stopButton ? await page.isVisible(selectors.stopButton) : false;
-
-    if (isGenerating) {
-      generationStarted = true;
-      stableSince = null;
+    // 5. Fill prompt & submit. Snapshot the conversation first so old replies are never read back as this turn's answer.
+    if (adapter.captureBaseline) {
+      baseline = await adapter.captureBaseline(page, selectors).catch(() => undefined);
+      turnContext.baseline = baseline;
     }
 
-    let currentText = "";
+    await page.fill(selectors.input, prompt, { timeoutMs: 10_000 });
+
+    // E114: from here on the prompt may already be on the site. A failure in the click itself is checked: only a page that
+    // still holds the unsent prompt (and shows no new user message) may be typed into again on retry.
     try {
-      currentText = adapter.extractResponse
-        ? await adapter.extractResponse(page, selectors)
-        : await extractLatestAssistantText(page, selectors);
-    } catch {}
-
-    if (currentText.length > lastText.length) {
-      generationStarted = true;
-      const delta = currentText.slice(lastText.length);
-      emit({
-        ...baseEvent,
-        type: "content.delta",
-        streamKind: "assistant_text",
-        delta,
-      });
-      lastText = currentText;
-      stableSince = now();
-    } else if (generationStarted && currentText.length > 0) {
-      if (stableSince === null) {
-        stableSince = now();
-      } else if (now() - stableSince >= stabilityMs && !isGenerating) {
-        break;
+      if (selectors.submitButton && (await page.isVisible(selectors.submitButton))) {
+        await page.click(selectors.submitButton, { timeoutMs: 10_000 });
+      } else {
+        await page.evaluate(`(() => {
+          const el = document.querySelector(${JSON.stringify(selectors.input)});
+          if (el) {
+            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+          }
+        })()`);
       }
+    } catch (err) {
+      await sleep(2000).catch(() => {});
+      const sent = await probeWebChatSubmitted(page, adapter, selectors, turnContext);
+      if (sent === false) throw err;
+      throw new WebChatSubmittedError(err instanceof Error ? err.message : String(err), { baseline, emittedText: "" }, { cause: err });
+    }
+  }
+
+  // 6. Poll / observe DOM until generation finishes
+  const baseStabilityMs = (config.stabilitySec ?? adapter.defaultStabilitySec ?? 1.5) * 1000;
+  // config.stabilitySec pins the window; otherwise a site with maxStabilitySec stretches it while the reply keeps coming in pieces.
+  const maxStabilityMs = config.stabilitySec === undefined && adapter.maxStabilitySec ? adapter.maxStabilitySec * 1000 : undefined;
+  const timeoutMs = config.timeoutMs ?? adapter.defaultTimeoutMs ?? 60_000;
+  const startTime = now();
+  let lastText = resume?.emittedText ?? "";
+  let stableSince: number | null = null;
+  // A resumed read that already streamed part of the reply counts as started, so a reply that has since settled can complete.
+  let generationStarted = lastText.length > 0;
+  let growths = lastText.length > 0 ? 1 : 0;
+
+  let finalText = "";
+
+  // E114: everything below runs after the prompt went out — a failure here must never lead to the prompt being typed again.
+  try {
+    while (now() - startTime < timeoutMs) {
+      if (abortSignal?.aborted) {
+        if (selectors.stopButton && (await page.isVisible(selectors.stopButton))) {
+          await page.click(selectors.stopButton).catch(() => {});
+        }
+        throw new Error("Turn was cancelled by user.");
+      }
+
+      const isGenerating = adapter.isGenerating
+        ? await adapter.isGenerating(page, selectors, turnContext)
+        : selectors.stopButton ? await page.isVisible(selectors.stopButton) : false;
+
+      if (isGenerating) {
+        generationStarted = true;
+        stableSince = null;
+      }
+
+      let currentText = "";
+      try {
+        currentText = adapter.extractResponse
+          ? await adapter.extractResponse(page, selectors, turnContext)
+          : await extractLatestAssistantText(page, selectors);
+      } catch {}
+
+      if (currentText.length > lastText.length) {
+        generationStarted = true;
+        const delta = currentText.slice(lastText.length);
+        emit({
+          ...baseEvent,
+          type: "content.delta",
+          streamKind: "assistant_text",
+          delta,
+        });
+        lastText = currentText;
+        growths += 1;
+        stableSince = now();
+      } else if (generationStarted && currentText.length > 0) {
+        if (stableSince === null) {
+          stableSince = now();
+        } else if (now() - stableSince >= webChatStabilityMs(baseStabilityMs, maxStabilityMs, growths) && !isGenerating) {
+          break;
+        }
+      }
+
+      await sleep(250);
     }
 
-    await sleep(250);
+    finalText = adapter.extractResponse
+      ? await adapter.extractResponse(page, selectors, turnContext)
+      : await extractLatestAssistantText(page, selectors);
+
+    if (!finalText && !generationStarted) {
+      throw new Error(
+        `[${adapter.displayName}] Generation timed out without producing any text response. ` +
+        `Check if the website layout changed or generation was blocked.`
+      );
+    }
+  } catch (err) {
+    if (abortSignal?.aborted || (err instanceof Error && err.message.includes("cancelled"))) throw err;
+    if (err instanceof WebChatSubmittedError) throw err;
+    // A page that clearly still holds the unsent prompt (submit silently did nothing) may be retried from scratch.
+    if (!resume && !generationStarted) {
+      const sent = await probeWebChatSubmitted(page, adapter, selectors, turnContext);
+      if (sent === false) throw err;
+    }
+    throw new WebChatSubmittedError(err instanceof Error ? err.message : String(err), { baseline, emittedText: lastText }, { cause: err });
   }
 
-  const finalText = adapter.extractResponse
-    ? await adapter.extractResponse(page, selectors)
-    : await extractLatestAssistantText(page, selectors);
-
-  if (!finalText && !generationStarted) {
-    throw new Error(
-      `[${adapter.displayName}] Generation timed out without producing any text response. ` +
-      `Check if the website layout changed or generation was blocked.`
-    );
-  }
-
-  // 6. Update sessionStore with current URL (for thread continuity)
+  // 7. Update sessionStore with current URL (for thread continuity)
   const afterUrl = page.url();
   if (afterUrl && afterUrl.startsWith("http")) {
     sessionStore.set(threadId, afterUrl);
@@ -697,6 +792,8 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
 
           void (async () => {
             let attempt = 0;
+            // E114: set once the prompt went out; the retry then only waits for / reads the reply, never types it again.
+            let resume: WebChatResume | undefined;
             while (attempt < 2) {
               let page: WebChatPage | null = null;
               try {
@@ -714,6 +811,7 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                   emit,
                   now: deps.now,
                   sleep: deps.sleep,
+                  resume,
                 });
                 break;
               } catch (err) {
@@ -731,13 +829,15 @@ export function createWebChatDriver(adapter: SiteAdapter, deps: WebChatDependenc
                   break;
                 }
                 attempt++;
+                if (err instanceof WebChatSubmittedError) resume = err.resume;
                 if (attempt < 2) {
+                  const why = err instanceof Error ? err.message : String(err);
                   emit({
                     ...baseEvent,
                     type: "turn.retrying",
                     attempt: 1,
                     delayMs: 1000,
-                    reason: err instanceof Error ? err.message : String(err),
+                    reason: resume ? `消息已发出，不重发，继续等待回复（${why}）` : why,
                   });
                   const sleepFn = deps.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
                   await sleepFn(1000);
