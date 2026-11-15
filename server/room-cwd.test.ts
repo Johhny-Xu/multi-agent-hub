@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupTurnCwd } from "./room-cwd.ts";
+import { groupTurnCwd, roomChatWorkdir } from "./room-cwd.ts";
 
 describe("groupTurnCwd", () => {
   it("the room's pinned folder overrides the member's own default", () => {
@@ -18,5 +18,21 @@ describe("groupTurnCwd", () => {
       return "/tmp/room";
     })).toBeUndefined();
     expect(pinCalls).toBe(0);
+  });
+});
+
+describe("roomChatWorkdir (E108)", () => {
+  it("gives a chat engine the member's own folder", () => {
+    expect(roomChatWorkdir({ worksInWorkspace: false, confined: false, botCwd: "/home/u/proj" })).toBe("/home/u/proj");
+  });
+  it("gives a workspace engine none: it already works in its folder", () => {
+    expect(roomChatWorkdir({ worksInWorkspace: true, confined: false, botCwd: "/home/u/proj" })).toBeUndefined();
+  });
+  it("gives a confined guest or cloud-guest room none", () => {
+    expect(roomChatWorkdir({ worksInWorkspace: false, confined: true, botCwd: "/home/u/proj" })).toBeUndefined();
+  });
+  it("gives none when the member has no folder set", () => {
+    expect(roomChatWorkdir({ worksInWorkspace: false, confined: false, botCwd: undefined })).toBeUndefined();
+    expect(roomChatWorkdir({ worksInWorkspace: false, confined: false, botCwd: "  " })).toBeUndefined();
   });
 });

@@ -76,7 +76,7 @@ import { createImageToolRoutes } from "./routes/image-tools.ts"; import { create
 import { createImageSettingsRoutes } from "./routes/image-settings.ts";
 import { fitsOnOneLine, parseBotProfilePatch } from "./bot-profile.ts";
 import { routeDirectTurn } from "./turn-route.ts"; import { QuickModelFallback } from "./quick-model-fallback.ts"; import { COMPUTER_JOURNAL_PATH, createSavedSteps, personRequest, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
-import { groupTurnCwd } from "./room-cwd.ts";
+import { groupTurnCwd, roomChatWorkdir } from "./room-cwd.ts";
 import { RoomTurnDeadline, RoomTurnStallRegistry, effectiveRoomTurnTimeoutMinutes, parseConversationTurnTimeout, roomTurnTimeoutMessage } from "./room-turn-timeout.ts";
 import { roomTurnEnd, type RoomClaimEnd } from "./room-turn-end.ts";
 import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
@@ -10559,6 +10559,7 @@ async function runClaimedGroupMemberTurn(
         systemStable: roomSystem.stable,
         systemVolatile: roomSystem.volatile,
         cwd, ...(worksInWorkspace || roomGuestConfined || cloudGuestOpened(threadId) ? {} : { toolResultFolder: messageFileRootsForThread(readyBot.id, threadId).find((root) => root !== ATTACHMENTS_DIR) }),
+        ...((roomWorkdir) => roomWorkdir ? { workdir: roomWorkdir } : {})(roomChatWorkdir({ worksInWorkspace, confined: Boolean(roomGuestConfined) || cloudGuestOpened(threadId), botCwd: readyBot.cwd })),
         integrations,
         ...(integrations.browser && browserIsThePlace(roomPlan) ? { preloadBrowserTools: true } : {}),
         ...settingsTurnFields(cfg, DATA_DIR, managedPolicy.restrictsMcp()),

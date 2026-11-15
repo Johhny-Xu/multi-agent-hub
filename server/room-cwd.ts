@@ -6,3 +6,11 @@ export function groupTurnCwd(
   if (memberDefault === undefined) return undefined;
   return pinRoomCwd() ?? memberDefault;
 }
+
+/** E108: a chat engine (no working folder of its own) gets the member's own folder for its in-process
+ * workdir tools in a room too; workspace engines, confined guests and cloud-guest rooms get none. */
+export function roomChatWorkdir(args: { worksInWorkspace: boolean; confined: boolean; botCwd: string | undefined }): string | undefined {
+  if (args.worksInWorkspace || args.confined) return undefined;
+  const cwd = args.botCwd?.trim();
+  return cwd || undefined;
+}
