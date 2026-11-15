@@ -15,6 +15,7 @@ import type { ModelCatalog, ProviderSnapshot } from "../../contracts.ts";
 import { loadConfig } from "../../config.ts";
 import { zcodeCentralKeyEnv } from "../../cli-keys.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import {
   discoverZcodeModels,
   normalizeZcodeSessionModel,
@@ -116,6 +117,34 @@ function zcodeVersionProbe(env: Record<string, string | undefined>, cli: string)
   });
 }
 
+const sameBase = (a: string | undefined, b: string): boolean =>
+  Boolean(a) && a!.trim().replace(/\/+$/, "") === b.replace(/\/+$/, "");
+
+/** A local-inject pick (`9router::model`, E111) becomes the bare model id of a deployed-key provider
+ * the bridge writes into this spawn's provider store: appended to the OpenAI-compatible key's list
+ * when that key already points at the same host, otherwise an `omb-<host>` provider. ZCode's own
+ * BYOK providers are never used (user rule: CLIs carry no BYOK of their own). The env is part of the
+ * spawn fingerprint, so another inject model respawns the bridge. */
+export function ensureZcodeInjectModel(modelId: string, env: Record<string, string | undefined>): string {
+  const inject = decodeInjectId(modelId);
+  const host = inject ? localHost(inject.host) : undefined;
+  if (!inject || !host) return modelId;
+  const add = (list: string | undefined): string =>
+    [...new Set([...(list ?? "").split(",").map((model) => model.trim()).filter(Boolean), inject.model])].join(",");
+  if (env.OMB_CLI_OPENAI_COMPAT_KEY?.trim() && sameBase(env.OMB_CLI_OPENAI_COMPAT_URL, host.baseUrl)) {
+    env.OMB_CLI_OPENAI_COMPAT_MODELS = add(env.OMB_CLI_OPENAI_COMPAT_MODELS);
+    return inject.model;
+  }
+  const id = `omb-${host.id.replace(/[^\w-]+/g, "-")}`;
+  if (env.OMB_CLI_INJECT_ID !== id) env.OMB_CLI_INJECT_MODELS = "";
+  env.OMB_CLI_INJECT_ID = id;
+  env.OMB_CLI_INJECT_NAME = `${host.label} (OpenMausBot)`;
+  env.OMB_CLI_INJECT_URL = host.baseUrl;
+  env.OMB_CLI_INJECT_KEY = hostApiKey(host, env);
+  env.OMB_CLI_INJECT_MODELS = add(env.OMB_CLI_INJECT_MODELS);
+  return inject.model;
+}
+
 const support: AcpSupport = {
   driverKind: "zcodeAgent",
   displayName: "ZCode",
@@ -137,7 +166,8 @@ const support: AcpSupport = {
   transformEnv: (env) => {
     Object.assign(env, zcodeCentralKeyEnv(loadConfig()));
   },
-  resolveModels: async (env, config) => discoverZcodeModels(config.cli, env),
+  resolveModels: async (env, config) => mergeLocalInject(await discoverZcodeModels(config.cli, env), env),
+  resolveTurnModel: (model, env) => (model ? ensureZcodeInjectModel(model, env) : model),
   // Older bots and the hub keep the bare `GLM-5.3-Flash`; the live catalog qualifies it once two providers offer it.
   normalizeSessionSelection: (turn, offered) => {
     const model = normalizeZcodeSessionModel(turn.model, offered);

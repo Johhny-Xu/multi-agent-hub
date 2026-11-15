@@ -11,7 +11,8 @@
 //   timeout-then-ok   go silent for the first prompt, answer every later one
 //   account           after the first send, ask for provider runtime headers: the bridge must
 //                     grant account:bigmodel-start-plan with FAKE_ZCODE_EXPECTED_API_KEY and refuse
-//                     every other provider; then the turn completes
+//                     every other provider; then the turn completes. FAKE_ZCODE_ACCOUNT_DOMAIN=zai plays
+//                     a Z.ai login: account:zai-start-plan is granted, the bigmodel plan refused
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
@@ -108,16 +109,18 @@ const recordHeader = (askedProvider, granted, keyOk) => {
 
 async function accountTurn(sessionId) {
   const expected = process.env.FAKE_ZCODE_EXPECTED_API_KEY ?? "";
+  const domain = process.env.FAKE_ZCODE_ACCOUNT_DOMAIN || "bigmodel";
+  const plan = `account:${domain}-start-plan`;
   const grant = await ask("interaction/requestProviderRuntimeHeaders", {
     requestId: `${sessionId}:provider-runtime-headers:test-1`,
     sessionId,
-    providerId: "account:bigmodel-start-plan",
-    modelSelection: { providerId: "account:bigmodel-start-plan", modelId: "GLM-5.3-Flash" },
-    accountAccess: { type: "zhipu-account", accountType: "bigmodel", mode: "start-plan", entitled: true },
+    providerId: plan,
+    modelSelection: { providerId: plan, modelId: "GLM-5.3-Flash" },
+    accountAccess: { type: "zhipu-account", accountType: domain, mode: "start-plan", entitled: true },
   });
   const granted = grant?.result?.headersApplied === true;
   const keyOk = granted && grant.result.requestAuth?.apiKey === expected;
-  recordHeader("account:bigmodel-start-plan", granted, keyOk);
+  recordHeader(plan, granted, keyOk);
   const wrongProvider = await ask("interaction/requestProviderRuntimeHeaders", {
     requestId: `${sessionId}:provider-runtime-headers:test-2`,
     sessionId,
@@ -134,6 +137,16 @@ async function accountTurn(sessionId) {
     accountAccess: { type: "zhipu-account", accountType: "bigmodel", mode: "individual-coding-plan", entitled: true },
   });
   recordHeader("account:bigmodel-start-plan:individual-coding-plan", wrongMode?.result?.headersApplied === true, false);
+  if (domain !== "bigmodel") {
+    const otherDomain = await ask("interaction/requestProviderRuntimeHeaders", {
+      requestId: `${sessionId}:provider-runtime-headers:test-4`,
+      sessionId,
+      providerId: "account:bigmodel-start-plan",
+      modelSelection: { providerId: "account:bigmodel-start-plan", modelId: "GLM-5.3-Flash" },
+      accountAccess: { type: "zhipu-account", accountType: "bigmodel", mode: "start-plan", entitled: true },
+    });
+    recordHeader("account:bigmodel-start-plan", otherDomain?.result?.headersApplied === true, false);
+  }
   setTimeout(() => complete(sessionId, "OK account"), 10);
 }
 

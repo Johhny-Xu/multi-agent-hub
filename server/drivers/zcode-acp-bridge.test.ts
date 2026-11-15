@@ -112,14 +112,15 @@ function startBridge(
 
 /** A bridge whose app server will see a logged-in account: a credential store in a temp data
  * directory plus a builtin config whose revision the entitlement push can be based on. */
-function startAccountBridge(mode: string, withLogin = true): Bridge {
+function startAccountBridge(mode: string, withLogin = true, domain: "bigmodel" | "zai" = "bigmodel"): Bridge {
   return startBridge(mode, 5, undefined, (dir) => {
     mkdirSync(join(dir, ".zcode", "v2"), { recursive: true });
     if (withLogin) {
       writeFileSync(join(dir, ".zcode", "v2", "credentials.json"), JSON.stringify({
         zcodejwttoken: seal(ACCOUNT_JWT),
-        "oauth:bigmodel:access_token": seal("test-access-token"),
+        [`oauth:${domain}:access_token`]: seal("test-access-token"),
       }), { mode: 0o600 });
+      writeFileSync(join(dir, ".zcode", "v2", "setting.json"), JSON.stringify({ providerFamilyDomain: domain }));
     }
     const builtin = join(dir, "zcode-builtin.json");
     writeFileSync(builtin, JSON.stringify({ schemaVersion: 1, revision: "30", config: {} }));
@@ -128,6 +129,7 @@ function startAccountBridge(mode: string, withLogin = true): Bridge {
       ZCODE_CREDENTIAL_SECRET: ACCOUNT_SECRET,
       ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: builtin,
       FAKE_ZCODE_EXPECTED_API_KEY: ACCOUNT_JWT,
+      FAKE_ZCODE_ACCOUNT_DOMAIN: domain,
     };
   });
 }
@@ -234,6 +236,29 @@ describe("zcode ACP bridge account plan", () => {
       { askedProvider: "account:bigmodel-start-plan", granted: true, keyOk: true },
       { askedProvider: "builtin:bigmodel", granted: false, keyOk: false },
       { askedProvider: "account:bigmodel-start-plan:individual-coding-plan", granted: false, keyOk: false },
+    ]);
+  });
+
+  it("pushes the Z.ai Start Plan for a zai login and refuses the bigmodel plan", async () => {
+    const bridge = startAccountBridge("account", true, "zai");
+    const sessionId = await newSession(bridge);
+    const result = await prompt(bridge, sessionId, "plan task");
+    expect(result.stopReason).toBe("end_turn");
+    expect(chunkText(bridge.updates())).toBe("OK account");
+
+    const state = bridge.state();
+    expect(state.accountPushes).toHaveLength(1);
+    expect(state.accountPushes[0].providers).toEqual({
+      "account:zai-start-plan": { access: { type: "zhipu-account", entitled: true } },
+    });
+    expect(state.accountPushes[0].states).toEqual({
+      "account:zai-start-plan": { availability: "available", entitled: true, current: true },
+    });
+    expect(state.headerRequests).toEqual([
+      { askedProvider: "account:zai-start-plan", granted: true, keyOk: true },
+      { askedProvider: "builtin:bigmodel", granted: false, keyOk: false },
+      { askedProvider: "account:bigmodel-start-plan:individual-coding-plan", granted: false, keyOk: false },
+      { askedProvider: "account:bigmodel-start-plan", granted: false, keyOk: false },
     ]);
   });
 

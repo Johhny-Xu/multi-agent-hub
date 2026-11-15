@@ -27,6 +27,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import type { ModelCatalog, ModelVariantOption } from "../contracts.ts";
+import { AdapterProcessGroups, installAdapterShutdown } from "./adapter-process-group.ts";
 
 const DEFAULT_IDLE_TIMEOUT_SEC = 900;
 /** How long a finished turn's app server may sit idle before the bridge recycles it. Every idle
@@ -78,11 +79,16 @@ export function zcodeRecycleIdleMs(env: Record<string, string | undefined> = pro
  * personal providers; the picker then opens on Flash instead of whatever the app-server last used. */
 const PLAN_MODEL_IDS = ["GLM-5.3-Flash", "GLM-5.3"];
 
-/** The account's own Start Plan providers, most preferred first. The spawned CLI's builtin config
- * declares the `account:*` providers, but the app server starts them fail-closed and only lists
- * one once this bridge pushes its entitlement (pushAccountProviders); `builtin:bigmodel-start-plan`
- * is the desktop-era id the CLI still migrates model refs from. */
-const START_PLAN_PROVIDER_IDS = ["account:bigmodel-start-plan", "builtin:bigmodel-start-plan"];
+/** The account's own Start Plan providers, one pair per ZCode login domain (BigModel 国内, Z.ai 国际).
+ * The spawned CLI's builtin config declares the `account:*` providers, but the app server starts them
+ * fail-closed and only lists one once this bridge pushes its entitlement (pushAccountProviders);
+ * `builtin:*-start-plan` is the desktop-era id the CLI still migrates model refs from. */
+export type ZcodeAccountDomain = "bigmodel" | "zai";
+const ZCODE_ACCOUNT_DOMAINS: readonly ZcodeAccountDomain[] = ["bigmodel", "zai"];
+const START_PLAN_PROVIDER_IDS = ZCODE_ACCOUNT_DOMAINS.flatMap((domain) => [`account:${domain}-start-plan`, `builtin:${domain}-start-plan`]);
+/** The provider the account's Start Plan is served under for one login domain. */
+export const zcodeStartPlanProviderId = (domain: ZcodeAccountDomain = "bigmodel"): string => `account:${domain}-start-plan`;
+const isStartPlanPickerId = (id: string): boolean => START_PLAN_PROVIDER_IDS.some((provider) => id.toLowerCase().startsWith(`${provider.toLowerCase()}/`));
 
 function bareModelId(id: string): string {
   const slash = id.lastIndexOf("/");
@@ -491,6 +497,14 @@ export function byokProvidersFromEnv(env: Record<string, string | undefined>): B
     try { name = `OpenAI-compatible (${new URL(compatUrl).host})`; } catch { /* keep the plain name */ }
     providers.push({ id: "omb-openai-compat", name, baseUrl: compatUrl, apiKey: compatKey, models: compatModels });
   }
+  // A local-inject pick (`9router::model`, E111) on a host the compat key does not already serve.
+  const injectId = env.OMB_CLI_INJECT_ID?.trim();
+  const injectKey = env.OMB_CLI_INJECT_KEY?.trim();
+  const injectUrl = env.OMB_CLI_INJECT_URL?.trim();
+  const injectModels = (env.OMB_CLI_INJECT_MODELS ?? "").split(",").map((model) => model.trim()).filter(Boolean);
+  if (injectId && /^omb-[\w-]+$/.test(injectId) && injectKey && injectUrl && injectModels.length) {
+    providers.push({ id: injectId, name: env.OMB_CLI_INJECT_NAME?.trim() || injectId, baseUrl: injectUrl, apiKey: injectKey, models: injectModels });
+  }
   return providers;
 }
 
@@ -639,10 +653,22 @@ export function decryptZcodeCredentialValue(value: unknown, env: Record<string, 
 export interface ZcodeAccountCredentials {
   jwt: string;
   accessToken: string;
+  domain?: ZcodeAccountDomain; // whose OAuth token proved the login; absent means bigmodel
 }
 
-/** The bigmodel account login held in the CLI's own credential store, read-only. Both values must
- * decrypt: the JWT authenticates start-plan model requests, the OAuth token proves the login. */
+/** The desktop's chosen provider family (`providerFamilyDomain` in ~/.zcode/v2/setting.json). */
+function zcodeSettingDomain(env: Record<string, string | undefined>): string | undefined {
+  try {
+    const value = JSON.parse(readFileSync(join(zcodeDataBaseDir(env), ".zcode", "v2", "setting.json"), "utf8"))?.providerFamilyDomain;
+    return typeof value === "string" ? value.trim().toLowerCase() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The BigModel or Z.ai account login in the CLI's own credential store, read-only. The JWT authenticates
+ * start-plan requests, `oauth:<domain>:access_token` proves the login; the domain follows the desktop's
+ * chosen family, then the CLI's active provider, then whichever login decrypts (bigmodel first). */
 export function readZcodeAccountCredentials(env: Record<string, string | undefined>): ZcodeAccountCredentials | undefined {
   const file = zcodeCredentialsFile(env);
   if (!existsSync(file)) return undefined;
@@ -654,9 +680,14 @@ export function readZcodeAccountCredentials(env: Record<string, string | undefin
   }
   if (!store || typeof store !== "object") return undefined;
   const jwt = decryptZcodeCredentialValue(store["zcodejwttoken"], env)?.trim();
-  const accessToken = decryptZcodeCredentialValue(store["oauth:bigmodel:access_token"], env)?.trim();
-  if (!jwt || !accessToken) return undefined;
-  return { jwt, accessToken };
+  if (!jwt) return undefined;
+  const active = decryptZcodeCredentialValue(store["oauth:active_provider"], env)?.trim().toLowerCase();
+  for (const domain of [zcodeSettingDomain(env), active, ...ZCODE_ACCOUNT_DOMAINS]) {
+    if (!ZCODE_ACCOUNT_DOMAINS.includes(domain as ZcodeAccountDomain)) continue;
+    const accessToken = decryptZcodeCredentialValue(store[`oauth:${domain}:access_token`], env)?.trim();
+    if (accessToken) return { jwt, accessToken, domain: domain as ZcodeAccountDomain };
+  }
+  return undefined;
 }
 
 /** The `provider/updateAccountConfig` snapshot that makes the account's Start Plan visible to the
@@ -678,14 +709,15 @@ export function zcodeStartPlanAccountPush(
   const revisionLabel = typeof revision === "string" ? revision.trim()
     : typeof revision === "number" && Number.isFinite(revision) ? String(revision) : "";
   if (!revisionLabel) return undefined;
+  const provider = zcodeStartPlanProviderId(credentials.domain);
   return {
     revision: `omb-bridge-${Date.now()}-${randomUUID()}`,
     basedOnZCodeBuiltinRevision: `zcode-builtin:${revisionLabel}:${createHash("sha256").update(resolve(builtinPath)).digest("hex")}`,
     providers: {
-      "account:bigmodel-start-plan": { access: { type: "zhipu-account", entitled: true } },
+      [provider]: { access: { type: "zhipu-account", entitled: true } },
     },
     states: {
-      "account:bigmodel-start-plan": { availability: "available", entitled: true, current: true },
+      [provider]: { availability: "available", entitled: true, current: true },
     },
   };
 }
@@ -717,6 +749,7 @@ export class ZcodeAppServer {
   readonly child: ChildProcess;
   readonly notifications: Array<Record<string, unknown>> = [];
   readonly ownGroup = process.platform !== "win32" && process.env.AGENTHUB_OWNED_POSIX_GROUP !== "1";
+  readonly groups: AdapterProcessGroups;
   private readonly pending = new Map<string, ZcodePendingRequest>();
   private readonly builtinProviderConfig: string | undefined;
   private readonly accountCredentials: ZcodeAccountCredentials | undefined;
@@ -728,7 +761,9 @@ export class ZcodeAppServer {
     cwd: string;
     storage: string;
     env: Record<string, string | undefined>;
+    groups?: AdapterProcessGroups;
   }) {
+    this.groups = input.groups ?? new AdapterProcessGroups();
     const spec = launchSpec(input.cli, ["app-server", "--cwd", input.cwd]);
     const env: Record<string, string | undefined> = { ...process.env, ...input.env, ZCODE_STORAGE_DIR: input.storage };
     const providerConfig = resolveBuiltinProviderConfig(input.env, input.cli);
@@ -752,6 +787,7 @@ export class ZcodeAppServer {
       stdio: ["pipe", "pipe", "pipe"],
       detached: this.ownGroup,
     });
+    this.groups.track(this.child, this.ownGroup);
     // Vendor stderr can carry private settings; never forward its raw text.
     this.child.stderr?.resume();
     const lines = createInterface({ input: this.child.stdout! });
@@ -766,10 +802,12 @@ export class ZcodeAppServer {
     this.child.stdin?.on("error", () => rejectPending("APP_SERVER_STDIN_FAILED"));
     this.child.once("error", () => {
       this.closed = true;
+      void this.groups.kill(this.child);
       rejectPending("APP_SERVER_START_FAILED");
     });
     this.child.once("close", () => {
       this.closed = true;
+      void this.groups.kill(this.child);
       rejectPending("APP_SERVER_EXITED");
       lines.close();
     });
@@ -821,7 +859,8 @@ export class ZcodeAppServer {
     const request = (params ?? {}) as Record<string, any>;
     const providerId = typeof request.providerId === "string" ? request.providerId : "";
     const access = request.accountAccess as Record<string, unknown> | undefined;
-    if (providerId === "account:bigmodel-start-plan" && access?.mode === "start-plan" && this.accountCredentials) {
+    const pushed = this.accountCredentials ? zcodeStartPlanProviderId(this.accountCredentials.domain) : undefined;
+    if (pushed && providerId === pushed && access?.mode === "start-plan") {
       this.write({ id, result: { headersApplied: true, requestAuth: { apiKey: this.accountCredentials.jwt } } });
       return;
     }
@@ -882,53 +921,12 @@ export class ZcodeAppServer {
       pending.reject(new ZcodeRpcError("APP_SERVER_STOPPED"));
     }
     this.pending.clear();
-    if (this.child.exitCode !== null || this.closed) return;
-    this.child.stdin?.end();
-    await this.waitForExit(1_500);
-    if (this.child.exitCode !== null || this.closed) return;
-    if (process.platform === "win32") {
-      const kill = spawn("taskkill.exe", ["/PID", String(this.child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-      await new Promise<void>((resolveKill) => {
-        const finish = () => {
-          clearTimeout(timer);
-          kill.off("close", finish);
-          kill.off("error", finish);
-          resolveKill();
-        };
-        const timer = setTimeout(finish, 1_500);
-        kill.once("close", finish);
-        kill.once("error", finish);
-      });
-    } else if (this.ownGroup) {
-      try {
-        process.kill(-this.child.pid!, "SIGTERM");
-      } catch {
-        this.child.kill("SIGTERM");
-      }
-    } else {
-      try {
-        this.child.kill("SIGTERM");
-      } catch {
-        // Already gone.
-      }
+    if (this.child.exitCode === null && !this.closed) {
+      this.child.stdin?.end();
+      const stdinGrace = Math.min(1_500, Math.max(25, Number(process.env.OMB_ZCODE_STDIN_GRACE_MS ?? 1_500) || 1_500));
+      await this.waitForExit(stdinGrace);
     }
-    await this.waitForExit(500);
-    if (process.platform !== "win32" && this.child.exitCode === null && !this.closed) {
-      if (this.ownGroup) {
-        try {
-          process.kill(-this.child.pid!, "SIGKILL");
-        } catch {
-          this.child.kill("SIGKILL");
-        }
-      } else {
-        try {
-          this.child.kill("SIGKILL");
-        } catch {
-          // Already gone.
-        }
-      }
-      await this.waitForExit(500);
-    }
+    await this.groups.kill(this.child);
   }
 
   private waitForExit(timeoutMs: number): Promise<void> {
@@ -955,15 +953,17 @@ export class ZcodeAppServer {
 export function normalizeZcodeSessionModel(model: string | undefined, offered: readonly string[]): string | undefined {
   if (!model || !offered.length || offered.includes(model)) return model;
   const lower = model.toLowerCase();
-  if (START_PLAN_PROVIDER_IDS.some((provider) => lower.startsWith(`${provider.toLowerCase()}/`))) {
+  if (isStartPlanPickerId(lower)) {
     // The catalog qualifies ids only when two providers offer the model; a catalog with just the
     // Start Plan shows the bare id, which would otherwise reject the saved qualified id.
+    // Saved under one login domain (account:bigmodel-start-plan/…), it matches the other's entry too.
     const bare = bareModelId(model).toLowerCase();
-    return offered.find((id) => !id.includes("/") && id.toLowerCase() === bare) ?? model;
+    return offered.find((id) => isStartPlanPickerId(id) && bareModelId(id).toLowerCase() === bare)
+      ?? offered.find((id) => !id.includes("/") && id.toLowerCase() === bare) ?? model;
   }
   if (model.includes("/")) return model;
   const matches = offered.filter((id) => bareModelId(id).toLowerCase() === lower);
-  const startPlan = matches.find((id) => START_PLAN_PROVIDER_IDS.some((provider) => id.toLowerCase().startsWith(`${provider.toLowerCase()}/`)));
+  const startPlan = matches.find(isStartPlanPickerId);
   if (startPlan) return startPlan;
   if (isZcodePlanModel(model) && !zcodePlanKeyFallbackEnabled()) {
     throw new Error(`ZCode Start Plan 不可用: this session's catalog has no Start Plan entry for ${model}, and the coding-plan key fallback is disabled (set OMB_ZCODE_PLAN_KEY_FALLBACK=1 to restore it).`);
@@ -1247,6 +1247,7 @@ function startBridge(): void {
   const idleTimeoutSec = Math.max(1, Number(argValue("--timeout") ?? DEFAULT_IDLE_TIMEOUT_SEC) || DEFAULT_IDLE_TIMEOUT_SEC);
   const cli = resolveZcodeCli(process.env, launchCli);
   const sessions = new Map<string, BridgeSession>();
+  const groups = new AdapterProcessGroups();
 
   const send = (message: unknown): void => {
     process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -1281,7 +1282,7 @@ function startBridge(): void {
       }
     }
     session.storage = mkdtempSync(join(tmpdir(), "omb-zcode-session-"));
-    session.app = new ZcodeAppServer({ cli, cwd: session.cwd, storage: session.storage, env: process.env });
+    session.app = new ZcodeAppServer({ cli, cwd: session.cwd, storage: session.storage, env: process.env, groups });
     await session.app.pushAccountProviders();
     return session.app;
   };
@@ -1746,11 +1747,13 @@ function startBridge(): void {
     }
   };
 
-  const shutdown = (): void => {
-    for (const session of sessions.values()) {
+  installAdapterShutdown(groups, async () => {
+    const closing = [...sessions.values()];
+    sessions.clear();
+    await Promise.all(closing.map(async (session) => {
       session.cancelled = true;
       cancelZcodeAppServerRecycle(session);
-      void session.app?.shutdown().catch(() => {});
+      await session.app?.shutdown().catch(() => {});
       if (session.storage) {
         try {
           rmSync(session.storage, { recursive: true, force: true });
@@ -1758,13 +1761,8 @@ function startBridge(): void {
           // Best effort on process exit.
         }
       }
-    }
-    sessions.clear();
-  };
-  process.once("SIGTERM", () => { shutdown(); process.exit(0); });
-  process.once("SIGINT", () => { shutdown(); process.exit(0); });
-  process.once("exit", shutdown);
-  process.stdin.once("end", () => { shutdown(); process.exit(0); });
+    }));
+  });
 
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   lines.on("line", (line) => {

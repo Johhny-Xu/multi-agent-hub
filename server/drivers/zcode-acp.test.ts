@@ -28,6 +28,7 @@ import {
   zcodePlanKeyFallbackEnabled,
   zcodeRecycleIdleMs,
   zcodeStartPlanAccountPush,
+  zcodeStartPlanProviderId,
   normalizeZcodeSessionModel,
   type ZcodeRecyclableSession,
 } from "./zcode-acp.ts";
@@ -182,6 +183,15 @@ describe("isZcodeStartPlanProvider", () => {
     expect(isZcodeStartPlanProvider("builtin:bigmodel-start-plan")).toBe(true);
     expect(isZcodeStartPlanProvider("omb-zcode-plan")).toBe(false);
     expect(isZcodeStartPlanProvider(undefined)).toBe(false);
+  });
+
+  it("recognises the Z.ai (international) Start Plan the same way", () => {
+    expect(isZcodeStartPlanProvider("account:zai-start-plan")).toBe(true);
+    expect(isZcodeStartPlanProvider("builtin:zai-start-plan")).toBe(true);
+    expect(isZcodeStartPlanProvider("account:zai-individual-coding-plan")).toBe(false);
+    expect(zcodeStartPlanProviderId("zai")).toBe("account:zai-start-plan");
+    expect(zcodeStartPlanProviderId("bigmodel")).toBe("account:bigmodel-start-plan");
+    expect(zcodeStartPlanProviderId()).toBe("account:bigmodel-start-plan");
   });
 });
 
@@ -373,7 +383,7 @@ describe("readZcodeAccountCredentials", () => {
         zcodejwttoken: seal("jwt-value"),
         "oauth:bigmodel:access_token": seal("token-value"),
       });
-      expect(readZcodeAccountCredentials(testEnv(dir))).toEqual({ jwt: "jwt-value", accessToken: "token-value" });
+      expect(readZcodeAccountCredentials(testEnv(dir))).toEqual({ jwt: "jwt-value", accessToken: "token-value", domain: "bigmodel" });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -393,7 +403,79 @@ describe("readZcodeAccountCredentials", () => {
   });
 });
 
+describe("readZcodeAccountCredentials (Z.ai Start Plan)", () => {
+  const writeSetting = (dir: string, setting: Record<string, unknown>): void =>
+    writeFileSync(join(dir, ".zcode", "v2", "setting.json"), JSON.stringify(setting));
+
+  it("reads a Z.ai-only login as the zai domain", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-zcode-cred-zai-"));
+    try {
+      writeCredentials(dir, { zcodejwttoken: seal("jwt-value"), "oauth:zai:access_token": seal("zai-token") });
+      expect(readZcodeAccountCredentials(testEnv(dir))).toEqual({ jwt: "jwt-value", accessToken: "zai-token", domain: "zai" });
+      writeSetting(dir, { providerFamilyDomain: "zai" });
+      expect(readZcodeAccountCredentials(testEnv(dir))?.domain).toBe("zai");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("follows the desktop's providerFamilyDomain when both logins are present", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-zcode-cred-zai-"));
+    try {
+      writeCredentials(dir, {
+        zcodejwttoken: seal("jwt-value"),
+        "oauth:bigmodel:access_token": seal("bigmodel-token"),
+        "oauth:zai:access_token": seal("zai-token"),
+      });
+      expect(readZcodeAccountCredentials(testEnv(dir))?.domain).toBe("bigmodel");
+      writeSetting(dir, { providerFamilyDomain: "zai" });
+      expect(readZcodeAccountCredentials(testEnv(dir))).toEqual({ jwt: "jwt-value", accessToken: "zai-token", domain: "zai" });
+      writeSetting(dir, { providerFamilyDomain: "bigmodel" });
+      expect(readZcodeAccountCredentials(testEnv(dir))).toEqual({ jwt: "jwt-value", accessToken: "bigmodel-token", domain: "bigmodel" });
+      writeSetting(dir, { providerFamilyDomain: "somewhere-else" });
+      expect(readZcodeAccountCredentials(testEnv(dir))?.domain).toBe("bigmodel");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the CLI's active provider when the desktop setting is absent, and falls back to the login that exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-zcode-cred-zai-"));
+    try {
+      writeCredentials(dir, {
+        zcodejwttoken: seal("jwt-value"),
+        "oauth:bigmodel:access_token": seal("bigmodel-token"),
+        "oauth:zai:access_token": seal("zai-token"),
+        "oauth:active_provider": seal("zai"),
+      });
+      expect(readZcodeAccountCredentials(testEnv(dir))?.domain).toBe("zai");
+      writeCredentials(dir, { zcodejwttoken: seal("jwt-value"), "oauth:bigmodel:access_token": seal("bigmodel-token") });
+      writeSetting(dir, { providerFamilyDomain: "zai" });
+      expect(readZcodeAccountCredentials(testEnv(dir))?.domain).toBe("bigmodel");
+      writeCredentials(dir, { "oauth:zai:access_token": seal("zai-token") });
+      expect(readZcodeAccountCredentials(testEnv(dir))).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("zcodeStartPlanAccountPush", () => {
+  it("pushes the Z.ai Start Plan entitlement for a zai login, and bigmodel otherwise", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-zcode-push-"));
+    try {
+      const builtin = join(dir, "zcode-builtin.json");
+      writeFileSync(builtin, JSON.stringify({ schemaVersion: 1, revision: "43", config: {} }));
+      const zai = zcodeStartPlanAccountPush(builtin, { jwt: "jwt-value", accessToken: "token-value", domain: "zai" })!;
+      expect(zai.providers).toEqual({ "account:zai-start-plan": { access: { type: "zhipu-account", entitled: true } } });
+      expect(zai.states).toEqual({ "account:zai-start-plan": { availability: "available", entitled: true, current: true } });
+      const bigmodel = zcodeStartPlanAccountPush(builtin, { jwt: "jwt-value", accessToken: "token-value", domain: "bigmodel" })!;
+      expect(Object.keys(bigmodel.providers as object)).toEqual(["account:bigmodel-start-plan"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("mirrors the desktop's entitlement push for the bigmodel Start Plan", () => {
     const dir = mkdtempSync(join(tmpdir(), "omb-zcode-push-"));
     try {
@@ -640,6 +722,48 @@ describe("zcode plan key fallback (ZCODE-planguard)", () => {
     expect(normalizeZcodeSessionModel("builtin:bigmodel-start-plan/GLM-5.3", ["GLM-5.3"])).toBe("GLM-5.3");
     expect(normalizeZcodeSessionModel("account:bigmodel-start-plan/GLM-5.3-Flash", ["9router/GLM-5.3-Flash"]))
       .toBe("account:bigmodel-start-plan/GLM-5.3-Flash");
+  });
+});
+
+describe("Z.ai Start Plan catalog and saved models", () => {
+  const zaiSnapshot = {
+    settings: {
+      model: {
+        available: [
+          { ref: { providerId: "account:zai-start-plan", modelId: "GLM-5.3-Flash" }, label: "GLM-5.3-Flash", providerLabel: "Start Plan" },
+          { ref: { providerId: "account:zai-start-plan", modelId: "GLM-5.2" }, label: "GLM-5.2", providerLabel: "Start Plan" },
+          { ref: { providerId: "9router", modelId: "deepseek-v4.1-flash" }, label: "DeepSeek" },
+        ],
+        current: { providerId: "9router", modelId: "deepseek-v4.1-flash" },
+      },
+    },
+  };
+
+  it("qualifies the zai Start Plan entries and opens new sessions on its Flash", () => {
+    const { models } = catalogFromSnapshot(zaiSnapshot);
+    expect(models.map((model) => model.pickerId)).toEqual([
+      "account:zai-start-plan/GLM-5.3-Flash", "account:zai-start-plan/GLM-5.2", "deepseek-v4.1-flash",
+    ]);
+    expect(preferredZcodeModelId(models)).toBe("account:zai-start-plan/GLM-5.3-Flash");
+  });
+
+  it("maps a bare plan id onto the zai Start Plan entry", () => {
+    const offered = catalogFromSnapshot(zaiSnapshot).models.map((model) => model.pickerId);
+    expect(normalizeZcodeSessionModel("GLM-5.3-Flash", offered)).toBe("account:zai-start-plan/GLM-5.3-Flash");
+    expect(normalizeZcodeSessionModel("GLM-5.3-Flash", ["omb-zcode-plan/GLM-5.3-Flash", "account:zai-start-plan/GLM-5.3-Flash"]))
+      .toBe("account:zai-start-plan/GLM-5.3-Flash");
+  });
+
+  it("keeps a bot saved on one domain's Start Plan working after ZCode switches domain", () => {
+    const zai = ["account:zai-start-plan/GLM-5.3-Flash", "omb-zcode-plan/GLM-5.3-Flash", "deepseek-v4.1-flash"];
+    expect(normalizeZcodeSessionModel("account:bigmodel-start-plan/GLM-5.3-Flash", zai)).toBe("account:zai-start-plan/GLM-5.3-Flash");
+    expect(normalizeZcodeSessionModel("builtin:bigmodel-start-plan/GLM-5.3-Flash", zai)).toBe("account:zai-start-plan/GLM-5.3-Flash");
+    const bigmodel = ["account:bigmodel-start-plan/GLM-5.3-Flash", "deepseek-v4.1-flash"];
+    expect(normalizeZcodeSessionModel("account:zai-start-plan/GLM-5.3-Flash", bigmodel)).toBe("account:bigmodel-start-plan/GLM-5.3-Flash");
+    expect(normalizeZcodeSessionModel("account:zai-start-plan/GLM-5.3-Flash", ["GLM-5.3-Flash"])).toBe("GLM-5.3-Flash");
+    // A model the other domain's plan does not carry is left as saved, never moved to another provider.
+    expect(normalizeZcodeSessionModel("account:bigmodel-start-plan/GLM-5.3", zai)).toBe("account:bigmodel-start-plan/GLM-5.3");
+    expect(normalizeZcodeSessionModel("account:zai-start-plan/GLM-5.3-Flash", zai)).toBe("account:zai-start-plan/GLM-5.3-Flash");
   });
 });
 
@@ -1512,4 +1636,87 @@ describe("zcode ACP bridge idle recycle (FIX-E52)", () => {
     expect(bridge.state().boots).toBe(1);
     expect(bridge.state().creates).toBe(1);
   }, 25_000);
+});
+
+describe("zcode 9router local-inject picks (E111)", () => {
+  it("appends a 9router:: pick to the compat key's list when it points at the same host", async () => {
+    const { ensureZcodeInjectModel } = await import("./acp/zcode.ts");
+    const env: Record<string, string | undefined> = {
+      OMB_CLI_OPENAI_COMPAT_KEY: "fixture-compat-key",
+      OMB_CLI_OPENAI_COMPAT_URL: "http://127.0.0.1:20128/v1/",
+      OMB_CLI_OPENAI_COMPAT_MODELS: "stai/step-5-preview",
+    };
+    expect(ensureZcodeInjectModel("9router::zd/claude-sonnet-5-5", env)).toBe("zd/claude-sonnet-5-5");
+    expect(env.OMB_CLI_OPENAI_COMPAT_MODELS).toBe("stai/step-5-preview,zd/claude-sonnet-5-5");
+    expect(env.OMB_CLI_INJECT_ID).toBeUndefined();
+    expect(byokProvidersFromEnv(env)[0]!.models).toEqual(["stai/step-5-preview", "zd/claude-sonnet-5-5"]);
+  });
+
+  it("does not list the compat key's own model twice", async () => {
+    const { ensureZcodeInjectModel } = await import("./acp/zcode.ts");
+    const env: Record<string, string | undefined> = {
+      OMB_CLI_OPENAI_COMPAT_KEY: "fixture-compat-key",
+      OMB_CLI_OPENAI_COMPAT_URL: "http://127.0.0.1:20128/v1",
+      OMB_CLI_OPENAI_COMPAT_MODELS: "stai/step-5-preview",
+    };
+    expect(ensureZcodeInjectModel("9router::stai/step-5-preview", env)).toBe("stai/step-5-preview");
+    expect(env.OMB_CLI_OPENAI_COMPAT_MODELS).toBe("stai/step-5-preview");
+  });
+
+  it("adds an omb-9router provider keyed by OMB_9ROUTER_API_KEY when the compat key serves another host", async () => {
+    const { ensureZcodeInjectModel } = await import("./acp/zcode.ts");
+    const env: Record<string, string | undefined> = {
+      OMB_9ROUTER_API_KEY: "fixture-9router-key",
+      OMB_CLI_OPENAI_COMPAT_KEY: "sk-x",
+      OMB_CLI_OPENAI_COMPAT_URL: "https://gateway.example/v1",
+      OMB_CLI_OPENAI_COMPAT_MODELS: "model-a",
+    };
+    expect(ensureZcodeInjectModel("9router::zd/claude-sonnet-5-5", env)).toBe("zd/claude-sonnet-5-5");
+    expect(env.OMB_CLI_OPENAI_COMPAT_MODELS).toBe("model-a");
+    expect(byokProvidersFromEnv(env)).toEqual([
+      { id: "omb-openai-compat", name: "OpenAI-compatible (gateway.example)", baseUrl: "https://gateway.example/v1", apiKey: "sk-x", models: ["model-a"] },
+      { id: "omb-9router", name: "9router (OpenMausBot)", baseUrl: "http://127.0.0.1:20128/v1", apiKey: "fixture-9router-key", models: ["zd/claude-sonnet-5-5"] },
+    ]);
+  });
+
+  it("leaves a non-inject or unknown-host pick untouched", async () => {
+    const { ensureZcodeInjectModel } = await import("./acp/zcode.ts");
+    const env: Record<string, string | undefined> = { OMB_CLI_OPENAI_COMPAT_MODELS: "model-a" };
+    expect(ensureZcodeInjectModel("GLM-5.3-Flash", env)).toBe("GLM-5.3-Flash");
+    expect(ensureZcodeInjectModel("nohost::zd/claude-sonnet-5-5", env)).toBe("nohost::zd/claude-sonnet-5-5");
+    expect(env).toEqual({ OMB_CLI_OPENAI_COMPAT_MODELS: "model-a" });
+  });
+
+  it("ignores an inject provider whose id is not an omb- id or that lacks a key", () => {
+    const base = { OMB_CLI_INJECT_URL: "http://127.0.0.1:20128/v1", OMB_CLI_INJECT_MODELS: "zd/claude-sonnet-5-5" };
+    expect(byokProvidersFromEnv({ ...base, OMB_CLI_INJECT_ID: "9router", OMB_CLI_INJECT_KEY: "k" })).toEqual([]);
+    expect(byokProvidersFromEnv({ ...base, OMB_CLI_INJECT_ID: "omb-9router" })).toEqual([]);
+  });
+
+  it("writes every injected 9router model into the provider store", () => {
+    const storage = mkdtempSync(join(tmpdir(), "omb-zcode-e111-"));
+    try {
+      const written = providerFile(storage, {
+        OMB_CLI_OPENAI_COMPAT_KEY: "fixture-compat-key",
+        OMB_CLI_OPENAI_COMPAT_URL: "http://127.0.0.1:20128/v1",
+        OMB_CLI_OPENAI_COMPAT_MODELS: "stai/step-5-preview,zd/claude-sonnet-5-5",
+      });
+      const store = JSON.parse(readFileSync(written!, "utf8"));
+      expect(store.config.providerConfigRules.providerRules[0].config.personalModelIds).toEqual(["stai/step-5-preview", "zd/claude-sonnet-5-5"]);
+      expect(store.config.modelConfigRules.providerModelRules.map((rule: any) => rule.modelId)).toEqual(["stai/step-5-preview", "zd/claude-sonnet-5-5"]);
+    } finally {
+      rmSync(storage, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves a 9router:: turn model through the driver support", async () => {
+    const env: Record<string, string | undefined> = {
+      OMB_CLI_OPENAI_COMPAT_KEY: "fixture-compat-key",
+      OMB_CLI_OPENAI_COMPAT_URL: "http://127.0.0.1:20128/v1",
+      OMB_CLI_OPENAI_COMPAT_MODELS: "stai/step-5-preview",
+    };
+    const { ensureZcodeInjectModel } = await import("./acp/zcode.ts");
+    expect(ensureZcodeInjectModel("9router::zd/claude-sonnet-5-5", env)).toBe("zd/claude-sonnet-5-5");
+    expect(normalizeZcodeSessionModel("zd/claude-sonnet-5-5", ["GLM-5.3-Flash", "stai/step-5-preview", "zd/claude-sonnet-5-5"])).toBe("zd/claude-sonnet-5-5");
+  });
 });
