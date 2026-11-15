@@ -52,8 +52,9 @@ export function assertSafeCliArgv(
 const cliGroups = new WeakSet<ChildProcess>();
 const stopping = new WeakMap<ChildProcess, Promise<boolean>>();
 
-type LinuxProcess = { pid: number; parent: number; start: string; state: string };
+type LinuxProcess = { pid: number; parent: number; pgrp: number; session: number; start: string; state: string };
 const linuxTrees = new WeakMap<ChildProcess, Map<number, string>>();
+const linuxGroups = new WeakMap<ChildProcess, Map<number, string>>();
 
 function linuxProcess(pid: number): LinuxProcess | null {
   let stat: string;
@@ -67,17 +68,52 @@ function linuxProcess(pid: number): LinuxProcess | null {
   const start = fields[19];
   const state = fields[0];
   const parent = Number(fields[1]);
-  if (!start || !state || !Number.isInteger(parent)) throw new Error("Unreadable Linux process identity");
-  return { pid, parent, start, state };
+  const pgrp = Number(fields[2]);
+  const session = Number(fields[3]);
+  if (!start || !state || !Number.isInteger(parent) || !Number.isInteger(pgrp) || !Number.isInteger(session)) {
+    throw new Error("Unreadable Linux process identity");
+  }
+  return { pid, parent, pgrp, session, start, state };
 }
 
-/** Linux sandbox helpers can leave the CLI's process group and reparent during a protocol interrupt. */
+function linuxGroupHasLiveMembers(pgid: number, leaderStart: string): boolean {
+  if (pgid <= 1 || pgid === process.pid) return false;
+  try {
+    process.kill(-pgid, 0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+  }
+  try {
+    const leader = linuxProcess(pgid);
+    // If the leader PID was recycled for an unrelated process, drop ownership immediately.
+    if (leader && leader.start !== leaderStart) return false;
+  } catch {
+    return false;
+  }
+  let entries: string[];
+  try { entries = readdirSync("/proc"); } catch { return false; }
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const current = linuxProcess(Number(entry));
+      if (current && current.pgrp === pgid && current.state !== "Z" && current.state !== "X") return true;
+    } catch {}
+  }
+  return false;
+}
+
+/** Linux sandbox helpers and adapter subtrees can leave the CLI's process group and reparent to PID 1. */
 export function captureCliTree(child: ChildProcess): void {
   if (process.platform !== "linux" || !cliGroups.has(child) || !child.pid) return;
   let tree = linuxTrees.get(child);
   if (!tree) {
     tree = new Map();
     linuxTrees.set(child, tree);
+  }
+  let groups = linuxGroups.get(child);
+  if (!groups) {
+    groups = new Map();
+    linuxGroups.set(child, groups);
   }
   const snapshot = new Map<number, LinuxProcess>();
   let entries: string[];
@@ -90,17 +126,30 @@ export function captureCliTree(child: ChildProcess): void {
       if (current) snapshot.set(pid, current);
     } catch {}
   }
+  const rootStart = tree.get(child.pid);
+  const rootMatches = Boolean(rootStart) && (!snapshot.has(child.pid) || snapshot.get(child.pid)?.start === rootStart);
   const parents = new Set([...tree].filter(([pid, start]) => snapshot.get(pid)?.start === start).map(([pid]) => pid));
   let discovered: boolean;
   do {
     discovered = false;
     for (const current of snapshot.values()) {
-      if (current.pid === process.pid || !parents.has(current.parent) || tree.get(current.pid) === current.start) continue;
+      if (current.pid === process.pid || tree.get(current.pid) === current.start) continue;
+      const inParentChain = parents.has(current.parent);
+      const inDetachedGroup = groups.has(current.pgrp) && snapshot.get(current.pgrp)?.start === groups.get(current.pgrp);
+      const inRootSession = rootMatches && current.session === child.pid;
+      if (!inParentChain && !inDetachedGroup && !inRootSession) continue;
       tree.set(current.pid, current.start);
       parents.add(current.pid);
       discovered = true;
     }
   } while (discovered);
+  for (const [pid, start] of tree) {
+    if (pid === child.pid || pid <= 1 || pid === process.pid) continue;
+    const current = snapshot.get(pid);
+    if (current && current.start === start && current.pgrp === current.pid && !groups.has(current.pgrp)) {
+      groups.set(current.pgrp, current.start);
+    }
+  }
 }
 
 function linuxDescendantsStopped(child: ChildProcess): boolean {
@@ -110,6 +159,13 @@ function linuxDescendantsStopped(child: ChildProcess): boolean {
       const current = linuxProcess(pid);
       if (current?.start === start && current.state !== "Z" && current.state !== "X") return false;
     } catch { return false; }
+  }
+  const groups = linuxGroups.get(child);
+  if (groups) {
+    for (const [pgid, leaderStart] of [...groups]) {
+      if (linuxGroupHasLiveMembers(pgid, leaderStart)) return false;
+      groups.delete(pgid);
+    }
   }
   return true;
 }
@@ -125,11 +181,29 @@ function linuxRootIdentityMatches(child: ChildProcess): boolean | undefined {
 }
 
 function signalLinuxDescendants(child: ChildProcess, value: NodeJS.Signals): void {
+  const signaledGroups = new Set<number>();
+  const groups = linuxGroups.get(child);
+  if (groups) {
+    for (const [pgid, leaderStart] of [...groups]) {
+      if (!linuxGroupHasLiveMembers(pgid, leaderStart)) {
+        groups.delete(pgid);
+        continue;
+      }
+      try {
+        process.kill(-pgid, value);
+        signaledGroups.add(pgid);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ESRCH") groups.delete(pgid);
+      }
+    }
+  }
   for (const [pid, start] of [...(linuxTrees.get(child) ?? [])].reverse()) {
     if (pid === child.pid || pid <= 1 || pid === process.pid) continue;
     try {
       const current = linuxProcess(pid);
-      if (current?.start === start && current.state !== "Z" && current.state !== "X") process.kill(pid, value);
+      if (!current || current.start !== start || current.state === "Z" || current.state === "X") continue;
+      if (signaledGroups.has(current.pgrp)) continue;
+      process.kill(pid, value);
     } catch {}
   }
 }

@@ -17,6 +17,8 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
+import { AdapterProcessGroups, installAdapterShutdown } from "./adapter-process-group.ts";
+
 const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
 
@@ -339,7 +341,7 @@ export function startBridge(): void {
 
   const sessions = new Map<string, Session>();
   const running = new Map<string, RunningTask>();
-  const children = new Set<ChildProcess>();
+  const groups = new AdapterProcessGroups();
 
   const send = (message: unknown): void => {
     process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -352,27 +354,6 @@ export function startBridge(): void {
   };
   const update = (sessionId: string, value: Record<string, unknown>): void => {
     send({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
-  };
-
-  const killTree = (child: ChildProcess): void => {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    if (process.platform !== "win32" && typeof child.pid === "number") {
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch {
-        // Already gone, or never became its own group leader.
-      }
-      const force = setTimeout(() => {
-        try {
-          process.kill(-child.pid!, "SIGKILL");
-        } catch {
-          // Already gone.
-        }
-      }, 3_000);
-      force.unref?.();
-      return;
-    }
-    child.kill();
   };
 
   const runTask = (session: Session, text: string): Promise<RunResult> => new Promise((resolveRun) => {
@@ -450,13 +431,13 @@ export function startBridge(): void {
       resolveRun({ kind: "error", message: errorText("not-found") });
       return;
     }
-    children.add(child);
+    groups.track(child, process.platform !== "win32");
     running.set(session.id, { child, cancelled: false, settle: finish });
     heartbeat = setInterval(() => update(session.id, { sessionUpdate: "mcode_bridge_heartbeat" }), heartbeatMs());
     heartbeat.unref?.();
     // `mcode` enforces its own deadline; this is the backstop if it cannot.
     hardStop = setTimeout(() => {
-      killTree(child);
+      void groups.kill(child);
       finish({ kind: "error", message: errorText("timeout") });
     }, (timeoutSec + 60) * 1_000);
     hardStop.unref?.();
@@ -469,11 +450,12 @@ export function startBridge(): void {
       if (/sign in to minimax|run `?mcode login`?/i.test(chunk)) projector.markAuthFailure();
     });
     child.once("error", () => {
-      children.delete(child);
+      void groups.kill(child);
       finish({ kind: "error", message: errorText("not-found") });
     });
     child.once("close", (code) => {
-      children.delete(child);
+      // Reap any helper left in `mcode`'s group after the leader exits; no-op if already gone.
+      void groups.kill(child);
       if (pending.trim()) handleEvent(pending);
       pending = "";
       const task = running.get(session.id);
@@ -519,7 +501,7 @@ export function startBridge(): void {
     const task = running.get(sessionId);
     if (!task) return;
     task.cancelled = true;
-    killTree(task.child);
+    void groups.kill(task.child);
     // Answer at once; the process group is being reclaimed in the background.
     task.settle({ kind: "cancelled" });
   };
@@ -569,17 +551,9 @@ export function startBridge(): void {
     }
   };
 
-  const shutdown = (): void => {
-    for (const task of running.values()) {
-      task.cancelled = true;
-      killTree(task.child);
-    }
-    for (const child of children) killTree(child);
-  };
-  process.once("SIGTERM", () => { shutdown(); process.exit(0); });
-  process.once("SIGINT", () => { shutdown(); process.exit(0); });
-  process.once("exit", shutdown);
-  process.stdin.once("end", () => { shutdown(); process.exit(0); });
+  installAdapterShutdown(groups, () => {
+    for (const task of running.values()) task.cancelled = true;
+  });
 
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   lines.on("line", (line) => {

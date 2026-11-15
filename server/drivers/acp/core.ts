@@ -17,7 +17,7 @@ import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, deviceAuthInstanceSurface } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { CLI_VERSION_TIMEOUT_MS, describeSpawnFailure, execCli, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts";
+import { captureCliTree, CLI_VERSION_TIMEOUT_MS, describeSpawnFailure, execCli, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { acpNativeLogMessage } from "./tool-log.ts";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
@@ -213,16 +213,63 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       const sessions = new Map<string, AcpSession>();
     // Retain every closing Qwen child until its tree is gone: closing drops the pool entry, not its native writer lease.
       const retiring = new Map<string, Set<ReturnType<typeof spawnCli>>>();
+      const closingChildren = new Map<ReturnType<typeof spawnCli>, { force: () => Promise<boolean> }>();
+      const closeGraceMs = () => envOr("OMB_ACP_CLOSE_GRACE_MS", 5_000);
+      const killGraceMs = () => envOr("OMB_ACP_KILL_GRACE_MS", 5_000);
       const retireChild = async (threadId: string, child: ReturnType<typeof spawnCli>): Promise<boolean> => {
         let children = retiring.get(threadId);
         if (!children) retiring.set(threadId, children = new Set());
         children.add(child);
-        const stopped = await killCliTree(child);
+        const stopped = await killCliTree(child, killGraceMs());
         if (stopped) {
           children.delete(child);
           if (!children.size && retiring.get(threadId) === children) retiring.delete(threadId);
         }
         return stopped;
+      };
+      const reapClosingChild = (child: ReturnType<typeof spawnCli>, immediate: boolean): void => {
+        const existing = closingChildren.get(child);
+        if (existing) {
+          if (immediate) void existing.force();
+          return;
+        }
+        let promise: Promise<boolean> | null = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const startKill = (): Promise<boolean> => {
+          if (!promise) {
+            if (timer) clearTimeout(timer);
+            child.off("exit", onExit);
+            promise = killCliTree(child, killGraceMs()).finally(() => {
+              closingChildren.delete(child);
+            });
+          }
+          return promise;
+        };
+        const onExit = (): void => {
+          // Once the adapter exits on stdin EOF, immediately reap any surviving captured child group
+          // (a zero-signal no-op when the adapter already cleaned up its own groups).
+          void startKill();
+        };
+        closingChildren.set(child, { force: startKill });
+        if (immediate || child.exitCode !== null || child.signalCode !== null) {
+          void startKill();
+          return;
+        }
+        child.once("exit", onExit);
+        timer = setTimeout(() => {
+          void startKill();
+        }, closeGraceMs());
+        timer.unref?.();
+      };
+      const awaitAllClosing = async (): Promise<void> => {
+        const tasks: Array<Promise<unknown>> = [];
+        for (const [threadId, children] of retiring) {
+          for (const child of children) tasks.push(retireChild(threadId, child));
+        }
+        for (const entry of closingChildren.values()) {
+          tasks.push(entry.force());
+        }
+        await Promise.all(tasks);
       };
       const sessionIdle = sessionIdlePolicy("ACP");
 
@@ -245,17 +292,15 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           return;
         }
         host.draining = true;
-      // EOF is no guaranteed exit: Qwen is tracked before another turn can resume its history.
+        // Snapshot the adapter's child tree and detached groups BEFORE stdin EOF lets the adapter exit
+        // and reparent its children to PID 1.
+        captureCliTree(session.child);
         try {
           session.child.stdin.end();
         } catch {}
+        const immediate = why === "stop" || why === "stopAll" || why === "dispose" || why === "cancel-timeout";
         if (support.restartOnMcpChange) void retireChild(threadId, session.child);
-        else {
-          const kill = setTimeout(() => {
-            void killCliTree(session.child);
-          }, 5_000);
-          kill.unref?.();
-        }
+        else reapClosingChild(session.child, immediate);
       };
       // A session that ignores session/cancel goes on working, and EOF on stdin does not stop it either. Only a confirmed
       // session/close or the end of its process stops it, and ending a shared process ends the other sessions' turns too.
@@ -273,7 +318,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             settle(link.threadId, other, false, "exit_before_result");
           }
         }
-        if (await killCliTree(host.child)) return true;
+        if (await killCliTree(host.child, killGraceMs())) return true;
         if (session.current) emit({ ...base(threadId, session.current.turnId), type: "runtime.error",
           ...noticeFailure("chat.notice.acpStopFailed", { provider: support.displayName }) });
         return false;
@@ -296,7 +341,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const session = sessions.get(threadId);
         if (!session) return;
         if (session.idleTimer) clearTimeout(session.idleTimer);
-        session.idleTimer = armIdleClose(`${instanceId}\0${threadId}`, engineIdleMs(threadId, sessionIdle), { close: () => closeSession(threadId, "idle"),
+        session.idleTimer = armIdleClose(`${instanceId}\0${threadId}`, engineIdleMs(threadId, sessionIdle), { close: () => { if (sessions.get(threadId) === session) closeSession(threadId, "idle"); }, // E117: a dead session's timer must not close its successor
           idle: () => sessions.get(threadId) === session && !session.closing && !session.current });
       };
     // Session allows the driver keeps when the agent offered no `allow_always`: exact operations per
@@ -1514,9 +1559,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           stopAll: async () => {
             for (const { stop } of active.values()) stop();
             for (const threadId of Array.from(sessions.keys())) closeSession(threadId, "stopAll");
-            for (const [threadId, children] of retiring) {
-              for (const child of children) void retireChild(threadId, child);
-            }
+            await awaitAllClosing();
           },
           closeIdleSessions: () => {
             let closed = 0;
@@ -1545,9 +1588,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             closeSession(threadId, "dispose");
             settle(threadId, session, true, "cancelled");
           }
-          for (const [threadId, children] of retiring) {
-            for (const child of children) void retireChild(threadId, child);
-          }
+          await awaitAllClosing();
           listeners.clear();
         },
       };
