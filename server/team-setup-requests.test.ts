@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { TeamSetupError, TeamSetupRequestService } from "./team-setup-requests.ts";
+import { accountSwitch } from "./account-switch.ts";
 import { botFolder } from "./bot-folder.ts";
 import { flushProfileHistory, readHistory } from "./profile-versions.ts";
 import { hasTeamAuthority } from "./peer-roster.ts";
@@ -11,7 +12,7 @@ import type { BotRecord, OptionCardData } from "./store.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import type { DirectApply } from "./direct-apply.ts";
 
-function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean }>) {
+function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean }>, extra: Partial<ConstructorParameters<typeof TeamSetupRequestService>[0]> = {}) {
   const bots: BotRecord[] = [];
   const messages: Array<{ id: string; role?: string; card?: OptionCardData }> = [];
   const teams = ["", "Work", "Engineering", "Private"];
@@ -52,10 +53,11 @@ function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean 
   const service = new TeamSetupRequestService({ store, teams: () => teams, maxBots: 100, hasTeamAuthority,
     canPersist, ownsThread: () => sourceExists, targetBusy, deleteBot, autoApply, validateChange,
     validateModel: (selection, current) => {
-      if (!({ claude: ["sonnet", "opus"], codex: ["gpt-fixture"] }[selection.instanceId]?.includes(selection.model))) return "Model is not in the current catalog";
+      if (!({ claude: ["sonnet", "opus"], claudeApi: ["sonnet"], codex: ["gpt-fixture"] }[selection.instanceId]?.includes(selection.model))) return "Model is not in the current catalog";
       return current?.approvalMode === "full" && selection.instanceId !== current.modelSelection.instanceId ? "Existing permissions are incompatible" : null;
     },
     ...(caps ? { driverCapabilities: (instanceId: string) => caps[instanceId] } : {}),
+    ...extra,
   });
   const propose = (operations: unknown[], newTeams: string[] = []) => service.propose({ botId: chief.id, threadId: chief.threadId, plan: { reason: "Requested specialist setup", operations, newTeams } });
   const submit = (operations: unknown[], newTeams: string[] = []) => service.submit({ botId: chief.id, threadId: chief.threadId, plan: { reason: "Requested specialist setup", operations, newTeams } });
@@ -642,5 +644,65 @@ describe("a Chief making bots, whatever the plan", () => {
   it("still holds the workspace's own ceiling", () => {
     const app = full(97);
     expect(() => app.propose([specialist("Scout"), specialist("Writer")])).toThrow(expect.objectContaining({ status: 409, message: "This setup exceeds the workspace bot limit" }));
+  });
+});
+
+describe("set_up_team across accounts of one engine (E83)", () => {
+  const ENGINES: Record<string, string> = { claude: "claudeAgent", claudeApi: "claudeAgent", codex: "codex" };
+  const engineOf = (id: string) => ENGINES[id];
+  const setup = (workspaceDefault?: { instanceId: string; model: string }) => {
+    const h = harness(undefined, {
+      accountSwitch: (selection, references) => accountSwitch(engineOf, selection, references),
+      ...(workspaceDefault ? { workspaceDefault: () => workspaceDefault } : {}),
+    });
+    h.autoApply.mockImplementation(() => "full-access");
+    return h;
+  };
+
+  it("never applies a new bot on another account of the Chief's engine on its own, even under Full access", async () => {
+    const h = setup();
+    const result = await h.submit([specialist("Kay", "Work", { instanceId: "claudeApi", model: "sonnet" })]);
+    expect(result.state).toBe("pending");
+    expect(h.apply).not.toHaveBeenCalled();
+    expect(result.detail).toContain("Account: claude → claudeApi");
+    const card = h.messages.at(-1)!.card!;
+    expect(card.options).toEqual(["Apply setup", "Cancel"]);
+    expect(card.autoApplied).toBeUndefined();
+    expect((await h.resolve(result.requestId))?.result.state).toBe("applied");
+    expect(h.store.bots.find((bot) => bot.name === "Kay")?.modelSelection).toEqual({ instanceId: "claudeApi", model: "sonnet" });
+  });
+
+  it("asks before moving an existing bot to another account of its engine", async () => {
+    const h = setup();
+    const result = await h.submit([{ action: "update", botId: h.peer.id, fields: { modelSelection: { instanceId: "claudeApi", model: "sonnet" } } }]);
+    expect(result.state).toBe("pending");
+    expect(result.detail).toContain("Account: claude → claudeApi");
+    expect(h.peer.modelSelection).toEqual({ instanceId: "claude", model: "sonnet" });
+    expect((await h.resolve(result.requestId, "deny"))?.result.state).toBe("denied");
+    expect(h.peer.modelSelection).toEqual({ instanceId: "claude", model: "sonnet" });
+  });
+
+  it("applies directly on the same account, or on an engine nobody here uses yet", async () => {
+    const h = setup();
+    const same = await h.submit([specialist("Lee", "Work")]);
+    expect(same.state).toBe("applied");
+    expect(same.detail).not.toContain("Account:");
+    const first = await h.submit([specialist("Max", "Work", { instanceId: "codex", model: "gpt-fixture" })]);
+    expect(first.state).toBe("applied");
+    expect(first.detail).not.toContain("Account:");
+  });
+
+  it("treats the workspace default's account as already chosen for new bots", async () => {
+    const h = setup({ instanceId: "claudeApi", model: "sonnet" });
+    const result = await h.submit([specialist("Kay", "Work", { instanceId: "claudeApi", model: "sonnet" })]);
+    expect(result.state).toBe("applied");
+  });
+
+  it("marks the account change on a card shown at the owner's level too", () => {
+    const h = setup();
+    h.autoApply.mockImplementation(() => null);
+    const card = h.propose([specialist("Kay", "Work", { instanceId: "claudeApi", model: "sonnet" })]);
+    expect(card.detail).toContain("Account: claude → claudeApi");
+    expect(h.service.switchesAccount(h.messages.at(-1)!.card!.teamSetupRequest!)).toBe(true);
   });
 });

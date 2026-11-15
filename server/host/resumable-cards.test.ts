@@ -50,6 +50,22 @@ describe("resumableCards", () => {
     expect(resumableCards(oneRow(signIn({ superseded: true })), "t1", 0)).toEqual([]);
   });
 
+  it("waits on a start_thread account card until the turn hears the person's decision (E83)", () => {
+    const thread = (extra: Partial<OptionCardData>, ask: Record<string, unknown>): OptionCardData => ({
+      title: "Open #Review on another account?", subtitle: "", options: ["Confirm", "Cancel"], requestId: "r2", tool: "start_thread", ...extra,
+      modelRequest: { version: 1, requestId: "r2", botId: "kiwi", threadId: "t1", targetBotId: "kiwi", targetName: "Kiwi", createdAt: 1, reason: "Open thread #Review",
+        selection: { instanceId: "qoder", model: "m" }, before: { instanceId: "qoder-ks", model: "m" }, thread: { title: "Review", ...ask } },
+    });
+    expect(waitsOn(thread({}, {}))).toEqual([{ id: "m1", waits: "account decision: Open #Review on another account?" }]);
+    expect(waitsOn(thread({ answered: "allow" }, { result: "allow" })), "confirmed, not yet heard").toHaveLength(1);
+    expect(waitsOn(thread({ answered: "deny" }, { result: "deny" })), "cancelled, not yet heard").toHaveLength(1);
+    expect(waitsOn(thread({ answered: "allow" }, { result: "allow", resumed: true }))).toEqual([]);
+    expect(waitsOn(thread({ answered: "unavailable", dismissed: true }, {})), "closed by Stop").toEqual([]);
+    const plain = thread({}, {});
+    delete plain.modelRequest!.thread;
+    expect(waitsOn(plain), "a default-model card never parks a turn").toEqual([]);
+  });
+
   it("tells a parked turn with a card left to wait on from one with none", () => {
     expect(anyCardLive(oneRow(secret({})), "t1", ["s1"])).toBe(true);
     expect(anyCardLive(oneRow(secret({ superseded: true })), "t1", ["s1"])).toBe(false);

@@ -101,7 +101,7 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   const skillAction = card.skillRequest?.action;
   if (skillAction) return t(SKILL_SETTLED_LABEL[skillAction]);
   if (card.profileRequest) return t("approval.status.profileUpdated");
-  if (card.modelRequest) return t("approval.status.modelChanged");
+  if (card.modelRequest) return t(card.modelRequest.thread ? "approval.status.allowed" : "approval.status.modelChanged");
   if (card.routineRequest) return t("approval.status.routineConfirmed");
   if (card.skillRequest) return t("approval.status.skillConfirmed");
   return t("approval.status.allowed");

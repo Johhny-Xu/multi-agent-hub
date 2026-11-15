@@ -167,6 +167,17 @@ describe("team creation with every optional field filled in", () => {
     expect(result.isError).toBeFalsy();
     expect(calls[0].body.modelSelection).toEqual({ instanceId: "codex", model: "gpt-5" });
   });
+
+  it("start_thread waiting on the person's Confirm for another account says nothing opened and to end the turn (E83)", async () => {
+    const calls: Array<{ path: string; body: any }> = [];
+    const result = await callTool("start_thread", { title: "Review", message: "Review it.", model_selection: { instanceId: "qoder", model: "qmodel_latest" } },
+      recording(calls, { pending: true, accountSwitch: { from: "qoder-ks", to: "qoder" }, requestId: "r-9", title: "Review", self: true }));
+    expect(result.isError).toBeFalsy();
+    expect(result.text).toContain("Nothing was opened yet");
+    expect(result.text).toContain("qoder is another account of the same engine as qoder-ks");
+    expect(result.text).toContain("End your turn now");
+    expect(result.text).not.toContain("Opened thread");
+  });
 });
 
 describe("mcp_server", () => {

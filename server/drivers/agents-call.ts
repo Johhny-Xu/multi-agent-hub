@@ -456,6 +456,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (args.report_back === true) body.reportBack = true;
     const r = await api("/api/internal/threads", { method: "POST", body: JSON.stringify(body) });
     if (r.error && r.state !== "failed") return { text: `Couldn't open that thread: ${String(r.error)}`, isError: true };
+    if (r.pending === true && jsonRecord(r.accountSwitch)) {
+      const change = r.accountSwitch;
+      return { text: `Nothing was opened yet. ${String(change.to ?? "That instance")} is another account of the same engine as ${String(change.from ?? "this conversation's")}, so usage would be billed to it, and the person must Confirm that first: a card is waiting in this conversation (request id: ${String(r.requestId ?? "unknown")}). End your turn now and say you are waiting for their Confirm. Their decision comes back to you here; if they confirm, call start_thread again with the same title, message and model_selection. Do not retry before that, and do not pick another account of that engine instead.` };
+    }
     if (r.reportBack === true) {
       return { text: `Opened thread #${String(r.title ?? title)} on yourself [thread id: ${String(r.threadId ?? "")}]. It starts when this turn ends, and its result comes back to this conversation and resumes you automatically (assignment id: ${String(r.requestId ?? "unknown")}). Mention it to the person as #${String(r.title ?? title)} and finish your turn; do not check or wait for it in this turn. To steer it or send it a follow-up, while it runs or after, use coordinate_bots with bot_ids ["${BOT_ID}"] and thread "${String(r.threadId ?? "")}".` };
     }

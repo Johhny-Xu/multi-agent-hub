@@ -4,6 +4,7 @@ import { harnessCapabilityLines, type DriverCapabilities } from "./harness-capab
 import { newId } from "./contracts.ts";
 import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "./direct-apply.ts";
 import { redactSecretsInText } from "./redact.ts";
+import { accountSwitchLine, type AccountSwitch } from "./account-switch.ts";
 import type { BotRecord } from "./store.ts";
 
 const MAX_REASON = 500;
@@ -49,6 +50,11 @@ export interface ModelRequestServiceOptions {
   validateTarget?: (proposerBotId: string, targetBotId: string) => string | null;
   validateModel?: (selection: ModelSelection, current: BotRecord) => string | null;
   driverCapabilities?: (instanceId: string) => DriverCapabilities | undefined;
+  /** Server-owned (E83): the switch moves the bot to another account instance of the same engine, so
+   * who pays changes. Such a switch always waits for the person's Confirm; nothing auto-applies it. */
+  switchesAccount?: (before: ModelSelection, selection: ModelSelection) => boolean;
+  /** E83 start_thread: called once when the person confirms a thread card; the bot may then open that one thread. */
+  grantThread?: (payload: ModelRequestCardData) => void;
 }
 
 export class ModelRequestError extends Error {
@@ -66,7 +72,7 @@ export type ResolveModelRequestResult =
   | { claimed: true; state: "invalid"; error: string; status: number }
   | { claimed: true; state: "already_settled"; behavior: string }
   | { claimed: true; state: "denied" }
-  | { claimed: true; state: "applied"; targetBotId: string; settlementPending?: true; message?: string };
+  | { claimed: true; state: "applied"; targetBotId: string; settlementPending?: true; message?: string; thread?: true };
 
 export type UndoModelRequestResult =
   | { claimed: false }
@@ -137,6 +143,8 @@ export class ModelRequestService {
   private readonly validateTarget?: ModelRequestServiceOptions["validateTarget"];
   private readonly validateModel?: ModelRequestServiceOptions["validateModel"];
   private readonly driverCapabilities?: ModelRequestServiceOptions["driverCapabilities"];
+  private readonly switchesAccount?: ModelRequestServiceOptions["switchesAccount"];
+  private readonly grantThread?: ModelRequestServiceOptions["grantThread"];
 
   constructor(options: ModelRequestServiceOptions) {
     this.store = options.store;
@@ -146,6 +154,53 @@ export class ModelRequestService {
     this.validateTarget = options.validateTarget;
     this.validateModel = options.validateModel;
     this.driverCapabilities = options.driverCapabilities;
+    this.switchesAccount = options.switchesAccount;
+    this.grantThread = options.grantThread;
+  }
+
+  /** E83 start_thread on another account of the same engine: always a Confirm/Cancel card, whatever the access level. */
+  proposeThreadAccount(args: {
+    botId: string;
+    threadId: string;
+    title: string;
+    current: ModelSelection;
+    selection: ModelSelection;
+    change: AccountSwitch;
+    reportBack?: boolean;
+    from?: { botId: string; name: string; color: string };
+  }): { requestId: string; messageId: string; title: string; summary: string; detail: string } {
+    const bot = this.store.bot(args.botId);
+    if (!bot) throw new ModelRequestError(NO_SUCH_BOT, 404);
+    const persistence = this.canPersist?.(args.botId, args.threadId, true);
+    if (persistence && !persistence.ok) throw new ModelRequestError(persistence.error, persistence.status);
+    const requestId = newId();
+    const targetName = redactSecretsInText(bot.name);
+    const threadTitle = redactSecretsInText(args.title);
+    const before = structuredClone(args.current);
+    const selection = structuredClone(args.selection);
+    const capabilityLines = this.driverCapabilities
+      ? harnessCapabilityLines(this.driverCapabilities(before.instanceId), this.driverCapabilities(selection.instanceId))
+      : [];
+    const title = "Open #" + threadTitle + " on another account?";
+    const detail = [
+      "Thread: #" + threadTitle + (args.reportBack ? " (its result comes back to this conversation)" : ""),
+      "AI and model: " + JSON.stringify(before) + " → " + JSON.stringify(selection),
+      ...capabilityLines,
+      accountSwitchLine(args.change),
+      "Only this one thread runs there; " + targetName + "'s default model does not change.",
+      "Nothing runs until you confirm. After you confirm, " + targetName + " continues and opens the thread.",
+    ].join("\n");
+    const payload: ModelRequestCardData = {
+      version: 1, requestId, botId: args.botId, threadId: args.threadId, targetBotId: args.botId, targetName,
+      createdAt: this.now(), reason: "Open thread #" + threadTitle, selection, before, thread: { title: threadTitle },
+    };
+    const messageInput: Parameters<ModelRequestStore["appendMessage"]>[1] = {
+      role: "bot", kind: "options",
+      card: { title, subtitle: detail, options: ["Confirm", "Cancel"], requestId, tool: "start_thread", modelRequest: payload },
+    };
+    if (args.from) messageInput.from = args.from;
+    const message = this.store.appendMessage(args.threadId, messageInput);
+    return { requestId, messageId: message.id, title, summary: title + " · thread on another account", detail };
   }
 
   propose(args: {
@@ -192,6 +247,10 @@ export class ModelRequestService {
     const capabilityLines = this.driverCapabilities
       ? harnessCapabilityLines(this.driverCapabilities(before.instanceId), this.driverCapabilities(selection.instanceId))
       : [];
+    const accountSwitch = this.switchesAccount?.(before, selection) === true;
+    if (accountSwitch) {
+      capabilityLines.push("Account: " + before.instanceId + " → " + selection.instanceId + " (another account of the same engine; usage is billed to it). This needs your Confirm.");
+    }
     const payload: ModelRequestCardData = {
       version: 1,
       requestId,
@@ -205,7 +264,7 @@ export class ModelRequestService {
       before,
     };
     const copy = modelCardCopy({ targetName, crossBot, before, selection, reason, capabilityLines });
-    const grant = submitted ? this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null : null;
+    const grant = submitted && !accountSwitch ? this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null : null;
     const automatic = grant !== null;
     const persistence = this.canPersist?.(args.botId, args.threadId, !automatic);
     if (persistence && !persistence.ok) throw new ModelRequestError(persistence.error, persistence.status);
@@ -251,7 +310,7 @@ export class ModelRequestService {
     if (!message || !card || !payload) return { claimed: false };
     if (card.undone) return { claimed: true, state: "already_undone" };
     const cannot = (error: string, status = 409): UndoModelRequestResult => ({ claimed: true, state: "invalid", error, status });
-    if (!card.autoApplied || card.answered !== "allow") return cannot("Only a change that applied on its own can be undone here.");
+    if (!card.autoApplied || card.answered !== "allow" || payload.thread) return cannot("Only a change that applied on its own can be undone here.");
     if (payload.botId !== args.botId || payload.threadId !== args.threadId) {
       return cannot("This model change belongs to another conversation", 403);
     }
@@ -296,6 +355,18 @@ export class ModelRequestService {
       if (refusal) return { claimed: true, state: "invalid", error: refusal, status: 404 };
     }
 
+    if (payload.thread) {
+      if (!this.store.bot(payload.botId)) return { claimed: true, state: "invalid", error: NO_SUCH_BOT, status: 404 };
+      const result = args.behavior === "allow" ? "allow" as const : "deny" as const;
+      const settled = this.store.patchMessage(args.threadId, message.id, {
+        card: { ...card, answered: result, held: undefined, modelRequest: { ...payload, thread: { ...payload.thread, result },
+          ...(result === "allow" ? { appliedAt: this.now() } : {}) } },
+      });
+      if (!settled) return { claimed: true, state: "invalid", error: "This confirmation card is no longer available", status: 409 };
+      if (result === "deny") return { claimed: true, state: "denied" };
+      this.grantThread?.(payload);
+      return { claimed: true, state: "applied", targetBotId: payload.botId, thread: true };
+    }
     try {
       const target = this.store.bot(payload.targetBotId);
       if (!target) throw new ModelRequestError(NO_SUCH_BOT, 404);

@@ -274,3 +274,124 @@ describe("a bot's model changes below Full access", () => {
     expect(bot.modelSelection).toEqual({ instanceId: "codex", model: "gpt-fixture" });
   });
 });
+
+describe("propose_model across accounts of one engine (E83)", () => {
+  const KINDS: Record<string, string> = { "qoder": "qoderAgent", "qoder-ks": "qoderAgent", "claude": "claudeAgent", "codex": "codex" };
+  const switchesAccount = (before: ModelSelection, selection: ModelSelection) =>
+    before.instanceId !== selection.instanceId && Boolean(KINDS[before.instanceId]) && KINDS[before.instanceId] === KINDS[selection.instanceId];
+
+  it("never auto-applies a switch to another account instance, even under Full access", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const service = new ModelRequestService({ store, autoApply: () => "full-access", switchesAccount });
+    const submitted = service.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "qoder", model: "qmodel_latest" }, reason: "retry" });
+    expect(submitted.state).toBe("pending");
+    expect(bot.modelSelection).toEqual({ instanceId: "qoder-ks", model: "qmodel_latest" });
+    expect(store.applied).toEqual([]);
+    const card = store.messagesFor(bot.threadId)[0].card!;
+    expect(card.options).toEqual(["Confirm", "Cancel"]);
+    expect(card.dismissed).toBeUndefined();
+    expect(card.autoApplied).toBeUndefined();
+    expect(card.subtitle).toContain("Account: qoder-ks → qoder");
+  });
+
+  it("applies the account switch only once the person confirms", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const service = new ModelRequestService({ store, autoApply: () => "level", switchesAccount });
+    const submitted = service.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "qoder", model: "qmodel_latest" }, reason: "retry" });
+    expect(submitted.state).toBe("pending");
+    expect(service.resolve({ botId: bot.id, threadId: bot.threadId, requestId: submitted.requestId, behavior: "allow" })).toMatchObject({ state: "applied" });
+    expect(bot.modelSelection).toEqual({ instanceId: "qoder", model: "qmodel_latest" });
+  });
+
+  it("keeps the person's Cancel: the bot stays on its own account", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const service = new ModelRequestService({ store, autoApply: () => "full-access", switchesAccount });
+    const submitted = service.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "qoder", model: "qmodel_latest" }, reason: "retry" });
+    expect(service.resolve({ botId: bot.id, threadId: bot.threadId, requestId: submitted.requestId, behavior: "deny" })).toMatchObject({ state: "denied" });
+    expect(bot.modelSelection).toEqual({ instanceId: "qoder-ks", model: "qmodel_latest" });
+  });
+
+  it("still auto-applies a model change inside the same account instance", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const service = new ModelRequestService({ store, autoApply: () => "full-access", switchesAccount });
+    const submitted = service.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "qoder-ks", model: "qmodel_lite" }, reason: "faster" });
+    expect(submitted.state).toBe("applied");
+    expect(bot.modelSelection).toEqual({ instanceId: "qoder-ks", model: "qmodel_lite" });
+    expect(store.messagesFor(bot.threadId)[0].card!.subtitle).not.toContain("Account:");
+  });
+
+  it("leaves a switch to a different engine on the existing rules", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Scout");
+    const service = new ModelRequestService({ store, autoApply: () => "full-access", switchesAccount });
+    expect(service.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "codex", model: "gpt-fixture" }, reason: "asked" }).state).toBe("applied");
+  });
+});
+
+describe("start_thread on another account of one engine (E83)", () => {
+  const change = { from: "qoder-ks", to: "qoder" };
+  const ask = (service: ModelRequestService, bot: BotRecord) => service.proposeThreadAccount({
+    botId: bot.id, threadId: bot.threadId, title: "Second opinion", current: bot.modelSelection,
+    selection: { instanceId: "qoder", model: "qmodel_latest" }, change, reportBack: true,
+  });
+
+  it("posts a Confirm/Cancel card that never applies on its own and never changes the default", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const service = new ModelRequestService({ store, autoApply: () => "full-access" });
+    const asked = ask(service, bot);
+    const card = store.messagesFor(bot.threadId)[0].card!;
+    expect(card.options).toEqual(["Confirm", "Cancel"]);
+    expect(card.tool).toBe("start_thread");
+    expect(card.autoApplied).toBeUndefined();
+    expect(card.dismissed).toBeUndefined();
+    expect(card.subtitle).toContain("Account: qoder-ks → qoder");
+    expect(card.modelRequest!.thread).toEqual({ title: "Second opinion" });
+    expect(asked.title).toContain("#Second opinion");
+    expect(store.applied).toEqual([]);
+  });
+
+  it("grants exactly this thread on Confirm and leaves the bot's default alone", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const grantThread = vi.fn();
+    const service = new ModelRequestService({ store, grantThread });
+    const asked = ask(service, bot);
+    expect(service.resolve({ botId: bot.id, threadId: bot.threadId, requestId: asked.requestId, behavior: "allow" }))
+      .toMatchObject({ state: "applied", thread: true });
+    expect(grantThread).toHaveBeenCalledTimes(1);
+    expect(grantThread.mock.calls[0][0]).toMatchObject({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "qoder" } });
+    expect(bot.modelSelection).toEqual({ instanceId: "qoder-ks", model: "qmodel_latest" });
+    expect(store.applied).toEqual([]);
+    const card = store.messagesFor(bot.threadId)[0].card!;
+    expect(card.answered).toBe("allow");
+    expect(card.modelRequest!.thread!.result).toBe("allow");
+    expect(service.resolve({ botId: bot.id, threadId: bot.threadId, requestId: asked.requestId, behavior: "allow" }))
+      .toMatchObject({ state: "already_settled" });
+    expect(grantThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("records Cancel without granting anything", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const grantThread = vi.fn();
+    const service = new ModelRequestService({ store, grantThread });
+    const asked = ask(service, bot);
+    expect(service.resolve({ botId: bot.id, threadId: bot.threadId, requestId: asked.requestId, behavior: "deny" })).toMatchObject({ state: "denied" });
+    expect(grantThread).not.toHaveBeenCalled();
+    expect(store.messagesFor(bot.threadId)[0].card!.modelRequest!.thread!.result).toBe("deny");
+  });
+
+  it("cannot be undone like an auto-applied default change", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Pot", { instanceId: "qoder-ks", model: "qmodel_latest" });
+    const service = new ModelRequestService({ store });
+    const asked = ask(service, bot);
+    service.resolve({ botId: bot.id, threadId: bot.threadId, requestId: asked.requestId, behavior: "allow" });
+    expect(service.undo({ botId: bot.id, threadId: bot.threadId, requestId: asked.requestId })).toMatchObject({ state: "invalid" });
+  });
+});

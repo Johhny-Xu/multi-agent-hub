@@ -4,6 +4,8 @@ import type { Store } from "../store.ts";
 function decision(card: OptionCardData | undefined): { kind: string; request: { result?: unknown; resumed?: boolean } } | null {
   if (card?.teamSetupRequest) return { kind: "team setup decision", request: card.teamSetupRequest };
   if (card?.mcpRequest) return { kind: "MCP server decision", request: card.mcpRequest };
+  // E83: a start_thread waiting on the person's Confirm to use another account of the same engine.
+  if (card?.modelRequest?.thread) return { kind: "account decision", request: card.modelRequest.thread };
   return null;
 }
 

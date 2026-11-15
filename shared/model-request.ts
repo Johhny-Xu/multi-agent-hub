@@ -19,4 +19,7 @@ export interface ModelRequestCardData {
   selection: ModelSelection;
   before: ModelSelection;
   appliedAt?: number;
+  /** E83 start_thread: the card asks to open one thread on another account of the same engine, not to change the
+   * default. Confirm grants the bot one start_thread on `selection`; nothing about the bot's default changes. */
+  thread?: { title: string; result?: "allow" | "deny"; resumed?: boolean };
 }

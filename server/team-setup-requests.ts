@@ -9,6 +9,7 @@ import { recordProfileChange, type HistoryActor } from "./profile-versions.ts";
 import { validateBotCwd } from "./bot-cwd.ts";
 import { UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { harnessCapabilityLines, type DriverCapabilities } from "./harness-capabilities.ts";
+import { accountSwitchLine, type AccountSwitch } from "./account-switch.ts";
 import { redactSecretsInText } from "./redact.ts"; import { chiefLevel } from "./chief-level.ts"; import { defaultBotRefusal } from "./default-bot.ts";
 import type { BotRecord, OptionCardData } from "./store.ts";
 import type { TeamSetupFields, TeamSetupOperation, TeamSetupRequest, TeamSetupResult, TeamSetupUndo } from "../shared/team-setup.ts";
@@ -83,6 +84,10 @@ interface Options {
   /** Null only where the owner confirms on a card (direct-apply.ts). */
   autoApply?(botId: string, threadId: string): DirectApply | null;
   driverCapabilities?(instanceId: string): DriverCapabilities | undefined;
+  /** E83, server-owned: whether `selection` moves to another account of an engine one of `references` already runs on. */
+  accountSwitch?(selection: ModelSelection, references: ReadonlyArray<ModelSelection | undefined>): AccountSwitch | null;
+  /** The workspace's default model for new bots: with the Chief's own, what a new bot's account is compared against. */
+  workspaceDefault?(): ModelSelection | undefined;
   validateChange?(before: BotRecord, fields: TeamSetupFields): void;
   maxBots: number;
   ownsThread(botId: string, threadId: string): boolean;
@@ -105,6 +110,23 @@ export class TeamSetupRequestService {
     const chief = this.options.store.bot(botId);
     if (!chief || chief.hidden || !chiefLevel(chief)) throw new TeamSetupError("Only an active Chief of Staff can propose team setup", 403);
     return chief;
+  }
+
+  /** E83: the account change one operation makes, if any. An update compares with the bot's current default; a new
+   * bot with the Chief's own default and the workspace default, so the same account (or a first engine) never asks. */
+  private operationAccountSwitch(operation: TeamSetupOperation, chiefId: string): AccountSwitch | null {
+    const selection = operation.fields.modelSelection;
+    if (!selection || !this.options.accountSwitch) return null;
+    const current = operation.action === "update" ? this.options.store.bot(operation.botId) : undefined;
+    const references = operation.action === "update"
+      ? [current?.modelSelection]
+      : [this.options.store.bot(chiefId)?.modelSelection, this.options.workspaceDefault?.()];
+    return this.options.accountSwitch(selection, references);
+  }
+
+  /** Whether any operation moves a bot to another account of the same engine; such a setup always waits for the person. */
+  switchesAccount(request: TeamSetupRequest): boolean {
+    return !request.deletion && request.operations.some((operation) => this.operationAccountSwitch(operation, request.botId) !== null);
   }
 
   private requesterScope(request: TeamSetupRequest): TeamSetupFields | undefined {
@@ -141,6 +163,7 @@ export class TeamSetupRequestService {
     const chief = this.chief(request.botId);
     if (!this.options.ownsThread(request.botId, request.threadId)) throw new TeamSetupError("The requesting conversation no longer exists", 409);
     if (immediate && !this.options.autoApply?.(request.botId, request.threadId)) throw new TeamSetupError("This conversation can no longer apply team setup on its own; ask the owner", 409);
+    if (immediate && this.switchesAccount(request)) throw new TeamSetupError("This setup moves a bot to another account of the same engine, which only the person can confirm", 409);
     if (confirming && !immediate && !this.options.store.messagesFor(request.threadId).some((message) => message.card?.requestId === request.requestId && !message.card.answered && !message.card.dismissed)) throw new TeamSetupError("This setup card is no longer pending", 409);
     if (confirming && teamSetupRevision(chief, this.requesterScope(request)) !== request.requesterRevision) throw new TeamSetupError("The Chief's settings changed. This setup was cancelled; review a new proposal.", 409);
     const existingTeams = new Set(this.options.teams().map(section));
@@ -234,9 +257,11 @@ export class TeamSetupRequestService {
   proposeDeletion(args: DeletionArgs) { return this.card(this.prepareDeletion(args), args.from); }
 
   async submit(args: SetupArgs & SubmitAuthority) {
-    const grant = this.options.autoApply?.(args.botId, args.threadId) ?? null;
-    if (grant) return { ...await this.applyImmediately(this.prepare(args), args.from, args.canCommit), appliedBy: grant };
-    return { ...this.propose(args), applied: false, state: "pending" as const };
+    const request = this.prepare(args);
+    // E83: another account of the same engine changes who pays, so Full access never applies it on its own.
+    const grant = this.switchesAccount(request) ? null : this.options.autoApply?.(args.botId, args.threadId) ?? null;
+    if (grant) return { ...await this.applyImmediately(request, args.from, args.canCommit), appliedBy: grant };
+    return { ...this.card(request, args.from), applied: false, state: "pending" as const };
   }
 
   async submitDeletion(args: DeletionArgs & SubmitAuthority) {
@@ -276,6 +301,8 @@ export class TeamSetupRequestService {
               this.options.driverCapabilities((value as ModelSelection).instanceId),
             ));
           }
+          const change = this.operationAccountSwitch(operation, request.botId);
+          if (change) lines.push(accountSwitchLine(change));
         } else {
           const before = current ? (key === "section" ? current.section || "General" : String(current[key as keyof BotRecord] ?? "")) : undefined;
           const after = key === "section" ? (value as string) || "General" : String(value);

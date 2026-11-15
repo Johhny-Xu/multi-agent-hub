@@ -472,7 +472,7 @@ import { createAgentCard } from "./chat-widgets.ts";
 import { createChatAppRoutes, createChatApps, createChatAppsMcp } from "./routes/chat-apps.ts";
 import { buildBotOverview, type BotOverview, connectedAppsFacts } from "./bot-overview.ts";
 import { ProfileRequestService } from "./profile-requests.ts";
-import { ModelRequestService } from "./model-requests.ts";
+import { ModelRequestError, ModelRequestService } from "./model-requests.ts";
 import { TeamSetupError, TeamSetupRequestService } from "./team-setup-requests.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
@@ -664,6 +664,7 @@ import { createWebhookRoutes } from "./routes/webhooks.ts";
 import { withScopeHint } from "./connector-scope-hint.ts";
 import { createConnectorCards } from "./host/connector-cards.ts";
 import { createLoginMailCodes } from "./host/login-mail-codes.ts";
+import { accountSwitch, AccountSwitchGrants, threadAccountDecisionText } from "./account-switch.ts";
 import { onThreadSeen, personAsks as personAskAt, sawThread } from "./thread-presence.ts"; import { createWarmSummaryHost, HARNESS_IDLE_FRACTION } from "./host/warm-summary-host.ts";
 // The last check of each computer is remembered between restarts, so the list shows the last answer.
 // Declared before any boot-time await: vpsConfigSummary() can run during boot (desktop-updates e2e TDZ).
@@ -1971,6 +1972,12 @@ function reconcileParkedNode(node: HandoffView): boolean {
   for (const id of node.cards) {
     const message = messages.find((item) => item.id === id);
     if (!message) continue;
+    const threadAsk = message.card?.modelRequest?.thread;
+    if (threadAsk?.result && !threadAsk.resumed) {
+      if (!coordinator.answerNode(node.id, threadAccountDecisionText(message.card!.modelRequest!))) return false;
+      store.patchMessage(node.threadId, message.id, { card: { ...message.card!, modelRequest: { ...message.card!.modelRequest!, thread: { ...threadAsk, resumed: true } } } });
+      return true;
+    }
     const request = message.card?.teamSetupRequest;
     if (request?.result) {
       if (!coordinator.answerNode(node.id, teamSetupDecisionText(request))) return false;
@@ -9332,6 +9339,8 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
       }
 }
 
+const engineOf = (instanceId: string) => registry.get(instanceId)?.driverKind;
+const threadAccountGrants = new AccountSwitchGrants();
 const driverCapabilitiesFor = (instanceId: string) => {
   const instance = registry.get(instanceId);
   return instance ? { driverKind: instance.driverKind, agentsMcp: instance.adapter.capabilities.agentsMcp === true } : undefined;
@@ -9414,6 +9423,9 @@ const modelRequests = new ModelRequestService({
   validateTarget: chiefPeerTargetRule("default model"),
   validateModel: validateModelProposal,
   driverCapabilities: driverCapabilitiesFor,
+  // E83: another account instance of the same engine changes who pays, so it always waits for the person.
+  switchesAccount: (before, selection) => accountSwitch(engineOf, selection, [before]) !== null,
+  grantThread: (payload) => threadAccountGrants.grant(payload.botId, payload.threadId, payload.selection.instanceId),
 });
 const teamSetupTeams = () => [...new Set(["", ...readSections(), ...store.bots.map((bot) => sectionKey(bot.section)), ...store.groups.map((group) => sectionKey(group.section))])];
 const teamSetupRequests = new TeamSetupRequestService({
@@ -9431,6 +9443,8 @@ const teamSetupRequests = new TeamSetupRequestService({
   },
   validateModel: validateModelProposal,
   driverCapabilities: driverCapabilitiesFor,
+  accountSwitch: (selection, references) => accountSwitch(engineOf, selection, references),
+  workspaceDefault: () => cfg.defaultModelSelection ?? (bootSelection.instanceId ? bootSelection : undefined),
   deleteBot: async (botId, revalidate, request) => {
     const result = await deleteBotWithLifecycle(botId, revalidate, request);
     if (result.status >= 400) throw new TeamSetupError(result.body.error ?? "The bot could not be deleted", result.status);
@@ -9553,9 +9567,19 @@ function resolveAndSendModel(
   if (result.state === "applied" || result.state === "denied") {
     appendDecision(DATA_DIR, {
       threadId: args.threadId, requestId: args.requestId, botId: args.botId, botName: args.botName,
-      tool: "update_model", summary: card.subtitle,
+      tool: card.modelRequest?.thread ? "start_thread" : "update_model", summary: card.subtitle,
       decision: result.state === "applied" ? "user-approved" : "user-denied", source: "user",
     });
+  }
+  if (card.modelRequest?.thread && (result.state === "applied" || result.state === "denied")) {
+    // E83: the start_thread that parked on this card continues with the person's decision.
+    const current = store.messagesFor(args.threadId).find((item) => item.card?.requestId === args.requestId && item.card.modelRequest?.thread);
+    const payload = current?.card?.modelRequest;
+    if (current?.card && payload?.thread?.result && !payload.thread.resumed && answerCardNode(args.threadId, current.id, threadAccountDecisionText(payload))) {
+      store.patchMessage(args.threadId, current.id, { card: { ...current.card, modelRequest: { ...payload, thread: { ...payload.thread, resumed: true } } } });
+    }
+    json(res, 200, { ok: true, outcome: result.state === "applied" ? "allowed-once" : "rejected" });
+    return true;
   }
   if (result.state === "applied") {
     const target = store.bot(result.targetBotId);
@@ -14472,6 +14496,16 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         const sourceTitle = owner.group ? owner.group.name : (store.taskByThread(from.id, fromThreadId)?.title ?? "");
         const picked = body.modelSelection === undefined ? null : checkedModelSelection(body.modelSelection, undefined, true); const refused = !picked ? null : target.id !== from.id ? "model_selection is only for threads on yourself" : !picked.ok ? picked.error : ownThreads.refusal(picked.selection, from); if (refused) return json(res, 400, { error: refused });
         if (target.id === from.id) { const selfRefused = selfThreadRefusal({ handoff: Boolean(internalCapability.roomHandoffId), requestLine: store.activePath(fromThreadId).findLast((line) => line.role === "user" && line.kind === "text") }); if (selfRefused) return json(res, 409, { error: selfRefused });
+          // E83: a thread on another account of the engine this conversation or the bot's default runs on bills that account, so it waits for the person's Confirm whatever the access level; the Confirm grants this one open.
+          const current = turnSelection(from.id, fromThreadId) ?? from.modelSelection, change = picked?.ok ? accountSwitch(engineOf, picked.selection, [current, from.modelSelection]) : null;
+          if (picked?.ok && change && !threadAccountGrants.take(from.id, fromThreadId, picked.selection.instanceId)) {
+            let asked: ReturnType<typeof modelRequests.proposeThreadAccount>;
+            try { asked = modelRequests.proposeThreadAccount({ botId: from.id, threadId: fromThreadId, title, current, selection: picked.selection, change, reportBack: body.reportBack === true, ...(owner.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}) }); }
+            catch (error) { return json(res, error instanceof ModelRequestError ? error.status : 400, { error: error instanceof Error ? error.message : String(error) }); }
+            internalCapability.openedThreads += 1;
+            appendDecision(DATA_DIR, { threadId: fromThreadId, requestId: asked.requestId, botId: from.id, botName: from.name, tool: "start_thread", summary: asked.detail, decision: "card-shown", source: "model" });
+            return json(res, 202, { pending: true, accountSwitch: change, requestId: asked.requestId, title, self: true, botId: from.id, botName: from.name });
+          }
           const inherited = picked?.ok ? { modelSelection: picked.selection, approvalMode: undefined } : ownThreads.inherited(from.id, fromThreadId);
           if (body.reportBack === true) { if (owner.group) return json(res, 400, { error: "report_back works only from your own conversation, not a room. Leave it out; the thread's result then stays in that thread." });
             const result = await coordinateBots({ botIds: [from.id], message, rework: false, thread: "new", reply: "resume", consult: false, title, projectId, ownThread: inherited }), receipt = (result.body.receipts as PeerDeliveryReceipt[] | undefined)?.[0];
