@@ -6,7 +6,7 @@
 // sends whole-reply snapshots, so live streaming would duplicate text). The agent key lives in
 // `~/.config/agenthub-meoo/meoo-auth.env`, the project id one directory over; neither is read here.
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import type { ProviderSnapshot } from "../../contracts.ts";
 import { augmentedPath, userHome } from "../../env-path.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import { readMeooEnvValue } from "./meoo-env.ts";
 import { versionFromProbe } from "./version-probe.ts";
 
 /** `GET /projects/<id>/agent/capabilities` on 2026-11-07 for this account's project; `auto` is its own default. */
@@ -61,13 +62,10 @@ function accountHomes(env: Record<string, string | undefined>): string[] {
   return [...new Set(candidates.filter((home) => home.length > 0))];
 }
 
-/** A `MEOO_AK=...` line is what authorises an Agent Run; the file itself is never logged or forwarded. */
+/** A `MEOO_AK=...` line is what authorises an Agent Run; the file itself is never logged or forwarded. The
+ * bridge reads the same file with the same parser, so "configured" here means a run would find a key. */
 function agentKeyHeld(home: string): boolean {
-  try {
-    return /^\s*MEOO_AK\s*=\s*\S+/m.test(readFileSync(join(home, ".config", "agenthub-meoo", "meoo-auth.env"), "utf-8"));
-  } catch {
-    return false;
-  }
+  return Boolean(readMeooEnvValue(join(home, ".config", "agenthub-meoo", "meoo-auth.env"), "MEOO_AK"));
 }
 
 /** The home whose Meoo files hold an agent key, if any. */

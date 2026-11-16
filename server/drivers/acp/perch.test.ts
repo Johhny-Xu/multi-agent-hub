@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,7 @@ import type { ProviderInstance } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { BUILT_IN_DRIVERS } from "../builtIn.ts";
-import { PerchAgentDriver, perchByolmModelId, perchSignedIn, resolvePerchCli } from "./perch.ts";
+import { PerchAgentDriver, perchByolmModelId, perchProjectMcpConfig, perchSignedIn, resolvePerchCli } from "./perch.ts";
 import { parsePerchOptions, perchBundlePath, perchModelOptions, perchPrivateSettingsDir, perchSelectedModel, selectPerchModel } from "./perch-models.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "../../testing/fake-acp-cli.ts");
@@ -455,5 +455,87 @@ describe("Perch ACP driver", () => {
       config: { cli: join(scratch, "missing-perch"), fullAuto: false },
     });
     expect(await instance.snapshot()).toMatchObject({ state: "unavailable" });
+  });
+
+  describe("the project's MCP config", () => {
+    const SERVER = { name: "computer", command: "node", args: ["proxy.js"], env: [] };
+    const mcpPath = (dir: string) => join(dir, ".perch", "mcp.json");
+    const namesPath = (dir: string) => join(dir, ".perch", ".omb-mcp-names.json");
+
+    it("tightens both files to 0600 and keeps the person's own servers", () => {
+      const dir = join(scratch, "project");
+      mkdirSync(join(dir, ".perch"), { recursive: true });
+      writeFileSync(mcpPath(dir), JSON.stringify({ servers: { mine: { type: "stdio", command: "x", args: [] }, old: {} } }));
+      writeFileSync(namesPath(dir), JSON.stringify(["old"]));
+      chmodSync(mcpPath(dir), 0o644);
+      chmodSync(namesPath(dir), 0o644);
+
+      perchProjectMcpConfig(dir, [SERVER]);
+
+      expect(statSync(mcpPath(dir)).mode & 0o777).toBe(0o600);
+      expect(statSync(namesPath(dir)).mode & 0o777).toBe(0o600);
+      expect(Object.keys(JSON.parse(readFileSync(mcpPath(dir), "utf8")).servers).sort()).toEqual(["computer", "mine"]);
+    });
+
+    it("treats an empty file as an empty config", () => {
+      const dir = join(scratch, "project");
+      mkdirSync(join(dir, ".perch"), { recursive: true });
+      writeFileSync(mcpPath(dir), "");
+      writeFileSync(namesPath(dir), "");
+      perchProjectMcpConfig(dir, [SERVER]);
+      expect(JSON.parse(readFileSync(mcpPath(dir), "utf8")).servers).toHaveProperty("computer");
+    });
+
+    it("keeps a normal absolute folder working", () => {
+      const dir = join(scratch, "abs-project");
+      perchProjectMcpConfig(dir, [SERVER]);
+      expect(JSON.parse(readFileSync(mcpPath(dir), "utf8")).servers).toHaveProperty("computer");
+      expect(statSync(join(dir, ".perch")).mode & 0o777).toBe(0o700);
+    });
+
+    it("does not overwrite a file whose JSON it cannot parse", () => {
+      const dir = join(scratch, "project");
+      mkdirSync(join(dir, ".perch"), { recursive: true });
+      writeFileSync(mcpPath(dir), "{ not json");
+      expect(() => perchProjectMcpConfig(dir, [SERVER])).toThrow();
+      expect(readFileSync(mcpPath(dir), "utf8")).toBe("{ not json");
+    });
+
+    it("refuses a name list that is not made of names", () => {
+      const dir = join(scratch, "project");
+      mkdirSync(join(dir, ".perch"), { recursive: true });
+      writeFileSync(namesPath(dir), JSON.stringify(["ok", 7]));
+      expect(() => perchProjectMcpConfig(dir, [SERVER])).toThrow(/list of MCP server names/);
+    });
+
+    it.skipIf(process.platform === "win32")("refuses a .perch folder that is a link to elsewhere", () => {
+      const outside = join(scratch, "outside");
+      mkdirSync(outside);
+      const dir = join(scratch, "project");
+      mkdirSync(dir);
+      symlinkSync(outside, join(dir, ".perch"));
+      expect(() => perchProjectMcpConfig(dir, [SERVER])).toThrow(/symbolic link/);
+      expect(readdirSync(outside)).toEqual([]);
+    });
+
+    it.skipIf(process.platform === "win32")("refuses an mcp.json that is a link and leaves its target alone", () => {
+      const dir = join(scratch, "project");
+      mkdirSync(join(dir, ".perch"), { recursive: true });
+      const target = join(scratch, "outside.json");
+      writeFileSync(target, "{}");
+      symlinkSync(target, mcpPath(dir));
+      expect(() => perchProjectMcpConfig(dir, [SERVER])).toThrow(/symbolic link/);
+      expect(readFileSync(target, "utf8")).toBe("{}");
+    });
+
+    it.skipIf(process.platform === "win32")("refuses a name list that is a link and leaves its target alone", () => {
+      const dir = join(scratch, "project");
+      mkdirSync(join(dir, ".perch"), { recursive: true });
+      const target = join(scratch, "outside-names.json");
+      writeFileSync(target, "[]");
+      symlinkSync(target, namesPath(dir));
+      expect(() => perchProjectMcpConfig(dir, [SERVER])).toThrow(/symbolic link/);
+      expect(readFileSync(target, "utf8")).toBe("[]");
+    });
   });
 });

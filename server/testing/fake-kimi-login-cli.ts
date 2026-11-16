@@ -20,7 +20,7 @@ appendFileSync(join(home, "fake-kimi-calls.jsonl"), `${JSON.stringify({ args, ho
 const signIn = () => {
   mkdirSync(join(kimiHome, "credentials"), { recursive: true });
   const token = mode === "global" ? "kimi-code-env-0e4f99c69cc27850.json" : "kimi-code.json";
-  writeFileSync(join(kimiHome, "credentials", token), "{\"fixture\":\"offline, not a credential\"}\n", { mode: 0o600 });
+  writeFileSync(join(kimiHome, "credentials", token), "{\"fixture\":\"offline, not a credential\",\"access_token\":\"offline-fixture-access\",\"refresh_token\":\"offline-fixture-refresh\"}\n", { mode: 0o600 });
   process.stderr.write("Logged in to Kimi Code.\n");
   process.exit(0);
 };

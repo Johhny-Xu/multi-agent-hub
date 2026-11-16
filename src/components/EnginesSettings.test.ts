@@ -48,6 +48,16 @@ describe("Settings → Engines → ChatGPT accounts", () => {
     expect(render(true)).toContain(">Signed in<");
   });
 
+  it("names a Codex API-key login as an API key and offers no ChatGPT sign-out it cannot confirm", () => {
+    render(true, { signOut: true });
+    const keyed = fixture.instances[0]!;
+    keyed.snapshot.account = { method: "api-key" };
+    const html = renderToStaticMarkup(createElement(EnginesSettings));
+    expect(html).toContain("Uses an API key");
+    expect(html).not.toContain(">Signed in<");
+    expect(accountActions("chatgpt", keyed).signOut).toBe(false);
+  });
+
   it("offers sign-out only for a signed-in account the server can sign out, and removal only for added accounts", () => {
     const account = (instanceId: string, authenticated: boolean, signOut: boolean): InstanceInfo => ({
       instanceId, driverKind: "codex", displayName: "Plan", snapshot: { state: "available", authenticated, chatgptPlan: true },
@@ -186,7 +196,7 @@ describe("Settings → Engines → setup cards", () => {
     const account = (instanceId: string, authenticated: boolean, signOut: boolean): InstanceInfo => ({
       instanceId, driverKind: "antigravityAgent", displayName: "Google account", cliDefault: "agy_acp_server",
       snapshot: { state: "available", authenticated }, models: { default: "gemini", options: [] },
-      authentication: { method: "browser", signOut },
+      authentication: { method: "callback-url", signOut },
     });
     fixture.instances = [account("antigravity", true, true)];
     expect(renderToStaticMarkup(createElement(EnginesSettings))).toContain(">Sign out<");

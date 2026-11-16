@@ -387,6 +387,9 @@ export function startBridge(): void {
     };
 
     const handleEvent = (line: string): void => {
+      // A settled run is over: what its orphaned process still writes must not reach the hub or this session's
+      // native id, which a newer run may already own.
+      if (settled) return;
       const trimmed = line.trim();
       if (!trimmed) return;
       let event: unknown;
@@ -407,6 +410,7 @@ export function startBridge(): void {
 
     let pending = "";
     const feed = (chunk: string): void => {
+      if (settled) return;
       pending += chunk;
       // Line buffering: a chunk may end mid-JSON, so only whole lines are parsed.
       let newline = pending.indexOf("\n");
@@ -447,7 +451,7 @@ export function startBridge(): void {
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (chunk: string) => {
       // Never forward vendor diagnostics verbatim; only the login hint is recognised.
-      if (/sign in to minimax|run `?mcode login`?/i.test(chunk)) projector.markAuthFailure();
+      if (!settled && /sign in to minimax|run `?mcode login`?/i.test(chunk)) projector.markAuthFailure();
     });
     child.once("error", () => {
       void groups.kill(child);
@@ -456,6 +460,12 @@ export function startBridge(): void {
     child.once("close", (code) => {
       // Reap any helper left in `mcode`'s group after the leader exits; no-op if already gone.
       void groups.kill(child);
+      // This run is already answered (cancelled or timed out): its tail belongs to nobody, and the session's
+      // `running` entry may by now be a newer run's.
+      if (settled) {
+        pending = "";
+        return;
+      }
       if (pending.trim()) handleEvent(pending);
       pending = "";
       const task = running.get(session.id);

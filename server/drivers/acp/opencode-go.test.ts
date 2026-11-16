@@ -21,6 +21,7 @@ import {
   openCodeLimitFacts,
   openCodeOwnedDirectories,
   openCodePromptUnreachedModel,
+  openCodeSpawnFingerprint,
   OpenCodeDriver,
   openCodeProviderKeysAllowed,
   openMausOwnsWorkingFolder,
@@ -373,16 +374,34 @@ describe("OpenCode catalog", () => {
 
   it("holds a provider's free models together, never a paid Go model", () => {
     // The catalog reports Zen's free models at cost 0; a Go model is paid.
-    parseOpenCodeModelsOutput([
+    const catalog = parseOpenCodeModelsOutput([
       "opencode/big-pickle", JSON.stringify({ cost: { input: 0, output: 0 } }),
       "opencode-go/deepseek-v4.1-flash", JSON.stringify({ cost: { input: 1, output: 2 } }),
     ].join("\n"));
     const said = 'AI_APICallError: Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go';
-    const facts = openCodeLimitFacts(said, "opencode/deepseek-v4.1-flash-free");
+    const facts = openCodeLimitFacts(said, "opencode/deepseek-v4.1-flash-free", catalog!);
     expect(facts.limit).toBe("model");
     expect(facts.limitModels).toEqual(expect.arrayContaining(["opencode/deepseek-v4.1-flash-free", "opencode/big-pickle"]));
     expect(facts.limitModels).not.toContain("opencode-go/deepseek-v4.1-flash");
     expect(openCodeLimitFacts(said), "a refusal that names no model holds just the model scope").toEqual({ limit: "model" });
+  });
+
+  // OpenCode Go's weekly allowance is the Go subscription's alone: Zen's free models on the same login keep working, so a
+  // free model there is still a backup when a Go model runs out.
+  it("holds only the Go models when a Go model meets the Go allowance, never Zen's free models", () => {
+    const catalog = parseOpenCodeModelsOutput([
+      "opencode/deepseek-v4.1-flash-free", JSON.stringify({ cost: { input: 0, output: 0 } }),
+      "opencode-go/glm-5.3", JSON.stringify({ cost: { input: 1, output: 2 } }),
+      "opencode-go/minimax-m3", JSON.stringify({ cost: { input: 1, output: 2 } }),
+    ].join("\n"))!;
+    for (const said of ["OpenCode Go weekly usage limit reached", "Internal error: GoUsageLimitError: the Go allowance is used up"]) {
+      const facts = openCodeLimitFacts(said, "opencode-go/minimax-m3", catalog);
+      expect(facts.limit, said).toBe("model");
+      expect(facts.limitModels).toEqual(expect.arrayContaining(["opencode-go/minimax-m3", "opencode-go/glm-5.3"]));
+      expect(facts.limitModels).not.toContain("opencode/deepseek-v4.1-flash-free");
+    }
+    expect(openCodeLimitFacts("OpenCode Go weekly usage limit reached", "opencode/big-pickle", catalog), "a limit met by another model still holds the account")
+      .toEqual({ limit: "engine" });
   });
 
   it("classifies OpenCode 2's authentication refusal and leaves real internal errors alone", () => {
@@ -595,8 +614,8 @@ describe("OpenCode catalog discovery from the ACP session", () => {
     const offered = ["opencode/claude-sonnet-5-5", "opencode/big-pickle", "opencode/longcat-2.5-preview-free"];
     expect(preferredOpenCodeModel(offered, "opencode/longcat-2.5-preview-free")).toBe("opencode/longcat-2.5-preview-free");
     expect(preferredOpenCodeModel(offered, "opencode/claude-sonnet-5-5")).toBe("opencode/longcat-2.5-preview-free");
-    parseOpenCodeModelsOutput(["opencode/big-pickle", JSON.stringify({ cost: { input: 0, output: 0 } })].join("\n"));
-    expect(preferredOpenCodeModel(offered, "opencode/big-pickle")).toBe("opencode/big-pickle");
+    const catalog = parseOpenCodeModelsOutput(["opencode/big-pickle", JSON.stringify({ cost: { input: 0, output: 0 } })].join("\n"));
+    expect(preferredOpenCodeModel(offered, "opencode/big-pickle", catalog!)).toBe("opencode/big-pickle");
     expect(preferredOpenCodeModel(["anthropic/claude-sonnet-5", "openai/gpt-6"], "openai/gpt-6")).toBe("openai/gpt-6");
     expect(preferredOpenCodeModel([], null)).toBe("");
   });
@@ -1856,5 +1875,91 @@ describe("openCodeOutputTokenCap (E54)", () => {
     const env: Record<string, string | undefined> = { OMB_BYOK_MAX_OUTPUT_TOKENS: "48000" };
     ensureOpenCodeInjectModel("9router::stai/step-5-preview", env);
     expect(openCodeOutputTokenCap(env)).toBe(48_000);
+  });
+});
+
+describe("OpenCode catalog cache scope (B05, B21)", () => {
+  afterEach(() => resetOpenCodeModelCache());
+
+  it("does not let one home's successful probe answer for another", async () => {
+    const proven = vi.fn(async () => catalog("opencode/big-pickle"));
+    const other = vi.fn(async () => catalog());
+    await expect(canRunOpenCode({ HOME: "/nonexistent/one" }, "scope-cli", proven)).resolves.toBe(true);
+    await expect(canRunOpenCode({ HOME: "/nonexistent/two" }, "scope-cli", other)).resolves.toBe(false);
+    expect(proven).toHaveBeenCalledOnce();
+    expect(other).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a failed probe's retry clock inside its own environment", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const failed = vi.fn(async () => catalog());
+      const working = vi.fn(async () => catalog("opencode/big-pickle"));
+      const envA = { HOME: "/nonexistent/a" };
+      const envB = { HOME: "/nonexistent/b" };
+
+      await expect(canRunOpenCode(envA, "ttl-cli", failed)).resolves.toBe(false);
+      await expect(canRunOpenCode(envA, "ttl-cli", failed)).resolves.toBe(false);
+      expect(failed).toHaveBeenCalledOnce();
+      await expect(canRunOpenCode(envB, "ttl-cli", working)).resolves.toBe(true);
+
+      vi.setSystemTime(Date.now() + 30_001);
+      await expect(canRunOpenCode(envA, "ttl-cli", failed)).resolves.toBe(false);
+      expect(failed).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not fall back to another environment's catalog", async () => {
+    const homeA = mkdtempSync(join(tmpdir(), "omb-opencode-scope-a-"));
+    const homeB = mkdtempSync(join(tmpdir(), "omb-opencode-scope-b-"));
+    try {
+      const seeded = await discoverOpenCodeModels({ ...process.env, HOME: homeA, FAKE_ACP_MODELS: "opencode/big-pickle" }, FAKE_CLI);
+      expect(seeded.options.map((option) => option.id)).toEqual(["opencode/big-pickle"]);
+
+      const other = await discoverOpenCodeModels({ ...process.env, HOME: homeB, FAKE_ACP_MODELS: "" }, FAKE_CLI);
+      expect(other).toEqual({ default: "", options: [] });
+    } finally {
+      await removeTempDir(homeA);
+      await removeTempDir(homeB);
+    }
+  });
+
+  it("returns the same catalog object when discovery fails, so its prices survive", async () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-opencode-fallback-"));
+    try {
+      const first = await discoverOpenCodeModels(
+        { ...process.env, HOME: home, FAKE_ACP_MODELS: "opencode/claude-sonnet-5-5,opencode/big-pickle-free" },
+        FAKE_CLI,
+      );
+      expect(first.options.map((option) => option.id)).toEqual(["opencode/claude-sonnet-5-5", "opencode/big-pickle-free"]);
+
+      const fallback = await discoverOpenCodeModels({ ...process.env, HOME: home, FAKE_ACP_MODELS: "" }, FAKE_CLI);
+      expect(fallback).toBe(first);
+      expect(preferredOpenCodeModel(fallback.options.map((option) => option.id), "opencode/claude-sonnet-5-5", fallback))
+        .toBe("opencode/big-pickle-free");
+    } finally {
+      await removeTempDir(home);
+    }
+  });
+
+  it("keeps catalog revisions and spawn fingerprints inside their own environment", async () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-opencode-revision-"));
+    try {
+      const envA = { ...process.env, HOME: home };
+      const envB = { ...process.env, HOME: join(home, "second") };
+
+      await discoverOpenCodeModels({ ...envA, FAKE_ACP_MODELS: "opencode/big-pickle" }, FAKE_CLI, { refresh: true });
+      const fingerprintA = openCodeSpawnFingerprint(envA, FAKE_CLI);
+      const fingerprintB = openCodeSpawnFingerprint(envB, FAKE_CLI);
+      expect(fingerprintA).not.toBe(fingerprintB);
+
+      await discoverOpenCodeModels({ ...envA, FAKE_ACP_MODELS: "opencode/big-pickle,opencode/zen-two" }, FAKE_CLI, { refresh: true });
+      expect(openCodeSpawnFingerprint(envA, FAKE_CLI)).not.toBe(fingerprintA);
+      expect(openCodeSpawnFingerprint(envB, FAKE_CLI)).toBe(fingerprintB);
+    } finally {
+      await removeTempDir(home);
+    }
   });
 });

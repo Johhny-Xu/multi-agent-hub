@@ -4,6 +4,7 @@
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { cleanText, unusableAnswer } from "./answer.mjs";
 import { loadConnection } from "./config.mjs";
 
 export let HUB = null;
@@ -60,12 +61,6 @@ export function resolveWorker(raw) {
 function refRegex(worker) {
   const prefix = worker === "traecode" ? "(?:traecode|trae)" : worker;
   return new RegExp("^" + prefix + "-[0-9a-f]+$", "i");
-}
-
-function cleanText(text) {
-  // Strips ANSI colour escapes from CLI output; the ESC control character is the point.
-  // oxlint-disable-next-line no-control-regex
-  return String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
 }
 
 /** 从枢纽回执里提取正文，移除状态行和连续的退出码/会话元数据尾行。 */
@@ -332,15 +327,6 @@ function parseReceipt(text, worker, expectedRef = null) {
     return { status: "running", ref, answer: "", ...extra };
   }
   return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500), ...extra };
-}
-
-const PLACEHOLDER_ANSWERS = new Set(["(无输出)", "(尚无文本)", "(no output)", "(empty)", "task received", "已收到任务", "任务已收到"]);
-
-function unusableAnswer(text) {
-  const value = cleanText(text).replace(/\s+/g, "").toLowerCase();
-  if (!value) return true;
-  if (PLACEHOLDER_ANSWERS.has(value)) return true;
-  return value.length <= 24 && ["思考中", "生成中", "thinking", "receivedthetask"].some((marker) => value.includes(marker));
 }
 
 /** Normalize one receipt while keeping the raw worker status and input ref. */

@@ -1,9 +1,18 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { AcpHost, type AcpInbound } from "./host.ts";
+import { AcpHost, PrivateResponseIds, type AcpInbound } from "./host.ts";
+
+// Native logging has its own 250 ms flush timer; keeping it out of the module keeps this file's timer
+// counts about the host's requests only.
+const nativeLog = vi.hoisted(() => ({ entries: [] as Array<{ threadId: string; dir: string; msg: any }> }));
+vi.mock("../native.ts", () => ({
+  appendNative: (threadId: string, entry: { dir: string; msg: any }) => {
+    nativeLog.entries.push({ threadId, ...entry });
+  },
+}));
 
 function fakeChild() {
   const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), exitCode: null, pid: undefined });
@@ -87,5 +96,118 @@ describe("one ACP process for several threads", () => {
     h.say({ jsonrpc: "2.0", method: "session/update", params: { update: {} } });
     await flush();
     expect(h.heard.get("only")).toHaveLength(2);
+  });
+});
+
+describe("an ACP request's deadlines", () => {
+  async function timed(run: () => Promise<void>): Promise<void> {
+    vi.useFakeTimers();
+    try {
+      await run();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("clears both deadlines once a private response arrives", () => timed(async () => {
+    const h = hostWith(null);
+    const link = h.link("a", "s-1");
+    const answer = link.request("_x.ai/mcp/list", {}, 1_000, undefined, 500);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(2);
+    const id = h.written.at(-1)!.id;
+    h.say({ jsonrpc: "2.0", id, result: { servers: [] } });
+    await expect(answer).resolves.toEqual({ servers: [] });
+    expect(vi.getTimerCount()).toBe(0);
+  }));
+
+  it("rejects once on the request deadline and never on the idle one", () => timed(async () => {
+    const h = hostWith(null);
+    const link = h.link("a", "s-1");
+    const answer = link.request("_x.ai/mcp/list", {}, 100, undefined, 300);
+    answer.catch(() => {});
+    await vi.advanceTimersByTimeAsync(110);
+    await expect(answer).rejects.toThrow("timed out");
+    expect(vi.getTimerCount()).toBe(0);
+    // The idle deadline was cleared with it: nothing fires when its moment passes.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(vi.getTimerCount()).toBe(0);
+  }));
+
+  it("rejects on idle silence and clears the hard deadline", () => timed(async () => {
+    const h = hostWith(null);
+    const link = h.link("a", "s-1");
+    const answer = link.request("_x.ai/mcp/list", {}, 300, undefined, 100);
+    answer.catch(() => {});
+    await vi.advanceTimersByTimeAsync(110);
+    await expect(answer).rejects.toThrow(/stopped responding/);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(vi.getTimerCount()).toBe(0);
+  }));
+
+  it("clears both deadlines when the thread leaves", () => timed(async () => {
+    const h = hostWith(null);
+    const link = h.link("a", "s-1");
+    const answer = link.request("_x.ai/mcp/list", {}, 1_000, undefined, 500);
+    answer.catch(() => {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(2);
+    link.close();
+    await expect(answer).rejects.toThrow("session closed");
+    expect(vi.getTimerCount()).toBe(0);
+  }));
+
+  it("returns to the timer baseline after repeated private requests", () => timed(async () => {
+    const h = hostWith(null);
+    const link = h.link("a", "s-1");
+    const baseline = vi.getTimerCount();
+    for (let round = 0; round < 5; round++) {
+      const answer = link.request("_x.ai/mcp/list", {}, 1_000, undefined, 500) as Promise<unknown>;
+      await vi.advanceTimersByTimeAsync(0);
+      h.say({ jsonrpc: "2.0", id: h.written.at(-1)!.id, result: {} });
+      await answer;
+    }
+    expect(vi.getTimerCount()).toBe(baseline);
+  }));
+
+  it("keeps a late private response masked after its request timed out", () => timed(async () => {
+    const h = hostWith(null);
+    const link = h.link("a", "s-1");
+    const answer = link.request("_x.ai/mcp/list", {}, 100);
+    answer.catch(() => {});
+    const id = h.written.at(-1)!.id;
+    await vi.advanceTimersByTimeAsync(110);
+    await expect(answer).rejects.toThrow("timed out");
+    nativeLog.entries.length = 0;
+    h.say({ jsonrpc: "2.0", id, result: { servers: [{ name: "private-fixture", headers: { Authorization: "Bearer private-fixture" } }] } });
+    await vi.advanceTimersByTimeAsync(0);
+    const logged = nativeLog.entries.filter((entry) => entry.dir === "in" && entry.msg.id === id);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]!.msg).toEqual({ jsonrpc: "2.0", id, result: "[MCP catalog omitted]" });
+    expect(JSON.stringify(logged)).not.toContain("Bearer");
+  }));
+
+  it("forgets an expired private ID and keeps the record list bounded", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      const ids = new PrivateResponseIds();
+      ids.add(1);
+      ids.retire(1);
+      expect(ids.has(1)).toBe(true);
+      vi.setSystemTime(PrivateResponseIds.TTL_MS + 1);
+      ids.prune();
+      expect(ids.has(1)).toBe(false);
+
+      for (let index = 0; index < PrivateResponseIds.LIMIT + 2; index++) {
+        ids.add(1_000 + index);
+        ids.retire(1_000 + index);
+      }
+      expect(ids.has(1_000)).toBe(false);
+      expect(ids.has(1_000 + PrivateResponseIds.LIMIT + 1)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

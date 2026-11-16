@@ -169,7 +169,7 @@ describe("Simple mode's bot menu", () => {
     point(more(), 200);
     await wait(320);
     expect(flyout()).not.toBeNull();
-    expect([...flyout()!.querySelectorAll("button")].map((node) => node.textContent)).toEqual(["Edit profile", "Make Chief of Staff", "Duplicate", "Delete all conversations…"]);
+    expect([...flyout()!.querySelectorAll("button")].map((node) => node.textContent)).toEqual(["Edit profile", "Pause bot", "Make Chief of Staff", "Duplicate", "Delete all conversations…"]);
     point(pin, 80);
     await wait(20);
     expect(flyout()).toBeNull();
@@ -214,7 +214,7 @@ describe("bot list's Mark all as read", () => {
     flushSync(() => button("Mark all as read").click());
     await expect.poll(() => onClose.mock.calls.length).toBe(1);
     expect(reads(answer)).toEqual([
-      "/api/bots/reviewer/read background", "/api/bots/reviewer/read next", "/api/bots/scout/read scout-main", "/api/groups/room/read",
+      "/api/bots/reviewer/read background", "/api/bots/reviewer/read next", "/api/bots/scout/read scout-main", "/api/groups/room/read room-thread",
     ]);
     expect(state.bots.filter((candidate) => !candidate.hidden).every((candidate) => candidate.tasks!.every((task) => !task.unread))).toBe(true);
     expect(state.groups[0]!.unread).toBe(false);
@@ -234,7 +234,7 @@ describe("bot list's Mark all as read", () => {
     expect(button("Mark all as read").disabled).toBe(false);
     flushSync(() => button("Mark all as read").click());
     await expect.poll(() => onClose.mock.calls.length).toBe(1);
-    expect(reads(answer)).toEqual(["/api/bots/scout/read scout-main", "/api/groups/room/read"]);
+    expect(reads(answer)).toEqual(["/api/bots/scout/read scout-main", "/api/groups/room/read room-thread"]);
   });
 
   it("keeps completed reads and shows the failure when one request fails, guarding repeat clicks", async () => {

@@ -22,6 +22,7 @@ import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp-http.ts";
 import { compileToolSchema, schemaProblems, serverToolValidator, type ServerToolCheck } from "../mcp-schema-validator.ts";
 import { fitToolList, withoutDanglingReferences } from "../mcp-tool-schema.ts";
 import { listsComputerTool } from "../computer-tool-list.ts";
+import { READ_OPEN_PAGE_ONLY, readsAroundBrowser } from "../browser-tool-shape.ts";
 import { capToolList, learnToolCountLimit, shareToolBudget, toolCountLimitFromError } from "../tool-count-limit.ts";
 import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
@@ -100,6 +101,13 @@ function object(value: unknown): value is Record<string, unknown> {
 function aborted(): Error { return new Error("MCP operation cancelled"); }
 class McpRequestRefused extends Error {}
 
+/** The refusal text keeps the request's method and the server's error code — never its message, which is
+ * the server's own text and may hold anything. */
+function mcpRefusalText(method: string | undefined, error: unknown): string {
+  const code = object(error) && typeof error.code === "number" && Number.isFinite(error.code) ? error.code : "?";
+  return `MCP request failed; inspect the configured integration (method ${method ?? "?"}, JSON-RPC code ${code})`;
+}
+
 /** A chat-runtime bot's tools never get the operator's control-plane secrets; the entry's own env is applied last. */
 export function chatMcpEnvironment(serverEnv: Record<string, string>, source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...source, PATH: augmentedPath() };
@@ -118,7 +126,7 @@ export class ChatMcpClient {
   private failure?: string;
   private stderrTail = "";
   private readonly configured: string[];
-  private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+  private pending = new Map<number, { method: string; resolve(value: unknown): void; reject(error: Error): void }>();
 
   /** `configured`: a server the person set up, whose own environment passes the bot box as theirs. */
   constructor(server: Server, computerUse = false, configured = false) {
@@ -215,7 +223,7 @@ export class ChatMcpClient {
       const entry = this.pending.get(message.id);
       if (!entry) continue;
       this.pending.delete(message.id);
-      if ("error" in message) entry.reject(new McpRequestRefused("MCP request failed; inspect the configured integration"));
+      if ("error" in message) entry.reject(new McpRequestRefused(mcpRefusalText(entry.method, message.error)));
       else if (!("result" in message)) entry.reject(new Error("MCP response has no result"));
       else entry.resolve(message.result);
     }
@@ -242,7 +250,7 @@ export class ChatMcpClient {
         const timer = setTimeout(() => finish(new Error(timedOut)), timeout);
         timer.unref();
         signal.addEventListener("abort", cancel, { once: true });
-        this.pending.set(id, { resolve: (value) => finish(undefined, value), reject: (error) => finish(error) });
+        this.pending.set(id, { method, resolve: (value) => finish(undefined, value), reject: (error) => finish(error) });
         try { this.write({ jsonrpc: "2.0", id, method, params }); }
         catch { finish(new Error("MCP request could not be sent")); }
       });
@@ -419,6 +427,18 @@ export function loopbackNavigationHint(tool: string, args: unknown, text: string
   if (!/^agent_browser_(?:open|navigate)$/u.test(tool) || !object(args) || typeof args.url !== "string") return "";
   if (!ROUTE_LOOPBACK.test(args.url.trim()) || !/(?:ERR_[A-Z_]+|failed)/u.test(text)) return "";
   return " That address is the loopback of the machine running this browser, not your own computer: open the site by the LAN address it answers on (for example http://192.168.1.20:8188), which must be reachable from the server, and allow it under Settings → Browser → Open sites on this server.";
+}
+
+/** agent-browser's read hides `url`: a call whose only misfit is a string url gets the way to read an address instead of the bare schema misfit. */
+function readsAddressOnly(tool: RegisteredTool, args: unknown): boolean {
+  if (!tool.builtInBrowser || !readsAroundBrowser({ name: tool.name, arguments: args }) || !object(args) || typeof args.url !== "string") return false;
+  const { url: _url, ...rest } = args;
+  return tool.schema(rest);
+}
+
+/** READ_OPEN_PAGE_ONLY with the tool names this chat registered for the browser server. */
+function readOpenPageOnly(server: string): string {
+  return READ_OPEN_PAGE_ONLY.replace(/agent_browser_(?:open|read)/gu, (tool) => chatToolName(server, tool));
 }
 
 function omitBlankDefaults(builtInBrowser: boolean, tool: string, args: unknown) {
@@ -709,7 +729,9 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     if (!tool) throw new Error("The requested tool was not advertised for this turn");
     if (selectionExcludes(tool, args)) throw new Error("Tool selection excludes this tool");
     omitBlankDefaults(tool.builtInBrowser, tool.name, args);
-    if (!object(args) || (!(tool.searched && isDirectoryTool(tool.name)) && !tool.schema(args))) throw new Error(ARGUMENTS_MISFIT);
+    if (!object(args) || (!(tool.searched && isDirectoryTool(tool.name)) && !tool.schema(args))) {
+      throw new Error(readsAddressOnly(tool, args) ? readOpenPageOnly(tool.server) : ARGUMENTS_MISFIT);
+    }
   };
   const viewOf = (tool: RegisteredTool, args: Record<string, unknown>, title: string): ChatToolCallView => {
     const runs = target(tool, args);

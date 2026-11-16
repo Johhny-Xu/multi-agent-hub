@@ -5,11 +5,12 @@
 // promptCapabilities {image, embeddedContext}, mcpCapabilities {http, sse},
 // loadSession, and sessionCapabilities {additionalDirectories, close, delete, fork, list, resume}.
 // Sign-in is the CLI's own `qoderclicn login`; this driver stores no key.
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { userHome } from "../../env-path.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import type { LogSignal } from "./quiet-status.ts";
 
 /**
  * `qodercli --thinking <mode>` (its --help, both builds: auto, adaptive, enabled, disabled). ACP has no session
@@ -49,7 +50,7 @@ const QODER_MODELS = {
     { id: "ultimate", label: "Ultimate" },
     { id: "fast", label: "Fast" },
     { id: "efficient", label: "Efficient" },
-    { id: "qmodel_latest", label: "Qwen4-Max-Preview" },
+    { id: "qmodel_latest", label: "Qwen4-Max" },
     { id: "qmodel_38max", label: "Qwen3.8-Max" },
     { id: "qfmodel", label: "Qwen3.8-Flash" },
     { id: "kmodel_latest", label: "Kimi-K3.1-Pro" },
@@ -75,7 +76,7 @@ const QODER_CN_MODELS = {
     // Live ACP model_selection of qoderclicn 1.1.74 on 2026-11-12 (E89: Qwen4-Max-Preview now on the CN catalog; 1.1.86 fails models.list with 403).
     { id: "auto", label: "Auto" },
     { id: "fast", label: "Fast" },
-    { id: "qmodel_latest", label: "Qwen4-Max-Preview" },
+    { id: "qmodel_latest", label: "Qwen4-Max" },
     { id: "qmodel_38max", label: "Qwen3.8-Max" },
     { id: "qfmodel", label: "Qwen3.8-Flash" },
     { id: "dmodel", label: "DeepSeek-V4-Pro" },
@@ -95,6 +96,62 @@ export function qoderSignedIn(homeDir: string) {
     const home = join(userHome(env), homeDir);
     return existsSync(join(home, "state.json")) || existsSync(join(home, "settings.json"));
   };
+}
+
+/**
+ * Qoder's per-process debug log: `~/<config dir>/logs/runs/<time>-<rand>-p<PID>/qodercli.log`. The config dir is
+ * ~/.qoder (qodercli), ~/.qoder-cn (qoderclicn), or another ~/.qoder* one a wrapper passes with --config-dir
+ * (qoderclicn-tmp2 → ~/.qoder-cn-tmp2). The ACP child is the CLI itself (wrappers `exec` it), so its pid names the
+ * directory. A server-side queue (403 / 10605 / RESOURCE_LIMIT) only shows up here: the CLI retries on its own and
+ * sends ACP nothing, so without this log the prompt-idle guard would kill a queued turn as silent.
+ */
+export function qoderRunLogPath(env: Record<string, string | undefined>, _sessionId: string, pid?: number): string | null {
+  if (!pid || !Number.isInteger(pid) || pid <= 0) return null;
+  const home = userHome(env);
+  const suffix = `-p${pid}`;
+  let best: { path: string; mtimeMs: number } | null = null;
+  let configDirs: string[];
+  try {
+    configDirs = readdirSync(home).filter((name) => name.startsWith(".qoder"));
+  } catch {
+    return null;
+  }
+  for (const dir of configDirs) {
+    const runs = join(home, dir, "logs", "runs");
+    let entries: string[];
+    try {
+      entries = readdirSync(runs);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith(suffix)) continue;
+      const path = join(runs, entry, "qodercli.log");
+      try {
+        // A recycled pid can match an old run; the newest directory is this process's.
+        const mtimeMs = statSync(join(runs, entry)).mtimeMs;
+        if (!best || mtimeMs > best.mtimeMs) best = { path, mtimeMs };
+      } catch {
+        // gone between readdir and stat
+      }
+    }
+  }
+  return best?.path ?? null;
+}
+
+/**
+ * A Qoder queue line (2026-10-22 / 11-11 logs): `... Qoder API error: statusCode=FORBIDDEN, statusCodeValue=403,
+ * body(...)={"code":"403","message":"{\"code\":\"10605\",...\"isQueued\":true,...\"retryAfterSeconds\":60,...
+ * \"subCode\":\"RESOURCE_LIMIT\"...}`. It reads as a retry the CLI is waiting out, so the turn stays alive.
+ */
+const QUEUE_POLL = /<-- operation=checkModelQueueStatus\b.*\bstatus=200\b/;
+
+export function parseQoderLogLine(line: string): LogSignal | null {
+  // After the first 10605 the CLI polls the queue about once a minute and logs each answer: the request is still queued.
+  if (QUEUE_POLL.test(line)) return { kind: "retry", status: 403, delayMs: null, attempt: null };
+  if (!/\b10605\b/.test(line) && !line.includes("RESOURCE_LIMIT")) return null;
+  const seconds = /retryAfterSeconds[\\"]*\s*:\s*(\d+)/.exec(line) ?? /waitTime[\\"]*\s*:\s*(\d+)/.exec(line);
+  return { kind: "retry", status: 403, delayMs: seconds ? Number(seconds[1]) * 1000 : null, attempt: null };
 }
 
 const QODER_INSTALL = {
@@ -119,6 +176,7 @@ const intl: AcpSupport = {
   authFailure: "continue",
   isAuthenticated: qoderSignedIn(".qoder"),
   buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
+  statusLog: { path: qoderRunLogPath, parse: parseQoderLogLine, keepsTurnAlive: true },
 };
 
 const cn: AcpSupport = {

@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFile
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProviderInstance } from "../../contracts.ts";
 import { DEFAULT_FLEET, PRODUCT_FLEET_ADDITIONS } from "../../instance-fleets.ts";
@@ -134,6 +134,75 @@ describe("MiMo Code ACP driver", () => {
     const working = writeVersionFixture("0.1.15");
     const found = await verifyMimocodeCli({ ...env, OMB_MIMOCODE_CLI: working }, broken);
     expect(found).toEqual({ path: working, version: "0.1.15" });
+  });
+
+  it("retries a failed --version probe after its short TTL", async () => {
+    const cli = writeScript("bin/mimo", "exit 1");
+    const env = { HOME: scratch, PATH: join(scratch, "empty-bin") };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      expect(await verifyMimocodeCli(env, cli)).toBeNull();
+      writeScript("bin/mimo", "printf '0.1.15\\n'");
+      // A CLI repaired a moment after the probe failed is not seen yet…
+      expect(await verifyMimocodeCli(env, cli)).toBeNull();
+      // …but the negative answer is not kept for the session.
+      vi.setSystemTime(Date.now() + 6_000);
+      expect(await verifyMimocodeCli(env, cli)).toEqual({ path: cli, version: "0.1.15" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-probes at once when a refresh is asked for", async () => {
+    const cli = writeScript("bin/mimo", "exit 1");
+    const env = { HOME: scratch, PATH: join(scratch, "empty-bin") };
+    expect(await verifyMimocodeCli(env, cli)).toBeNull();
+    writeScript("bin/mimo", "printf '0.1.15\\n'");
+
+    expect(await verifyMimocodeCli(env, cli, { refresh: true })).toEqual({ path: cli, version: "0.1.15" });
+  });
+
+  it("keeps a failed refresh short-lived instead of permanent", async () => {
+    const cli = writeScript("bin/mimo", "exit 1");
+    const env = { HOME: scratch, PATH: join(scratch, "empty-bin") };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      expect(await verifyMimocodeCli(env, cli, { refresh: true })).toBeNull();
+      writeScript("bin/mimo", "printf '0.1.15\\n'");
+      expect(await verifyMimocodeCli(env, cli)).toBeNull();
+      vi.setSystemTime(Date.now() + 6_000);
+      expect(await verifyMimocodeCli(env, cli)).toEqual({ path: cli, version: "0.1.15" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a successful probe cached, and probes again when the candidates change", async () => {
+    const probes = join(scratch, "probes.log");
+    const cli = writeScript("bin/mimo", `printf 'probe\\n' >> "${probes}"\nprintf '0.1.15\\n'`);
+    const env = { HOME: scratch, PATH: join(scratch, "empty-bin") };
+    expect(await verifyMimocodeCli(env, cli)).toEqual({ path: cli, version: "0.1.15" });
+    await verifyMimocodeCli(env, cli);
+    expect(readFileSync(probes, "utf8").trim().split("\n")).toHaveLength(1);
+
+    const other = writeVersionFixture("0.1.16");
+    expect(await verifyMimocodeCli(env, other)).toEqual({ path: other, version: "0.1.16" });
+  });
+
+  it("lets Settings refresh past a failed probe", async () => {
+    const cli = writeVersionFixture("not a version");
+    instance = await MimocodeAgentDriver.create({
+      instanceId: "mimocode-probe-refresh", displayName: "MiMo Code", enabled: true,
+      environment: { HOME: scratch, PATH: join(scratch, "empty-bin") },
+      config: { cli, fullAuto: false },
+    });
+    expect(await instance.snapshot()).toMatchObject({ state: "unavailable", notEngineCli: true });
+    writeVersionFixture("0.1.15");
+    // The snapshot stays on the cached failure, as an ordinary turn may not pay a probe each time.
+    expect(await instance.snapshot()).toMatchObject({ state: "unavailable", notEngineCli: true });
+
+    await instance.refreshModels?.();
+    expect(instance.models.options.length).toBe(4);
   });
 
   it("reads the version and the sign-in file into the snapshot", async () => {

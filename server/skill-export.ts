@@ -10,8 +10,10 @@ export function skillExport(host: Pick<SkillsLibraryHost, "listBotSkills" | "rea
   const { readBotSkillFile } = host;
   // A skill the engine loads by itself from its own folder (the person's ~/.claude/skills, a project's) is never packed,
   // nor a built-in vendor EGM skill: every install brings its own copy.
-  const listBotSkills = (bot: BotRecord) => host.listBotSkills(bot)
-    .filter((skill) => (skill as { origin?: string }).origin !== "native" && skill.source !== EGM_SOURCE);
+  const listBotSkills = (bot: BotRecord) => host.listBotSkills(bot).filter((skill) => {
+    const origin = (skill as { origin?: string }).origin;
+    return origin !== "native" && origin !== "project" && skill.source !== EGM_SOURCE;
+  });
   function checkedExportSkillNames(
     value: unknown,
     bots: readonly BotRecord[],

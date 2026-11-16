@@ -13,11 +13,12 @@
 // project id from `--project`, `MEOO_PROJECT_URL_ID` or `~/.config/agenthub-meoo/project.env`. No key
 // is ever logged or forwarded. A run may take minutes and is stopped by aborting the HTTP stream.
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+
+import { readMeooEnvValue } from "./acp/meoo-env.ts";
 
 const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
@@ -40,10 +41,17 @@ interface RunningTask {
   abort: () => void;
 }
 
-type RunResult =
+export type RunResult =
   | { kind: "text"; text: string; note?: string }
   | { kind: "cancelled" }
   | { kind: "error"; message: string };
+
+/** One run's reply as its event stream builds it. */
+export interface RunProgress {
+  replyText: string;
+  status: string;
+  note: string;
+}
 
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -69,20 +77,10 @@ function accountHomes(): string[] {
   return [...new Set(candidates.filter((home) => home.length > 0))];
 }
 
-/** `KEY=value` from an env-style file, without exporting anything. */
-function readEnvFile(path: string, key: string): string {
-  try {
-    const found = new RegExp(`^\\s*${key}\\s*=\\s*(\\S+)`, "m").exec(readFileSync(path, "utf-8"));
-    return found?.[1]?.trim() ?? "";
-  } catch {
-    return "";
-  }
-}
-
 function readAgentKey(): string {
   if (process.env.MEOO_AK) return process.env.MEOO_AK.trim();
   for (const home of accountHomes()) {
-    const key = readEnvFile(join(home, ".config", "agenthub-meoo", "meoo-auth.env"), "MEOO_AK");
+    const key = readMeooEnvValue(join(home, ".config", "agenthub-meoo", "meoo-auth.env"), "MEOO_AK");
     if (key) return key;
   }
   return "";
@@ -92,7 +90,7 @@ function readProjectId(): string {
   const explicit = argValue("--project") ?? process.env.MEOO_PROJECT_URL_ID;
   if (explicit) return explicit.trim();
   for (const home of accountHomes()) {
-    const id = readEnvFile(join(home, ".config", "agenthub-meoo", "project.env"), "MEOO_PROJECT_URL_ID");
+    const id = readMeooEnvValue(join(home, ".config", "agenthub-meoo", "project.env"), "MEOO_PROJECT_URL_ID");
     if (id) return id;
   }
   return "";
@@ -137,6 +135,110 @@ const TERMINAL: Record<string, "completed" | "failed" | "cancelled"> = {
   "run.interrupted": "cancelled",
   "run.superseded": "cancelled",
 };
+
+/** One complete SSE event's name and data, tolerating both LF and CRLF streams. */
+export function parseSseEvent(raw: string): { event: string; data: string } {
+  const lines = raw.split(/\r?\n/);
+  const event = (lines.find((line) => line.startsWith("event:")) ?? "").slice(6).trim();
+  const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("");
+  return { event, data };
+}
+
+/** Takes one complete event off `buffer`, or null while its blank-line terminator has not arrived. The
+ * terminator can be `\n\n` or `\r\n\r\n`, so its whole length is removed rather than a fixed two bytes. */
+export function takeSseEvent(buffer: string): { raw: string; rest: string } | null {
+  const match = /\r?\n\r?\n/.exec(buffer);
+  if (!match) return null;
+  return { raw: buffer.slice(0, match.index), rest: buffer.slice(match.index + match[0].length) };
+}
+
+/** Decodes the event stream across chunk boundaries: a multi-byte character split between two reads is
+ * held by the decoder instead of being replaced with U+FFFD. */
+export class SseReader {
+  readonly #decoder = new TextDecoder("utf-8");
+  #buffer = "";
+
+  push(chunk: Uint8Array): Array<{ event: string; data: string }> {
+    this.#buffer += this.#decoder.decode(chunk, { stream: true });
+    return this.#drain();
+  }
+
+  /** The held-back tail of a character, then any event it completed; an unfinished last event stays out
+   * of the result, as an early-ended stream has never been parsed as half a JSON document. */
+  flush(): Array<{ event: string; data: string }> {
+    this.#buffer += this.#decoder.decode();
+    return this.#drain();
+  }
+
+  #drain(): Array<{ event: string; data: string }> {
+    const events: Array<{ event: string; data: string }> = [];
+    for (;;) {
+      const taken = takeSseEvent(this.#buffer);
+      if (!taken) return events;
+      this.#buffer = taken.rest;
+      events.push(parseSseEvent(taken.raw));
+    }
+  }
+}
+
+/** Applies one SSE event's data to the run; false once the run has ended. A payload that is not JSON yet
+ * is ignored: it is not an answer and must not become an error the person reads. */
+export function applySseEvent(progress: RunProgress, event: string, data: string): boolean {
+  if (!data) return true;
+  let payload: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(data) as unknown;
+    payload = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return true;
+  }
+  const type = event || (typeof payload?.type === "string" ? payload.type : "");
+  if (type === "message.delta" || type === "message.snapshot") {
+    progress.replyText = reduceText(progress.replyText, type, payload);
+    return true;
+  }
+  if (type === "run.input_required") {
+    const action = payload?.action as { prompt?: unknown } | undefined;
+    const asked = typeof action?.prompt === "string" ? action.prompt : typeof payload?.detail === "string" ? payload.detail : "";
+    // 300 characters keeps a long question from carrying more than the person asked for.
+    progress.note = asked.slice(0, 300);
+    progress.status = "input_required";
+    return false;
+  }
+  const terminal = TERMINAL[type];
+  if (terminal) {
+    progress.status = terminal;
+    return false;
+  }
+  return true;
+}
+
+/** How a finished stream becomes a turn. `input_required` is checked before the "no text" failures, because
+ * the question itself is the answer the caller can act on. */
+export function runResult(progress: RunProgress): RunResult {
+  if (progress.status === "failed") return { kind: "error", message: "Meoo failed this run. Send the message again to retry." };
+  if (progress.status === "cancelled") return { kind: "cancelled" };
+  if (progress.status === "input_required" && progress.note) {
+    return { kind: "text", text: progress.replyText, ...(progress.note ? { note: progress.note } : {}) };
+  }
+  if (progress.status === "running") {
+    // The stream ended without a terminal event: partial text is still the only answer we have.
+    if (!progress.replyText.trim()) {
+      return { kind: "error", message: "Meoo closed this run before it finished. Send the message again to retry." };
+    }
+  } else if (!progress.replyText.trim()) {
+    return { kind: "error", message: "Meoo finished without any reply text." };
+  }
+  return { kind: "text", text: progress.replyText, ...(progress.note ? { note: progress.note } : {}) };
+}
+
+/** The reply body the bridge emits: a question Meoo asked rides after the text, and with no text it is
+ * the whole body rather than two leading newlines. */
+export function composeReplyBody(text: string, note: string): string {
+  if (!note) return text;
+  const ask = `(Meoo asked for more input, which this connection cannot send: ${note})`;
+  return text.trim() ? `${text}\n\n${ask}` : ask;
+}
 
 /** One Agent Run: start it, read its event stream to the end, return the reply text. */
 async function runAgent(
@@ -200,49 +302,23 @@ async function runAgent(
       return { kind: "error", message: `Meoo stopped sending this run (${events.status}). Send the message again to retry.` };
     }
 
-    let replyText = "";
-    let status = "running";
-    let note = "";
-    let buffer = "";
+    const progress: RunProgress = { replyText: "", status: "running", note: "" };
+    const reader = new SseReader();
     const body = events.body as unknown as AsyncIterable<Uint8Array> | null;
     if (!body) return { kind: "error", message: "Meoo returned an empty event stream. Send the message again to retry." };
 
+    const consume = (events: Array<{ event: string; data: string }>): boolean => {
+      for (const { event, data } of events) if (!applySseEvent(progress, event, data)) return false;
+      return true;
+    };
+    let endedEarly = false;
     for await (const chunk of body) {
-      buffer += Buffer.from(chunk).toString("utf-8");
-      let split = buffer.indexOf("\n\n");
-      while (split >= 0) {
-        const raw = buffer.slice(0, split);
-        buffer = buffer.slice(split + 2);
-        split = buffer.indexOf("\n\n");
-        const lines = raw.split("\n");
-        const name = (lines.find((line) => line.startsWith("event:")) ?? "").slice(6).trim();
-        const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("");
-        if (!data) continue;
-        let payload: Record<string, unknown> | null = null;
-        try {
-          const parsed = JSON.parse(data) as unknown;
-          payload = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-        } catch {
-          continue;
-        }
-        const type = name || (typeof payload?.type === "string" ? payload.type : "");
-        if (type === "message.delta" || type === "message.snapshot") {
-          replyText = reduceText(replyText, type, payload);
-        } else if (type === "run.input_required") {
-          const action = payload?.action as { prompt?: unknown } | undefined;
-          const asked = typeof action?.prompt === "string" ? action.prompt : typeof payload?.detail === "string" ? payload.detail : "";
-          note = asked.slice(0, 300);
-          status = "input_required";
-          break;
-        }
-        const terminal = TERMINAL[type];
-        if (terminal) {
-          status = terminal;
-          break;
-        }
-      }
-      if (status !== "running") break;
+      endedEarly = !consume(reader.push(chunk));
+      if (endedEarly) break;
     }
+    // A terminal event or a question ends the run on purpose; only a naturally ended stream has a
+    // decoder tail left to flush.
+    if (!endedEarly) consume(reader.flush());
 
     if (task.cancelled) return { kind: "cancelled" };
     if (timedOut) {
@@ -251,17 +327,7 @@ async function runAgent(
         message: `Meoo ran past its ${timeoutSec}-second limit before finishing, so the run was stopped. Send a smaller task, or send it again.`,
       };
     }
-    if (status === "failed") {
-      return { kind: "error", message: "Meoo failed this run. Send the message again to retry." };
-    }
-    if (status === "cancelled") return { kind: "cancelled" };
-    if (status === "running") {
-      // The stream ended without a terminal event: partial text is still the only answer we have.
-      if (!replyText.trim()) return { kind: "error", message: "Meoo closed this run before it finished. Send the message again to retry." };
-    } else if (!replyText.trim()) {
-      return { kind: "error", message: "Meoo finished without any reply text." };
-    }
-    return { kind: "text", text: replyText, ...(note ? { note } : {}) };
+    return runResult(progress);
   } catch (error) {
     if (task.cancelled) return { kind: "cancelled" };
     if (timedOut) {
@@ -327,7 +393,9 @@ export function startBridge(): void {
 
     if (result.kind === "cancelled") return reply(id, { stopReason: "cancelled" });
     if (result.kind === "error") return fail(id, -32000, result.message);
-    const body = result.note ? `${result.text}\n\n(Meoo asked for more input, which this connection cannot send: ${result.note})` : result.text;
+    const body = composeReplyBody(result.text, result.note ?? "");
+    // `end_turn` even after a question: this connection cannot send the answer back to that Agent Run, and
+    // reporting cancelled or failed would be a different fact.
     for (let offset = 0; offset < body.length; offset += REPLY_CHUNK) {
       update(sessionId, {
         sessionUpdate: "agent_message_chunk",

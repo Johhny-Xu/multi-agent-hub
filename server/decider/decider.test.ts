@@ -309,6 +309,20 @@ describe("settings rules", () => {
     expect(deciderAccount(ON, "browserAutomation")).toMatchObject({ provider: "jev" });
   });
 
+  it("keeps a custom gateway for every seam except the browser one", () => {
+    const custom: AppConfig = {
+      decider: {
+        enabled: true, provider: "custom", customKey: "gw-test-key", customBaseUrl: "https://gw.example.com/v1",
+        jobs: { roomRouting: true, browserAutomation: true },
+      },
+    };
+    expect(deciderAccount(custom)).toMatchObject({ provider: "custom" });
+    expect(deciderAccount(custom, "roomRouting")).toMatchObject({ provider: "custom" });
+    expect(deciderReady(custom, "roomRouting")).toBe(true);
+    expect(deciderAccount(custom, "browserAutomation")).toBeNull();
+    expect(deciderReady(custom, "browserAutomation")).toBe(false);
+  });
+
   it("does not enable browser automation when saving a key", () => {
     const patch = deciderSavePatch({ key: "tsk_new" }, undefined);
     expect(patch.ok).toBe(true);

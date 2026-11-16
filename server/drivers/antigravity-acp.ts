@@ -206,6 +206,9 @@ export async function prepareAntigravityProfile(input: {
   const realHome = (input.baseEnv ?? process.env).HOME?.trim() || homedir();
   if (isolatedCliHome) await prepareIsolatedCliHome(isolatedCliHome, realHome);
   await mkdir(acpDirectory, { recursive: true, mode: 0o700 });
+  const skillsDirectory = join(directory, "omb-skills");
+  await mkdir(skillsDirectory, { recursive: true, mode: 0o700 });
+  if (!(await lstat(skillsDirectory)).isDirectory()) throw new Error("Antigravity staging path must be a real directory.");
   if (process.platform !== "win32") {
     const { chmod } = await import("node:fs/promises");
     await chmod(directory, 0o700);
@@ -310,7 +313,7 @@ export class AntigravityAcpClient {
       runtime.executablePath,
       // The packaged server is bare on Linux (it reads --uid=); a person's own agy CLI takes its `acp` subcommand.
       runtime.spawnArgs,
-      { cwd, env: profile.environment, stdio: ["pipe", "pipe", "pipe"], ...(relay ? { box: { relay: relay.socketPath } } : {}) },
+      { cwd, env: profile.environment, stdio: ["pipe", "pipe", "pipe"], box: { ro: [join(profile.directory, "omb-skills")], ...(relay ? { relay: relay.socketPath } : {}) } },
       "bot",
     );
     this.child.stdout!.setEncoding("utf8");

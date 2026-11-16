@@ -22,6 +22,7 @@ import { showTunnelRetiredNotice } from "../lib/phone-link";
 import { PhonesList } from "./PhonesList";
 import { PairedPhones } from "./PairedPhones";
 import { TailnetComputers } from "./TailnetComputers";
+import { RemoteAccessCheckRow } from "./RemoteAccessCheck";
 import { LearnMore, SettingRow, SettingsFoldRow, SettingsGroup, SettingsLinkRow, SettingsRows, Switch } from "./SettingsPrimitives";
 import { Layer } from "./Layer";
 import { DialogTitle } from "./settings/SettingsDialog";
@@ -273,7 +274,7 @@ export function PairDeviceDialog({ c, state, onClose, secureAddress = false, pla
     if (c.phase !== "sign-in") setStep("consent");
   }, [step, signedIn, c.phase]);
   const begin = async () => {
-    await c.act((bridge) => setRoute(bridge, picked, true));
+    if (!await c.act((bridge) => setRoute(bridge, picked, true))) return;
     setStep("pairing");
     c.useLocal();
   };
@@ -325,6 +326,7 @@ export function PairDeviceDialog({ c, state, onClose, secureAddress = false, pla
               )}
             </div>
             <p className="text-[12px] leading-4 text-ink-secondary">{t("phone.pair.footShort")}</p>
+            {c.error && <p role="alert" className="text-[12px] leading-4 text-danger">{c.error}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" className="ui-button" onClick={close}>{t("common.cancel")}</button>
               <button type="button" disabled={c.busy} onClick={() => void begin()} className="ui-button ui-button-primary" data-pair-turn-on="">{t("phone.pair.turnOnShow")}</button>
@@ -479,6 +481,7 @@ export function PhoneDevicesSection({ profileEmail = "", focusRequest = 0, simpl
               <Switch checked={state.keepAwake} aria-label={t("remote.keepAwakeAria")} disabled={c.busy || !anyRoute}
                 onClick={() => void c.act((companion) => companion.keepAwake(!state.keepAwake))} />
             </SettingRow>
+            <RemoteAccessCheckRow account={c.account} state={state} />
             {moreWays && (
               <SettingsFoldRow id="more-ways" title={t("devices.moreWays")} open={moreOpen} onToggle={() => setMoreOpen(!moreOpen)}>
                 <SettingRow title="Tailscale" subtitle={<>{t("remote.tailscaleSwitch.short", { app: productName() })}{" "}<LearnMore href={TAILSCALE_HELP} /></>}

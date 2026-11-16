@@ -2,13 +2,14 @@
 import type { EffortLevel, LiveSettings } from "../../shared/wire";
 import type { ImageProvider } from "../../shared/image-generation";
 import type { VpsInstanceView } from "../../shared/vps";
+import type { ToolGroup } from "../../shared/tool-groups";
 import type { OnboardingStatus } from "@/lib/onboarding";
 import type { ModelSelection } from "./store";
 
 /** A saved credential: whether it is set and, for admins, its last four characters. The key itself never comes back. */
 export interface SavedKey { configured: boolean; last4?: string }
 
-export type NestedKeyName = "ttsKey" | "fishAudioKey" | "geminiTtsKey" | "jevApiKey" | "geminiDeciderKey" | "openrouterDeciderKey" | "workersAiToken" | "openaiImageApiKey" | "customImageApiKey" | "openaiLiveKey" | "geminiImageApiKey";
+export type NestedKeyName = "ttsKey" | "fishAudioKey" | "geminiTtsKey" | "jevApiKey" | "geminiDeciderKey" | "openrouterDeciderKey" | "workersAiToken" | "customDeciderKey" | "openaiImageApiKey" | "customImageApiKey" | "openaiLiveKey" | "geminiImageApiKey";
 
 export interface ImageSlotStatus { provider: ImageProvider; model: string; configured: boolean }
 
@@ -27,6 +28,8 @@ export interface ConfigStatus {
   /** X research comes with MausBot Cloud plans: `included` while this server holds the plan's relay credential;
    * `unavailable` when the Admin said no to this desktop's paid sign-in. */
   xResearch?: { included: boolean; unavailable?: boolean };
+  /** The built-in tool groups this workspace has, the ones a bot's Settings offer to turn off. */
+  toolGroups?: ToolGroup[];
   /** The person's own treg key for research: configured or not, never the key. */
   treg?: SavedKey;
   /** The Postiz organisation API key, and the Postiz server it belongs to when it is not Postiz Cloud. */
@@ -74,6 +77,12 @@ export interface ConfigStatus {
   awakeLimit?: number;
   /** Bots paused for the plan's limit: kept, but taking no turns. */
   pausedBots?: string[];
+  /** What the person paused (Pause in the sidebar menus): bots by id and departments by name. Absent from older servers. */
+  pausedByPerson?: { bots: string[]; departments: string[] };
+  /** Every bot taking no new work because the person paused it or its department. */
+  heldBots?: string[];
+  /** The server cannot read its saved routines, so none runs until it can. */
+  routinesUnreadable?: true;
   threads?: { maxConcurrentPerBot: number; eventLogMaxBytes?: number; eventLogRetentionDays?: number };
   automaticRecovery?: { enabled: boolean; backup?: ModelSelection };
   /** Prompt-cache keep-warm for idle Claude threads. Absent from older servers. */
@@ -112,9 +121,13 @@ export interface ConfigStatus {
    * saved. OpenRouter only: `keySource` says which key is in use (its own, or
    * the one under Settings → API keys); `sharedKey`: that one is on file. */
   decider?: {
-    provider: "jev" | "workersai" | "openrouter" | "gemini";
-    /** The OpenRouter model in use, or the fixed Gemini Decision model; present only for those two providers. */
+    provider: "jev" | "workersai" | "openrouter" | "gemini" | "custom";
+    /** The OpenRouter or custom model in use, or the fixed Gemini Decision model; present only while that is the provider. */
     model?: string;
+    /** The custom endpoint's protocol, or the OpenRouter API. */
+    api?: "chat" | "decisions" | "systemone";
+    /** The custom endpoint's base URL (the person's own setting, not a secret); custom only. */
+    baseUrl?: string;
     configured: boolean;
     keySource?: "own" | "shared";
     sharedKey?: boolean;
@@ -160,7 +173,7 @@ export interface ConfigStatus {
   /** What a paired phone calls this computer; "" uses the default. */
   computerName?: string;
   /** Opt-in flags. Absent means off. */
-  features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean };
+  features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; savedSteps?: boolean; savedStepsHere?: boolean; usbPhoneTakeover?: boolean };
   /** The built-in Elephant-Goldfish Model skills, offered to every bot; on unless false. */
   egmSkills?: { enabled?: boolean };
   /** First-run progress: whether the welcome tour was finished and which
@@ -218,6 +231,12 @@ export interface BrowserEngineSummary {
   /** Self-hosted servers only: whether bots' browsers may open this server's own sites and its local network
    * (browserEngine.egress.localNetwork, off by default). Absent on the desktop and on MausBot Cloud. */
   serverSites?: boolean;
+  /** Whether an owner-configured SOCKS5 upstream is active; the endpoint is never exposed in config status. */
+  proxyConfigured?: boolean;
+  /** Whether an owner-configured SOCKS5 upstream is saved, even if the current browser engine cannot use it. */
+  proxySaved?: boolean;
+  /** Team Cloud only: whether this caller may change the shared SOCKS5 upstream. */
+  proxyEditable?: boolean;
 }
 
 export interface BrowserProfile {

@@ -1273,7 +1273,7 @@ export class CdpProxy {
     const onClose = () => { if (!res.writableEnded) ctrl.abort(); };
     req.once("close", onClose);
     res.once("close", onClose);
-    let release: (() => void) | void;
+    let release: (() => void) | void | undefined;
     const deadline = Date.now() + (this.wsCommandTimeoutMs ?? RELAY_SINGLE_REQUEST_WAIT_MS);
     try {
       await this.ensureUpstreamStrict({ deadline, signal: ctrl.signal });

@@ -10,6 +10,7 @@ import type {
   SendTurnInput,
 } from "../../contracts.ts";
 import { type DeviceSignIn } from "../device-auth.ts";
+import { type AcpBrowserSignInSpec } from "./browser-auth.ts";
 import type { AcpSteerSupport } from "./steer.ts";
 import { type AcpQuestionRequest } from "./question-requests.ts";
 import { type AcpModelSelection } from "./session-model-controls.ts";
@@ -28,6 +29,8 @@ export interface AcpConfig {
   cli: string;
   fullAuto: boolean;
   workspace?: string;
+  /** Custom ACP only: the agent advertises a `steer` command and answers `/steer <text>` during a turn as Hermes does. */
+  steer?: boolean;
 }
 
 /** Per-CLI specifics plugged into the shared ACP runtime; `askTool` is the native tool `questionRequests` come from. */
@@ -72,7 +75,7 @@ export interface AcpSupport {
   install?: EngineInstall;
   /** The CLI's own device-code login (`grok login --device-auth`), run with the turns' binary and
    * environment and confirmed by isAuthenticated. */
-  deviceSignIn?: DeviceSignIn;
+  deviceSignIn?: DeviceSignIn; browserSignIn?: AcpBrowserSignInSpec;
   /** CLI argv AFTER the binary name to enter ACP stdio mode. */
   spawnArgs(config: AcpConfig, turn: SendTurnInput): string[];
   /** Provider credential variables this ACP child is allowed to inherit. */
@@ -128,10 +131,14 @@ export interface AcpSupport {
   shareProcess?: boolean;
   /** Route workspace file access through ACP so edits retain approval cards. */
   clientFileSystem?: boolean;
+  /** Additional server-owned directories this turn may read; writes remain confined to cwd. */
+  clientReadRoots?(turn: SendTurnInput): readonly string[];
   /** Sent as `clientCapabilities._meta` on initialize, where agents read vendor capabilities. */
   clientCapabilitiesMeta?: Record<string, unknown>;
   /** Made once per process: rewrites a session/update before the turn reads it, or drops it by returning null. */
   updateFilter?(): (update: Record<string, any>) => Record<string, any> | null;
+  /** Rewrites a session/request_permission's params (its options and tool call) before the card is built. */
+  permissionRequest?(params: Record<string, any>): Record<string, any>;
   /** The agent reaches MCP servers by URL: OpenMausBot's own servers are this server's endpoints, no process each. */
   ownMcpOverHttp?: boolean;
   /** The engine receives session/new's mcpServers. A bridge that drops them (codearts, meoo,
@@ -143,9 +150,13 @@ export interface AcpSupport {
    * picks what to tell the person. Null when this process keeps none. A `shared` log holds every session's
    * and process's lines, so its lines prove nothing about this turn and only `parse` reads them. */
   statusLog?: {
-    path(env: Record<string, string | undefined>, sessionId: string): string | null;
+    /** `pid` is the ACP child's process id, for CLIs that name their per-process log after it (Qoder). */
+    path(env: Record<string, string | undefined>, sessionId: string, pid?: number): string | null;
     parse(line: string, sessionId: string): LogSignal | null;
     shared?: true;
+    /** A retry this log reports is the engine waiting out its provider's queue on its own (Qoder 10605): the turn
+     * watchdog counts it as the turn's activity, as it would an event. */
+    keepsTurnAlive?: true;
   };
   /** Bound provider-native tool payloads before writing diagnostic logs. */
   sanitizeToolPayload?: boolean;

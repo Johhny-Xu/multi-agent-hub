@@ -1,6 +1,8 @@
 // Google Antigravity through its official ACP server: managed runtime, isolated Google profile,
 // model/mode configuration and OAuth.
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import { dirname, join } from "node:path";
+import { stageAntigravitySkills } from "./antigravity-skills.ts";
 import { antigravityAccount } from "./antigravity-account.ts";
 import {
   newEventId,
@@ -16,15 +18,14 @@ import type { RuntimeEvent, RuntimeEventListener } from "../../shared/runtime-ev
 import { DATA_DIR } from "../config.ts";
 import { noticeFailure } from "../chat-notices.ts";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./acp/core.ts";
 import {
   AntigravityAuthController,
   antigravityProfileAuthenticated,
+  antigravityProfileDirectory,
   prepareAntigravityProfile,
   probeAntigravityModels,
   isAddedAntigravityAccount,
-  antigravityProfileDirectory,
   removeAntigravitySignIn,
   validateAntigravityRuntime,
 } from "./antigravity-acp.ts";
@@ -108,6 +109,7 @@ const support: AcpSupport = {
   sessionScopedApproval: true,
   resumeMethod: "resume",
   clientFileSystem: true,
+  clientReadRoots: (turn) => (turn.skillFiles ?? []).map(dirname),
   sanitizeToolPayload: true,
 
   resolveCommand: async (env, config, instanceId) => {
@@ -121,6 +123,7 @@ const support: AcpSupport = {
         ? [...runtime.spawnArgs, ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]
         : runtime.spawnArgs,
       env: profile.environment,
+      ro: [join(profile.directory, "omb-skills")],
     };
   },
 
@@ -319,7 +322,10 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
     };
     return {
       ...base,
-      adapter,
+      adapter: {
+        ...adapter,
+        sendTurn: async (turn) => adapter.sendTurn(stageAntigravitySkills(turn, antigravityProfileDirectory(input.instanceId))),
+      },
       get models() {
         return withBackend(base.models, antigravityBackendBook);
       },

@@ -49,7 +49,7 @@ test("dispatch acceptance wait is capped at 25 seconds by the shared deadline", 
 });
 
 test("bridge copies stay independently installable and identical", async () => {
-  for (const file of ["hub.mjs", "server.mjs", "ask.mjs", "login.mjs", "config.mjs", "discovery.mjs"]) {
+  for (const file of ["hub.mjs", "answer.mjs", "server.mjs", "ask.mjs", "login.mjs", "config.mjs", "discovery.mjs"]) {
     const copies = await Promise.all(roots.map((root) => readFile(new URL(root + file, import.meta.url), "utf8")));
     const hashes = copies.map((copy) => createHash("sha256").update(copy).digest("hex"));
     for (const hash of hashes.slice(1)) assert.equal(hash, hashes[0], `${file} drifted`);

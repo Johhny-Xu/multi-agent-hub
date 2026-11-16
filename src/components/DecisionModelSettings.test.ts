@@ -110,7 +110,7 @@ describe("DecisionModelSettings", () => {
   it("offers every provider, with Jev selected for an existing install and no model picker", () => {
     const view = render();
     expect(view.provider!.props.value).toBe("jev");
-    expect(optionsOf(view.provider!)).toEqual(["jev", "openrouter", "gemini"]);
+    expect(optionsOf(view.provider!)).toEqual(["jev", "openrouter", "gemini", "custom"]);
     expect(view.html).toContain("TypeSafe Jev");
     expect(view.model).toBeUndefined();
     expect(fixture.effects).toHaveLength(1);
@@ -118,10 +118,40 @@ describe("DecisionModelSettings", () => {
     expect(fixture.api).not.toHaveBeenCalled();
   });
 
+  it("asks a custom endpoint for its base URL, model and protocol, and saves its key in its own slot", async () => {
+    fixture.config = status({ provider: "custom", model: "m-1", api: "decisions", baseUrl: "https://gw.example.com/v1", configured: false, enabled: false, jobs: { roomRouting: true } });
+    let view = render();
+    expect(view.html).toContain('value="https://gw.example.com/v1"');
+    expect(view.html).toContain('value="m-1"');
+    expect(view.html).toContain("Endpoint API key");
+    expect(view.html).not.toContain("typesafe.ai");
+    fixture.api.mockResolvedValue(fixture.config);
+    type(view.input, "gw-key");
+    view = render();
+    click(view.save);
+    await flush();
+    expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ decider: { customKey: "gw-key" } }) });
+    expect(deciderFailureText({ reason: "malformed" }, false, "custom")).toContain("Check the protocol and model ID.");
+    expect(deciderFailureText({ reason: "http_error", status: 500 }, false, "custom")).toBe("Your endpoint sent back an error (500).");
+  });
+
   it("lists only the jobs that work: no coming-soon rows", () => {
     const view = render();
     for (const label of ["Browser clicks", "Tool selection", "Where work runs", "Coming soon"]) expect(view.html).not.toContain(label);
     expect(view.switches).toHaveLength(4);
+  });
+
+  it("keeps browser automation off a custom gateway and says why", () => {
+    fixture.config = status({
+      provider: "custom", model: "m-1", api: "decisions", baseUrl: "https://gw.example.com/v1",
+      configured: true, enabled: true, jobs: { roomRouting: true },
+    });
+    const view = render();
+    expect(view.browser.props.disabled).toBe(true);
+    expect(view.html).toContain("Browser automation requires TypeSafe Jev");
+    // A Jev gateway still offers it.
+    fixture.config = status({ provider: "jev", configured: true, enabled: true, jobs: { roomRouting: true } });
+    expect(render().browser.props.disabled).toBe(false);
   });
 
   it("every button shows a pointer cursor", () => {

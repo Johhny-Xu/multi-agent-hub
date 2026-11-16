@@ -1,6 +1,7 @@
+import { instructionsUpdateRefusal } from "./automation-instructions.ts";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-
+import { ROUTINE_RUN_LIMIT_MINUTES } from "../shared/routines.ts";
 import { formatInstant, routineCronText } from "./routine-cron-text.ts";
 import { conversationLanguage } from "./server-lines.ts";
 import { plainClock, plainTimeZone, plainWeekdays } from "../shared/plain-time-zone.ts";
@@ -15,7 +16,7 @@ import {
   type RoutineToolScheduleInput,
 } from "./routine-request-schemas.ts";
 import { runsOnce } from "../shared/limit-reset.ts";
-import { limitResetOccurrence } from "./routine-schedules.ts";
+import { limitResetOccurrence, noFutureResumeMessage } from "./routine-schedules.ts";
 import {
   intervalHasRestrictions,
   nextOccurrence,
@@ -214,8 +215,8 @@ function duration(value: number | undefined): number {
 
 function timeout(value: number | null | undefined): number | null | undefined {
   if (value == null) return value;
-  if (!Number.isInteger(value) || value < 5 || value > 240) {
-    throw new RoutineRequestError("timeoutMinutes must be a whole number from 5 to 240");
+  if (!Number.isInteger(value) || value < 5 || value > 1_440) {
+    throw new RoutineRequestError("timeoutMinutes must be a whole number from 5 to 1440");
   }
   return value;
 }
@@ -398,16 +399,6 @@ function ownedRoutine(manager: RoutineManager, id: string, botId: string): Routi
   return manager.listRoutines().find((routine) => routine.id === id && routine.botId === botId) ?? null;
 }
 
-function noFutureResumeMessage(schedule: RoutineSchedule): string {
-  if (schedule.type === "interval") {
-    return "That interval routine has no future runs. Choose a later end time or remove the end restriction before resuming.";
-  }
-  if (schedule.type === "once") {
-    return "That one-time routine's scheduled time has passed. Update it to a new future time before resuming.";
-  }
-  return "That routine has no future runs. Update its schedule before resuming.";
-}
-
 function normalizedOperation(
   manager: RoutineManager,
   botId: string,
@@ -430,11 +421,14 @@ function normalizedOperation(
   const current = ownedRoutine(manager, id, ownerBotId);
   if (!current) throw new RoutineRequestError("That routine does not exist", 404);
   if (validated.action === "update") {
+    const changes = normalizeChanges(validated.changes, now, ownEngine);
+    const refusal = instructionsUpdateRefusal(current.prompt, changes.instructions);
+    if (refusal) throw new RoutineRequestError(refusal, 409);
     return {
       action: "update",
       routineId: id,
       expectedUpdatedAt: current.updatedAt,
-      changes: normalizeChanges(validated.changes, now, ownEngine),
+      changes,
       ...(validated.forBot ? { forBot: validated.forBot } : {}),
     };
   }
@@ -683,7 +677,7 @@ function cardCopy(
   // Credential-shaped values never travel back through the bot's MCP response or into the transcript.
   const visibleInstructions = redactSecretsInText(definition.instructions);
   const runLimit = definition.timeoutMinutes === undefined
-    ? "no run limit"
+    ? `default run limit (${ROUTINE_RUN_LIMIT_MINUTES / 60} hours of work)`
     : `${definition.timeoutMinutes} min limit`;
   return {
     title,

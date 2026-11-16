@@ -13,6 +13,7 @@ export type BotUpdatePatch = Partial<
     | "autoStartVps"
     | "color"
     | "mascotExpression"
+    | "mascotBody"
     | "mascotFaceColor"
     | "avatarUrl"
     | "avatarCrop"
@@ -29,6 +30,7 @@ export type BotUpdatePatch = Partial<
     | "voiceNotes"
     | "voiceNoteEveryReply"
     | "xResearch"
+    | "toolsOff"
     | "pinned"
     | "hidden"
     | "sidebarHidden"
@@ -49,6 +51,8 @@ export type BotUpdatePatch = Partial<
   connectorTools?: Bot["connectorTools"] | null;
   connectorScopes?: Bot["connectorScopes"] | null;
   phoneApps?: Bot["phoneApps"] | null;
+  /** null demotes a default bot to a regular one; the server clears the mark. Body only: bot state drops the field. */
+  defaultBot?: Bot["defaultBot"] | null;
   /** The server's proof the local-auto warning was shown: wire-only, never folded into bot state. */
   acknowledgeLocalAuto?: boolean;
   applyToAllThreads?: boolean;
@@ -61,13 +65,14 @@ export type BotUpdatePatch = Partial<
 
 export type BotStatePatch = Omit<
   BotUpdatePatch,
-  "computer" | "connectorTools" | "connectorScopes" | "phoneApps" | "acknowledgeLocalAuto" | "applyToAllThreads" | "keepThreadModels" | "threadId" | "mainThreadChoice"
+  "computer" | "connectorTools" | "connectorScopes" | "phoneApps" | "defaultBot" | "acknowledgeLocalAuto" | "applyToAllThreads" | "keepThreadModels" | "threadId" | "mainThreadChoice"
 > & {
   mainThreadId?: string;
   computer?: Bot["computer"];
   connectorTools?: Bot["connectorTools"];
   connectorScopes?: Bot["connectorScopes"];
   phoneApps?: Bot["phoneApps"];
+  defaultBot?: Bot["defaultBot"];
 };
 
 interface BotPatchQueueEntry {
@@ -126,11 +131,14 @@ const stateOverlay = (patch: BotUpdatePatch): BotStatePatch => {
     connectorTools,
     connectorScopes,
     phoneApps,
+    defaultBot,
     ...fields
   } = patch;
   const normalized: BotStatePatch = { ...fields };
   if (computer === null) normalized.computer = undefined;
   else if (computer !== undefined) normalized.computer = computer;
+  if (defaultBot === null) normalized.defaultBot = undefined;
+  else if (defaultBot !== undefined) normalized.defaultBot = defaultBot;
   if (connectorTools === null) normalized.connectorTools = undefined;
   else if (connectorTools !== undefined) normalized.connectorTools = connectorTools;
   if (connectorScopes === null) normalized.connectorScopes = undefined;
@@ -146,6 +154,8 @@ export function createBotPatchQueue(options: BotPatchQueueOptions): BotPatchQueu
   const entries = new Map<string, BotPatchQueueEntry>();
   const delayMs = options.delayMs ?? 400;
   let disposed = false;
+  // Once the page is going away every later save must survive it, including one queued behind an in-flight request.
+  let leaving = false;
 
   const settleIfIdle = (entry: BotPatchQueueEntry) => {
     if (entry.running || entry.timer !== null || hasFields(entry.pending)) return;
@@ -153,7 +163,7 @@ export function createBotPatchQueue(options: BotPatchQueueOptions): BotPatchQueu
     for (const resolve of entry.idleWaiters.splice(0)) resolve(entry.fallback);
   };
 
-  const drain = async (entry: BotPatchQueueEntry, leaving = false): Promise<void> => {
+  const drain = async (entry: BotPatchQueueEntry, requestedLeaving = false): Promise<void> => {
     if (disposed || entry.running || entry.timer !== null || !hasFields(entry.pending)) return;
     entry.running = true;
     const patch = entry.pending;
@@ -163,7 +173,7 @@ export function createBotPatchQueue(options: BotPatchQueueOptions): BotPatchQueu
     entry.controller = controller;
 
     try {
-      const bot = await options.send(entry.botId, patch, controller.signal, entry.fallback, leaving);
+      const bot = await options.send(entry.botId, patch, controller.signal, entry.fallback, leaving || requestedLeaving);
       if (disposed || entry.cancelled) return;
       entry.fallback = bot;
       options.onAuthoritative(bot, stateOverlay(entry.pending));
@@ -259,6 +269,7 @@ export function createBotPatchQueue(options: BotPatchQueueOptions): BotPatchQueu
     },
 
     flushAll() {
+      leaving = true;
       for (const entry of entries.values()) {
         if (entry.timer === null) continue;
         clearTimeout(entry.timer);

@@ -5,7 +5,6 @@ import { BUILT_IN_DRIVERS } from "./builtIn.ts";
 import { DEFAULT_FLEET, PRODUCT_FLEET_ADDITIONS } from "../instance-fleets.ts";
 import { engineCapabilities } from "../runtime/capabilities.ts";
 import { TOOL_SCOPE_SUPPORT } from "../../shared/tool-scope-support.ts";
-import { engineForDriver } from "../../src/lib/analytics-allowlist.ts";
 import { supportsWorkspaceFiles } from "../workspace.ts";
 import {
   accountOrder, createDumateDriver, createDumateFetch, decodeDumateConfig, DUMATE_MODELS, NOT_SIGNED_IN, pointsShort,
@@ -68,7 +67,6 @@ describe("DuMate driver pieces", () => {
     expect((PRODUCT_FLEET_ADDITIONS as Record<string, { driver: string }>).dumate).toEqual({ driver: "dumate" });
     expect(engineCapabilities("dumate").resume).toBe(engineCapabilities("greenference").resume);
     expect(TOOL_SCOPE_SUPPORT.dumate).toBe("native-and-mcp");
-    expect(engineForDriver("dumate")).toBe("dumate");
     expect(supportsWorkspaceFiles("dumate")).toBe(false);
   });
 });

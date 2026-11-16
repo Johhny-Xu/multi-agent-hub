@@ -188,7 +188,16 @@ export interface MimocodeCli {
   version: string;
 }
 
-let verified: { key: string; cli: MimocodeCli | null } | null = null;
+/** A failed probe is retried soon: a CLI installed or repaired after it must not stay invisible for the whole session. */
+const NEGATIVE_PROBE_TTL_MS = 5_000;
+
+type VerifiedMimocode = {
+  key: string;
+  cli: MimocodeCli | null;
+  expiresAt: number;
+};
+
+let verified: VerifiedMimocode | null = null;
 
 /** Forget the cached `--version` probe (tests). */
 export function resetMimocodeCliCache(): void {
@@ -208,10 +217,13 @@ function probeVersion(path: string, env: Record<string, string | undefined>): Pr
 export async function verifyMimocodeCli(
   env: Record<string, string | undefined>,
   cli: string,
+  options: { refresh?: boolean } = {},
 ): Promise<MimocodeCli | null> {
   const candidates = mimocodeCliCandidates(env, cli);
   const key = candidates.join("\u0000");
-  if (verified?.key === key) return verified.cli;
+  if (!options.refresh && verified?.key === key && (verified.cli !== null || verified.expiresAt > Date.now())) {
+    return verified.cli;
+  }
   let found: MimocodeCli | null = null;
   for (const candidate of candidates) {
     const version = await probeVersion(candidate, env);
@@ -220,7 +232,7 @@ export async function verifyMimocodeCli(
       break;
     }
   }
-  verified = { key, cli: found };
+  verified = { key, cli: found, expiresAt: found ? Number.POSITIVE_INFINITY : Date.now() + NEGATIVE_PROBE_TTL_MS };
   return found;
 }
 
@@ -256,8 +268,9 @@ function normalizeMimocodeTurn(turn: SendTurnInput): SendTurnInput {
 async function resolveModels(
   env: Record<string, string | undefined>,
   config: { cli: string },
+  options: { refresh?: boolean } = {},
 ): Promise<ModelCatalog> {
-  const cli = await verifyMimocodeCli(env, config.cli);
+  const cli = await verifyMimocodeCli(env, config.cli, options);
   if (!cli) return MIMOCODE_MODELS;
   return new Promise<ModelCatalog>((settle) => {
     execFile(cli.path, ["models"], { timeout: 25_000, maxBuffer: 4 * 1024 * 1024, env }, (error, stdout) => {
@@ -305,7 +318,9 @@ const support: AcpSupport = {
     return { state: "available", version: cli.version, authenticated: mimocodeSignedIn(env), billing: "subscription" };
   },
 
-  resolveModels: async (env, config) => mergeLocalInject(await resolveModels(env, config), env),
+  // A refresh is the person asking again: it re-probes even a failed `--version`.
+  resolveModels: async (env, config, _instanceId, fresh) =>
+    mergeLocalInject(await resolveModels(env, config, { refresh: fresh === true }), env),
 
   // A local-inject pick (`9router::model`) becomes the CLI-native `omb-9router/model` with its provider
   // in MIMOCODE_CONFIG_CONTENT (E70); bundled ids pass unchanged.

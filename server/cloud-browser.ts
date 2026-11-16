@@ -363,6 +363,15 @@ interface MachineState {
   lightInflight?: Promise<MachineHealth>;
 }
 
+/** One shared bring-up per machine, cancelled only once the last caller waiting on it has left. */
+type BringupWaiters = {
+  controller: AbortController;
+  count: number;
+  settled: boolean;
+  /** Stops forwarding the pool's close to this bring-up. */
+  detach: () => void;
+};
+
 function abortedPromise(signal: AbortSignal | undefined): Promise<never> | null {
   if (!signal) return null;
   if (signal.aborted) return Promise.reject(new Error("aborted"));
@@ -411,6 +420,7 @@ export class CloudBrowserPool {
   readonly #light = new Map<string, { at: number; health: MachineHealth }>();
   readonly #states = new Map<string, MachineState>();
   readonly #sharedBringupStarted = new Map<string, number>();
+  readonly #bringupWaiters = new Map<string, BringupWaiters>();
   readonly #closingController = new AbortController();
   readonly #poolV2?: boolean | (() => boolean);
 
@@ -521,6 +531,41 @@ export class CloudBrowserPool {
     return entry && this.#deps.now() - entry.at < (machine.relayAlias ? BOX_HEALTH_TTL_MS : HEALTH_TTL_MS) ? entry.health : undefined;
   }
 
+  /** The bring-up every caller of this machine shares right now, counted so the last caller's cancel can end it. */
+  #joinBringup(machineId: string): BringupWaiters {
+    const existing = this.#bringupWaiters.get(machineId);
+    if (existing) {
+      existing.count += 1;
+      return existing;
+    }
+    const controller = new AbortController();
+    const onClosing = () => controller.abort();
+    if (this.#closingController.signal.aborted) controller.abort();
+    else this.#closingController.signal.addEventListener("abort", onClosing, { once: true });
+    const context: BringupWaiters = {
+      controller,
+      count: 1,
+      settled: false,
+      detach: () => this.#closingController.signal.removeEventListener("abort", onClosing),
+    };
+    this.#bringupWaiters.set(machineId, context);
+    return context;
+  }
+
+  /** A caller is done waiting: the shared work stops only when nobody is waiting and it has not finished. */
+  #leaveBringup(machineId: string, context: BringupWaiters): void {
+    context.count = Math.max(0, context.count - 1);
+    if (context.count > 0) return;
+    if (!context.settled) context.controller.abort();
+    context.detach();
+    if (this.#bringupWaiters.get(machineId) === context) this.#bringupWaiters.delete(machineId);
+  }
+
+  #settleBringup(machineId: string): void {
+    const context = this.#bringupWaiters.get(machineId);
+    if (context) context.settled = true;
+  }
+
   async #probeV2(url: string, timeoutMs: number | undefined, ctx?: ProbeContext): Promise<{ ok: boolean; detail?: string }> {
     if (this.#deps.probeRelay) {
       const res = await this.#deps.probeRelay(url, { ...ctx, ...(timeoutMs !== undefined ? { timeoutMs } : {}) }).catch((): RelayProbeResult => ({
@@ -535,6 +580,7 @@ export class CloudBrowserPool {
   /** "passive": never asks a relayed box anything; "light": a cold relayed box only says whether it is awake and how
    * busy; "up": the machine is made usable, a relayed box's relay and Chrome brought up. Others ignore the mode. */
   async #check(machine: CloudBrowserMachine, mode: "passive" | "light" | "up", ctx?: ProbeContext): Promise<MachineHealth> {
+    if (ctx?.signal?.aborted) return { ok: false, detail: "已取消" };
     if (this.#isV2()) return await this.#checkV2(machine, mode, ctx);
     if (machine.relayAlias && !this.#warm.has(machine.id)) {
       if (mode === "passive") return { ok: false, detail: "空闲未连" };
@@ -595,6 +641,7 @@ export class CloudBrowserPool {
     } finally {
       this.#inflight.delete(machine.id);
       this.#sharedBringupStarted.delete(machine.id);
+      this.#settleBringup(machine.id);
     }
   }
 
@@ -630,7 +677,7 @@ export class CloudBrowserPool {
         if (mode === "passive") return { ok: false, detail: "正在清理连接" };
         if (state.drainPromise) {
           await state.drainPromise.catch(() => {});
-          if (state.phase === "quarantined" && this.#deps.now() < state.quarantineUntil) {
+          if ((state as { phase: string }).phase === "quarantined" && this.#deps.now() < state.quarantineUntil) {
             return { ok: false, detail: "隔离冷却中" };
           }
         }
@@ -749,7 +796,7 @@ export class CloudBrowserPool {
       const wasWarm = this.#warm.has(machine.id);
       if (mode === "up" || wasWarm || remoteStarted) {
         const tornDown = await this.#drainV2(machine, "health", checkGen, seqBefore, true);
-        if (!tornDown && state.phase === "ready") {
+        if (!tornDown && (state as { phase: string }).phase === "ready") {
           return { ok: true, ...(remoteLoad !== undefined ? { load: remoteLoad } : {}), cdpUrl: url };
         }
       } else {
@@ -778,6 +825,7 @@ export class CloudBrowserPool {
     } finally {
       this.#inflight.delete(machine.id);
       this.#sharedBringupStarted.delete(machine.id);
+      this.#settleBringup(machine.id);
     }
   }
 
@@ -928,6 +976,7 @@ export class CloudBrowserPool {
     }
 
     state.waiters += 1;
+    const bringup = this.#joinBringup(machine.id);
     try {
       const sharedStart = this.#sharedBringupStarted.get(machine.id) ?? enteredAt;
       const sharedDeadline = sharedStart + timing.bringupBudgetMs;
@@ -986,7 +1035,7 @@ export class CloudBrowserPool {
             return this.#health.get(machine.id)!.health;
           }
         }
-        return await this.#check(machine, "up", { deadline: sharedDeadline, signal: this.#closingController.signal });
+        return await this.#check(machine, "up", { deadline: sharedDeadline, signal: bringup.controller.signal });
       })());
 
       if (!checkResult.ok || !checkResult.cdpUrl) {
@@ -1001,6 +1050,7 @@ export class CloudBrowserPool {
       return { cdpUrl: checkResult.cdpUrl, generation: state.generation };
     } finally {
       state.waiters = Math.max(0, state.waiters - 1);
+      this.#leaveBringup(machine.id, bringup);
     }
   }
 

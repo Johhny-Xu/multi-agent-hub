@@ -5,6 +5,7 @@ import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../shared/credentia
 import { rankSkills } from "../../shared/skill-fit.ts";
 import { isSkillSwitchAction, skillSwitchVerb } from "../../shared/skill-request.ts";
 import { EMAIL_CREDENTIAL } from "../../shared/email.ts";
+import { noCloudComputerNote } from "../../shared/team-setup.ts";
 
 import { peerName } from "../peer-roster.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
@@ -14,11 +15,12 @@ import { harnessClientFromEnv } from "./agents-client.ts";
 import type { HarnessClient, Json } from "./agents-client.ts";
 import { memorySearchText } from "./memory-search-text.ts";
 import { boundedAgentResult } from "./agents-result.ts";
-import { outOfBounds } from "./agents-schema.ts";
+import { argumentNames, outOfBounds } from "./agents-schema.ts";
 import { dropBlankArguments } from "./agents-blank-arguments.ts";
 import { callResearchTool, RESEARCH_TOOL_NAMES } from "./agents-research-tools.ts";
 import { callHelperTool, HELPER_TOOL_NAMES } from "./agents-helper-tools.ts";
 import { callUsageLimitsTool, USAGE_LIMITS_TOOL } from "./agents-usage-tool.ts";
+import { callThreadPostTool, THREAD_POST_TOOL } from "./agents-thread-post-tool.ts"; import { callRenameThreadTool, RENAME_THREAD_TOOL } from "./agents-thread-title-tool.ts";
 import { callWaitTool, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
 import { callBurstTool } from "./agents-burst-tool.ts";
 import { callComputerAskTool, COMPUTER_ASK_TOOL_NAMES } from "./agents-computer-ask-tool.ts";
@@ -33,7 +35,6 @@ import { callDevsTool, DEVS_TOOL_NAMES } from "./agents-devs-tools.ts";
 export interface ToolCallContext {
   botId: string;
   threadId: string;
-  depth: number;
   /** A standing external runtime: its capability cannot reach the result cache, so big results are cut. */
   externalRuntime: boolean;
   // Presentation only: the server still authenticates and scopes every call.
@@ -52,7 +53,6 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
   return {
     botId: profile.botId,
     threadId: env.OMB_THREAD_ID ?? "",
-    depth: Number(env.OMB_TURN_DEPTH ?? "0") || 0,
     externalRuntime: env.OMB_EXTERNAL_RUNTIME === "1",
     sharedComputers: profile.sharedComputers,
     client: harnessClientFromEnv(env),
@@ -217,7 +217,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   const refused = outOfBounds(name, fullInputSchema(name), args);
   if (refused) return { text: refused, isError: true };
   const member = agentsCallMember(name, args);
-  const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH } = context;
+  const { botId: BOT_ID, threadId: THREAD_ID } = context;
   const { api, apiResponse } = context.client;
   if (name === "vm_exec") {
     const { ok, body } = await apiResponse("/api/internal/vm-exec", {
@@ -305,10 +305,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       && (canonical.reply === undefined || canonical.reply === "resume" || canonical.reply === "none")
       && optional("consult", "boolean") && optional("in_my_folder", "boolean")
       && optional("done_when", "string") && optional("reason", "string") && optional("title", "string") && optional("answers", "string")
-      && (canonical.group_id === undefined || canonical.group_id === null || typeof canonical.group_id === "string");
+      && (canonical.group_id === undefined || canonical.group_id === null || typeof canonical.group_id === "string") && (canonical.files === undefined || canonical.files === null || (Array.isArray(canonical.files) && canonical.files.every((path) => typeof path === "string") && canonical.files.filter((path) => path.trim()).length <= 5));
     if (!usable) {
       return {
-        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, title, thread ("standing", "new" or the id of a thread you opened on that teammate), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false), done_when and answers are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
+        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, title, thread ("standing", "new" or the id of a thread you opened on that teammate), reply ("resume" or "none"), consult (true or false), in_my_folder (true or false), done_when, answers and files (an array of at most 5 file paths) are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
         isError: true,
       };
     }
@@ -319,7 +319,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       thread: canonical.thread, reply: canonical.reply,
       title: typeof canonical.title === "string" && canonical.title.trim() ? canonical.title.trim() : undefined, consult: canonical.consult, inMyFolder: canonical.in_my_folder,
       done_when: typeof canonical.done_when === "string" && canonical.done_when.trim() ? canonical.done_when.trim() : undefined,
-      answers: typeof canonical.answers === "string" && canonical.answers.trim() ? canonical.answers.trim() : undefined,
+      answers: typeof canonical.answers === "string" && canonical.answers.trim() ? canonical.answers.trim() : undefined, files: Array.isArray(canonical.files) && canonical.files.some((path) => path.trim()) ? canonical.files.filter((path) => path.trim()) : undefined,
     }) });
     return { text: JSON.stringify(r), ...(r.error ? { isError: true } : {}) };
   }
@@ -403,6 +403,8 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       text: `Posted in ${r.roomName ?? "the room"}${r.attachedVoiceNote ? " with the voice note attached" : ""}. Nobody's turn was started, so expect no reply — tell the user it is posted.`,
     };
   }
+  if (name === THREAD_POST_TOOL) return callThreadPostTool(args, context);
+  if (name === RENAME_THREAD_TOOL) return callRenameThreadTool(args, context);
   if (name === "select_computer") {
     if (args.surface !== undefined && (typeof args.surface !== "string" || !["auto", "cloud", "vm", "local", "browser"].includes(args.surface))) {
       return { text: "Choose auto, cloud, vm, local or browser; omit surface to inspect connected choices.", isError: true };
@@ -411,6 +413,14 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       method: "POST", body: JSON.stringify({ surface: args.surface }),
     });
     return { text: JSON.stringify(result) };
+  }
+  if (name === "reset_cloud_computer") {
+    const forBotId = String(args.for_bot_id ?? "").trim();
+    const r = await apiResponse("/api/internal/cloud-computer/reset", {
+      method: "POST", body: JSON.stringify({ why: args.why, ...(forBotId ? { targetBotId: forBotId } : {}) }),
+    });
+    if (!r.ok) return { text: String(r.body.error ?? `reset_cloud_computer failed (HTTP ${r.status}).`), isError: true };
+    return { text: String(r.body.text ?? "") };
   }
   if (name === "list_threads") {
     const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID });
@@ -442,7 +452,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (!title || !message) return { text: "start_thread needs title (one short line) and message (the complete first message).", isError: true };
     const toBotId = typeof args.bot_id === "string" ? args.bot_id.trim() : "";
     const folder = typeof args.folder === "string" ? args.folder.trim() : "";
-    const body: Record<string, unknown> = { fromBotId: BOT_ID, fromThreadId: THREAD_ID, title, message, depth: DEPTH };
+    const body: Record<string, unknown> = { fromBotId: BOT_ID, fromThreadId: THREAD_ID, title, message };
     if (toBotId) body.toBotId = toBotId;
     if (folder) body.folder = folder;
     if (args.model_selection !== undefined) {
@@ -518,8 +528,9 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     const botName = String(args.name ?? "").trim();
     const role = String(args.role ?? "").trim();
     const instructions = String(args.instructions ?? "").trim();
-    if (!botName || !role || !instructions) {
-      return { text: "create_bot needs name, role, and instructions.", isError: true };
+    const copyFrom = typeof args.copy_from_bot_id === "string" ? args.copy_from_bot_id.trim() : "";
+    if (!botName || (!copyFrom && (!role || !instructions))) {
+      return { text: "create_bot needs name, role, and instructions, or name and copy_from_bot_id.", isError: true };
     }
     const r = await api(`/api/internal/create-bot`, {
       method: "POST",
@@ -529,6 +540,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
         name: botName,
         role,
         instructions,
+        ...(copyFrom ? { copyFromBotId: copyFrom } : {}),
         ...(args.modelSelection !== undefined ? { modelSelection: args.modelSelection } : {}),
         ...(typeof args.cwd === "string" ? { cwd: args.cwd.trim() } : {}),
       }),
@@ -537,8 +549,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       return { text: `One review card is visible: ${String(r.title)}. @${botName} has not been created yet. End this turn; the decision and structured result resume you automatically once. Do not ask again, poll, or repeat this request.` };
     }
     if (!r.id) return completedProposalResult(r, `creating @${botName}`) ?? { text: `@${botName} was not created.`, isError: true };
+    const created = r.name ?? botName;
+    const noComputer = r.noCloudComputerYet === true ? noCloudComputerNote(String(created)) : "";
     return {
-      text: `Created @${r.name ?? botName} in ${r.section ?? "General"} [id: ${r.id}].${r.modelSelection ? ` Model: ${JSON.stringify(r.modelSelection)}.` : ""} Assign work with coordinate_bots.`,
+      text: `Created @${created} in ${r.section ?? "General"} [id: ${r.id}].${r.modelSelection ? ` Model: ${JSON.stringify(r.modelSelection)}.` : ""} Assign work with coordinate_bots.${noComputer}`,
     };
   }
   if (member === "create_room") {
@@ -679,8 +693,9 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (typeof args.cwd === "string") changes.cwd = args.cwd.trim();
     if (typeof args.notifications === "boolean") changes.notifications = args.notifications;
     if (typeof args.speakReplies === "boolean") changes.speakReplies = args.speakReplies;
+    if (typeof args.browserProfile === "string") changes.browserProfile = args.browserProfile.trim();
     if (!Object.keys(changes).length) {
-      return { text: "propose_profile needs at least one of name, title, description, soul, cwd, notifications, or speakReplies.", isError: true };
+      return { text: "propose_profile needs at least one of name, title, description, soul, cwd, notifications, speakReplies, or browserProfile.", isError: true };
     }
     const forBotId = String(args.for_bot_id ?? "").trim();
     const r = await api("/api/internal/profile-requests", {
@@ -907,11 +922,11 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       };
     }
     if (args.action !== "create" && args.action !== "update") {
-      return { text: 'skill_manage action must be "create", "update", "enable", "disable" or "delete".', isError: true };
+      return { text: `skill_manage action must be "create", "update", "enable", "disable" or "delete". It takes ${argumentNames(fullInputSchema(name))}.`, isError: true };
     }
     const skillMd = typeof args.skill_md === "string" ? args.skill_md : "";
     if (!skillMd.trim()) {
-      return { text: 'skill_manage needs skill_md: the full SKILL.md including YAML frontmatter.', isError: true };
+      return { text: 'skill_manage needs skill_md: the full SKILL.md including YAML frontmatter, e.g. "---\\nname: file-expense\\ndescription: Files an expense in the company portal.\\n---\\n\\n# File expense\\n".', isError: true };
     }
     const source = typeof args.source === "string" ? args.source.trim() : "";
     if (!source) {
@@ -949,6 +964,11 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   if (name === "mcp_server") {
     const r = await apiResponse("/api/internal/mcp-servers", { method: "POST", body: JSON.stringify(args) });
     if (!r.ok) return { text: String(r.body.error ?? `mcp_server failed (HTTP ${r.status}).`), isError: true };
+    return { text: String(r.body.text ?? "") };
+  }
+  if (name === "app_settings") {
+    const r = await apiResponse("/api/internal/app-settings", { method: "POST", body: JSON.stringify(args) });
+    if (!r.ok) return { text: String(r.body.error ?? `app_settings failed (HTTP ${r.status}).`), isError: true };
     return { text: String(r.body.text ?? "") };
   }
   return { text: `Unknown tool: ${name}`, isError: true };

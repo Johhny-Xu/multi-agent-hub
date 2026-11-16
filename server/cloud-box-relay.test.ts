@@ -208,7 +208,7 @@ describe("the box relay script", () => {
         let buffer = Buffer.alloc(0);
         let stage = 0;
         socket.on("data", (chunk) => {
-          buffer = Buffer.concat([buffer, chunk]);
+          buffer = Buffer.concat([buffer, typeof chunk === "string" ? Buffer.from(chunk) : chunk]);
           if (stage === 0) {
             if (buffer.length < 3) return;
             buffer = buffer.subarray(2 + buffer[1]!);

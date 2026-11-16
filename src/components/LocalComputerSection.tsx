@@ -764,7 +764,7 @@ function SafetyLine({ perBot, path }: { perBot: boolean; path: string }) {
   </div>;
 }
 
-export function LocalComputerSection() {
+export function LocalComputerSection({ privateOnly = false }: { privateOnly?: boolean }) {
   const cloudHome = useStore().state.config?.cloudHome === true;
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -913,6 +913,7 @@ export function LocalComputerSection() {
   }, [inventoryRefreshKey, refreshInventory, status?.mode]);
 
   useEffect(() => {
+    if (privateOnly) return;
     const controller = new AbortController();
     setCloudLoading(true);
     void refreshCloudInventory(controller.signal)
@@ -925,9 +926,10 @@ export function LocalComputerSection() {
         if (!controller.signal.aborted) setCloudLoading(false);
       });
     return () => controller.abort();
-  }, [cloudRefreshKey, refreshCloudInventory]);
+  }, [cloudRefreshKey, privateOnly, refreshCloudInventory]);
 
   useEffect(() => {
+    if (privateOnly) return;
     const controller = new AbortController();
     setVpsLoading(true);
     void refreshVpsInventory(controller.signal)
@@ -940,7 +942,7 @@ export function LocalComputerSection() {
         if (!controller.signal.aborted) setVpsLoading(false);
       });
     return () => controller.abort();
-  }, [refreshVpsInventory, vpsRefreshKey]);
+  }, [privateOnly, refreshVpsInventory, vpsRefreshKey]);
 
   const post = async (action: Exclude<Action, "recreate">, signal: AbortSignal) => {
     const response = await fetch(`/api/local-computer/${action}`, {
@@ -1194,7 +1196,7 @@ export function LocalComputerSection() {
   return (
     <>
       <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</p>
-      <CloudComputersCard
+      {!privateOnly && <><CloudComputersCard
         instances={cloudInventory}
         configured={cloudConfigured}
         loading={cloudLoading}
@@ -1205,7 +1207,6 @@ export function LocalComputerSection() {
         onSleep={(instance) => void actOnCloudComputer("sleep", instance)}
         onDelete={(instance) => void actOnCloudComputer("delete", instance)}
       />
-
       <VpsComputersCard
         instances={vpsInventory}
         sections={vpsSections}
@@ -1218,8 +1219,7 @@ export function LocalComputerSection() {
         onRefresh={() => setVpsRefreshKey((key) => key + 1)}
         onRemove={(instance) => void removeVpsComputer(instance)}
       />
-
-      <MacLocalControl />
+      <MacLocalControl /></>}
 
       {!cloudHome && <>
       <Card
@@ -1273,8 +1273,8 @@ export function LocalComputerSection() {
         subtitle={t("vm.isolation.subtitle")}
       >
         <div className="flex justify-end">
-          <Segmented label={t("vm.isolation.title")} value={status?.mode === "per-bot" ? "per-bot" : "shared"}
-            onChange={(mode) => { if (status && !policyPending) void savePolicy(mode, status.max_instances ?? 2); }}
+          <Segmented label={t("vm.isolation.title")} value={status?.mode === "per-bot" ? "per-bot" : "shared"} disabled={!status || policyPending}
+            onChange={(mode) => { if (status) void savePolicy(mode, status.max_instances ?? 2); }}
             options={[{ value: "shared" as const, label: t("vm.isolation.shared") }, { value: "per-bot" as const, label: t("vm.isolation.perBot") }]} />
         </div>
         {perBot && (

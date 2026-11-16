@@ -2,6 +2,25 @@
 
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.3.3] - 2026-11-17
+
+### 变更
+
+- **底座升级到 OpenMausBot `0.1.161`**：在 0.1.154 的基础上合并上游 0.1.161（含 Antigravity 评审补丁），补回合并中丢失的 `AcpSupport.permissionRequest`，修正 shared-process 停止时的重复 kill 回归，类型检查只剩已知的 checkin 一处。
+- **Qoder 排队不再被误杀**：Qoder 服务端排队（10605 / RESOURCE_LIMIT）期间的状态会喂给 ACP 空闲判定和回合看门狗，排队中的回合不会被当成卡死而中止。
+
+### 修复
+
+- **全项目扫描修复 18 个问题**（BUGSCAN-1116，共 21 项，B01、B07、B16 本轮不改）：
+  - Meoo：SSE 解析与环境文件读取的 4 处问题；
+  - Perch：已有宽松权限的配置文件现在会收紧，写 MCP 配置不再跟随符号链接；
+  - Kimi token 与 Grok key 文件权限收紧，Grok 目录创建修正（新增 `secure-file` 安全写入工具）；
+  - ACP Host：私密响应 ID 与定时器在请求结束后清理；
+  - 决策模型：自定义模型与 browserAutomation 设置的组合问题；
+  - 云浏览器就绪等待可以取消，bot 配置更新保持连接；
+  - OpenCode 模型目录缓存按配置隔离（2 处），MiMo 负缓存修正，MCode 取消状态修正；
+  - MCP hub 占位回复修正，新增 `mcp/answer.mjs` 并同步到各桥接副本。
+
 ## [1.3.0] - 2026-11-07
 
 **这是一次重构而不是增量更新**：仓库主干从自建的 agenthub WebUI 换成 OpenMausBot 的多引擎工作台，hub 原有的 MCP 任务池、签到与配额作为附属模块留下。

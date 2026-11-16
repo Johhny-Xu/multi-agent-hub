@@ -1,6 +1,6 @@
 // Kimi Code: Moonshot's `kimi acp` on the Kimi Code subscription login
 // (~/.kimi-code/credentials), not a Moonshot API key. Verified on kimi-code 0.29.1.
-import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -8,6 +8,7 @@ import type { ModelCatalog } from "../../contracts.ts";
 import type { DeviceSignIn, DeviceSignInState } from "../device-auth.ts";
 import { decodeInjectId, hostApiKey, LOCAL_HOSTS, localHost, mergeLocalInject } from "../local-inject.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import { chmodPrivateFile, ensurePrivateDirectory, writePrivateFileAtomic } from "./secure-file.ts";
 import { currentEngineCatalog } from "../../model-manifest/manifest.ts";
 import { ENGINE_MODEL_ID } from "../../model-manifest/schema.ts";
 
@@ -27,13 +28,15 @@ function kimiDataRoot(env: Record<string, string | undefined>): string {
 const KIMI_TOKEN_FILE = /^kimi-code(?:-env-[0-9a-f]+)?\.json$/;
 
 /** kimi-code 2.4.1 (revokedTombstone) keeps a sign-in the provider refused as a file with both tokens empty, and reads an
- * unparseable file as no sign-in. */
+ * unparseable file as no sign-in. A token that is present but not a non-empty string is malformed, not a login. */
 function kimiTokenHeld(path: string): boolean {
   try {
     const token: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!token || typeof token !== "object") return false;
+    if (!token || typeof token !== "object" || Array.isArray(token)) return false;
     const { access_token: access, refresh_token: refresh } = token as Record<string, unknown>;
-    return !(access === "" && refresh === "");
+    const accessHeld = typeof access === "string" && access.trim().length > 0;
+    const refreshHeld = typeof refresh === "string" && refresh.trim().length > 0;
+    return accessHeld || refreshHeld;
   } catch {
     return false;
   }
@@ -411,7 +414,7 @@ export function ensureKimiInjectAlias(
 
   const alias = `${inject.host}/${inject.model.replace(/\//g, "-")}`;
   const dataRoot = kimiDataRoot(env);
-  mkdirSync(dataRoot, { recursive: true });
+  ensurePrivateDirectory(dataRoot, { followLink: true });
   const path = join(dataRoot, "config.toml");
   let text = "";
   try {
@@ -452,9 +455,12 @@ export function ensureKimiInjectAlias(
   }
   if (blocks.length) {
     const prefix = text && !text.endsWith("\n") ? `${text}\n\n` : text ? `${text}\n` : "";
-    writeFileSync(path, `${prefix}${blocks.join("\n")}`);
+    writePrivateFileAtomic(path, `${prefix}${blocks.join("\n")}`, { followLink: true });
   } else if (text !== original) {
-    writeFileSync(path, text);
+    writePrivateFileAtomic(path, text, { followLink: true });
+  } else if (existsSync(path)) {
+    // The content is already right, but an older file may still be group- or world-readable.
+    chmodPrivateFile(path);
   }
   return alias;
 }

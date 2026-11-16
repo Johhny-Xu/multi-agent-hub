@@ -13,7 +13,7 @@ import { shortcutLabel } from "../ShortcutHint";
 import { SettingsLook } from "../SettingsPrimitives";
 import { SettingsPageBody } from "./pages/SettingsPageBody";
 import { useSwitchToComputer } from "./inert";
-import { KEY_CATALOG, keyMatches, type KeyEntry } from "../keys/key-catalog";
+import { KEY_CATALOG, keyHidden, keyMatches, type KeyEntry } from "../keys/key-catalog";
 import { openKeySettings } from "../keys/key-focus";
 import { useSettingsContext, useSettingsPlace } from "./settings-context";
 import { needsAdvanced, pageById, resolveSettingsTarget, searchSettings, visiblePages, type SearchHit, type SettingsPageId } from "./settings-index";
@@ -58,7 +58,6 @@ export function SettingsWindow() {
   const [anchor, setAnchor] = useState<string | null>(target.anchor ?? null);
   const [narrowPage, setNarrowPage] = useState(state.appSettingsSection !== "overview");
   const [query, setQuery] = useState("");
-  const [scrolled, setScrolled] = useState(false);
   const pages = visiblePages(ctx);
   const page = pageById(target.page);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -80,7 +79,7 @@ export function SettingsWindow() {
   const hits = useMemo(() => searchSettings(query, ctx, (entry) => hitLabel({ entry, elsewhere: false, score: 0 }, place, ctx.desktop),
     (candidate) => pageLabel(candidate, place, ctx.desktop)), [query, ctx, place]);
 
-  const keyHits = useMemo(() => (ctx.client || !query.trim() ? [] : KEY_CATALOG.filter((entry) => keyMatches(entry, query.trim().toLowerCase())).slice(0, 8)), [ctx.client, query]);
+  const keyHits = useMemo(() => (ctx.client || !query.trim() ? [] : KEY_CATALOG.filter((entry) => !keyHidden(entry.id, state.config) && keyMatches(entry, query.trim().toLowerCase(), state.config)).slice(0, 8)), [ctx.client, query, state.config]);
   const openKey = (entry: KeyEntry) => { setQuery(""); setNarrowPage(true); dispatch(entry.uses ? openKeySettings(entry.uses, entry.id) : openKeySettings(entry.id)); };
   const computer = useSwitchToComputer();
   const close = () => dispatch({ type: "toggleAppSettings", open: false });
@@ -155,7 +154,7 @@ export function SettingsWindow() {
       <SettingsShellContext.Provider value={shell}>
         <div className="glass-popup-frame" data-settings-sheet data-settings-look="simple" style={{ ...glassPopupFrameStyle(), ["--settings-narrow-top" as string]: `${glassPopupTopInset() === GLASS_POPUP_GUTTER ? 12 : glassPopupTopInset()}px` }} onMouseDown={(event) => event.target === event.currentTarget && close()}>
           <div aria-hidden="true" className="glass-scrim pointer-events-none absolute inset-0" />
-          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="app-settings-title" tabIndex={-1} style={{ outline: "none" }}
+          <div ref={dialogRef} role="dialog" data-look="settings" aria-modal="true" aria-labelledby="app-settings-title" tabIndex={-1} style={{ outline: "none" }}
             data-settings-page-open={target.page} data-settings-advanced={ctx.advanced ? "" : undefined}
             className="glass-surface glass-popup animate-pop-in relative flex flex-col overflow-hidden text-ink">
             <span id="app-settings-title" className="sr-only">{t("settings.title")}</span>
@@ -186,10 +185,10 @@ export function SettingsWindow() {
               {(!narrow || !showList) && (
                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                   {!narrow && closeButton}
-                  <div ref={scrollRef} data-settings-scroll data-settings-content="" onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
+                  <div ref={scrollRef} data-settings-scroll data-settings-content=""
                     className={cn("settings-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]", narrow ? "pb-12" : "px-8 pb-12")}>
                     <div className={cn("flex max-w-[640px] flex-col", narrow && "max-w-none")}>
-                      <SettingsPageHeader page={page} ctx={ctx} place={place} scrolled={scrolled} narrow={narrow} missing={missing} />
+                      <SettingsPageHeader page={page} ctx={ctx} place={place} narrow={narrow} missing={missing} />
                       <div key={target.page} data-settings-page-body={target.page} className={cn("flex flex-col gap-6", narrow && "px-4")}>
                         <LicenseExpiryBanner config={state.config} />
                         {page.owner === "place" && state.config === null

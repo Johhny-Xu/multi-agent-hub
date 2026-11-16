@@ -860,7 +860,7 @@ export class ZcodeAppServer {
     const providerId = typeof request.providerId === "string" ? request.providerId : "";
     const access = request.accountAccess as Record<string, unknown> | undefined;
     const pushed = this.accountCredentials ? zcodeStartPlanProviderId(this.accountCredentials.domain) : undefined;
-    if (pushed && providerId === pushed && access?.mode === "start-plan") {
+    if (pushed && this.accountCredentials && providerId === pushed && access?.mode === "start-plan") {
       this.write({ id, result: { headersApplied: true, requestAuth: { apiKey: this.accountCredentials.jwt } } });
       return;
     }

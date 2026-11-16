@@ -204,6 +204,24 @@ describe("Chat MCP session", () => {
     expect(calls).toEqual([dropped ? {} : { url: " " }, { url: "https://example.com" }]);
   });
 
+  it.each([
+    ["browser", "Open the address with browser_agent_browser_open first, then call browser_agent_browser_read without url."],
+    ["custom", "input schema"],
+  ] as const)("names the way to read an address when agent_browser_read's url is hidden (%s)", async (mountAs, error) => {
+    // agent-browser's read with its url hidden by slimBrowserToolList (email bug 1a1cb892)
+    const readSchema = { type: "object", properties: { filter: { type: "string" } }, additionalProperties: false };
+    const f = fixture(`if (message.method === "tools/list") { reply(message, {tools:[{name:"agent_browser_read",description:"Read the open page.",inputSchema:schema}]}); continue; }`, readSchema);
+    const session = await mountChatTools(mountAs === "browser" ? { browser: f.server } : { custom: { browser: f.server } }, f.controller.signal, true);
+    sessions.push(session);
+    const name = session.definitions[0]!.function.name;
+    expect(() => session.validate(name, { url: "https://example.com/swagger.json" })).toThrow(error);
+    expect(() => session.validate(name, { filter: 7 })).toThrow("input schema");
+    // a url of the wrong type, or another bad argument, keeps the schema error
+    expect(() => session.validate(name, { url: 7 })).toThrow("input schema");
+    expect(() => session.validate(name, { url: "https://example.com", filter: 7 })).toThrow("input schema");
+    expect(() => session.validate(name, {})).not.toThrow();
+  });
+
   it("shows a model behind Moonshot each schema fitted to its limit, and still checks calls against the full one", async () => {
     const full = wideSchema(110);
     const f = fixture("", full);
@@ -452,7 +470,7 @@ describe("Chat MCP session", () => {
     const f = fixture(`if (message.method === "tools/call") { send({jsonrpc:"2.0",id:message.id,error:{code:-1,message:"secret-fixture-key"}}); continue; }`);
     const session = await f.mount();
     const result = await session.execute("audit_write", { value: "test" }, f.controller.signal);
-    expect(result).toMatchObject({ ok: false, text: 'MCP request failed; inspect the configured integration That was the MCP server "audit".' });
+    expect(result).toMatchObject({ ok: false, text: 'MCP request failed; inspect the configured integration (method tools/call, JSON-RPC code -1) That was the MCP server "audit".' });
     expect(result.text).not.toContain("secret-fixture-key");
     expect(alive(f.read().pid)).toBe(true);
   });

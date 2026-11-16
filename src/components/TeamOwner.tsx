@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bell, Check } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { avatarMarks } from "@/lib/avatar-marks";
 import { t } from "@/lib/i18n";
 import { api, useStore, openThread, type Bot } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
@@ -40,10 +41,10 @@ export function PersonFace({ person, size = 18 }: { person: TeamPerson; size?: n
   const picture = pictureOf(person, useTeamPeople());
   const [failed, setFailed] = useState<string | null>(null);
   if (picture && failed !== picture) {
-    return <img src={picture} alt="" aria-hidden="true" draggable={false} data-person-picture={person.email} onError={() => setFailed(picture)}
+    return <img {...avatarMarks("person", "picture")} src={picture} alt="" aria-hidden="true" draggable={false} data-person-picture={person.email} onError={() => setFailed(picture)}
       style={{ width: size, height: size }} className="inline-block shrink-0 rounded-full bg-raised object-cover" />;
   }
-  return <span aria-hidden="true" style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
+  return <span {...avatarMarks("person", "initials")} aria-hidden="true" style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
     className={cn("inline-flex shrink-0 items-center justify-center rounded-full font-semibold leading-none text-white", hueOf(person.email))}>{initial(person)}</span>;
 }
 
@@ -115,7 +116,7 @@ export function pickOwnerOf(bot: Bot, team: TeamPeople, at: { x: number; y: numb
 /** A tag or passed message is done once its person opens it, even in a shared chat someone else already read. */
 function readConversation(groups: ReadonlyArray<{ id: string; threadId: string; tasks?: ReadonlyArray<{ threadId: string }> }>, botId: string, threadId: string) {
   const group = groups.find((one) => one.threadId === threadId || one.tasks?.some((task) => task.threadId === threadId));
-  void (group ? api(`/api/groups/${group.id}/read`, { method: "POST" }) : api(`/api/bots/${botId}/read`, { method: "POST", body: JSON.stringify({ threadId }) }))
+  void (group ? api(`/api/groups/${group.id}/read`, { method: "POST", body: JSON.stringify({ threadId }) }) : api(`/api/bots/${botId}/read`, { method: "POST", body: JSON.stringify({ threadId }) }))
     .then(() => refreshNeedsYou()).catch(() => {});
 }
 

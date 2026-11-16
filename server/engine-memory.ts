@@ -29,7 +29,7 @@ const STALL_PERCENT = 20;
 const MINUTE_MS = 60_000, DAY_MINUTES = 24 * 60;
 /** Engines that run each thread's turns in processes of their own. */
 export const ENGINE_PROCESS_KINDS: ReadonlySet<string> = new Set(["claudeAgent", "codex", "opencodeGo", "grokAgent", "geminiAgent", "kimiAgent",
-  "droidAgent", "cursorAgent", "qwenAgent", "hermesAgent", "clineAgent", "copilotAgent", "commandCodeAgent", "kiroAgent", "customAcp", "piAgent", "antigravityAgent",
+  "droidAgent", "cursorAgent", "qwenAgent", "hermesAgent", "clineAgent", "copilotAgent", "commandCodeAgent", "kiroAgent", "devinAgent", "customAcp", "piAgent", "ompAgent", "mistralVibeAgent", "antigravityAgent",
   // Same per-thread process model as the ACP engines above.
   "codebuddyAgent", "codebuddyCnAgent", "qoderAgent", "qoderCnAgent", "codeartsAcpAgent", "mcodeAgent", "meooAgent", "zcodeAgent", "perchAgent", "doubaoAgent",
   // dsh runs one process per thread as well; it was absent from this set upstream, so its threads never got the
@@ -270,6 +270,9 @@ export class EngineMemory {
     child.once("exit", (_code, signal) => this.exited(pid, engine, signal));
     this.arm();
   }
+
+  /** The engine processes tracked now, with the threads each runs: for the performance sampler's buckets. */
+  enginePids(): Array<{ pid: number; threads: string[] }> { return [...this.engines].map(([pid, engine]) => ({ pid, threads: [...engine.threads] })); }
 
   /** A thread's session now runs in this already tracked engine process. */
   attach(child: ChildProcess, threadId: string): void {

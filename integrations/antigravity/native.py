@@ -17,7 +17,7 @@ import uuid
 SOURCE = Path(__file__).resolve().parent
 NAME = 'multi-agent-hub'
 STATE_NAME = '.multi-agent-hub-install.json'
-MCP_FILES = ('server.mjs', 'hub.mjs', 'ask.mjs', 'login.mjs', 'config.mjs', 'discovery.mjs')
+MCP_FILES = ('server.mjs', 'hub.mjs', 'ask.mjs', 'login.mjs', 'config.mjs', 'discovery.mjs', 'answer.mjs')
 WORKERS = ('antigravity', 'codebuddy', 'codebuddy-cn', 'github-copilot',
            'mimocode', 'minimaxcode', 'traecode', 'zcode', 'codearts',
            'opencode', 'cline', 'qoder', 'qoder-cn')

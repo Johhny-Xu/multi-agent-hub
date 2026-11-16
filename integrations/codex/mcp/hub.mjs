@@ -4,6 +4,7 @@
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { cleanText, unusableAnswer } from "./answer.mjs";
 import { loadConnection } from "./config.mjs";
 
 export let HUB = null;
@@ -60,10 +61,6 @@ export function resolveWorker(raw) {
 function refRegex(worker) {
   const prefix = worker === "traecode" ? "(?:traecode|trae)" : worker;
   return new RegExp("^" + prefix + "-[0-9a-f]+$", "i");
-}
-
-function cleanText(text) {
-  return String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trim();
 }
 
 /** 从枢纽回执里提取正文，移除状态行和连续的退出码/会话元数据尾行。 */
@@ -207,6 +204,12 @@ async function taskOptions(options = {}) {
   return result;
 }
 
+/** The thread that asked for this dispatch, when the host mounted the hub MCP with one. Absent here means absent on the wire. */
+function originThreadHeader() {
+  const thread = String(process.env.HUB_ORIGIN_THREAD || process.env.AGENTHUB_ORIGIN_THREAD || "").trim();
+  return thread ? { "X-Hub-Origin-Thread": thread } : {};
+}
+
 function hubError(kind, text) {
   const error = new Error(text);
   error.kind = kind;
@@ -222,7 +225,7 @@ async function callTool(name, args, timeoutMs, allowToolError = false) {
   target.searchParams.delete("token");
   const resp = await fetch(target, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}), ...originThreadHeader() },
     body: payload,
     signal: AbortSignal.timeout(Math.max(1, Math.ceil(timeoutMs))),
   });
@@ -324,15 +327,6 @@ function parseReceipt(text, worker, expectedRef = null) {
     return { status: "running", ref, answer: "", ...extra };
   }
   return { status: "unknown", ref: expectedRef || "", answer: cleaned.slice(0, 500), ...extra };
-}
-
-const PLACEHOLDER_ANSWERS = new Set(["(无输出)", "(尚无文本)", "(no output)", "(empty)", "task received", "已收到任务", "任务已收到"]);
-
-function unusableAnswer(text) {
-  const value = cleanText(text).replace(/\s+/g, "").toLowerCase();
-  if (!value) return true;
-  if (PLACEHOLDER_ANSWERS.has(value)) return true;
-  return value.length <= 24 && ["思考中", "生成中", "thinking", "receivedthetask"].some((marker) => value.includes(marker));
 }
 
 /** Normalize one receipt while keeping the raw worker status and input ref. */

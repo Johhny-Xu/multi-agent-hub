@@ -164,6 +164,7 @@ describe("bot patch queue", () => {
           connectorTools: patch.connectorTools ?? undefined,
           connectorScopes: patch.connectorScopes ?? undefined,
           phoneApps: patch.phoneApps ?? undefined,
+          defaultBot: patch.defaultBot ?? undefined,
         });
       },
       reconcile: async () => bot(),
@@ -495,5 +496,36 @@ describe("bot patch queue", () => {
     await vi.advanceTimersByTimeAsync(400);
     await queue.flush("bot-1");
     expect(sent).toEqual([{ title: "still saves" }]);
+  });
+
+  it("keeps a save that was queued behind an in-flight one alive after the page leaves", async () => {
+    const first = deferredBot();
+    const sent: BotUpdatePatch[] = [];
+    const leaving: boolean[] = [];
+    const queue = createBotPatchQueue({
+      send: (_botId, patch, _signal, _current, requestedLeaving) => {
+        sent.push(patch);
+        leaving.push(requestedLeaving);
+        return sent.length === 1 ? first.promise : Promise.resolve(bot());
+      },
+      reconcile: async () => bot(),
+      onAuthoritative: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    queue.enqueue("bot-1", { title: "A" }, bot());
+    await vi.advanceTimersByTimeAsync(400);
+    expect(sent).toEqual([{ title: "A" }]);
+    queue.enqueue("bot-1", { name: "B" }, bot());
+    queue.flushAll();
+
+    first.resolve(bot({ title: "A" }));
+    await vi.runAllTicks();
+    await Promise.resolve();
+
+    expect(sent).toEqual([{ title: "A" }, { name: "B" }]);
+    expect(leaving).toEqual([false, true]);
+    await queue.flush("bot-1");
+    expect(sent).toHaveLength(2);
   });
 });

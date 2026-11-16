@@ -779,3 +779,146 @@ describe("E115 relay recovery V2", () => {
     }
   });
 });
+
+describe("a shared bring-up ends with its last waiter (B03)", () => {
+  const VPS_RELAY = {
+    instances: [{ id: "box1", name: "box-one", kind: "mcp", adapter: "simular-box", mcpServer: "simular-box" }],
+  };
+  const box = () => cloudBrowserMachines({ vps: VPS_RELAY, cloudOffload: { boxRelayVia: "ssh:relay-host" } } as never)[0]!;
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /** A bring-up held open at ensureRemote, so a test decides when it may finish. */
+  function heldBringUp() {
+    let clock = 0;
+    let release: () => void = () => {};
+    let signal: AbortSignal | undefined;
+    const events: string[] = [];
+    const stats = { remote: 0, ended: 0 };
+    const deps: CloudBrowserDeps & { tick(ms: number): void } = {
+      relayRecoveryV2: true,
+      tick: (ms) => { clock += ms; },
+      now: () => clock,
+      async ensureRemote(_machine, ctx) {
+        stats.remote += 1;
+        signal = ctx?.signal;
+        events.push("ensureRemote");
+        await new Promise<void>((resolve) => { release = resolve; });
+        return ctx?.signal?.aborted ? { ok: false, detail: "已取消" } : { ok: true, load: 0.1 };
+      },
+      async ensureTunnel() { events.push("ensureTunnel"); return true; },
+      async probe() { events.push("probe"); return true; },
+      async probeBox() { return { ok: true, load: 0.1 }; },
+      async teardown() { stats.ended += 1; events.push("teardown"); },
+      sleep: async () => {},
+    };
+    return { deps, events, stats, released: () => release(), aborted: () => signal?.aborted === true };
+  }
+
+  it("starts nothing for a waiter cancelled before the shared check begins", async () => {
+    const { deps, events, stats } = heldBringUp();
+    const pool = new CloudBrowserPool(deps);
+    const controller = new AbortController();
+    controller.abort();
+
+    const error = await pool.awaitRelayReady(box(), { signal: controller.signal }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(RelayError);
+    expect((error as RelayError).code).toBe("RELAY_CANCELLED");
+    expect(stats.remote).toBe(0);
+    expect(events).toEqual([]);
+  });
+
+  it("aborts the shared work when its only waiter leaves mid-ensureRemote", async () => {
+    const { deps, events, aborted, released } = heldBringUp();
+    const pool = new CloudBrowserPool(deps);
+    const controller = new AbortController();
+
+    const waiting = pool.awaitRelayReady(box(), { signal: controller.signal }).catch((caught: unknown) => caught);
+    await pause(10);
+    expect(events).toEqual(["ensureRemote"]);
+    expect(aborted()).toBe(false);
+
+    controller.abort();
+    const error = await waiting;
+    expect((error as RelayError).code).toBe("RELAY_CANCELLED");
+    expect(aborted()).toBe(true);
+
+    released();
+    await pause(20);
+    expect(events).not.toContain("ensureTunnel");
+  });
+
+  it("keeps the shared bring-up alive while another waiter is still waiting", async () => {
+    const { deps, events, stats, released } = heldBringUp();
+    const pool = new CloudBrowserPool(deps);
+    const controller = new AbortController();
+
+    const first = pool.awaitRelayReady(box(), { signal: controller.signal }).catch((caught: unknown) => caught);
+    await pause(10);
+    const second = pool.awaitRelayReady(box());
+    await pause(10);
+    expect(stats.remote).toBe(1);
+
+    controller.abort();
+    expect((await first) as RelayError).toMatchObject({ code: "RELAY_CANCELLED" });
+
+    released();
+    await expect(second).resolves.toMatchObject({ cdpUrl: "http://127.0.0.1:19351" });
+    expect(events).toContain("ensureTunnel");
+  });
+
+  it("aborts the shared work when the last waiter's own deadline passes", async () => {
+    const { deps, events, aborted, released } = heldBringUp();
+    const pool = new CloudBrowserPool(deps);
+
+    const waiting = pool.awaitRelayReady(box(), { deadline: 20 }).catch((caught: unknown) => caught);
+    const error = await waiting;
+
+    expect((error as RelayError).code).toBe("RELAY_RECOVERY_TIMEOUT");
+    expect(aborted()).toBe(true);
+    released();
+    await pause(20);
+    expect(events).not.toContain("ensureTunnel");
+  });
+
+  it("cancels a shared bring-up when the pool closes", async () => {
+    const { deps, events, aborted, released } = heldBringUp();
+    const pool = new CloudBrowserPool(deps);
+
+    const waiting = pool.awaitRelayReady(box()).catch((caught: unknown) => caught);
+    await pause(10);
+    pool.close();
+
+    expect((await waiting) as RelayError).toMatchObject({ code: "RELAY_CANCELLED" });
+    expect(aborted()).toBe(true);
+    released();
+    await pause(20);
+    expect(events).not.toContain("ensureTunnel");
+  });
+
+  it("never ends a bring-up that already finished when a later waiter leaves", async () => {
+    const events: string[] = [];
+    const pool = new CloudBrowserPool({
+      relayRecoveryV2: true,
+      now: () => 0,
+      async ensureRemote() { events.push("ensureRemote"); return { ok: true, load: 0.1 }; },
+      async ensureTunnel() { events.push("ensureTunnel"); return true; },
+      async probe() { return true; },
+      async probeBox() { return { ok: true, load: 0.1 }; },
+      async teardown() { events.push("teardown"); },
+      sleep: async () => {},
+    });
+    await expect(pool.awaitRelayReady(box())).resolves.toMatchObject({ cdpUrl: "http://127.0.0.1:19351" });
+    expect(pool.phaseOf("box1")).toBe("ready");
+
+    const controller = new AbortController();
+    const leaving = pool.awaitRelayReady(box(), { signal: controller.signal }).catch((caught: unknown) => caught);
+    controller.abort();
+    await leaving;
+
+    expect(pool.phaseOf("box1")).toBe("ready");
+    expect(events).not.toContain("teardown");
+    await expect(pool.awaitRelayReady(box())).resolves.toMatchObject({ cdpUrl: "http://127.0.0.1:19351" });
+    expect(events.filter((event) => event === "ensureRemote")).toHaveLength(1);
+  });
+});

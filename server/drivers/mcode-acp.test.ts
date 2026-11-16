@@ -4,7 +4,7 @@
 //
 // The CLI is a fake written to a temp directory; the real `mcode` is never called.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -64,6 +64,23 @@ if (mode === "session-history") {
 } else if (mode === "partial") {
   emit({ type: "item.started", item: { type: "agent_message", id: "m1", contentDelta: "I'll start by reading" } });
   hang();
+} else if (mode === "late-events") {
+  const argvPath = process.env.FAKE_MCODE_ARGV;
+  if (argvPath) {
+    fs.appendFileSync(require("node:path").join(process.cwd(), argvPath), JSON.stringify(process.argv.slice(2)) + "\\n");
+  }
+  // A cancelled process keeps writing for a moment: those lines belong to the run nobody waits for any more.
+  process.on("SIGTERM", () => {
+    emit({ type: "session.started", sessionId: "mvs_late" });
+    emit({ type: "item.started", item: { type: "agent_message", id: "m2", contentDelta: "LATE-TEXT" } });
+    emit({ type: "item.completed", item: { type: "tool_call", id: "i9", toolCall: { id: "call-late", name: "Read", status: "completed" } } });
+    setTimeout(() => process.exit(0), 30);
+  });
+  emit({ type: "item.started", item: { type: "agent_message", id: "m1", contentDelta: "first" } });
+  hang();
+} else if (mode === "tail-without-newline") {
+  process.stdout.write(JSON.stringify({ type: "exec.completed", result: { status: "succeeded", output: "tail answer" } }));
+  process.exit(0);
 } else {
   hang();
 }
@@ -391,5 +408,41 @@ describe("mcode ACP bridge", () => {
     const sessionId = await newSession(bridge);
 
     await expect(prompt(bridge, sessionId)).rejects.toThrow(/failed to answer/);
+  });
+
+  it("drops a cancelled run's late events and keeps them out of the next turn", async () => {
+    const bridge = startBridge({ FAKE_MCODE_MODE: "late-events", FAKE_MCODE_ARGV: "argv.log" });
+    const argvLog = join(bridge.dir, "argv.log");
+    const starts = () => existsSync(argvLog)
+      ? readFileSync(argvLog, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as string[])
+      : [];
+    const sessionId = await newSession(bridge);
+
+    const first = prompt(bridge, sessionId, "first task");
+    await waitFor(() => bridge.updates().some((update) => update?.content?.text === "first"));
+    bridge.notify("session/cancel", { sessionId });
+    await expect(first).resolves.toMatchObject({ stopReason: "cancelled" });
+
+    // A new turn starts before the cancelled process has finished writing.
+    const second = prompt(bridge, sessionId, "second task");
+    await waitFor(() => starts().length === 2);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(bridge.updates().filter((update) => String(update?.content?.text ?? "").includes("LATE"))).toHaveLength(0);
+    expect(bridge.updates().some((update) => update?.toolCallId === "call-late")).toBe(false);
+    // The old run's close must not take the new run's place: a third prompt still finds the session busy.
+    await expect(prompt(bridge, sessionId, "third task")).rejects.toThrow(/still running/);
+    expect(starts()[1]).not.toContain("mvs_late");
+
+    bridge.notify("session/cancel", { sessionId });
+    await expect(second).resolves.toMatchObject({ stopReason: "cancelled" });
+  });
+
+  it("still flushes a normal run's last line when its process closes", async () => {
+    const bridge = startBridge({ FAKE_MCODE_MODE: "tail-without-newline" });
+    const sessionId = await newSession(bridge);
+
+    await expect(prompt(bridge, sessionId)).resolves.toMatchObject({ stopReason: "end_turn" });
+    expect(bridge.updates().filter((update) => update?.content?.text === "tail answer")).toHaveLength(1);
   });
 });

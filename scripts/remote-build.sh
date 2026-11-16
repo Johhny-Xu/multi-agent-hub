@@ -35,7 +35,7 @@ rsync -az --delete \
   --exclude 'dist' \
   --exclude 'dist-server' \
   --exclude 'release' \
-  --exclude 'state' \
+  --exclude '/state' \
   --exclude '*.log' \
   ./ "${REMOTE_HOST}:${REMOTE_DIR}/"
 

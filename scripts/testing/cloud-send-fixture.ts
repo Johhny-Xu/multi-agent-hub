@@ -6,7 +6,7 @@
 // and a fake 1Password SDK; no network.
 import { randomBytes } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -124,6 +124,9 @@ export interface CloudTeamFixture {
   home: string;
   id: string;
   name: string;
+  /** What the Admin signs with and this Cloud reports with, and the machine id it reports as. */
+  secret: string;
+  machineId: string;
   /** The Admin's signed pairing for one member, as the Admin hands it to the app: a one-time code, not redeemed. */
   grant(member: TeamMember): Promise<{ origin: string; code: string; expiresAt: number }>;
   /** The Admin's signed pairing for one member, redeemed into a bearer. `body` replaces the member and team claims
@@ -139,6 +142,8 @@ export interface CloudTeamFixture {
   /** The server stopped and started again on the same data (a deploy). */
   relaunch(env?: NodeJS.ProcessEnv): Promise<void>;
 }
+
+const TEAM_MACHINE_ID = "0d9e8f7a-6b5c-4d3e-9f8a-7b6c5d4e3f2a";
 
 function fakeOnePassword(at: string, token: string): string {
   const sdk = join(at, "node_modules", "@1password", "sdk");
@@ -165,7 +170,10 @@ exports.createClient = async ({ auth }) => {
 export async function launchCloudSendFixture({ onePasswordToken, cloudOnePasswordToken = onePasswordToken, toolCalls = 0, broker, env = {}, cloudEnv = {}, cloudEngine = "", desktopEngine = "", space, cloudSignedIn = true, team }: {
   onePasswordToken: string; cloudOnePasswordToken?: string; toolCalls?: number;
   /** A Team Cloud too (OMB_CLOUD_ROLE=team), with its own environment and synthetic Claude CLI lines. */
-  team?: { id: string; name: string; env?: NodeJS.ProcessEnv; engine?: string; noAi?: boolean };
+  team?: { id: string; name: string; env?: NodeJS.ProcessEnv; engine?: string; noAi?: boolean;
+    /** Scopes of this checkout's node_modules (`@duckdb`) linked into the Team Cloud's native tree before it starts: the
+     * server can load DuckDB at its first config broadcast, and a failed load stays failed for the server's life. */
+    native?: string[] };
   broker?: { url: string; install(): Promise<{ id: string; token: string; userId: string }> };
   env?: NodeJS.ProcessEnv;
   /** My Cloud's own environment only (a store limit, say). */
@@ -286,16 +294,25 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "testing", "fake-cl
       mkdirSync(join(root, "team", ".openmausbot"), { recursive: true });
       writeFileSync(join(root, "team", ".openmausbot", "config.json"), JSON.stringify({ instances: Object.fromEntries(["claude", "codex", "cursor", "githubCopilot", "openaiCompat", "qwen", "hermes", "pi", "grok"].map((id) => [id, { driver: "not-a-real-driver" }])) }));
     }
+    for (const scope of team.native ?? []) {
+      mkdirSync(join(root, "team", "native", "node_modules"), { recursive: true });
+      symlinkSync(join(SERVER_DIR, "..", "node_modules", scope), join(root, "team", "native", "node_modules", scope), "junction");
+    }
     const startTeam = (more: NodeJS.ProcessEnv = {}) => start("team", { OMB_CLOUD_ROLE: "team", OMB_CLOUD_TEAM_ID: team.id, OMB_CLOUD_TEAM_NAME: team.name,
-      OMB_CLOUD_MACHINE_ID: "0d9e8f7a-6b5c-4d3e-9f8a-7b6c5d4e3f2a", OMB_CLOUD_ADMIN_URL: "https://cloud.example.test", OMB_CLOUD_BOOTSTRAP_SECRET: secret,
+      OMB_CLOUD_MACHINE_ID: TEAM_MACHINE_ID, OMB_CLOUD_ADMIN_URL: "https://cloud.example.test", OMB_CLOUD_BOOTSTRAP_SECRET: secret,
       OMB_PUBLIC_URL: `https://${CLOUD_HOST}`, OMB_TEST_INTERNAL_CAPABILITY_KEY: CAPABILITY_KEY, ...(broker ? { OMB_COMPOSIO_BROKER_URL: broker.url } : {}), ...team.env, ...more },
       teamPort, stopOverIpc ? ["--import", stopOnMessage] : [], stopOverIpc, onePasswordToken, 0, team.engine ?? "", true);
     let teamServer = await startTeam();
+    const teamFetch = (path: string, init: RequestInit) => fetch(`${teamBase}${path}`, init).catch(async (error: unknown) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const state = teamServer.exitCode === null && teamServer.signalCode === null ? "is still running" : `exited (${teamServer.exitCode ?? teamServer.signalCode})`;
+      throw new Error(`${init.method ?? "GET"} ${path} on the Team Cloud got no answer, and the Team Cloud ${state}. The servers' output:\n${logs.slice(-8_000)}`, { cause: error });
+    });
     const as: CloudTeamFixture["as"] = async (token, method, path, body, headers = {}) => {
       const init: RequestInit = { method, headers: { ...EDGE, authorization: `Bearer ${token}`, ...headers,
         ...(body === undefined || body instanceof Uint8Array ? {} : { "content-type": "application/json" }) } };
       if (body !== undefined) init.body = body instanceof Uint8Array ? body : JSON.stringify(body);
-      const response = await remember(await fetch(`${teamBase}${path}`, init));
+      const response = await remember(await teamFetch(path, init));
       return { status: response.status, body: parse(await response.text()) };
     };
     // A new Team Cloud's Chief gets a name at random, so one run in 64 it would share a name with a bot the test makes.
@@ -308,7 +325,7 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "testing", "fake-cl
       if (renamed.status !== 200) throw new Error(`could not name the team's Chief: ${renamed.status} ${JSON.stringify(renamed.body)}`);
     };
     teamFixture = {
-      base: teamBase, home: join(root, "team"), id: team.id, name: team.name,
+      base: teamBase, home: join(root, "team"), id: team.id, name: team.name, secret, machineId: TEAM_MACHINE_ID,
       async grant(member) {
         const body = JSON.stringify({ label: "OpenMausBot app (Team Cloud)", ttlSeconds: 300, team: { id: team.id, name: team.name }, member });
         const timestamp = String(Math.floor(Date.now() / 1000)), nonce = randomBytes(16).toString("base64url");
@@ -321,11 +338,11 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "testing", "fake-cl
         const claims = options.body ?? { team: { id: team.id, name: team.name }, ...(member ? { member } : {}) };
         const body = JSON.stringify({ label: options.label ?? "OpenMausBot app (Team Cloud)", ttlSeconds: 300, ...claims });
         const timestamp = String(Math.floor(Date.now() / 1000)), nonce = randomBytes(16).toString("base64url");
-        const minted = await remember(await fetch(`${teamBase}/api/cloud/pairing`, { method: "POST", headers: { ...EDGE, "content-type": "application/json",
+        const minted = await remember(await teamFetch("/api/cloud/pairing", { method: "POST", headers: { ...EDGE, "content-type": "application/json",
           "x-omb-cloud-timestamp": timestamp, "x-omb-cloud-nonce": nonce, "x-omb-cloud-signature": `v1=${cloudPairingSignature(options.secret ?? secret, timestamp, nonce, body)}` }, body }));
         const grant = parse(await minted.text());
         if (minted.status !== 200) return { status: minted.status, body: grant, token: null };
-        const paired = await remember(await fetch(`${teamBase}/api/auth/pair`, { method: "POST", headers: { ...EDGE, "content-type": "application/json" }, body: JSON.stringify({ code: grant.code }) }));
+        const paired = await remember(await teamFetch("/api/auth/pair", { method: "POST", headers: { ...EDGE, "content-type": "application/json" }, body: JSON.stringify({ code: grant.code }) }));
         const session = parse(await paired.text());
         if (paired.status !== 200) return { status: paired.status, body: session, token: null };
         if (!chiefNamed && member && member.role !== "member") {

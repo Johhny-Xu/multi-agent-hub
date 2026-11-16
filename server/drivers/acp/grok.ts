@@ -1,6 +1,6 @@
 // Grok Build: the official `grok` CLI over ACP stdio (`grok … agent stdio`) on the grok.com
 // subscription login (~/.grok/auth.json), not the xAI API key. Verified against grok 1.0.0.
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parse as parseYaml } from "yaml";
@@ -10,6 +10,7 @@ import { harnessHome, splitCliString } from "../../env-path.ts";
 import type { DeviceSignIn, DeviceSignInState } from "../device-auth.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import { assertPrivateFile, chmodPrivateFile, ensurePrivateDirectory, writePrivateFileAtomic } from "./secure-file.ts";
 import { bundledEngineCatalog } from "../../model-manifest/bundled.ts";
 import { currentEngineCatalog } from "../../model-manifest/manifest.ts";
 import { ENGINE_MODEL_ID } from "../../model-manifest/schema.ts";
@@ -166,7 +167,11 @@ export function ensureGrokInjectSlug(
   const host = localHost(inject.host);
   if (!host) return modelId;
 
-  const path = join(grokHome(env), "config.toml");
+  // Only a local-inject turn has a reason to create Grok's home: an ordinary cloud turn must not.
+  const home = grokHome(env);
+  ensurePrivateDirectory(home, { followLink: true });
+  const path = join(home, "config.toml");
+  assertPrivateFile(path);
   let text = "";
   try {
     text = readFileSync(path, "utf8");
@@ -206,7 +211,10 @@ export function ensureGrokInjectSlug(
     if (key === "base_url") current.baseUrl = value;
   }
   flush();
-  if (found) return found;
+  if (found) {
+    if (existsSync(path)) chmodPrivateFile(path);
+    return found;
+  }
 
   const slug = suggestGrokSlug(inject.host, inject.model, taken);
   const heading = /[^a-z0-9_-]/i.test(slug) ? `[model."${slug}"]` : `[model.${slug}]`;
@@ -220,7 +228,7 @@ export function ensureGrokInjectSlug(
     "",
   ].join("\n");
   const next = text && !text.endsWith("\n") ? `${text}\n\n${block}` : `${text}${text ? "\n" : ""}${block}`;
-  writeFileSync(path, next);
+  writePrivateFileAtomic(path, next, { followLink: true });
   return slug;
 }
 

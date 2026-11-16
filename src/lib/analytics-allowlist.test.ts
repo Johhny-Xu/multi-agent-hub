@@ -32,6 +32,10 @@ describe("engine slugs", () => {
     expect([...slugs].sort()).toEqual([...ENGINE].sort());
   });
 
+  it("gives the DuMate chat engine its own slug", () => {
+    expect(engineForDriver("dumate")).toBe("dumate");
+  });
+
   it("maps an instance through its driver, never sending the instance id or its name", () => {
     const instances = [
       { instanceId: "claude-3f0c2b1e-9d1a-4c55-8a51-0a3a6f1e2b7c", driverKind: "claudeAgent" },

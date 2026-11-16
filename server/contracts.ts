@@ -222,6 +222,8 @@ export interface SendTurnInput {
   mcpFromUserConfig?: boolean;
   /** Claude Code loads the person's own `~/.claude/skills` from this folder's `.claude/skills` (`--add-dir`). */
   userSkillsDir?: string;
+  /** Harness-selected SKILL.md files available to this turn; a driver may stage their folders for native file access. */
+  skillFiles?: readonly string[];
   /** The bot's own Claude Code settings: `.claude/settings.json` in its working folder, else in its own folder. A Claude
    * turn in any other folder takes their hooks, plugins, permission rules and env. */
   botSettingsFile?: string;
@@ -326,6 +328,9 @@ export interface ProviderAdapter {
   hasSession(threadId: ThreadId): boolean;
   /** The local process running this thread's engine, while there is one: a long tool call's own processes are under it. */
   enginePid?(threadId: ThreadId): number | undefined;
+  /** When the thread's engine last showed, outside its events, that the turn is still waiting on its model (a provider
+   * queue it waits out on its own): the turn watchdog counts it as activity. undefined when it has not. */
+  engineAliveAt?(threadId: ThreadId): number | undefined;
   stopAll(): Promise<void>;
   /** Closes every engine process that is between turns, and one that is running a turn as soon as that turn ends. A
    * CLI reads its sign-in when it starts, so a process started before an account switch keeps the old account until
@@ -376,7 +381,10 @@ export interface ProviderSnapshot {
   update?: {
     title: string;
     message: string;
-    command: string;
+    /** Absent when there is nothing to run here, e.g. My Cloud's engines update with the Cloud. */
+    command?: string;
+    /** False when the app installer cannot supply this version; offer the terminal command instead. */
+    serverInstall?: false;
   };
   /** On a subscription a reported cost is notional. */
   billing?: "metered" | "subscription";
@@ -583,7 +591,7 @@ export interface ProviderInstance {
   /** Optional first-party runtime installation and account setup. */
   readonly installRuntime?: () => Promise<void>;
   readonly startAuthentication?: () => Promise<ProviderAuthenticationStart>;
-  readonly authenticationMethod?: "browser-pkce";
+  readonly authenticationMethod?: "browser-pkce" | "browser";
   readonly getAuthentication?: (flowId: string) => Promise<ProviderAuthenticationStatus>;
   readonly completeAuthentication?: (flowId: string, callbackUrl: string) => Promise<void>;
   readonly cancelAuthentication?: () => Promise<void>;

@@ -8,12 +8,11 @@ import { AdminOnly } from "../../AdminOnly";
 import { AutomaticRecoverySettings } from "../../AutomaticRecoverySettings";
 import { AwayEmailsSetting } from "../../AwayEmailsSetting";
 import { PausedBotsButton } from "../../AwakeBotsPicker";
-import { BuiltInBrowserRow, NewBrowserSettings, ServerSitesRow } from "../../BrowserSettingsRows";
+import { BrowserProxyRow, BuiltInBrowserRow, NewBrowserSettings, ServerSitesRow } from "../../BrowserSettingsRows";
 import { CacheKeepWarmSettings } from "../../CacheKeepWarmSettings";
 import { TeamPeopleCard } from "../../CloudAccountSettings";
 import { CloudKeepHere } from "../../CloudKeepHere";
 import { CustomDomainSettings } from "../../CustomDomainSettings";
-import { WorkspaceBackupSettings } from "../../WorkspaceBackupSettings";
 import { preloadConnectedApps } from "@/lib/connected-apps";
 import { DecisionModelSettings } from "../../DecisionModelSettings";
 import { DefaultBotSidebarRow } from "../../DefaultBotControls";
@@ -99,12 +98,6 @@ export function OverviewPage() {
     <SettingsGroup label={t("settings.overview.sidebar")} block="sidebar">
       <SettingsRows><PlaceLookRows /><DefaultBotSidebarRow simple /></SettingsRows>
     </SettingsGroup>
-    {/* Simple keeps what a person needs from Data here: back up and bring a backup back. */}
-    {!ctx.advanced && !ctx.client && (
-      <SettingsGroup label={t("settings.overview.yourData")} block="your-data">
-        <AdminOnly><WorkspaceBackupSettings compact /></AdminOnly>
-      </SettingsGroup>
-    )}
     {ctx.desktop && ctx.cloud && team && team.cloudPage && <div data-settings-block="people-and-plan"><TeamPeopleCard team={team} /></div>}
     {/* Address: a self-hosted server's own web address, Advanced only. A Cloud's address is MausBot's to manage, so it
         has none here (no administrator or proxy steps for a person who has no server to set up). */}
@@ -189,7 +182,7 @@ export function DesktopsPage() {
   const [details, setDetails] = useState(anchor === "desktop-details");
   return <>
     <SettingsGroup label={t("settings.desktops.browserSection")} block="browser">
-      <SettingsRows><BuiltInBrowserRow /><ServerSitesRow />{ctx.advanced && <div data-settings-block="new-browser" className="contents"><NewBrowserSettings /></div>}</SettingsRows>
+      <SettingsRows><BuiltInBrowserRow /><ServerSitesRow /><BrowserProxyRow />{ctx.advanced && <div data-settings-block="new-browser" className="contents"><NewBrowserSettings /></div>}</SettingsRows>
     </SettingsGroup>
     <AdminOnly><DesktopKinds /><div data-settings-block="auto-placement" className="contents"><AutoPlacementSettings /></div><CloudOffloadSettings /></AdminOnly>
     <BrowserProfilesRow />

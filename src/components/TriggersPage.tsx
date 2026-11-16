@@ -107,7 +107,8 @@ export function TriggersPage({ onBack, onOpenRoom }: { onBack: () => void; onOpe
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
               <LimitWarnings botFilter={showFilter ? botFilter : "all"} />
-              {all.length === 0 && state.routinesLoadState !== "loading" && state.hydrated ? (
+              {state.config?.routinesUnreadable && <div role="alert" className="mb-4 rounded-lg bg-danger/10 p-3 text-[12px] leading-relaxed text-danger" data-routines-unreadable="">{t("routines.unreadable")}</div>}
+              {all.length === 0 && !state.config?.routinesUnreadable && state.routinesLoadState !== "loading" && state.hydrated ? (
                 <section aria-label={t("automations.empty.title")} className="px-6 py-16 text-center">
                   <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-accent/10 text-accent"><Zap size={22} /></div>
                   <h2 className="text-[17px] font-semibold text-ink">{t("automations.empty.title")}</h2>
@@ -122,21 +123,22 @@ export function TriggersPage({ onBack, onOpenRoom }: { onBack: () => void; onOpe
                     const unseenProblem = automation.runs.find((run) => isRoutineProblemRun(run) && !run.seenAt);
                     const problemLine = unseenProblem && runLine(unseenProblem);
                     return (
-                      <li key={automation.id} data-automation={automation.id} data-automation-status={status.state} className={cn("flex items-start gap-3 px-4 py-3.5", openId === automation.id && "bg-raised/60")}>
+                      <li key={automation.id} data-automation={automation.id} data-automation-status={status.state} className={cn("relative flex items-start gap-3 px-4 py-3.5", openId === automation.id && "bg-raised/60")}>
                         <StatusMark status={status} className="mt-[5px]" />
                         <div className="min-w-0 flex-1">
-                          <button type="button" onClick={() => setOpenId(automation.id)} className="block text-left text-[15px] font-medium leading-snug text-ink hover:text-accent-text">{name || sentenceOf(automation)}</button>
+                          <button type="button" onClick={() => setOpenId(automation.id)} className="block text-left text-[15px] font-medium leading-snug text-ink after:absolute after:inset-0 hover:text-accent-text">{name || sentenceOf(automation)}</button>
                           {name && <div className="mt-0.5 text-[13px] text-ink">{sentenceOf(automation)}</div>}
                           {status.state === "needs-you"
-                            ? <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] text-warning">{t("automations.needsYou", { reason: status.reason ?? "" })}<FixButton automation={automation} status={status} actions={actions} onEdit={() => setEditing({ kind: automation.kind, id: automation.id })} /></div>
+                            ? <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] text-warning">{t("automations.needsYou", { reason: status.reason ?? "" })}<FixButton automation={automation} status={status} actions={actions} onEdit={() => setEditing({ kind: automation.kind, id: automation.id })} className="relative z-10" /></div>
                             : <div className="mt-0.5 text-[13px] text-ink-secondary">{statusLine(automation)}</div>}
                           {problemLine && <button type="button" onClick={() => setOpenId(automation.id)} className="mt-1 flex items-baseline gap-2 text-left text-[13px] text-danger">
                             <span aria-hidden="true" className="size-2 shrink-0 self-center rounded-full bg-danger" />
                             <span>{problemLine.when} {problemLine.mark} {problemLine.text}</span>
                           </button>}
+                          {!!automation.noStartStreak && <div className="mt-1 text-[13px] text-warning" data-automation-no-start="">{t("routines.noStartStreak", { count: automation.noStartStreak })}</div>}
                           {actions.error && actions.errorFor?.endsWith(`:${automation.id}`) && <p role="alert" className="mt-1 text-[12px] text-danger">{actions.error}</p>}
                         </div>
-                        {status.state !== "done" && <Switch checked={automation.enabled} disabled={actions.busy === `toggle:${automation.id}`} aria-label={t("automations.toggle", { name: automation.name })} onClick={() => void actions.toggle(automation)} className="mt-0.5 shrink-0" />}
+                        {status.state !== "done" && <Switch checked={automation.enabled} disabled={actions.busy === `toggle:${automation.id}`} aria-label={t("automations.toggle", { name: automation.name })} onClick={() => void actions.toggle(automation)} className="relative z-10 mt-0.5 shrink-0" />}
                       </li>
                     );
                   })}

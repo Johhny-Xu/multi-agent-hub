@@ -86,6 +86,7 @@ const PENDING_WORDS: readonly Word[] = [
 const ALLOWED: Record<string, string> = {
   "place.view.ccNeedsKey.short": "the copy names the two ways to get a cloud desktop, Boat or one's own computer, as the task asks for",
   "place.view.ccNeedsKey.line": "the copy names the two ways to get a cloud desktop, Boat or one's own computer, as the task asks for",
+  "grokMove.connect.where": "names the Server URL field of Grok Bot's own form, where the link is pasted",
   "sidebar.servers": "the switcher's own Servers list, renamed with the one-workspace switcher",
   "sidebar.switchServer": "the switcher's own Servers list, renamed with the one-workspace switcher",
   "sidebar.switchServerError": "points at the app menu's Server menu",

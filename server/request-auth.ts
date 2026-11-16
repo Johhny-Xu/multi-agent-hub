@@ -311,6 +311,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET"], path: /^\/api\/updates\/check$/ },
   { methods: ["POST"], path: /^\/api\/auth\/stream-ticket$/ },
   { methods: ["POST"], path: /^\/api\/auth\/logout$/ },
+  // A Team Cloud member's own themes: the route answers each person with theirs alone, and a limited session elsewhere with none.
+  { methods: ["GET", "PUT", "PATCH", "POST", "DELETE"], path: /^\/api\/themes(?:\/[a-z0-9-]+(?:\/(?:duplicate|export))?)?$/ },
+  { methods: ["GET", "HEAD"], path: /^\/api\/theme-assets\/[a-z0-9-]+\/[\w.-]+$/ },
   // A Team Cloud member's own phone: the code carries their address and role, never more (routes/team-phone.ts).
   { methods: ["POST"], path: /^\/api\/team\/phone-pairing$/ },
   // The phones those codes opened: a member lists and removes their own only (routes/team-phone.ts visiblePhones).
@@ -325,6 +328,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/phones\/self$/ },
   { methods: ["GET"], path: /^\/api\/phones\/self\/jobs$/ },
   { methods: ["POST"], path: /^\/api\/phones\/self\/jobs\/[\w-]+\/(?:lease|result)$/ },
+  // This phone's own push registrations, alerts and Live Activities, keyed by its session (routes/phone-push.ts).
+  { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/push\/(?:device|activity)$/ },
   { methods: ["GET"], path: /^\/api\/health$/ },
   { methods: ["GET"], path: /^\/api\/edition$/ },
   { methods: ["GET"], path: /^\/api\/brand$/ },
@@ -359,6 +364,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/queue\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/queue\/[\w-]+\/steer$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/tasks$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/tasks\/[\w-]+\/forks$/ },
   { methods: ["POST", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/tasks\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/tasks\/[\w-]+\/title$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/profile$/ },
@@ -386,6 +392,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/browser\/action$/ },
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/browser\/(?:stream|download\/[\w-]+)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/browser\/upload$/ },
+  // A bot's Data, read-only as a phone shows it: the sheet and tables, a page of a table or card (a catalog lookup, never
+  // SQL), a chart card's picture. Running, changing and exporting stay an admin's (data/routes.ts).
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/data$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/data\/page$/ },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/data\/cards\/c_\d+\/image$/ },
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/status$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/(?:resume|dismiss)$/ },
   // A member signs in to their own MCP server from its card; the handler keeps an app's card and a shared server's an admin's.
@@ -401,6 +412,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["DELETE"], path: /^\/api\/groups\/[\w-]+\/queue\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/queue\/[\w-]+\/steer$/ },
   { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/tasks$/ },
+  { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/tasks\/[\w-]+\/forks$/ },
   { methods: ["POST", "PATCH", "DELETE"], path: /^\/api\/groups\/[\w-]+\/tasks\/[\w-]+$/ },
   { methods: ["PATCH"], path: /^\/api\/groups\/[\w-]+$/ }, // display fields only: see clientGroupPatchViolation
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/reactions$/ },
@@ -459,6 +471,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET"], path: /^\/api\/needs-you$/ },
   // a person's own inbox: its lines, how many wait, and one of them read or done; the handler serves the session's own alone
   { methods: ["GET"], path: /^\/api\/inbox(?:\/count)?$/ },
+  { methods: ["POST"], path: /^\/api\/inbox\/read-all$/ },
   { methods: ["POST"], path: /^\/api\/inbox\/[\w-]+\/(?:read|done)$/ },
   // who a Team Cloud bot can report to, and handing over a bot the member owns: the handler checks who may
   { methods: ["GET"], path: /^\/api\/team\/people$/ },
@@ -479,6 +492,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // what the viewer's own bots put online, from conversations they can read; the handler deletes only what is theirs
   { methods: ["GET"], path: /^\/api\/published-apps(?:\/framing)?$/ },
   { methods: ["POST"], path: /^\/api\/published-apps\/delete$/ },
+  // Slack for Team Clouds: the Admin calls these with the member's own session, and the handler answers each as that
+  // member alone (routes/team-slack.ts); off a Team Cloud they answer 404
+  { methods: ["GET"], path: /^\/api\/slack\/team\/bots$/ },
+  { methods: ["POST"], path: /^\/api\/slack\/team\/messages(?:\/[0-9a-f-]{36}\/stop)?$/ },
 ];
 
 /** Explicit admin routes. Default deny also yields admin for unlisted routes. */
@@ -537,11 +554,11 @@ export function botProfileSettings(fields: Record<string, unknown>): Record<stri
   return Object.fromEntries(Object.entries(fields).filter(([key]) => BOT_PROFILE_SETTINGS.has(key)));
 }
 
-/** What a Team Cloud member who can edit a bot may change: its profile and model (as a bot they bring in), and which of
- * the team's connected apps and MCP servers it uses. Never what it may do on its computer, where it runs, its department
- * or whom it answers to or directs: those stay an admin's. */
+/** What a Team Cloud member who can edit a bot may change: its profile and model (as a bot they bring in), which of the
+ * team's connected apps and MCP servers it uses, and which built-in tool groups it is shown. Never what it may do on its
+ * computer, where it runs, its department or whom it answers to or directs: those stay an admin's. */
 const EDITOR_BOT_PATCH_FIELDS: ReadonlySet<string> = new Set([
-  ...BOT_PROFILE_SETTINGS, "threadId", "composio", "connectorTools", "connectorScopes", "mcpServers",
+  ...BOT_PROFILE_SETTINGS, "threadId", "composio", "connectorTools", "connectorScopes", "mcpServers", "toolsOff",
 ]);
 /** A member who can only view a bot marks it read, nothing else. */
 const VIEWER_BOT_PATCH_FIELDS: ReadonlySet<string> = new Set(["unread"]);
@@ -611,6 +628,8 @@ function mutatingPublicRoute(method: string, path: string): boolean {
   if (upper === "GET" && path === "/api/setup-import/grok") return true;
   // Drives a bot's browser: a WebSocket upgrade is a GET, but what it carries is input.
   if (/^\/api\/bots\/[\w-]+\/browser\/stream$/.test(path)) return true;
+  // Shows the bots' USB phone: a WebSocket upgrade is a GET that a local process could send without an Origin.
+  if (/^\/api\/usb-phones\/[^/]+\/stream$/.test(path)) return true;
   if (["GET", "HEAD", "OPTIONS"].includes(upper)) return false;
   // Internal routes carry their own per-boot authorization; pairing-code exchange is public (the one-time code is its authorization).
   return !path.startsWith("/api/internal/") &&

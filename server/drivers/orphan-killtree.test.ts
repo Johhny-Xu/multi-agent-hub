@@ -389,7 +389,7 @@ describe.skipIf(process.platform === "win32")("ORPHAN-KILLTREE process group cle
         images: false,
         backgroundText: false,
         resolveModelsOnCreate: false,
-        models: { default: "glm-5", supported: ["glm-5"] },
+        models: { default: "glm-5", options: [{ id: "glm-5", label: "GLM-5" }] },
         loginNote: "not signed in",
         authFailure: "continue",
         isAuthenticated: async () => true,

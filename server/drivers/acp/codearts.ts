@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { userHome } from "../../env-path.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
 
-/** `codearts models --pure` on 26.10.9. Replaced by the live catalog only if the CLI offers one. */
+/** `codearts models --pure` on 26.10.9 (+ openpangu-2.1-pro, live catalog 2026-11-16). Replaced by the live catalog only if the CLI offers one. */
 const CODEARTS_MODELS = {
   default: "huaweicloud-maas/kimi-k3.1-pro",
   options: [
@@ -23,6 +23,7 @@ const CODEARTS_MODELS = {
     { id: "huaweicloud-maas/glm-5.2-sft-harmony", label: "GLM 5.2 SFT Harmony" },
     { id: "huaweicloud-maas/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
     { id: "huaweicloud-maas/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash 1017" },
+    { id: "huaweicloud-maas/openpangu-2.1-pro", label: "OpenPangu 2.1 Pro" },
     { id: "huaweicloud-maas/openpangu-2.0-pro", label: "OpenPangu 2.0 Pro" },
     { id: "huaweicloud-maas/openpangu-2.0-flash", label: "OpenPangu 2.0 Flash" },
     { id: "huaweicloud-maas/speed", label: "智速模式" },
