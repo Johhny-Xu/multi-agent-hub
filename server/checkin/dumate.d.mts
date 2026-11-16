@@ -1,7 +1,7 @@
 // Type declarations for dumate.mjs (FEAT-dumate). Only the surface the driver, the bridge and the tests use is typed.
 
 export interface DumateAccount { id: string; uid?: string; name?: string; cookie: string; source?: string; addedAt?: number; expired?: boolean; [key: string]: unknown }
-export interface DumatePublicAccount { id: string; name: string; uid: string; source: string; addedAt: number; expired: boolean }
+export type DumatePublicAccount = { id: string; name: string; uid: string; source: string; addedAt: number; expired: boolean };
 export interface WebAnswer { ok: boolean; status: number; expired: boolean; code: number | null; message: string; result: any }
 export interface QuotaOverview {
   total: number; used: number; left: number; throttled: boolean; subscribed: boolean;
