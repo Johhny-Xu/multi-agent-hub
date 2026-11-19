@@ -27,3 +27,15 @@ export function updateCheckinConfig(config: Record<string, unknown>): Promise<un
 export function startAutoCheckinScheduler(): void;
 export function stopAutoCheckinScheduler(): void;
 export function runAutoCheckinTick(): Promise<string[]>;
+
+export interface CodeArtsCampaignGroups {
+  claimable: Array<Record<string, any>>;
+  claimed: Array<Record<string, any>>;
+  upcoming: Array<Record<string, any>>;
+  ineligible: Array<Record<string, any>>;
+}
+export function classifyCodeArtsCampaigns(items?: unknown[], nowSec?: number): CodeArtsCampaignGroups;
+export function checkinCodeArtsOne(ak: string, sk: string, deps?: {
+  fetch?: (ak: string, sk: string, method: string, url: string, body?: any) => Promise<{ status: number; json: any; text: string }>;
+  nowSec?: number;
+}): Promise<{ ok: boolean; status: string; message: string; credits?: number; consecutiveDays?: number; retryAt?: number; pendingReason?: string }>;

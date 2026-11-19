@@ -1969,24 +1969,108 @@ export async function checkinTrae(overrideToken = null) {
   };
 }
 
+/** 码道活动「已领」的状态（claimable=false 时出现） */
+const CODEARTS_CLAIMED = ['CLAIMED', 'CONFIRMED', 'CONSUMED'];
+
+/** ISO 字符串 / 毫秒 / 秒 → 秒级时间戳；解析不了返回 0 */
+function codeArtsTimeSec(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number' || /^\d+$/.test(String(v))) {
+    const n = Number(v);
+    return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+  }
+  const t = Date.parse(String(v));
+  return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
+}
+
+/**
+ * 把 /v1/ops/delivery 的活动行分成「要领 / 已领 / 待开窗 / 没资格」四类（纯函数，便于单测）。
+ *
+ * 2026-11 起码道「福利中心」同时挂多条 MANUAL_CLAIM 活动，每条都要单独点：
+ *   - 「每日签到领150积分」(USER_LOGIN，按钮「每日领取」)
+ *   - 「Skill创新赛每日签到礼」(USER_LOGIN，1000/天，按钮「立即领取」)
+ *   - 「2026年学生专属福利」(STUDENT_CERTIFIED，5000/月，开放期内才 claimable)
+ *   - 一次性的「Skill创新赛报名礼」「学生认证领积分」(领过就是 CLAIMED/CONFIRMED)
+ * 旧实现只取第一条 USER_LOGIN（恰好是已领的报名礼）就判「今日已领取」，其余全漏。
+ * 口径：上游 claimable=true 就领（按钮亮着），不按标题 / 类型 / ID 硬编码；
+ * 月度、一次性活动不在开放期或已领时上游自己给 claimable=false，自然跳过。
+ */
+export function classifyCodeArtsCampaigns(items = [], nowSec = Math.floor(Date.now() / 1000)) {
+  const out = { claimable: [], claimed: [], upcoming: [], ineligible: [] };
+  for (const it of Array.isArray(items) ? items : []) {
+    if (!it || typeof it !== 'object') continue;
+    const status = String(it.status || '').toUpperCase();
+    const start = codeArtsTimeSec(it.extra?.startTime);
+    const end = codeArtsTimeSec(it.extra?.endTime);
+    if (end && end <= nowSec) continue;               // 已结束
+    if (it.claimable === true) {
+      if (start && start > nowSec) out.upcoming.push(it); // 理论上不会：没开窗却亮按钮，按待开窗处理
+      else out.claimable.push(it);
+      continue;
+    }
+    if (CODEARTS_CLAIMED.includes(status)) { out.claimed.push(it); continue; }
+    // 还没开窗的（例如月度福利当天 10:00 才开）：24 小时内开窗的约个时间再来
+    if (start && start > nowSec && start - nowSec <= 24 * 3600) { out.upcoming.push(it); continue; }
+    out.ineligible.push(it);                           // ENTRY（未参与 / 未认证）等，没资格就不领
+  }
+  return out;
+}
+
+function codeArtsAmount(c) {
+  const amount = Number(c?.benefitAmount) || 0;
+  const unit = c?.benefitUnit === 'CREDIT' ? '积分' : (c?.benefitUnit || '');
+  return { amount, unit, text: `${amount}${unit}` };
+}
+
+/** 领一条活动；返回该活动的结果行 */
+async function claimCodeArtsCampaign(fetcher, ak, sk, campaign) {
+  const { amount, text } = codeArtsAmount(campaign);
+  const title = campaign.title || `活动 ${campaign.campaignId}`;
+  let claimRes;
+  try {
+    claimRes = await fetcher(ak, sk, 'POST', `${CODEARTS_SNAP}/v1/ops/claim`, {
+      campaignId: campaign.campaignId,
+      channel: 'IDE',
+      idempotentKey: randomUUID()
+    });
+  } catch (err) {
+    return { status: 'failed', title, credits: 0, message: `「${title}」领取请求异常：${err.message}` };
+  }
+  const cj = claimRes?.json || {};
+  const bizCode = Number(cj.code ?? NaN);
+  const bizMsg = String(cj.message || cj.error_msg || '');
+  if (bizCode === 0) {
+    return { status: 'success', title, credits: amount, message: `「${title}」+${text}` };
+  }
+  // 40001 = 权益还没刷新（本期已领）
+  if (bizCode === 40001) {
+    return { status: 'already', title, credits: 0, message: `「${title}」${bizMsg || '本期已领'}` };
+  }
+  const mapped = mapCodeArtsError(String(cj.error_code || (Number.isNaN(bizCode) ? '' : bizCode)), bizMsg, claimRes?.text);
+  return { status: mapped.status, title, credits: 0, message: `「${title}」${mapped.message}` };
+}
+
 /**
  * 单个 CodeArts AK/SK 账号的真实签到流程（参考 2951461586/CodeArts2API）
  *   1. GET  /api/v1/benefit/claim          福利通道登记（幂等，确认身份）
- *   2. GET  /v1/ops/delivery?channel=IDE   拉任务列表，找 USER_LOGIN 那个 campaign
- *   3. POST /v1/ops/claim                  领取（需要 channel + idempotentKey）
+ *   2. GET  /v1/ops/delivery?channel=IDE   拉福利中心活动列表
+ *   3. POST /v1/ops/claim                  逐条领取所有 claimable 的活动（需要 channel + idempotentKey）
  *
  * 旧实现只要文件里有 AK/SK 就直接返回「已激活」，从来没发过一个请求。
+ * deps.fetch / deps.nowSec 供单测注入。
  */
-async function checkinCodeArtsOne(ak, sk) {
+export async function checkinCodeArtsOne(ak, sk, deps = {}) {
+  const fetcher = deps.fetch || codeArtsFetch;
+  const nowSec = deps.nowSec ?? Math.floor(Date.now() / 1000);
   // 1. 福利 Token 通道（opengw）——**只是顺手领，失败不能挡住签到**
   //    2026-10 起 opengw 的 /api/v1/benefit/claim 对不少账号稳定返回
   //    {"error_code":"4000","error_msg":"invalid channel, group not found"}（benefit 通道按账号下线/迁移），
-  //    而真正给「每日 1000 积分」的 /v1/ops/claim 在 snap-access 上是好的。
+  //    而真正给积分的 /v1/ops/claim 在 snap-access 上是好的。
   //    以前这里一失败就 return，导致整个 CodeArts 签到被判失败。
   let userName = '';
   let benefitNote = '';
   try {
-    const r = await codeArtsFetch(ak, sk, 'GET', `${CODEARTS_GATEWAY}/api/v1/benefit/claim`);
+    const r = await fetcher(ak, sk, 'GET', `${CODEARTS_GATEWAY}/api/v1/benefit/claim`);
     const code = String(r.json?.error_code ?? '');
     if (code && code !== '0000') {
       const mapped = mapCodeArtsError(code, r.json?.error_msg, r.text);
@@ -2002,75 +2086,55 @@ async function checkinCodeArtsOne(ak, sk) {
     benefitNote = `福利 Token 通道不可达（${err.message}），已跳过；`;
   }
 
-  // 2. 任务列表
-  let campaign = null;
-  let campaigns = [];
+  // 2. 活动列表
+  let items = [];
   try {
-    const r = await codeArtsFetch(ak, sk, 'GET', `${CODEARTS_SNAP}/v1/ops/delivery?channel=IDE`);
-    const items = Array.isArray(r.json?.data?.items) ? r.json.data.items : [];
-    campaigns = items;
-    campaign = items.find((it) => it.type === 'USER_LOGIN')
-      || items.find((it) => /签到/.test(String(it.title || '')))
-      || null;
+    const r = await fetcher(ak, sk, 'GET', `${CODEARTS_SNAP}/v1/ops/delivery?channel=IDE`);
+    if (!Array.isArray(r.json?.data?.items)) {
+      const mapped = mapCodeArtsError(String(r.json?.error_code || r.json?.code || r.status || ''), r.json?.error_msg || r.json?.message, r.text);
+      return { ok: false, status: mapped.status, message: `${benefitNote}活动列表读取失败：${mapped.message}` };
+    }
+    items = r.json.data.items;
   } catch (err) {
-    return { ok: false, status: 'failed', message: `任务列表不可达：${err.message}` };
+    return { ok: false, status: 'failed', message: `活动列表不可达：${err.message}` };
   }
 
-  if (!campaign) {
-    return { ok: false, status: 'failed', message: `没有找到签到任务（共 ${campaigns.length} 个活动）` };
-  }
-
-  const amount = Number(campaign.benefitAmount) || 0;
-  const unit = campaign.benefitUnit === 'CREDIT' ? '积分' : (campaign.benefitUnit || '');
   const who = userName ? `${userName} ` : '';
-
-  // 3a. 已经领过
-  if (campaign.claimable === false && ['CLAIMED', 'CONFIRMED', 'CONSUMED'].includes(String(campaign.status))) {
-    return {
-      ok: true,
-      status: 'already',
-      message: `${benefitNote}${who}今日已领取「${campaign.title}」（${amount}${unit}）`,
-      credits: 0,
-      consecutiveDays: 0
-    };
+  const groups = classifyCodeArtsCampaigns(items, nowSec);
+  if (!groups.claimable.length && !groups.claimed.length && !groups.upcoming.length) {
+    return { ok: false, status: 'failed', message: `${benefitNote}${who}没有找到可领取的活动（共 ${items.length} 个活动）` };
   }
 
-  if (campaign.claimable === false) {
-    return {
-      ok: false,
-      status: 'failed',
-      message: `「${campaign.title}」当前不可领取（状态 ${campaign.status || '未知'}）`
-    };
-  }
+  // 3. 逐条领取（串行：同一账号并发领取容易撞上游幂等/限流）
+  const claims = [];
+  for (const c of groups.claimable) claims.push(await claimCodeArtsCampaign(fetcher, ak, sk, c));
 
-  // 3b. 真正领取
-  const claimRes = await codeArtsFetch(ak, sk, 'POST', `${CODEARTS_SNAP}/v1/ops/claim`, {
-    campaignId: campaign.campaignId,
-    channel: 'IDE',
-    idempotentKey: randomUUID()
-  });
-  const cj = claimRes.json || {};
-  const bizCode = Number(cj.code ?? NaN);
-  const bizMsg = String(cj.message || cj.error_msg || '');
+  const ok = claims.filter((r) => r.status === 'success');
+  const already = claims.filter((r) => r.status === 'already');
+  const bad = claims.filter((r) => !['success', 'already'].includes(r.status));
+  const credits = ok.reduce((s, r) => s + r.credits, 0);
 
-  if (bizCode === 0) {
-    return {
-      ok: true,
-      status: 'success',
-      message: `${benefitNote}${who}签到成功 +${amount}${unit}`,
-      credits: amount,
-      consecutiveDays: 1
-    };
+  const parts = [];
+  if (ok.length) parts.push(`领取成功 ${ok.map((r) => r.message).join('、')}`);
+  if (bad.length) parts.push(`领取失败 ${bad.map((r) => r.message).join('、')}`);
+  const claimedTitles = [...already.map((r) => r.title), ...groups.claimed.map((c) => c.title)];
+  if (claimedTitles.length) parts.push(`已领 ${claimedTitles.map((t) => `「${t}」`).join('')}`);
+  let retryAt = 0;
+  if (groups.upcoming.length) {
+    retryAt = Math.min(...groups.upcoming.map((c) => codeArtsTimeSec(c.extra?.startTime) || nowSec + 3600));
+    parts.push(`待开放 ${groups.upcoming.map((c) => `「${c.title}」`).join('')}（${new Date(retryAt * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })} 开放，到点自动补领）`);
   }
-  // 40001 = 权益还没刷新（今日已领）
-  if (bizCode === 40001) {
-    return { ok: true, status: 'already', message: `${who}${bizMsg || '今日已领取，等明天刷新'}`, credits: 0, consecutiveDays: 0 };
+  const message = `${benefitNote}${who}${parts.join('；')}`;
+
+  if (bad.length) {
+    const expired = bad.some((r) => r.status === 'expired');
+    return { ok: false, status: ok.length ? 'partial' : (expired ? 'expired' : 'failed'), message, credits, consecutiveDays: ok.length ? 1 : 0 };
   }
-  if (bizCode === 4006) {
-    return { ok: false, status: 'failed', message: `${bizMsg || '名额已领完'}（4006）` };
+  if (groups.upcoming.length) {
+    return { ok: true, status: (ok.length || claimedTitles.length) ? 'partial' : 'pending', pendingReason: 'awaiting_window', retryAt, message, credits, consecutiveDays: ok.length ? 1 : 0 };
   }
-  const mapped = mapCodeArtsError(String(cj.error_code || bizCode), bizMsg, claimRes.text);
-  return { ok: false, status: mapped.status, message: mapped.message };
+  if (ok.length) return { ok: true, status: 'success', message, credits, consecutiveDays: 1 };
+  return { ok: true, status: 'already', message, credits: 0, consecutiveDays: 0 };
 }
 
 /** 把华为云网关/业务错误码翻译成人话 */
@@ -2138,16 +2202,32 @@ export async function checkinCodeArts(overrideToken = null) {
     }
   }
 
-  const okOnes = results.filter((r) => r.status === 'success');
-  const alreadyOnes = results.filter((r) => r.status === 'already');
-  const badOnes = results.filter((r) => !['success', 'already'].includes(r.status));
-
-  const status = badOnes.length ? 'failed' : (okOnes.length ? 'success' : 'already');
+  // 账号级 partial 有两种：ok=true 是「领到了一部分、还有活动待开窗」，ok=false 是「领到了一部分、有的领失败」。
+  const isBad = (r) => ['failed', 'expired'].includes(r.status) || (r.status === 'partial' && !r.ok);
+  const isPending = (r) => r.status === 'pending' || (r.status === 'partial' && r.ok);
+  const isSigned = (r) => ['success', 'already', 'partial'].includes(r.status);
+  const okOnes = results.filter((r) => Number(r.credits) > 0);
+  const badOnes = results.filter(isBad);
+  const pendOnes = results.filter(isPending);
+  const anySigned = results.some(isSigned);
+  let status;
+  if (badOnes.length) {
+    status = (anySigned || pendOnes.length) ? 'partial'
+      : (badOnes.every((r) => r.status === 'expired') ? 'expired' : 'failed');
+  } else if (pendOnes.length) {
+    status = anySigned ? 'partial' : 'pending';
+  } else {
+    status = results.some((r) => r.status === 'success') ? 'success' : 'already';
+  }
+  const retryAt = results.reduce((min, r) => (r.retryAt && (!min || r.retryAt < min) ? r.retryAt : min), 0);
+  const pendingReason = (pendOnes.find((r) => r.pendingReason) || {}).pendingReason || '';
 
   return {
     platform: 'codearts',
     ok: badOnes.length === 0,
     status,
+    ...(retryAt ? { retryAt } : {}),
+    ...(pendingReason ? { pendingReason } : {}),
     message: results.map((r) => r.message).join('；'),
     credits: okOnes.reduce((s, r) => s + (Number(r.credits) || 0), 0),
     consecutiveDays: Math.max(0, ...results.map((r) => Number(r.consecutiveDays) || 0)),
