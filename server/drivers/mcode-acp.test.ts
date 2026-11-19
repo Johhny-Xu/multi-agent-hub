@@ -100,13 +100,13 @@ afterEach(async () => {
   await Promise.all(running.splice(0).map((bridge) => bridge.stop()));
 });
 
-function startBridge(env: Record<string, string> = {}): Bridge {
+function startBridge(env: Record<string, string> = {}, stuckSec = "30"): Bridge {
   const dir = mkdtempSync(join(tmpdir(), "omb-mcode-bridge-"));
   const cli = join(dir, "fake-mcode");
   writeFileSync(cli, FAKE_CLI, "utf8");
   chmodSync(cli, 0o755);
   const child: ChildProcessWithoutNullStreams = spawn(process.execPath, [
-    "--experimental-strip-types", BRIDGE, "--cli", cli, "--timeout", "30",
+    "--experimental-strip-types", BRIDGE, "--cli", cli, "--timeout", stuckSec,
   ], {
     env: { ...process.env, HOME: dir, OMB_MCODE_HOME: dir, FAKE_MCODE_MODE: "tools", ...env },
     stdio: ["pipe", "pipe", "pipe"],
@@ -132,7 +132,7 @@ function startBridge(env: Record<string, string> = {}): Bridge {
     if (!call) return;
     pending.delete(Number(message.id));
     clearTimeout(call.timer);
-    if (message.error) call.reject(new Error(`${message.error.code}: ${message.error.message}`));
+    if (message.error) call.reject(Object.assign(new Error(`${message.error.code}: ${message.error.message}`), { data: message.error.data }));
     else call.resolve(message.result);
   });
   const write = (message: unknown): void => {
@@ -380,6 +380,16 @@ describe("mcode ACP bridge", () => {
     bridge.notify("session/cancel", { sessionId });
     await expect(pending).resolves.toMatchObject({ stopReason: "cancelled" });
     expect(bridge.updates().some((update) => update?.sessionUpdate === "agent_message_chunk")).toBe(true);
+  });
+
+  it("judges a turn stuck by status query, not by a time limit, and says why", async () => {
+    // The fake mcode idles: no output, no CPU, no network. --timeout is the stuck window (1 s here), not a deadline.
+    const bridge = startBridge({ FAKE_MCODE_MODE: "idle" }, "1");
+    const sessionId = await newSession(bridge);
+    const failed = await prompt(bridge, sessionId).then(() => null, (error: Error & { data?: any }) => error);
+    expect(failed?.message).toMatch(/MiniMax Code was judged stuck by a status check: no CPU use, output or network activity for \d+ s/);
+    expect(failed?.message).not.toMatch(/limit/);
+    expect(failed?.data?.ombNotice?.key).toBe("chat.notice.turnStuck");
   });
 
   it("keeps the bridge heartbeat out of the tool events", async () => {

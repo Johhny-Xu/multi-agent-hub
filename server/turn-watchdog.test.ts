@@ -9,7 +9,8 @@ import type { ProviderAdapter, RuntimeEvent } from "./contracts.ts";
 import { EngineMemory } from "./engine-memory.ts";
 import type { Message } from "./store.ts";
 import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
-import { engineCommandCpuMs, engineProcessExited, engineProcessGone, ENGINE_EXIT_STALL_MS, stallLimitMs, stallNotice, stuckCommand, TurnWatchdog, type StallReason, type TurnWatchdogOptions, type WatchedTurn } from "./turn-watchdog.ts";
+import { engineCommandCpuMs, engineProcessExited, engineProcessGone, engineTreeSample, ENGINE_EXIT_STALL_MS, stallLimitMs, stallNotice, stuckCommand, TurnWatchdog, type StallReason, type TurnWatchdogOptions, type WatchedTurn } from "./turn-watchdog.ts";
+import { turnStuckMs, type LivenessSample } from "./drivers/turn-liveness.ts";
 
 const STALL = 10_000;
 const TOOL_STALL = 50_000;
@@ -52,6 +53,51 @@ function rig(extra: Partial<TurnWatchdogOptions> = {}) {
 const ENGINE_PID = 4242;
 /** A driver that tracks its engine process: it names one while the turn is active, and none once it is not. */
 const tracked = (pid: number | undefined): Pick<ProviderAdapter, "enginePid"> => ({ enginePid: () => pid });
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+const treeSample = (cpuMs: number, extra: Partial<LivenessSample> = {}): LivenessSample =>
+  ({ alive: true, cpuMs, ioBytes: 0, connections: 0, external: 0, ...extra });
+
+describe("TurnWatchdog status queries", () => {
+  it("does not stop a silent turn whose engine keeps using CPU (a model thinking without printing)", async () => {
+    let cpu = 0;
+    const { dog, stalls, tick } = rig({ engineSample: async () => treeSample((cpu += 1_000)) });
+    dog.watch("t1", "bot1");
+    for (let i = 0; i < 20; i += 1) { tick(STALL / 4); dog.sweep(); await flush(); }
+    expect(stalls).toHaveLength(0);
+  });
+
+  it("counts a connection to a remote model, or bytes moving through a local proxy, as activity", async () => {
+    let io = 0;
+    const remote = rig({ engineSample: async () => treeSample(0, { connections: 1, external: 1 }) });
+    const proxied = rig({ engineSample: async () => treeSample(0, { connections: 1, ioBytes: (io += 10) }) });
+    for (const r of [remote, proxied]) {
+      r.dog.watch("t1", "bot1");
+      for (let i = 0; i < 20; i += 1) { r.tick(STALL / 4); r.dog.sweep(); await flush(); }
+      expect(r.stalls).toHaveLength(0);
+    }
+  });
+
+  it("stops a turn whose engine shows no CPU, bytes or remote connection for the stall window, and names why", async () => {
+    const { dog, stalls, limits, tick } = rig({ engineSample: async () => treeSample(5, { connections: 1 }) });
+    dog.watch("t1", "bot1");
+    for (let i = 0; i < 4 && !stalls.length; i += 1) { tick(STALL / 2 + 1); dog.sweep(); await flush(); }
+    expect(stalls).toHaveLength(1);
+    expect(stallNotice(stalls[0]!, limits[0]!, limits[0]!, "silent", "CodeArts")).toEqual({ key: "chat.notice.turnStuck", params: { name: "CodeArts", window: "10 s" } });
+    expect(chatNotice("chat.notice.turnStuck", { name: "CodeArts", window: "30 min" })).toContain("judged stuck by a status check");
+  });
+
+  it("reads no engine for a driver that tracks none", async () => {
+    expect(await engineTreeSample(undefined, "t1")).toBeNull();
+    expect(await engineTreeSample(tracked(undefined), "t1")).toBeNull();
+    expect(await engineTreeSample(tracked(ENGINE_PID), "t1", async () => treeSample(7))).toEqual(treeSample(7));
+  });
+
+  it("takes its default silence from the shared stuck window", () => {
+    expect(turnStuckMs({})).toBe(30 * 60_000);
+    expect(turnStuckMs({ OMB_TURN_STUCK_MS: "0" })).toBe(0);
+  });
+});
 
 describe("TurnWatchdog", () => {
   it("counts its engine's word that it still waits on its model (a provider queue) as activity", () => {
@@ -623,7 +669,7 @@ describe("the stall handler", () => {
     const context = vm.createContext({
       process: { env },
       RoomTurnStallRegistry: class { stall() {} },
-      TurnStops, stoppedTurnOutcome, reportsToRequester: () => true, stallLimitMs, ENGINE_EXIT_STALL_MS,
+      TurnStops, stoppedTurnOutcome, reportsToRequester: () => true, stallLimitMs, ENGINE_EXIT_STALL_MS, turnStuckMs,
       TurnWatchdog: class { options: unknown; constructor(options: { onStall: (turn: WatchedTurn) => void }) { this.options = options; } },
       store: { messagesFor: () => messages, activePath: () => messages, appendMessage() {} },
       turnResourceOwners: new Map(), directTurnGenerationByThread: new Map([["t1", "gen-1"]]), directRequestOwners: new Map(),
@@ -672,7 +718,8 @@ describe("the stall handler", () => {
   it("never lets the environment switch the watchdog off", () => {
     for (const endless of ["Infinity", "1e309", "-Infinity"]) {
       const { context } = load(undefined, { OMB_TURN_STALL_MS: endless, OMB_TOOL_STALL_MS: endless });
-      expect(context.watchdog.options).toMatchObject({ stallMs: 20 * 60_000, toolStallMs: 2 * 60 * 60_000 });
+      // The default silence is the shared stuck window (OMB_TURN_STUCK_MS, 30 min).
+      expect(context.watchdog.options).toMatchObject({ stallMs: 30 * 60_000, toolStallMs: 2 * 60 * 60_000 });
     }
     const { context } = load(undefined, { OMB_TURN_STALL_MS: "3900000", OMB_TOOL_STALL_MS: "1e309" });
     expect(context.watchdog.options).toMatchObject({ stallMs: 3_900_000, toolStallMs: 2 * 60 * 60_000 });
@@ -737,5 +784,20 @@ describe("a Stop that wins against a provider dispatch", () => {
     // The stall handler cancels the dispatch after the sweep dropped the turn: that must not watch it again.
     r.dog.eventsDiscarded("t1");
     expect(r.dog.watching("t1")).toBe(false);
+  });
+});
+
+describe("a turn the crash guard stops", () => {
+  it("is stopped at once as a stall with the server-error reason, once, and only while it is watched", () => {
+    const stalls: Array<[string, StallReason]> = [];
+    const dog = new TurnWatchdog({ stallMs: 60_000, toolStallMs: 60_000, parkedStallMs: 60_000, engineExitStallMs: 60_000, checkMs: 60_000,
+      onStall: (turn, _silentMs, reason) => stalls.push([turn.threadId, reason]), now: () => 0 });
+    dog.watch("t1", "b1");
+    dog.watch("t2", "b1");
+    expect(dog.fail("t1")).toBe(true);
+    expect(dog.fail("t1")).toBe(false);
+    expect(dog.fail("never")).toBe(false);
+    expect(stalls).toEqual([["t1", "server-error"]]);
+    expect(dog.watching("t2")).toBe(true);
   });
 });

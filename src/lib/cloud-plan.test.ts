@@ -33,10 +33,10 @@ describe("a free trial, in one message and at most one next step per state", () 
     expect(cloudTrialView(trial("active", { amount: 5831 })).body).toContain("$58.31/month");
   });
 
-  it("ending with renewal off: when it stops, when its files go, and Subscribe to keep it", () => {
+  it("ending with renewal off: when it stops and when its files go, with no Subscribe button", () => {
     const view = cloudTrialView(trial("ending", { deleteAt: ENDS + 3 * DAY, keep: "portal" }), credit);
     expect(view).toEqual({ state: "ending", title: "Your free trial ends on Oct 15",
-      body: "Renewal is off, so the Cloud stops then and its files are deleted on Oct 18.", action: { kind: "subscribe", label: "Subscribe to keep it" } });
+      body: "Renewal is off, so the Cloud stops then and its files are deleted on Oct 18.", action: null });
     expect(cloudTrialView(trial("ending", { keep: "portal" })).body).toBe("Renewal is off, so the Cloud stops then, and its files are deleted a few days later.");
   });
 
@@ -57,7 +57,7 @@ describe("a free trial, in one message and at most one next step per state", () 
       action: { kind: "status", label: "Check payment status" } });
     for (const keep of ["portal", "checkout"] as const) {
       expect(cloudTrialView(trial("ended", { deleteAt: ENDS + 3 * DAY, keep }))).toEqual({ state: "ended", title: "Your free trial has ended",
-        body: "The Cloud is stopped. Its files are kept until Oct 18, then deleted.", action: { kind: "subscribe", label: "Subscribe to keep it" } });
+        body: "The Cloud is stopped. Its files are kept until Oct 18, then deleted.", action: null });
     }
     expect(cloudTrialView(trial("ended")).body).toBe("The Cloud is stopped, and its files are deleted soon.");
     expect(cloudTrialView(trial("late")).body).toBe("The Cloud is paused until it goes through, and comes back by itself.");
@@ -91,18 +91,13 @@ describe("the plan line and the credit", () => {
     expect([usd(5), usd(3.2), usd(0.004), usd(49), usd(58.31)]).toEqual(["$5", "$3.20", "$0", "$49", "$58.31"]);
   });
 
-  it("in its last two days, a trial says how to step down to the plan the Admin names, with its price", () => {
+  it("never offers to switch plans, whatever an older Admin names", () => {
     const active = trial("active", { chargeAt: ENDS }), starter = { tier: "starter" as const, amount: 1500 };
-    expect(cloudTrialView({ ...active, switchTo: starter }).switchPlan).toBe("Prefer Starter at $15? Tell us from your Plan page before Oct 15, and we'll switch your plan.");
-    expect(cloudTrialView({ ...active, tier: "max", switchTo: starter, personalAmount: 2900 }).switchPlan, "the Admin's switchTo wins")
-      .toBe("Prefer Starter at $15? Tell us from your Plan page before Oct 15, and we'll switch your plan.");
-    expect(cloudTrialView({ ...active, tier: "personal", switchTo: starter }).switchPlan).toBe("Prefer Starter at $15? Tell us from your Plan page before Oct 15, and we'll switch your plan.");
-    expect(cloudTrialView({ ...active, personalAmount: 2900 }).switchPlan, "an older Admin names only Personal's price: Personal is the way down").toBe("Prefer Personal at $29? Tell us from your Plan page before Oct 15, and we'll switch your plan.");
-    expect(cloudTrialView(active).switchPlan, "no plan named, no switch to offer").toBeUndefined();
-    for (const quiet of [{ ...active, tier: "personal", personalAmount: 2900 }, { ...active, tier: "starter", switchTo: starter }, { ...active, switchTo: { tier: "max" as const, amount: 9900 } },
-      { ...active, tier: undefined, switchTo: starter }, { ...active, tier: "team-2027", switchTo: starter }, trial("ending", { keep: "portal", switchTo: starter })]) {
-      expect(cloudTrialView(quiet).switchPlan, JSON.stringify(quiet)).toBeUndefined();
+    for (const view of [cloudTrialView({ ...active, switchTo: starter }), cloudTrialView({ ...active, personalAmount: 2900 }),
+      cloudTrialView({ ...active, tier: "max", switchTo: starter }), cloudTrialView(trial("ending", { keep: "portal", switchTo: starter }))]) {
+      expect(view).not.toHaveProperty("switchPlan");
     }
+    expect(cloudTrialView({ ...active, switchTo: starter }).action).toEqual({ kind: "manage", label: "Manage subscription" });
   });
 
   it("a Personal subscriber's plan is Personal wherever the app names it", () => {
@@ -219,11 +214,12 @@ describe("what is for sale, as the Admin says", () => {
     expect(bare.map(card => keys(card.shown)), "a plan without allowances sets nothing apart").toEqual([[], ["hours", "storage", "voice"]]);
   });
 
-  it("says who a team plan is for, from the most people the Admin allows it, and nothing it can't back", () => {
+  it("says a team plan is for the whole team, never a seat count the app would have to know, and nothing it can't back", () => {
     const allowances = { cpus: 4, cpuKind: "shared" as const, memoryMb: 4096, diskGb: 10, maxDiskGb: 100, computers: 4, computerHours: 300, voiceCharacters: 180_000 };
-    const promise = (seats?: number) => planCards({ plans: [{ tier: "team", amount: 16900, allowances: { ...allowances, ...(seats ? { seats } : {}) } }], recommended: "team" })[0]!.promise;
-    expect(promise(5)).toBe("One shared Cloud for up to 5 people: bots, group chats and roles your whole team uses.");
-    expect(promise(20)).toContain("up to 20 people");
+    const promise = (seats?: number) => planCards({ plans: [{ tier: "team", amount: 4000, allowances: { ...allowances, ...(seats ? { seats } : {}) } }], recommended: "team" })[0]!.promise;
+    expect(promise(2)).toBe("One shared Cloud for your whole team: bots, group chats and roles everyone uses. Add people any time.");
+    expect(promise(50), "the same words whatever seats the Admin sends").toBe(promise(2));
+    expect(promise(5)).not.toMatch(/\d/);
     expect(promise()).toBeNull();
     const pro = planCards({ plans: [{ tier: "pro", amount: 4900, allowances: { ...allowances, seats: 5 } }], recommended: "pro" })[0]!.promise;
     expect(pro, "a plan with its own words keeps them").toBe("Your bots keep working 24/7, even when your laptop is closed.");
@@ -231,14 +227,14 @@ describe("what is for sale, as the Admin says", () => {
 
   it("says a 1-day trial in the singular, in English and every language, and leaves other lengths as they read", () => {
     const allowances = { cpus: 8, cpuKind: "shared" as const, memoryMb: 8192, diskGb: 10, maxDiskGb: 100, computers: 15, computerHours: 800, voiceCharacters: 90_000, snapshotDays: 14 };
-    const terms = (trialDays: number) => planCards({ plans: [{ tier: "team", amount: 16900, trialDays, allowances }], recommended: "team" })[0]!.terms;
-    expect(terms(1)).toBe("Free for 1 day, then $169/month + tax");
-    expect(terms(3)).toBe("Free for 3 days, then $169/month + tax");
-    const badge = (trialDays: number) => cloudIntroView({ plans: [{ tier: "team", amount: 16900, trialDays }], recommended: "team" })!.badge;
+    const terms = (trialDays: number) => planCards({ plans: [{ tier: "team", amount: 4000, trialDays, allowances }], recommended: "team" })[0]!.terms;
+    expect(terms(1)).toBe("Free for 1 day, then $40/month + tax");
+    expect(terms(3)).toBe("Free for 3 days, then $40/month + tax");
+    const badge = (trialDays: number) => cloudIntroView({ plans: [{ tier: "team", amount: 4000, trialDays }], recommended: "team" })!.badge;
     expect(badge(1)).toBe("Free for 1 day");
     expect(badge(3)).toBe("Free for 3 days");
     setLocale("de");
-    expect(terms(1)).toBe("1 Tag kostenlos, dann $169/Monat zzgl. Steuern");
+    expect(terms(1)).toBe("1 Tag kostenlos, dann $40/Monat zzgl. Steuern");
     expect(badge(3)).toBe("3 Tage kostenlos");
     setLocale("en");
   });

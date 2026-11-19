@@ -19,6 +19,8 @@ export interface BrowserScope {
   readonly tabId: string | null;
   readonly place: BrowserPlace;
   readonly signal: AbortSignal;
+  /** The turn's own deadline, carried to each dispatch; a call outside a turn has none. */
+  readonly deadline?: number;
 }
 
 export type BrowserOperation =

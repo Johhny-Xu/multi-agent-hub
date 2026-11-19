@@ -9,6 +9,7 @@ import {
   type ExecFileOptions,
   type SpawnOptions,
 } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import type { Readable, Writable } from "node:stream";
 import { basename, dirname, join, resolve } from "node:path";
@@ -16,10 +17,14 @@ import { botBox, type WrappedSpawn } from "./bot-box/box.ts";
 import type { BoxRequest } from "./bot-box/plan.ts";
 import { homeProgramsDistrusted, serverMayRunFrom, serverPath } from "./bot-box/program-trust.ts";
 import { engineMemory } from "./engine-memory.ts";
+import { ENGINE_TAG_ENV, engineRunTag, engineStopped, recordEngine } from "./engine-records.ts";
 import { engineHomes } from "./engine-homes/engine-homes.ts";
 import type { HomedSpawn } from "./engine-homes/layout.ts";
 import { resolveCliSpawn, type ResolvedSpawn } from "./env-path.ts";
 import { spawnBotWork } from "./oom-score.ts";
+import { noticeFailure } from "./chat-notices.ts";
+import { processBudget } from "./process-room.ts";
+import { shortageCode } from "./process-shortage.ts";
 
 export function resolveCli(cli: string, args: string[] = [], env?: NodeJS.ProcessEnv): ResolvedSpawn {
   return resolveCliSpawn(cli, args, env);
@@ -56,10 +61,10 @@ type LinuxProcess = { pid: number; parent: number; pgrp: number; session: number
 const linuxTrees = new WeakMap<ChildProcess, Map<number, string>>();
 const linuxGroups = new WeakMap<ChildProcess, Map<number, string>>();
 
-function linuxProcess(pid: number): LinuxProcess | null {
+function linuxProcess(pid: number, file = `/proc/${pid}/stat`): LinuxProcess | null {
   let stat: string;
   try {
-    stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    stat = readFileSync(file, "utf8");
   } catch (error) {
     if (["ENOENT", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "")) return null;
     throw error;
@@ -170,6 +175,24 @@ function linuxDescendantsStopped(child: ChildProcess): boolean {
   return true;
 }
 
+/** Whether every process still in this group has exited and only waits to be collected. Where nothing collects orphans
+ * (Node as a container's process 1) such members stay for good, and kill(-pgid, 0) goes on succeeding for them. False
+ * when a member runs, when none is found, or when /proc can't say. */
+export function linuxGroupOnlyExited(group: number, list: () => string[] = () => readdirSync("/proc"), stat: (pid: number) => string = (pid) => readFileSync(`/proc/${pid}/stat`, "utf8")): boolean {
+  let entries: string[];
+  try { entries = list(); } catch { return false; }
+  let members = 0;
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    let fields: string[];
+    try { const text = stat(Number(entry)); fields = text.slice(text.lastIndexOf(")") + 2).split(" "); } catch { continue; }
+    if (Number(fields[2]) !== group) continue;
+    if (fields[0] !== "Z" && fields[0] !== "X") return false;
+    members += 1;
+  }
+  return members > 0;
+}
+
 function linuxRootIdentityMatches(child: ChildProcess): boolean | undefined {
   const start = child.pid && linuxTrees.get(child)?.get(child.pid);
   if (!child.pid || process.platform !== "linux" || !cliGroups.has(child)) return true;
@@ -262,15 +285,28 @@ export function boxedSpawn(resolved: ResolvedSpawn, opts: CliSpawnOptions, owner
   if (opts.box === false || (owner !== "bot" && !opts.box)) return null;
   const request = typeof opts.box === "object" ? opts.box : {};
   const home = homed ? { home: homed.home, shared: homed.shared } : {};
-  return botBox.wrap({ command: resolved.command, args: resolved.args, cwd: typeof opts.cwd === "string" ? opts.cwd : undefined, env: opts.env ?? process.env, ...request, ...home });
+  const threadId = engineHomes.thread(), conversationBot = engineHomes.bot();
+  return botBox.wrap({ command: resolved.command, args: resolved.args, cwd: typeof opts.cwd === "string" ? opts.cwd : undefined, env: opts.env ?? process.env, ...(threadId ? { threadId } : {}), ...(conversationBot ? { conversationBot } : {}), ...request, ...home });
+}
+
+/** What the audience rule gives a box in `cwd` now, as a key (null off a team or with the box off): a process kept
+ * between turns is started again when it changes, such as a bot's "Can edit team files". */
+export function boxAudienceKey(cwd: string): string | null {
+  if (!botBox.enabled()) return null;
+  const threadId = engineHomes.thread(), conversationBot = engineHomes.bot();
+  return botBox.audienceKey({ cwd, ...(threadId ? { threadId } : {}), ...(conversationBot ? { conversationBot } : {}) });
 }
 
 /** What a process several conversations share must be boxed with to serve `cwd` (null with the box off): all of the bot's
- * conversation folders for a conversation folder (task-workspaces/<bot>/<thread>, BoxRequest.botThreads), else `cwd`. */
+ * conversation folders for a conversation folder (task-workspaces/<bot>/<thread>, BoxRequest.botThreads), on a Team
+ * Cloud only those its audience may read (BoxAudience.threads), else `cwd`. */
 export function sharedBoxScope(cwd: string): string | null {
   if (!botBox.enabled()) return null;
   const parent = dirname(resolve(cwd));
-  return basename(dirname(parent)) === "task-workspaces" ? parent : resolve(cwd);
+  if (basename(dirname(parent)) !== "task-workspaces") return resolve(cwd);
+  const threadId = engineHomes.thread(), conversationBot = engineHomes.bot();
+  const threads = botBox.sharedThreadsKey({ cwd, ...(threadId ? { threadId } : {}), ...(conversationBot ? { conversationBot } : {}) });
+  return threads ? `${parent}#${createHash("sha256").update(threads).digest("hex").slice(0, 16)}` : parent;
 }
 
 let botSpawnEnvHook: ((env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv) | null = null;
@@ -311,19 +347,29 @@ export function spawnCli(
   const { box: _box, engineHome: _engineHome, botWork, ...spawnOpts } = boxed ? options : outsideBoxOptions(resolved.command, options);
   // The box's extra descriptors (its seccomp filter) follow stdio; only a plain three-entry stdio can take them.
   const stdio = boxed?.extraFds.length && Array.isArray(spawnOpts.stdio) && spawnOpts.stdio.length === 3 ? [...spawnOpts.stdio, ...boxed.extraFds] : spawnOpts.stdio;
+  // A server that restarts in place stops what an earlier one left by this tag (engine-records.ts).
+  const tag = process.platform === "win32" ? null : engineRunTag();
   const start = () => spawn(boxed?.command ?? resolved.command, boxed?.args ?? resolved.args, {
     ...spawnOpts,
     ...(boxed ? { env: boxed.env, stdio } : {}),
+    ...(tag ? { env: { ...(boxed?.env ?? spawnOpts.env ?? process.env), [ENGINE_TAG_ENV]: tag } } : {}),
     // POSIX: own group so kill(-pid) reaps child MCP servers; Windows: taskkill /T does it.
     ...(process.platform === "win32" ? { windowsHide: true } : { detached: true }),
   }) as ChildProcessByStdio<Writable, Readable, Readable>;
   let child: ChildProcessByStdio<Writable, Readable, Readable>;
+  const refused = (code: string | undefined) => { processBudget.spawnFailed(code); engineMemory.spawnRefused(code, owner === "bot"); };
   try {
     child = owner === "bot" || botWork ? spawnBotWork(start) : start();
+  } catch (error) {
+    // Node throws some refusals (ENOMEM) at once rather than reporting them on the child.
+    if (shortageCode(error)) refused((error as NodeJS.ErrnoException).code);
+    throw error;
   } finally {
     for (const fd of boxed?.extraFds ?? []) try { closeSync(fd); } catch {}
   }
   rememberLiveSpawn(child, [resolved.command, ...resolved.args]);
+  // Node reports most refused spawns (EAGAIN, EMFILE, ENOENT) on the child, a tick later, with no pid.
+  child.once("error", (error: NodeJS.ErrnoException) => { if (!child.pid) refused(error.code); });
   // The broker token minted for this process dies with it.
   if (boxed?.token) child.once("exit", boxed.release);
   if (process.platform !== "win32") cliGroups.add(child);
@@ -335,6 +381,7 @@ export function spawnCli(
     } catch {}
     linuxTrees.set(child, tree);
   }
+  if (process.platform !== "win32") recordEngine(child, child.pid ? linuxTrees.get(child)?.get(child.pid) ?? null : null);
   if (process.platform !== "win32" && owner === "bot") {
     rememberEngineSession(child);
     engineMemory.track(child);
@@ -453,9 +500,11 @@ export function cliVersionReader(cli: string): (err: Error | null, stdout: strin
 }
 
 /** Node reports a missing cwd as the CLI's own ENOENT, so pass `cwd` to tell a moved folder from a missing CLI. */
-type SpawnFailure = { message: string; setup: boolean };
+type SpawnFailure = { message: string; setup: boolean; text?: ReturnType<typeof noticeFailure>["text"] };
 
 export function describeSpawnFailure(err: NodeJS.ErrnoException, cli: string, cwd?: string): SpawnFailure {
+  const shortage = shortageCode(err);
+  if (shortage) return { ...noticeFailure("chat.notice.outOfProcesses", { code: shortage }), setup: false };
   if (err.code === "ENOENT") {
     if (cwd && !existsSync(cwd))
       return { message: `This chat's working folder no longer exists: ${cwd}. Choose another folder in the bot's settings, or create it again.`, setup: false };
@@ -483,7 +532,7 @@ export function killCliTree(child: ChildProcess, timeoutMs = 5_000): Promise<boo
   const run = stopCliTree(child, pid, Number.isFinite(timeoutMs) ? Math.max(0, timeoutMs) : 5_000);
   stopping.set(child, run);
   // Remember success, so a delayed caller cannot signal a reused PID/group.
-  void run.then((stopped) => { if (!stopped) stopping.delete(child); });
+  void run.then((stopped) => { if (!stopped) stopping.delete(child); else engineStopped(child); });
   return run;
 }
 
@@ -497,7 +546,8 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
       if (linuxRootIdentityMatches(child) === undefined) return false;
       try {
         process.kill(-pid, 0);
-        return false;
+        // A zombie member still answers kill(-pgid, 0); only as a container's PID 1 does nothing else collect it.
+        return process.platform === "linux" && process.pid === 1 && linuxGroupOnlyExited(pid);
       } catch (error) {
         // EPERM and other failures do not prove that the group is gone.
         return (error as NodeJS.ErrnoException).code === "ESRCH";
@@ -529,8 +579,10 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
       return true;
     };
     if (settled()) return true;
+    if (exited()) processBudget.noteLateReaped();
     signal("SIGTERM");
     if (await wait(timeoutMs)) return true;
+    processBudget.noteForceKilled();
     signal("SIGKILL");
     return wait(1_000);
   }

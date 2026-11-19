@@ -10,8 +10,8 @@ import { SignOutConfirm } from "../SignOutConfirm";
 import { CloudAccountSettings } from "../../CloudAccountSettings";
 import { useCloudUsageSettings } from "../../CloudUsageMeter";
 import { OrganizationSettings } from "../../OrganizationSettings";
+import { PlacesTogetherSwitch } from "../../PlacesTogetherSwitch";
 import { SettingRow, SettingsGroup, SettingsLinkRow, SettingsRows } from "../../SettingsPrimitives";
-import { UpdatesConsentRow } from "../../UpdatesConsent";
 import { useAccountSummary, useYou } from "../account-summary";
 import { useSettingsShell } from "../settings-shell";
 import { SpentRow } from "../plan-parts";
@@ -76,18 +76,13 @@ export function AccountPage() {
         <SettingsRows><InertRow title={t("settings.account.orgSignIn")} control={<button type="button" className="ui-button" tabIndex={-1}>{t("settings.account.signIn")}</button>} /></SettingsRows>
       </SettingsGroup>
     )}
-    {ctx.desktop && !ctx.client && window.ogb?.updatesConsent && (
-      <SettingsGroup label={t("settings.account.emails", { app: productName() })} block="emails">
-        <SettingsRows><UpdatesConsentRow /></SettingsRows>
-      </SettingsGroup>
-    )}
   </>;
 }
 
 export function PlanPage() {
   const { ctx, place } = useSettingsShell();
   const { state, dispatch } = useStore();
-  const { usage, upgrade, dialog } = useCloudUsageSettings();
+  const { usage } = useCloudUsageSettings();
   if (!ctx.desktop) {
     return (
       <SettingsGroup block="plan">
@@ -101,11 +96,11 @@ export function PlanPage() {
   }
   return <>
     <CloudAccountSettings part="plan" advanced={ctx.advanced} cloudHome={ctx.cloud} teamHome={state.config?.team} linkRequest={state.appSettingsCloudLink}
-      usage={usage} upgrade={upgrade}
+      usage={usage}
       // A Cloud's own cost stays off its paid plan's card (§1.3: it must never read as a second bill).
       extra={!ctx.advanced && !ctx.client && !(ctx.team && !ctx.admin) && (place.kind === "computer" || place.kind === "server") ? <SpentRow place={place.name} /> : undefined}
       onAddCloud={() => dispatch({ type: "openCloudAdd", source: "app_settings" })}
       onSignIn={() => dispatch({ type: "openCloudAdd", source: "app_settings", signIn: true })} />
-    {dialog}
+    <PlacesTogetherSwitch />
   </>;
 }

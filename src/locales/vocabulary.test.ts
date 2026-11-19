@@ -58,7 +58,6 @@ const isSource = (name: string) => /\.(?:ts|tsx|mjs|cjs|js)$/.test(name) && !/\.
 const ALLOWED: ReadonlyArray<{ file: string; snippet?: string; why: string }> = [
   { file: "packages/phone-protocol/src/credential-request.ts", snippet: "when Boat is selected", why: "the card that asks for a person's own Boat key" },
   { file: "server/boat-create-idempotency.ts", snippet: "unnamed Boat", why: "own-key repair: boat.dev's own name for a machine" },
-  { file: "src/lib/boat-offer.ts", snippet: "MausBot introduced me", why: "the email a person sends Boat to claim its credit" },
   { file: "server/workspace-backup.ts", snippet: "OMB-WORKSPACE-1", why: "a backup file's format marker" },
   { file: "electron/company-backups.mjs", snippet: "OMB-WORKSPACE-1", why: "a backup file's format marker" },
 ];
@@ -160,7 +159,7 @@ describe("one name per thing", () => {
     expect([myCloud, thisComputer, serverMenuLocal]).toEqual([e["cloudSetup.myCloud"], "place.local", "place.local"]);
     type Text = (key: string) => string;
     const label = (key: string) => (text: Text) => text(key);
-    const settings = (section: string) => (text: Text) => `${text("settings.title")} → ${text(section)}`;
+    const settings = (...sections: string[]) => (text: Text) => [text("settings.title"), ...sections.map(text)].join(" → ");
     const withoutEllipsis = (key: string) => (text: Text) => text(key).replace(/…$/, "");
     const pointers: Array<[string, Array<(text: Text) => string>]> = [
       ["cloudAccount.onCloudSignIn", [label("cloudAccount.signInAgain")]],
@@ -172,7 +171,7 @@ describe("one name per thing", () => {
       ["native.boot.folderMissing.body", [label("native.menu.server")]],
       ["native.boot.unhealthy.body", [label("native.menu.server")]],
       ["native.dialog.connectFailed.detail", [withoutEllipsis("native.menu.connect")]],
-      ["native.dialog.share.detail", [settings("settings.app.computers")]],
+      ["native.dialog.share.detail", [settings("settings.page.app", "settings.app.computers")]],
     ];
     const staleIn = (text: Text, prefix: string) => pointers.flatMap(([key, labels]) => labels.map((of) => of(text))
       .filter((shown) => !text(key).includes(shown)).map((shown) => `${prefix}${key} → ${shown}`));

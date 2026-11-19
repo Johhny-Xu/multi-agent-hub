@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { AppWindow, Bot as BotIcon, Cloud, Download, Mail, Smartphone, Sparkles, type LucideIcon } from "lucide-react";
+import { AppWindow, Bot as BotIcon, Download, Mail, Smartphone, Sparkles, type LucideIcon } from "lucide-react";
 
-import { track } from "@/lib/analytics";
 import { INTRO_CHIPS, setupSteps, type IntroChip, type SetupStep } from "@/lib/default-bot";
 import { t } from "@/lib/i18n";
 import { phonePairingSettingsAction } from "@/lib/phone-pairing";
@@ -16,7 +15,6 @@ const STEPS: Record<SetupStep, { label: LocaleKey; icon: LucideIcon }> = {
   bots: { label: "helperIntro.step.bots", icon: BotIcon },
   apps: { label: "helperIntro.step.apps", icon: AppWindow },
   phone: { label: "helperIntro.step.phone", icon: Smartphone },
-  cloud: { label: "helperIntro.step.cloud", icon: Cloud },
 };
 
 /** Each step opens the app's own flow for it. */
@@ -26,7 +24,6 @@ export function setupAction(step: SetupStep): Action {
     case "bots": return { type: "newBot" };
     case "apps": return { type: "togglePlugins", open: true, surface: "apps" };
     case "phone": return phonePairingSettingsAction();
-    case "cloud": return { type: "openCloudAdd", source: "app_onboarding" };
   }
 }
 
@@ -36,9 +33,7 @@ export function HelperSetup() {
   const steps = setupSteps({
     aiReady: state.instances.some(engineReady),
     ownBots: state.bots.filter((bot) => !bot.hidden && !bot.defaultBot).length,
-    onCloud: state.config?.cloudHome === true,
     team: Boolean(state.config?.team),
-    remote: typeof window !== "undefined" && window.ogb?.remoteClient?.active === true,
   });
   if (!steps.length) return null;
   return (
@@ -48,10 +43,7 @@ export function HelperSetup() {
         {steps.map((step) => {
           const { label, icon: Icon } = STEPS[step];
           return (
-            <button key={step} type="button" data-helper-step={step} onClick={() => {
-              if (step === "cloud") track("onboarding_cloud", { action: "start_trial" });
-              dispatch(setupAction(step));
-            }}
+            <button key={step} type="button" data-helper-step={step} onClick={() => dispatch(setupAction(step))}
               className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-accent/20">
               <Icon size={14} aria-hidden="true" className="text-accent" />{t(label)}
             </button>
@@ -67,7 +59,6 @@ const CHIPS: Record<IntroChip, { label: LocaleKey; icon: LucideIcon }> = {
   apps: { label: "helperIntro.chip.mail", icon: Mail },
   import: { label: "helperIntro.chip.skills", icon: Download },
   phone: { label: "helperIntro.chip.phone", icon: Smartphone },
-  cloud: { label: "helperIntro.chip.cloud", icon: Cloud },
 };
 
 /** Each chip opens the app's own flow for it; Connect an AI opens its dialog in place (IntroChips). */
@@ -76,7 +67,6 @@ export function chipAction(chip: Exclude<IntroChip, "ai">): Action {
     case "apps": return { type: "togglePlugins", open: true, surface: "apps" };
     case "import": return { type: "toggleAppSettings", open: true, section: "import" };
     case "phone": return phonePairingSettingsAction();
-    case "cloud": return { type: "openCloudAdd", source: "app_onboarding" };
   }
 }
 
@@ -95,7 +85,6 @@ export function IntroChips({ chips }: { chips: readonly IntroChip[] }) {
   const tap = (chip: IntroChip) => {
     setTapped((now) => new Set([...now, chip]));
     if (chip === "ai") return setConnecting(true);
-    if (chip === "cloud") track("onboarding_cloud", { action: "start_trial" });
     dispatch(chipAction(chip));
   };
   return (

@@ -2,6 +2,7 @@ import { processAlive } from "./browser-processes.ts";
 import type { ProviderAdapter, RuntimeEvent } from "./contracts.ts";
 import type { ServerTextParams } from "../shared/server-text.ts";
 import { sampleProcessTree, type ProcessSample } from "./drivers/acp/quiet-status.ts";
+import { formatSpan, sampleTurnTree, TurnLiveness, type LivenessSample } from "./drivers/turn-liveness.ts";
 import { redactSecretsInText } from "../shared/redact.ts";
 
 // A turn whose thread emits nothing for stallMs is wedged; waiting on a person or a computer is not a stall unless the
@@ -42,7 +43,7 @@ export function stuckCommand(turn: Partial<Pick<WatchedTurn, "runningTools">>, s
 
 /** Why the watchdog stopped a turn: it went silent, or the process running its engine exited and the turn can never
  * answer. */
-export type StallReason = "silent" | "engine-exited";
+export type StallReason = "silent" | "engine-exited" | "server-error";
 
 /** The silence that stops a turn whose engine process has exited: its engine can never answer it, so it waits only long
  * enough for the driver to report the turn's own end, and not for the tool limit. */
@@ -51,11 +52,24 @@ export const ENGINE_EXIT_STALL_MS = 2 * 60_000;
 /** What the person is told when the watchdog stops a turn silent for silentMs: the shell command still running, with how
  * long it ran, so they know what looked stuck; otherwise how long the turn was silent. A turn whose engine process
  * exited is told that instead: no silence of its own stopped it. */
-export function stallNotice(turn: Partial<Pick<WatchedTurn, "runningTools">>, silentMs: number, stopAt: number, reason: StallReason = "silent"):
-  { key: "chat.notice.engineExited"; params: ServerTextParams } | { key: "chat.notice.stalledCommand"; params: { command: string; minutes: number } } | { key: "chat.notice.stalled"; params: { minutes: number } } {
+export function stallNotice(turn: Partial<Pick<WatchedTurn, "runningTools">>, silentMs: number, stopAt: number, reason: StallReason = "silent", name?: string):
+  { key: "chat.notice.engineExited"; params: ServerTextParams } | { key: "chat.notice.stalledCommand"; params: { command: string; minutes: number } }
+  | { key: "chat.notice.stalled"; params: { minutes: number } } | { key: "chat.notice.turnStuck"; params: { name: string; window: string } } {
   if (reason === "engine-exited") return { key: "chat.notice.engineExited", params: {} };
   const stuck = stuckCommand(turn, stopAt);
-  return stuck ? { key: "chat.notice.stalledCommand", params: stuck } : { key: "chat.notice.stalled", params: { minutes: Math.round(silentMs / 60_000) } };
+  if (stuck) return { key: "chat.notice.stalledCommand", params: stuck };
+  // Named: the turn was judged by its engine's status (no events, and its process tree showed no CPU, bytes or model
+  // connection), so the person is told that, not just how long it was quiet.
+  if (name) return { key: "chat.notice.turnStuck", params: { name, window: formatSpan(silentMs) } };
+  return { key: "chat.notice.stalled", params: { minutes: Math.round(silentMs / 60_000) } };
+}
+
+/** A status query of the thread's engine process tree (CPU, bytes moved, connections); null when the driver tracks no
+ * engine process for it. */
+export async function engineTreeSample(adapter: Pick<ProviderAdapter, "enginePid"> | null | undefined, threadId: string,
+  sample: (pid: number) => Promise<LivenessSample> = sampleTurnTree): Promise<LivenessSample | null> {
+  const pid = adapter?.enginePid?.(threadId);
+  return pid === undefined ? null : sample(pid);
 }
 
 // Number() also reads "Infinity" and "1e309" as numbers, and an endless limit would switch the watchdog off.
@@ -89,6 +103,8 @@ export async function engineCommandCpuMs(adapter: Pick<ProviderAdapter, "engineP
 }
 
 const SUSPENDED_SWEEPS = 3;
+/** A turn silent this long gets its engine tree queried each sweep. */
+const ENGINE_QUERY_AFTER_MS = 2 * 60_000;
 
 const parked = (turn: WatchedTurn): boolean => turn.waitingOnHuman || turn.waitingOnComputer;
 
@@ -112,6 +128,10 @@ export interface TurnWatchdogOptions {
   /** When the turn's engine last showed, outside its events, that it is still waiting on its model (a provider queue):
    * read each sweep, a later time counts as an event. */
   engineAliveAt?: (turn: WatchedTurn) => number | undefined;
+  /** A status query of the turn's engine process tree, read each sweep once the turn has been silent for a while: CPU
+   * moving, bytes moving or a connection to a remote model counts as an event, so a model that thinks for a long time
+   * without printing is not stopped as silent. */
+  engineSample?: (turn: WatchedTurn) => Promise<LivenessSample | null>;
   /** silentMs: the silence that stopped the turn, stallMs, toolStallMs, parkedStallMs or engineExitStallMs. reason: why
    * the turn was stopped, so the person is told what actually happened to it. */
   onStall: (turn: WatchedTurn, silentMs: number, reason: StallReason) => void;
@@ -126,6 +146,8 @@ export class TurnWatchdog {
   private unheldSince = new Map<string, number>();
   /** Each turn's last read of its shell command's CPU time: the command it was read for (by start) and whether a read is out. */
   private cpu = new WeakMap<WatchedTurn, { since: number; ms: number | null; reading: boolean }>();
+  /** Each turn's last status query of its engine tree. */
+  private engine = new WeakMap<WatchedTurn, { sample: LivenessSample | null; at: number; reading: boolean }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private opts: TurnWatchdogOptions;
 
@@ -198,6 +220,15 @@ export class TurnWatchdog {
     if (turn) this.watch(threadId, turn.botId);
   }
 
+  /** Stops a watched turn now, as a stall would (server/crash-guard.ts: an error in the turn's own work). */
+  fail(threadId: string, reason: StallReason = "server-error"): boolean {
+    const turn = this.turns.get(threadId);
+    if (!turn) return false;
+    this.turns.delete(threadId);
+    this.opts.onStall(turn, this.now() - turn.lastEventAt, reason);
+    return true;
+  }
+
   watching(threadId: string): boolean {
     return this.turns.has(threadId);
   }
@@ -230,6 +261,7 @@ export class TurnWatchdog {
       // server/testing/group-local-vm-hooks.mjs rewrites the silentMs comparison below: keep that name.
       const { ms: silentMs, reason } = limit;
       if (at - turn.lastEventAt >= this.opts.stallMs) this.readCommandCpu(turn);
+      if (at - turn.lastEventAt >= Math.min(ENGINE_QUERY_AFTER_MS, this.opts.stallMs / 2)) this.readEngine(turn);
       if (at - turn.lastEventAt < silentMs) continue;
       this.turns.delete(turn.threadId);
       this.opts.onStall(turn, silentMs, reason);
@@ -259,6 +291,22 @@ export class TurnWatchdog {
       // A read that failed keeps the last one to compare with.
       this.cpu.set(turn, { since, ms: ms ?? previous, reading: false });
       if (ms !== null && previous !== null && ms !== previous && this.turns.get(turn.threadId) === turn) turn.lastEventAt = Math.max(turn.lastEventAt, this.now());
+    });
+  }
+
+  /** Queries the silent turn's engine tree; activity since the last query counts as an event. */
+  private readEngine(turn: WatchedTurn): void {
+    const read = this.opts.engineSample;
+    if (!read || parked(turn)) return;
+    const last = this.engine.get(turn);
+    if (last?.reading) return;
+    this.engine.set(turn, { sample: last?.sample ?? null, at: last?.at ?? 0, reading: true });
+    void Promise.resolve().then(() => read(turn)).catch(() => null).then((sample) => {
+      const at = this.now();
+      if (!sample) { this.engine.set(turn, { sample: last?.sample ?? null, at: last?.at ?? 0, reading: false }); return; }
+      const active = TurnLiveness.activity(last?.sample ?? null, sample, last?.sample ? at - last.at : 0).length > 0;
+      this.engine.set(turn, { sample, at, reading: false });
+      if (active && this.turns.get(turn.threadId) === turn) turn.lastEventAt = Math.max(turn.lastEventAt, at);
     });
   }
 

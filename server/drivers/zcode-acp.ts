@@ -28,8 +28,10 @@ import { fileURLToPath } from "node:url";
 
 import type { ModelCatalog, ModelVariantOption } from "../contracts.ts";
 import { AdapterProcessGroups, installAdapterShutdown } from "./adapter-process-group.ts";
+import { formatSpan, livenessTickMs, statusUpdate, stuckErrorData, TurnLiveness, turnMaxTotalMs, turnStuckMs, type TurnNotice } from "./turn-liveness.ts";
 
-const DEFAULT_IDLE_TIMEOUT_SEC = 900;
+/** setTimeout's ceiling: an RPC wait for a turn with no stuck window. */
+const NEVER_MS = 2_147_483_647;
 /** How long a finished turn's app server may sit idle before the bridge recycles it. Every idle
  * one holds the CLI's whole footprint (~0.5 GB) and several concurrent threads exhaust the host
  * (E52); a prompt inside the window reuses the process instead. */
@@ -1244,7 +1246,14 @@ export function scheduleZcodeAppServerRecycle(session: ZcodeRecyclableSession, i
 function startBridge(): void {
   const launchCli = argValue("--cli") ?? "zcode";
   const launchMode = argValue("--mode") ?? "yolo";
-  const idleTimeoutSec = Math.max(1, Number(argValue("--timeout") ?? DEFAULT_IDLE_TIMEOUT_SEC) || DEFAULT_IDLE_TIMEOUT_SEC);
+  // --timeout is now the stuck window in seconds (0 = never), not a time limit: a turn ends as stuck only once the app
+  // server sent no event and its process tree used no CPU, moved no bytes and held no model connection that long.
+  const timeoutArg = argValue("--timeout");
+  const stuckMs = timeoutArg !== undefined && Number.isFinite(Number(timeoutArg)) ? Math.max(0, Number(timeoutArg)) * 1000
+    : turnStuckMs(process.env, "OMB_ZCODE_STUCK_MS");
+  const maxTotalMs = turnMaxTotalMs(process.env, "OMB_ZCODE_MAX_MS");
+  const quietLimitMs = stuckMs > 0 ? stuckMs : NEVER_MS;
+  const tickMs = livenessTickMs(process.env, stuckMs);
   const cli = resolveZcodeCli(process.env, launchCli);
   const sessions = new Map<string, BridgeSession>();
   const groups = new AdapterProcessGroups();
@@ -1255,8 +1264,8 @@ function startBridge(): void {
   const reply = (id: unknown, result: unknown): void => {
     send({ jsonrpc: "2.0", id, result });
   };
-  const fail = (id: unknown, code: number, message: string): void => {
-    send({ jsonrpc: "2.0", id, error: { code, message } });
+  const fail = (id: unknown, code: number, message: string, data?: Record<string, unknown>): void => {
+    send({ jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } });
   };
   const update = (sessionId: string, value: Record<string, unknown>): void => {
     send({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
@@ -1378,7 +1387,7 @@ function startBridge(): void {
     // server can answer `session/send` long after the events of the turn it already runs (a
     // loaded CLI answers late), so every event restarts the wait and only total silence rejects.
     // The rejection leaves any running native turn alone — the retry follows it (E18).
-    const send = () => app.request("session/send", { sessionId, content: text, inputId }, idleTimeoutSec * 1_000, { renewOnEvent: true });
+    const send = () => app.request("session/send", { sessionId, content: text, inputId }, quietLimitMs, { renewOnEvent: true });
     let sent: any;
     // Set when the session already runs an earlier prompt: this turn follows that one to its end
     // instead of failing (E18), so its events are taken whatever input id they carry.
@@ -1401,10 +1410,25 @@ function startBridge(): void {
     if (!adoptActive && sent?.accepted !== true) throw new ZcodeRpcError("SEND_NOT_CONFIRMED");
     session.busy = true;
     session.cancelled = false;
-    // Any event from the app server renews the window, so a long turn that keeps producing tools
-    // or thinking is not stuck; only total silence ends it.
-    let quietUntil = Date.now() + idleTimeoutSec * 1_000;
-    const renew = (): void => { quietUntil = Date.now() + idleTimeoutSec * 1_000; };
+    // Any event from the app server is a sign of life, and so is its process tree using CPU, moving bytes or holding a
+    // model connection (a status query every ~30 s): a long turn that is thinking without events is not stuck.
+    // The bridge polls this app server several times a second, so its bytes always move and it spends a little CPU
+    // answering: bytes are not counted, and only CPU above 5% of a core is work.
+    const liveness = new TurnLiveness({
+      name: "ZCode", stuckMs, maxTotalMs, maxTotalVar: "OMB_ZCODE_MAX_MS", pid: () => app.child.pid, countIo: false, cpuShare: 0.05,
+    });
+    const renew = (): void => liveness.output();
+    let checkAt = Date.now() + tickMs;
+    const checkStatus = async (): Promise<void> => {
+      if (Date.now() < checkAt) return;
+      checkAt = Date.now() + tickMs;
+      const verdict = await liveness.check();
+      if (verdict.kind === "running") {
+        if (verdict.status) update(session.id, statusUpdate(verdict.status));
+        return;
+      }
+      throw new ZcodeRpcError("TURN_STUCK", verdict.kind === "stuck" ? { notice: verdict.notice } : { message: verdict.message });
+    };
     // A poll that times out is not a dead turn: the app server may be busy and answer the next
     // one. The streak of consecutive transient failures must not outlast the silence window, so a
     // genuinely unreachable app server still ends the turn instead of retrying forever.
@@ -1532,8 +1556,9 @@ function startBridge(): void {
       }
     };
     try {
-      while (Date.now() < quietUntil) {
+      for (;;) {
         if (session.cancelled) throw new ZcodeRpcError("CANCELLED");
+        await checkStatus();
         // A dead app server can never answer again: fail now instead of waiting for the silence
         // window to run out.
         if (!app.alive) throw new ZcodeRpcError("APP_SERVER_EXITED");
@@ -1551,7 +1576,12 @@ function startBridge(): void {
         } catch (error) {
           if (!isTransientPollError(error)) throw error;
           transientPollStreakStart ??= Date.now();
-          if (Date.now() - transientPollStreakStart >= idleTimeoutSec * 1_000) break;
+          // An app server that answers no poll for the whole stuck window is unreachable, whatever its CPU does.
+          if (stuckMs > 0 && Date.now() - transientPollStreakStart >= stuckMs) {
+            throw new ZcodeRpcError("TURN_STUCK", {
+              message: `ZCode was judged stuck by a status check: its app server answered no event poll for ${formatSpan(Date.now() - transientPollStreakStart)}, so the turn was stopped. Send the message again to retry.`,
+            });
+          }
           await sleep(TURN_POLL_MS);
           continue;
         }
@@ -1560,9 +1590,8 @@ function startBridge(): void {
         if (terminalError) throw terminalError;
         await sleep(TURN_POLL_MS);
       }
-      throw new ZcodeRpcError("TURN_TIMEOUT");
     } catch (error) {
-      if (error instanceof ZcodeRpcError && error.code === "TURN_TIMEOUT") {
+      if (error instanceof ZcodeRpcError && error.code === "TURN_STUCK") {
         // The native turn may still be running and the app server may drop the deferred session;
         // stop it here so the next prompt opens a fresh one instead of reusing a dead id.
         void app.request("session/stop", { sessionId }, 5_000).catch(() => {});
@@ -1624,6 +1653,11 @@ function startBridge(): void {
         return;
       }
       const code = error instanceof ZcodeRpcError ? error.code : "TURN_FAILED";
+      if (code === "TURN_STUCK") {
+        const detail = (error as ZcodeRpcError).detail as { notice?: TurnNotice; message?: string } | undefined;
+        if (detail?.notice) return fail(id, -32000, detail.notice.message, stuckErrorData(detail.notice));
+        return fail(id, -32000, detail?.message ?? "ZCode was stopped by its status check. Send the message again to retry.");
+      }
       const reason = classifyZcodeRpcRejection(error);
       fail(id, -32000, `ZCode could not finish this task (${code}${reason ? `: ${reason}` : ""}). Send the message again to retry.`);
     } finally {

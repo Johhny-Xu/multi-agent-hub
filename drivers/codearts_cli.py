@@ -26,13 +26,40 @@ MODEL_ID = re.compile(r"[A-Za-z0-9_.:-]+/[A-Za-z0-9_.:/-]+\Z")
 TEXT_SUFFIXES = {".txt", ".md", ".rst", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".csv", ".tsv", ".xml", ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".sh", ".ps1", ".sql", ".go", ".rs", ".java", ".c", ".h", ".cpp", ".hpp", ".log"}
 MAX_OUTPUT = 16 * 1024 * 1024
 
-# 单个任务默认上限（秒）。原来 300s，但一旦真的让它干活（跑 npm install、
-# 生成多文件页面）实测 5 分钟不够，会以 CODEARTS_TIMEOUT 收尾——文件都写完了却报失败。
-# 与 traecode(900) / zcode(1000) 对齐；Hub 侧还有自己的「无进展超时」兜底。
-DEFAULT_TIMEOUT_SEC = 900
-# E116：上面的 900s 现在是「无进展」上限（距最后一条 CLI 事件），不再是总时长；
-# 一直在调工具、出文本的任务不会因为写得久被杀。总时长另设硬上限。
-MAX_TOTAL_SEC = float(os.environ.get("AGENTHUB_CODEARTS_MAX_SEC") or 3600)
+# 不再有固定时长上限（原来 900s 无进展 + 3600s 总时长，长时间只思考不输出的任务会被误判超时）。
+# 现在每 ~30s 做一次状态查询：进程树是否还在、CPU 时间是否增长、是否有读写字节（/proc/<pid>/io）、
+# 是否有到模型的网络连接、是否有新输出。只有在「卡住窗口」内上述全都没有，才判定卡住（CODEARTS_STUCK）。
+# 卡住窗口默认 30 分钟：AGENTHUB_CODEARTS_STUCK_SEC（秒）或 OMB_TURN_STUCK_MS（毫秒）可改，0 = 永不判定。
+# --timeout 参数现在就是这个卡住窗口（秒）。
+def _env_seconds(names, fallback):
+    for name in names:
+        raw = (os.environ.get(name) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if not math.isfinite(value):
+            continue
+        if value <= 0:
+            return 0.0
+        return value / 1000.0 if name.endswith("_MS") else value
+    return fallback
+
+
+DEFAULT_STUCK_SEC = _env_seconds(("AGENTHUB_CODEARTS_STUCK_SEC", "OMB_CODEARTS_STUCK_MS", "OMB_TURN_STUCK_MS"), 1800.0)
+# 兼容旧名字：--timeout 的默认值。
+DEFAULT_TIMEOUT_SEC = DEFAULT_STUCK_SEC
+# 总时长上限默认关闭；只有显式设置 AGENTHUB_CODEARTS_MAX_SEC（或 OMB_TURN_MAX_MS）才启用。
+MAX_TOTAL_SEC = _env_seconds(("AGENTHUB_CODEARTS_MAX_SEC", "OMB_TURN_MAX_MS"), 0.0)
+# 模型目录查询（`codearts models`）是一次性的列表请求，不是任务，仍然用普通超时。
+MODEL_QUERY_TIMEOUT_SEC = 300.0
+# 状态查询间隔（秒）；窗口很短时（测试）按窗口的 1/4 查询。
+LIVENESS_TICK_SEC = 30.0
+# CPU 增量低于「单核 1%」视为运行时空转（定时器），不算干活。
+CPU_ACTIVE_SHARE = 0.01
+CPU_ACTIVE_FLOOR_SEC = 0.1
 
 # 工具调用审批模式。
 #   --pure 是无交互 headless，没有任何人可以批权限：CLI 会把每次 write/edit/bash
@@ -58,9 +85,10 @@ SHELL_ONLY_NOTE = (
 
 
 class AdapterError(Exception):
-    def __init__(self, code: str, status: str = "failed"):
+    def __init__(self, code: str, status: str = "failed", **detail):
         super().__init__(code)
         self.code, self.status = code, status
+        self.detail = {key: value for key, value in detail.items() if value is not None}
 
 
 def discover_cli(*, home: Path | str | None = None, env=None) -> str | None:
@@ -96,7 +124,7 @@ def describe_runtime(cli: str | None = None, **discovery) -> dict:
             "ide_login_implies_cli_login": False}
 
 
-def envelope(status="failed", text="", code=None, model="", session_id=None):
+def envelope(status="failed", text="", code=None, model="", session_id=None, detail=None):
     ok = status == "completed"
     value = {"type": "result", "is_error": not ok, "status": status,
              "subtype": "success" if ok else "error_" + (code or status).lower(),
@@ -104,7 +132,7 @@ def envelope(status="failed", text="", code=None, model="", session_id=None):
     if session_id:
         value["session_id"] = session_id
     if not ok:
-        value["error"] = {"code": code or status, "message": code or status}
+        value["error"] = {"code": code or status, "message": code or status, **(detail or {})}
     return value
 
 
@@ -353,13 +381,142 @@ def _terminate_owned(child: subprocess.Popen):
     child.wait(timeout=5)
 
 
-def _capture(command, *, cwd, env, timeout, stdin="", on_line: Callable | None = None, max_total: float | None = None):
+def _read(path):
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
+        return handle.read()
+
+
+def _loopback_peer(hexaddr: str) -> bool:
+    addr = hexaddr.split(":")[0]
+    if len(addr) == 8:
+        return addr[6:8].upper() == "7F"
+    if len(addr) == 32:
+        upper = addr.upper()
+        if upper == "00000000000000000000000001000000":
+            return True
+        if upper.startswith("0000000000000000FFFF0000"):
+            return upper[30:32] == "7F"
+    return False
+
+
+def sample_tree(root: int, read=_read, listdir=os.listdir, readlink=os.readlink) -> dict:
+    """Status query for one task's processes (Linux /proc): the tree under `root` plus `root`'s process group.
+
+    Returns alive, cpu (s), io (bytes read+written), connections and external (non-loopback) connections; a value that
+    cannot be read is None, never 0. Other platforms only learn whether the root is alive.
+    """
+    unknown = {"alive": None, "cpu": None, "io": None, "connections": None, "external": None}
+    if not os.path.isdir("/proc") and listdir is os.listdir:
+        try:
+            os.kill(root, 0)
+            unknown["alive"] = True
+        except ProcessLookupError:
+            unknown["alive"] = False
+        except OSError:
+            unknown["alive"] = True
+        return unknown
+    try:
+        names = listdir("/proc")
+    except OSError:
+        return unknown
+    rows = {}
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            stat = read(f"/proc/{name}/stat")
+        except OSError:
+            continue
+        fields = stat[stat.rfind(")") + 2:].split()
+        try:
+            rows[int(name)] = dict(ppid=int(fields[1]), pgrp=int(fields[2]), zombie=fields[0] == "Z",
+                                   cpu=(int(fields[11]) + int(fields[12])) / 100.0)
+        except (IndexError, ValueError):
+            continue
+    kids = {}
+    for pid, row in rows.items():
+        kids.setdefault(row["ppid"], []).append(pid)
+    queue = [root] + [pid for pid, row in rows.items() if row["pgrp"] == root]
+    members = set()
+    while queue and len(members) < 1024:
+        pid = queue.pop(0)
+        if pid in members or pid not in rows:
+            continue
+        members.add(pid)
+        queue.extend(kids.get(pid, ()))
+    live = [pid for pid in members if not rows[pid]["zombie"]]
+    if not live:
+        return dict(unknown, alive=False)
+    cpu = sum(rows[pid]["cpu"] for pid in members)
+    io = 0
+    sockets, namespaces = set(), {}
+    for pid in live:
+        if io is not None:
+            try:
+                text = read(f"/proc/{pid}/io")
+                values = dict(line.split(":", 1) for line in text.splitlines() if ":" in line)
+                io += int(values.get("rchar", 0)) + int(values.get("wchar", 0))
+            except (OSError, ValueError):
+                io = None
+        try:
+            namespaces.setdefault(readlink(f"/proc/{pid}/ns/net"), pid)
+        except OSError:
+            pass
+        try:
+            fds = listdir(f"/proc/{pid}/fd")
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                target = readlink(f"/proc/{pid}/fd/{fd}")
+            except OSError:
+                continue
+            if target.startswith("socket:["):
+                sockets.add(target[8:-1])
+    connections = external = 0
+    readable, seen = False, set()
+    for pid in (namespaces.values() or [root]):
+        for table in ("tcp", "tcp6"):
+            try:
+                text = read(f"/proc/{pid}/net/{table}")
+            except OSError:
+                continue
+            readable = True
+            for line in text.splitlines()[1:]:
+                cols = line.split()
+                if len(cols) < 10 or cols[3] != "01" or cols[9] not in sockets or cols[9] in seen:
+                    continue
+                seen.add(cols[9])
+                connections += 1
+                if not _loopback_peer(cols[2]):
+                    external += 1
+    return {"alive": True, "cpu": cpu, "io": io,
+            "connections": connections if readable else None, "external": external if readable else None}
+
+
+def activity(previous: dict | None, sample: dict, span: float) -> list:
+    """What moved between two status queries: cpu, io, network."""
+    active = []
+    if previous and sample.get("cpu") is not None and previous.get("cpu") is not None \
+            and sample["cpu"] - previous["cpu"] >= max(CPU_ACTIVE_FLOOR_SEC, span * CPU_ACTIVE_SHARE):
+        active.append("cpu")
+    if previous and sample.get("io") is not None and previous.get("io") is not None and sample["io"] != previous["io"]:
+        active.append("io")
+    # A remote peer is a model request in flight; through a local proxy only moving bytes show it.
+    if (sample.get("external") or 0) > 0 or (sample.get("io") is None and sample.get("external") is None
+                                            and (sample.get("connections") or 0) > 0):
+        active.append("network")
+    return active
+
+
+def _capture(command, *, cwd, env, timeout, stdin="", on_line: Callable | None = None, max_total: float | None = None,
+             sampler: Callable | None = None, tick: float | None = None, clock: Callable = time.monotonic):
     """Run the CLI with disk-backed capture.
 
-    `timeout` is an idle limit: it is measured from the last stdout line, so a
-    task that keeps producing events (tool calls, text parts) is never killed
-    for being long (E116). `max_total` is the absolute cap. `on_line` sees each
-    stdout line as it arrives so the caller can report progress live.
+    `timeout` is the stuck window, not a time limit: every `tick` seconds the task's processes are queried (alive, CPU
+    time, bytes read/written, model connections) and a new stdout line also counts; only a task that showed none of
+    that for `timeout` seconds is stopped, as CODEARTS_STUCK. `timeout` 0/None = never. `max_total` is an opt-in
+    absolute cap (CODEARTS_TIMEOUT). `on_line` sees each stdout line as it arrives so the caller can report progress.
     """
     import threading
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
@@ -369,12 +526,15 @@ def _capture(command, *, cwd, env, timeout, stdin="", on_line: Callable | None =
                                  start_new_session=private_group,
                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         child._agenthub_pgid = child.pid if private_group else None
-        last = [time.monotonic()]
+        last = [clock()]
         size = [0]
+        query = sampler or sample_tree
+        window = float(timeout or 0)
+        every = tick if tick is not None else max(0.05, min(LIVENESS_TICK_SEC, window / 4 if window > 0 else LIVENESS_TICK_SEC))
 
         def pump():
             for raw in iter(child.stdout.readline, b""):
-                last[0] = time.monotonic()
+                last[0] = clock()
                 size[0] += len(raw)
                 if size[0] <= MAX_OUTPUT:
                     out.write(raw)
@@ -386,7 +546,8 @@ def _capture(command, *, cwd, env, timeout, stdin="", on_line: Callable | None =
 
         reader = threading.Thread(target=pump, daemon=True)
         reader.start()
-        started = time.monotonic()
+        started = clock()
+        previous, checked_at = None, started
         try:
             try:
                 if stdin:
@@ -395,9 +556,20 @@ def _capture(command, *, cwd, env, timeout, stdin="", on_line: Callable | None =
             except (BrokenPipeError, OSError):
                 pass
             while child.poll() is None:
-                now = time.monotonic()
-                if now - last[0] > timeout or (max_total is not None and now - started > max_total):
-                    raise AdapterError("CODEARTS_TIMEOUT", "timeout")
+                now = clock()
+                if max_total and now - started > max_total:
+                    raise AdapterError("CODEARTS_TIMEOUT", "timeout", max_s=round(max_total))
+                if now - checked_at >= every:
+                    try:
+                        sample = query(child.pid)
+                    except Exception:
+                        sample = {}
+                    if activity(previous, sample, now - checked_at):
+                        last[0] = max(last[0], now)
+                    previous, checked_at = sample, now
+                    if window > 0 and now - last[0] >= window:
+                        raise AdapterError("CODEARTS_STUCK", "timeout", quiet_s=round(now - last[0], 1),
+                                           reason="no CPU, output or network activity")
                 time.sleep(0.05)
             # A grandchild may still hold stdout after the CLI exits; never wait on it for long.
             reader.join(timeout=1)
@@ -483,7 +655,8 @@ def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="o
             raise AdapterError("CODEARTS_UNSUPPORTED_THINKING")
         if stream != "off":
             raise AdapterError("CODEARTS_UNSUPPORTED_STREAM")
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
+        # timeout = the stuck window in seconds; 0 = never judge the task stuck.
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout < 0:
             raise AdapterError("CODEARTS_INVALID_TIMEOUT")
         if model and not MODEL_ID.fullmatch(model):
             raise AdapterError("CODEARTS_MODEL_MUST_INCLUDE_PROVIDER", "blocked_model")
@@ -500,13 +673,13 @@ def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="o
         permission_auto = auto_permission(env)
         # 放开审批时补一句环境说明：write/edit 一定被拒，落盘只能走 bash。
         prompt = f"{task}\n\n{SHELL_ONLY_NOTE}" if permission_auto else task
-        # 模型目录查询仍按 timeout 计；正式任务的 timeout 是无进展上限（E116）。
-        deadline = time.monotonic() + (MAX_TOTAL_SEC if live else timeout)
+        # 模型目录查询用普通超时；正式任务的 timeout 是卡住窗口，总时长上限默认关闭。
+        query_timeout = MODEL_QUERY_TIMEOUT_SEC if live else (timeout or MODEL_QUERY_TIMEOUT_SEC)
         with tempfile.TemporaryDirectory(prefix="agenthub-codearts-task-") as temp:
             runtime = Path(temp)
             child_env = runtime_environment(path, runtime, env=env)
             if model:
-                stdout, stderr, code = capture([str(path), "models", "--pure"], cwd=str(workdir), env=child_env, timeout=max(0.001, min(timeout, deadline - time.monotonic())))
+                stdout, stderr, code = capture([str(path), "models", "--pure"], cwd=str(workdir), env=child_env, timeout=query_timeout)
                 error = diagnostic_error(stdout + "\n" + stderr)
                 if error:
                     raise error
@@ -524,17 +697,14 @@ def run_task(*, task, cli=None, model="", timeout=DEFAULT_TIMEOUT_SEC, stream="o
                 command.extend(("--model", model))
             for file in files:
                 command.extend(("--file", file))
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise AdapterError("CODEARTS_TIMEOUT", "timeout")
             if live:
                 stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=timeout, stdin=prompt,
-                                               on_line=_print_progress if progress else None, max_total=remaining)
+                                               on_line=_print_progress if progress else None, max_total=MAX_TOTAL_SEC or None)
             else:
-                stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=remaining, stdin=prompt)
+                stdout, stderr, code = capture(command, cwd=str(workdir), env=child_env, timeout=timeout, stdin=prompt)
             return parse_events(stdout, stderr, code, model, permission_is_fatal=not permission_auto)
     except AdapterError as error:
-        return envelope(error.status, code=error.code, model=model)
+        return envelope(error.status, code=error.code, model=model, detail=error.detail)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
         return envelope(code="CODEARTS_ADAPTER_FAILED", model=model)
 

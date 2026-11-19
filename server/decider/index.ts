@@ -6,7 +6,7 @@ import { deciderCredential } from "../included-services.ts";
 import {
   customAccount, geminiAccount, helpersOn, includedAccount, jevAccount, openrouterAccount, sharedOpenRouterKey, workersAiAccount, type HelperAccount,
 } from "./accounts.ts";
-import { CUSTOM_DEFAULT_API, customBackend, customEndpoint } from "./custom.ts";
+import { CUSTOM_DEFAULT_API, customApiOf, customBackend, customEndpoint } from "./custom.ts";
 import { GEMINI_DECISION_MODEL, geminiBackend } from "./gemini.ts";
 import { jevBackend } from "./jev.ts";
 import { appendDeciderLog, stateHash } from "./log.ts";
@@ -45,7 +45,7 @@ export function deciderModel(cfg: AppConfig): string {
 }
 
 export function customDeciderApi(cfg: AppConfig): CustomApi {
-  return cfg.decider?.customApi === "decisions" ? "decisions" : CUSTOM_DEFAULT_API;
+  return customApiOf(cfg.decider?.customApi);
 }
 
 export function deciderApi(cfg: AppConfig): OpenRouterApi {
@@ -106,14 +106,24 @@ export function deciderSharedKeyUsable(cfg: AppConfig): boolean {
   return Boolean(sharedOpenRouterKey(cfg));
 }
 
+/** A key from elsewhere in Settings the decision model falls back on: OpenRouter's, or a Gemini one. */
+export function deciderBorrowedKey(cfg: AppConfig): boolean {
+  return deciderSharedKeyUsable(cfg) || Boolean(geminiAccount(cfg));
+}
+
 /** Never a key, nor an operator base URL with no UI; a custom gateway's `baseUrl` is the person's own setting. `provider` is the one in use, else the one chosen
- * (so Settings shows its key field); `keySource` and `sharedKey` are OpenRouter's, while it is in use. Which own
- * keys are on file is `describeHelpers`'s. */
+ * (so Settings shows its key field); `keySource` and `sharedKey` are OpenRouter's, while it is in use. `chosen` is Jev
+ * when the person picked it but only the shared OpenRouter key stands in, and OpenRouter when it was picked but only a
+ * saved Gemini key stands in, so Settings keeps the pick and its key field.
+ * Which own keys are on file is `describeHelpers`'s. */
 export function describeDecider(cfg: AppConfig) {
   const account = deciderAccount(cfg);
   const provider = account?.provider ?? draftProvider(cfg);
+  const jevChosen = cfg.decider?.provider === "jev" && provider === "openrouter" && account?.keySource === "shared";
+  const openrouterChosen = cfg.decider?.provider === "openrouter" && provider === "gemini";
   return {
     provider,
+    ...(jevChosen ? { chosen: "jev" as const } : openrouterChosen ? { chosen: "openrouter" as const } : {}),
     ...(provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
     ...(provider === "gemini" ? { model: GEMINI_DECISION_MODEL } : {}),
     ...(provider === "custom" ? {
@@ -200,7 +210,7 @@ export const DECIDER_KEY_REJECTED: Record<DeciderProvider, string> = {
 export function deciderPatchKey(
   patch: Partial<DeciderConfig>,
   current: DeciderConfig | undefined,
-): { provider: DeciderProvider; check: DeciderKeyCheck } | null {
+): { provider: keyof typeof DECIDER_KEY_ERROR; check: DeciderKeyCheck } | null {
   const jevKey = patch.key?.trim();
   const geminiKey = patch.geminiKey?.trim();
   const workersAiKey = patch.workersAiToken?.trim();
@@ -208,7 +218,7 @@ export function deciderPatchKey(
   const customKey = patch.customKey?.trim();
   if (customKey) {
     const model = (patch.customModel ?? current?.customModel)?.trim();
-    const api = (patch.customApi ?? current?.customApi) === "decisions" ? "decisions" : CUSTOM_DEFAULT_API;
+    const api = customApiOf(patch.customApi ?? current?.customApi);
     return { provider: "custom", check: { key: customKey, provider: "custom", api, ...(model ? { model } : {}) } };
   }
   if (jevKey) return { provider: "jev", check: { key: jevKey, provider: "jev" } };
@@ -371,7 +381,7 @@ export function createDecider(deps: DeciderDeps): Decider {
     if (account.provider === "gemini") return { model: GEMINI_DECISION_MODEL };
     if (account.provider === "custom") {
       const model = input.model?.trim() || cfg.decider?.customModel?.trim();
-      return { ...(model ? { model } : {}), api: input.api === "decisions" || input.api === "systemone" ? input.api : customDeciderApi(cfg) };
+      return { ...(model ? { model } : {}), api: input.api ? customApiOf(input.api) : customDeciderApi(cfg) };
     }
     if (account.provider !== "openrouter") return {};
     return input.model?.trim() ? { model: input.model.trim(), api: input.api ?? "chat" } : { model: deciderModel(cfg), api: deciderApi(cfg) };

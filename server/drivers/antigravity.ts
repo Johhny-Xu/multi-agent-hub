@@ -20,21 +20,30 @@ import { noticeFailure } from "../chat-notices.ts";
 import { homedir } from "node:os";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./acp/core.ts";
 import {
-  AntigravityAuthController,
+  antigravityClientInfo,
   antigravityProfileAuthenticated,
   antigravityProfileDirectory,
+  antigravitySessionSetup,
+  antigravityTokenPath,
+  authorizationUrlFromLine,
+  noteAntigravitySignedIn,
+  noteAntigravitySignInRequired,
   prepareAntigravityProfile,
   probeAntigravityModels,
   isAddedAntigravityAccount,
   removeAntigravitySignIn,
   validateAntigravityRuntime,
+  verifyAntigravityBrowserHelper,
 } from "./antigravity-acp.ts";
+import { antigravityLimitFacts, watchAntigravityPromptOutcome } from "./antigravity-turn-outcome.ts";
+import { AntigravityAuthController } from "./antigravity-auth.ts";
 import {
   antigravityManagedInstallAvailable,
   installAntigravityRuntime,
   resolveAntigravityRuntime,
 } from "./antigravity-runtime.ts";
 import { resolveAntigravityReleaseAsset } from "./antigravity-release.ts";
+import { AntigravityProcesses } from "./antigravity-processes.ts";
 import { VERIFICATION_TEMP_KEY, scheduleAntigravityTempSweep } from "./antigravity-temp.ts";
 import { augmentedPath } from "../env-path.ts";
 import { AntigravityCliLoginController } from "./antigravity-cli-login.ts";
@@ -82,7 +91,22 @@ export function antigravityPermissionMode(fullAuto: boolean, approvalMode?: Appr
 /** Full access on an agy CLI is a launch flag (1.5+ dropped the yolo session mode). */
 export const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions";
 
+const SIGN_IN_WORDS = /\bauthenticat|\bunauthenticated\b|\bsign(?:ed)?[ -]?in\b|\blog(?:ged)?[ -]?in\b|\bcredentials?\b/iu;
+
+/** -32000 is ACP's `auth_required`, but an agent may reuse it for other failures; the text must agree. */
+export function antigravitySignInError(error: unknown): boolean {
+  const value = error as { code?: unknown; message?: unknown; data?: unknown } | null;
+  if (value?.code !== -32000) return false;
+  const data = typeof value.data === "string" ? value.data : value.data && typeof value.data === "object" ? JSON.stringify(value.data) : "";
+  return SIGN_IN_WORDS.test(`${typeof value.message === "string" ? value.message : ""} ${data.slice(0, 2_000)}`);
+}
+
 const managedAsset = resolveAntigravityReleaseAsset();
+const runtimeProcesses = new AntigravityProcesses();
+/** Every model id an account here has been offered, beside the bundled catalog's. */
+const offeredModels = new Set<string>();
+/** The version of the runtime each instance's turns were last started on, known before it answers initialize. */
+const launchedVersions = new Map<string, string | null>();
 
 const support: AcpSupport = {
   driverKind: "antigravityAgent",
@@ -114,6 +138,7 @@ const support: AcpSupport = {
 
   resolveCommand: async (env, config, instanceId) => {
     const runtime = await resolveAntigravityRuntime(config.cli, env);
+    launchedVersions.set(instanceId, runtime.version);
     const profile = await prepareAntigravityProfile({ instanceId, runtime, baseEnv: env });
     if (profile.tempDirectory) scheduleAntigravityTempSweep(instanceId);
     return {
@@ -131,17 +156,32 @@ const support: AcpSupport = {
     const runtime = await resolveAntigravityRuntime(config.cli, env);
     const profile = await prepareAntigravityProfile({ instanceId, runtime, baseEnv: env });
     if (!(await antigravityProfileAuthenticated(profile))) throw new Error(support.loginNote);
-    return probeAntigravityModels({
+    const catalog = await probeAntigravityModels({
       runtime,
       profile,
       fallbackDefault: currentEngineCatalog("antigravity").default,
     });
+    for (const option of catalog.options) offeredModels.add(option.id);
+    return catalog;
   },
 
   pickAuthMethod: (methods) => methods.some((method) => method.id === "oauth-personal")
     ? "oauth-personal"
     : null,
   authFailure: "fail",
+  // With a stored token Google no longer honours, agy_acp_server 1.4.3 prints its sign-in link and waits on
+  // `authenticate`.
+  signInRequest: {
+    stderrLine: (line) => authorizationUrlFromLine(line) !== null,
+    rpcError: antigravitySignInError,
+    required: (instanceId) => noteAntigravitySignInRequired(antigravityTokenPath(instanceId)),
+  },
+  processStarted: (child, instanceId) => runtimeProcesses.track(instanceId, child),
+  sessionSetupParams: antigravitySessionSetup,
+  // One model family's quota is not the account's: Gemini and the models that share another allowance keep running.
+  limitFacts: (_text, model) => antigravityLimitFacts(model, [...support.models.options.map((option) => option.id), ...offeredModels]),
+  clientInfo: (instanceId) => antigravityClientInfo(launchedVersions.get(instanceId)),
+  promptOutcome: (instanceId, sessionId) => watchAntigravityPromptOutcome(support.displayName, antigravityProfileDirectory(instanceId), sessionId),
   requireAuthenticationBeforeSpawn: true,
   isAuthenticated: async (env, config, instanceId) => {
     try {
@@ -304,10 +344,14 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
     const adapter = withServedModels(base, tracker);
     scheduleAntigravityTempSweep(input.instanceId);
     scheduleAntigravityTempSweep(VERIFICATION_TEMP_KEY);
-    const auth = new AntigravityAuthController(() => void base.refreshModels?.());
+    const auth = new AntigravityAuthController(() => {
+      noteAntigravitySignedIn(antigravityTokenPath(input.instanceId));
+      void base.refreshModels?.();
+    });
     // An added agy CLI account signs in with `agy acp --login` in its own HOME (see prepareAntigravityProfile).
     const cliLogin = new AntigravityCliLoginController(() => void base.refreshModels?.());
     let cliLoginActive = false;
+    let signingOut: Promise<void> = Promise.resolve();
     let installFailure: string | undefined;
     const runtimeAndProfile = async () => {
       // A GUI launch's raw PATH may omit the official runtime the model picker found.
@@ -352,13 +396,18 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
             },
           }
         : {}),
+      authenticationMethod: "callback-url",
       startAuthentication: async () => {
+        await signingOut;
         const { runtime, profile } = await runtimeAndProfile();
         auth.cancel();
         cliLogin.cancel();
         cliLoginActive = runtime.kind === "cli" && isAddedAntigravityAccount(input.instanceId);
-        return cliLoginActive ? cliLogin.start(runtime, profile) : auth.start(runtime, profile);
+        if (cliLoginActive) return cliLogin.start(runtime, profile);
+        await verifyAntigravityBrowserHelper(profile);
+        return auth.start(runtime, profile);
       },
+      getAuthentication: async (flowId) => (cliLoginActive ? cliLogin.get(flowId) : auth.get(flowId)),
       completeAuthentication: async (flowId, callbackUrl) => cliLoginActive
         ? cliLogin.complete(flowId, callbackUrl)
         : auth.complete(flowId, callbackUrl),
@@ -366,10 +415,17 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
         auth.cancel();
         cliLogin.cancel();
       },
+      // A runtime process keeps the account it started with, and can write the token file again as it exits: the
+      // sign-in is removed at once, and once more when those processes are gone. A new sign-in waits for that.
       signOut: async () => {
         auth.cancel();
         cliLogin.cancel();
+        await base.adapter.stopAll();
         await removeAntigravitySignIn(input.instanceId);
+        if (!runtimeProcesses.count(input.instanceId)) return;
+        signingOut = runtimeProcesses.stopped(input.instanceId)
+          .then(() => removeAntigravitySignIn(input.instanceId))
+          .catch((error) => console.warn(`antigravity: could not finish the sign-out: ${error instanceof Error ? error.message : String(error)}`));
       },
       dispose: async () => {
         auth.cancel();

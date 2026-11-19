@@ -2,7 +2,6 @@
 // the preference's setter, and every setter reports the current values back so a bot can read them. Some live behind the
 // desktop app's bridge; where that bridge is absent they read as undefined, which the server takes as "not here".
 import { WINDOW_PREFS, type WindowPrefFrame, type WindowPrefId, type WindowPrefValue } from "../../shared/app-settings";
-import { analyticsEnabled, setAnalyticsEnabled } from "./analytics";
 import { applyChatWidth, readChatWidth } from "./chat-width";
 import { companionBridge, pageIsThisComputer } from "./companion-bridge";
 import type { CompanionRoute } from "./companion-types";
@@ -82,15 +81,10 @@ const PREFS: { [I in WindowPrefId]: Pref<I> } = {
     write: async (on) => { if (!on) return setFinishedNotifications(false); if ((await requestNotificationPermission()) === "granted") setFinishedNotifications(true); },
   },
   "general.notificationFeed": { read: () => notificationFeedEnabled(), write: (on) => setNotificationFeed(on) },
-  "general.analytics": { read: () => analyticsEnabled(), write: (on) => setAnalyticsEnabled(on) },
   "general.openAtLogin": { read: async () => { const state = await ogb()?.openAtLogin?.state(); return state?.available ? state.on : undefined; }, write: (on) => ogb()?.openAtLogin?.set(on) },
   "general.talkShortcut": {
     read: async () => { const state = await ogb()?.talkShortcut?.state(); return state?.available ? { enabled: state.enabled, key: state.key } : undefined; },
     write: (change) => ogb()?.talkShortcut?.set(change),
-  },
-  "account.productEmails": {
-    read: async () => { const state = await ogb()?.updatesConsent?.state(); return state?.available ? state.status === "opted_in" : undefined; },
-    write: (on) => ogb()?.updatesConsent?.choose({ status: on ? "opted_in" : "withdrawn" }),
   },
   "remote.wifi": route("wifi"),
   "remote.relay": route("relay"),

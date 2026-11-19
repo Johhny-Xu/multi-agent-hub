@@ -114,6 +114,24 @@ describe("McpOAuthManager sign-in", () => {
     await expect(manager.start("docs", mcp.url)).rejects.toMatchObject({ code: "no-registration" });
   });
 
+  it("shows the server's own reason when it refuses to register the app", async () => {
+    await setup({ registerRefusal: { status: 429, body: { error: "too_many_requests", error_description: "Too many client registrations from this address. Please try again in an hour." }, headers: { "retry-after": "3600" } } });
+    const error = await manager.start("docs", mcp.url).catch((cause: unknown) => cause);
+    expect((error as Error).message).toBe("This server would not register OpenMausBot for sign-in (HTTP 429): Too many client registrations from this address. Please try again in an hour. It asked to wait: Retry-After 3600 seconds. Try again later.");
+  });
+
+  it("keeps the plain refusal when the server gives no reason", async () => {
+    await setup({ registerRefusal: { status: 500, body: {} } });
+    const error = await manager.start("docs", mcp.url).catch((cause: unknown) => cause);
+    expect((error as Error).message).toBe("This server would not register OpenMausBot for sign-in. Try again later.");
+  });
+
+  it("still reports the refusal when the body is JSON null", async () => {
+    await setup({ registerRefusal: { status: 429, body: null, headers: { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" } } });
+    const error = await manager.start("docs", mcp.url).catch((cause: unknown) => cause);
+    expect((error as Error).message).toBe("This server would not register OpenMausBot for sign-in (HTTP 429). It asked to wait: Retry-After Wed, 21 Oct 2026 07:28:00 GMT. Try again later.");
+  });
+
   it("refuses a server that does not use OAuth", async () => {
     await setup();
     const open = await startFakeHttpMcp();
@@ -134,6 +152,14 @@ describe("McpOAuthManager tokens", () => {
     await approve(started);
     await settled("docs", started.flowId);
   }
+
+  it("requests offline access advertised by the authorization server and refreshes the resulting token", async () => {
+    await signedIn({ expiresIn: 60, offlineAccess: true });
+    expect(oauth.lastAuthorize?.get("scope")).toBe("mcp offline_access");
+    expect(oauth.isValid(`Bearer ${await manager.accessToken("docs", mcp.url)}`)).toBe(true);
+    expect(oauth.counts.refresh).toBe(1);
+    expect(manager.authState("docs", mcp.url)).toBe("signed-in");
+  });
 
   it("refreshes a token about to expire, once for concurrent callers", async () => {
     await signedIn({ expiresIn: 60 });
@@ -345,6 +371,13 @@ describe("a sign-in app registered in advance", () => {
     expect(oauth.counts.register).toBe(0);
     expect(oauth.clientAuths).toEqual([{ method: "none", clientId: "entra-app" }]);
     expect(oauth.isValid(`Bearer ${await manager.accessToken("docs", mcp.url)}`)).toBe(true);
+  });
+
+  it("preserves explicitly configured scopes when offline access is advertised", async () => {
+    await setup({ noRegistration: true, preRegistered: { "read-only": null }, offlineAccess: true });
+    registered = { clientId: "read-only", scopes: ["mcp"] };
+    const started = await manager.start("docs", mcp.url);
+    expect(new URL(started.authorizationUrl!).searchParams.get("scope")).toBe("mcp");
   });
 
   it("uses the app in place of registration even when the server offers it", async () => {

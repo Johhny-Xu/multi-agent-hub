@@ -17,6 +17,17 @@ export interface AppSettingCardField {
   appSettingRequest?: AppSettingRequest;
 }
 
+/** Settings a bot can ask the app to show in chat as the real control. Adding one here, in the server's SETTINGS_CARDS
+ * and in the window's card list is the whole registration. */
+export const SETTINGS_CARD_IDS = ["other-computers", "ai-sign-in"] as const;
+export type SettingsCardId = (typeof SETTINGS_CARD_IDS)[number];
+export const isSettingsCardId = (id: unknown): id is SettingsCardId => typeof id === "string" && (SETTINGS_CARD_IDS as readonly string[]).includes(id);
+/** Security invariant: a settings card row names the setting only. What the control shows (a code, a link, an address)
+ * is read by the window from the app itself and is never stored on the row or sent to a bot. */
+export interface SettingsCardData {
+  id: SettingsCardId;
+}
+
 export const SKIN_IDS = [
   "midnight",
   "atelier",
@@ -62,10 +73,8 @@ export const WINDOW_PREFS = {
   "general.followUp": z.enum(["steer", "queue"]),
   "general.finishedNotifications": z.boolean(),
   "general.notificationFeed": z.boolean(),
-  "general.analytics": z.boolean(),
   "general.openAtLogin": z.boolean(),
   "general.talkShortcut": z.object({ enabled: z.boolean(), key: z.enum(TALK_KEYS) }).strict(),
-  "account.productEmails": z.boolean(),
   "remote.wifi": z.boolean(),
   "remote.relay": z.boolean(),
   "remote.tailscale": z.boolean(),

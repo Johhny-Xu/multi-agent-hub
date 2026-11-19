@@ -97,10 +97,17 @@ export function createBrowserGateway(deps: BrowserGatewayDeps): BrowserGateway {
         return { status: "needs-agent", reason: "unsupported-observation", steps: [] };
       }
 
-      const startTime = now();
       const meta = input.textReply ? getPendingTextMeta(scope, input.textReply.requestId) : null;
       let remainingSteps = meta?.remainingSteps ?? input.maxSteps ?? 4;
       let remainingBudgetMs = meta?.remainingBudgetMs ?? DEFAULT_ACTIVE_BUDGET_MS;
+      // A continuation spends only what its saved budget has left: each stretch is charged its own time, never re-based
+      // on the default, and several actions in one stretch do not each pay for the stretch's whole elapsed time.
+      let budgetClock = now();
+      const consumeBudget = () => {
+        const current = now();
+        remainingBudgetMs = Math.max(0, remainingBudgetMs - (current - budgetClock));
+        budgetClock = current;
+      };
       const history: BrowserHistoryEntry[] = meta?.history ? [...meta.history] : [];
       const steps: BrowserStepSummary[] = [];
 
@@ -200,10 +207,10 @@ export function createBrowserGateway(deps: BrowserGatewayDeps): BrowserGateway {
             }
 
             if (textToType === undefined) {
-              const elapsed = now() - startTime;
+              consumeBudget();
               const pendingField = requestBrowserText(scope, textCtx, chosenCandidate, {
                 remainingSteps,
-                remainingBudgetMs: Math.max(0, remainingBudgetMs - elapsed),
+                remainingBudgetMs,
                 history,
               });
               return {
@@ -237,6 +244,10 @@ export function createBrowserGateway(deps: BrowserGatewayDeps): BrowserGateway {
         }
         if (auth === "pending") {
           return { status: "needs-agent", reason: "permission-required", steps };
+        }
+
+        if (scope.signal.aborted) {
+          return { status: "interrupted", reason: "cancelled", steps };
         }
 
         // Execute action
@@ -275,8 +286,7 @@ export function createBrowserGateway(deps: BrowserGatewayDeps): BrowserGateway {
         }
 
         remainingSteps--;
-        const elapsed = now() - startTime;
-        remainingBudgetMs = Math.max(0, DEFAULT_ACTIVE_BUDGET_MS - elapsed);
+        consumeBudget();
       }
 
       if (remainingBudgetMs <= 0) {

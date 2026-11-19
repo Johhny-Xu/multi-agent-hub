@@ -29,10 +29,6 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/live-call-media", () => ({ dismissLiveNotice: vi.fn() }));
 
 const { KeysPage } = await import("./KeysPage");
-const { track } = await import("@/lib/analytics");
-const { BOAT_OFFER, boatClaimMailto } = await import("@/lib/boat-offer");
-const { BOAT_OFFER_NOTICE } = await import("@/lib/notices");
-const { applyBrand, DEFAULT_BRAND } = await import("@/lib/brand");
 const { LiveKeyNeeded } = await import("../LiveKeyNeeded");
 const { openKeySettings } = await import("./key-focus");
 
@@ -101,13 +97,26 @@ describe("the keys page", () => {
     expect(rowsShown()).not.toContain("elevenlabs");
   });
 
-  it("offers the Live calls service, OpenAI, Azure OpenAI, Fish Audio, Gemini or ElevenLabs, on the separate live key row", () => {
+  it("offers the Live calls service, OpenAI, Azure OpenAI, Fish Audio, Gemini, ElevenLabs or a custom endpoint, on the separate live key row", () => {
     setConfig({ ...fx.config, live: { configured: false, provider: "azure", voice: "", readTypedReplies: true, idleMinutes: 5 } });
     page();
     const select = row("liveKey")!.querySelector<HTMLSelectElement>("select")!;
-    expect([...select.options].map((option) => option.value)).toEqual(["openai", "azure", "fish", "gemini", "elevenlabs"]);
+    expect([...select.options].map((option) => option.value)).toEqual(["openai", "azure", "fish", "gemini", "elevenlabs", "custom"]);
     expect(select.value).toBe("azure");
     expect(row("liveKey")!.querySelector('input[type="url"]')).not.toBeNull();
+  });
+
+  it("with a custom endpoint chosen, the Live key row asks for that endpoint's key, with its address and model, and no OpenAI page", () => {
+    const live = { configured: false, voice: "", readTypedReplies: true, idleMinutes: 5 };
+    setConfig({ ...fx.config, live: { ...live, provider: "custom", customEndpoint: "https://gateway.example.com/v1", customModel: "my-live" } });
+    page();
+    const custom = row("liveKey")!;
+    expect(custom.textContent).toContain("Custom endpoint key for Live calls");
+    expect(custom.textContent).toContain("Required");
+    expect(custom.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe("https://gateway.example.com/v1");
+    expect([...custom.querySelectorAll("input")].map((input) => input.value)).toContain("my-live");
+    expect(custom.querySelector<HTMLAnchorElement>('a[href*="platform.openai.com"]')).toBeNull();
+    expect(row("liveCalls")).toBeNull();
   });
 
   it("with Azure chosen, the Live key row asks for an Azure key: required, no OpenAI wording, and no row saying Live uses the OpenAI key", () => {
@@ -352,61 +361,6 @@ describe("the Ollama row", () => {
     await found("ready");
     expect(row("ollama")!.textContent).toContain("already added");
     expect(button("Add Ollama").disabled).toBe(true);
-  });
-});
-
-describe("Boat's credit offer on the Boat card", () => {
-  const offer = () => row("box")!.querySelector<HTMLElement>("[data-boat-offer]");
-  const buttons = () => [...offer()!.querySelectorAll<HTMLButtonElement>("button")];
-  const openComputers = () => flushSync(() => section("computers").querySelector<HTMLButtonElement>("button[aria-expanded]")!.click());
-  afterEach(() => {
-    BOAT_OFFER.until = null;
-    applyBrand({ brand: DEFAULT_BRAND, source: "default", file: "" });
-    delete (window as unknown as { ogb?: unknown }).ogb;
-    vi.unstubAllGlobals();
-  });
-
-  it("is always on the Boat card while the offer runs: with no key, a saved key, one a Cloud plan includes, and after its popup closed", () => {
-    page(); openComputers();
-    for (const box of [{ configured: false }, { configured: true, last4: "c3d4" }, { configured: false, included: true }]) {
-      setConfig({ ...fx.config, box });
-      expect(offer(), JSON.stringify(box)).not.toBeNull();
-      expect(offer()!.closest("[hidden]")).toBeNull();
-      const words = offer()!.textContent!;
-      for (const text of ["$50 of Boat credit for you", "Boat runs the cloud computers behind MausBot.", "You claim it yourself: it isn't automatic."]) {
-        expect(words).toContain(text);
-      }
-      expect(buttons().map((button) => button.textContent)).toEqual(["Get Boat", "I bought it: claim my $50"]);
-    }
-    vi.stubGlobal("localStorage", { getItem: (key: string) => (key === BOAT_OFFER_NOTICE ? "1" : null), setItem: () => {}, removeItem: () => {} });
-    page();
-    expect(offer(), "closing the popup never takes it from Settings").not.toBeNull();
-    type(host.querySelector<HTMLInputElement>("[data-keys-search]")!, "boat");
-    expect(rowsShown()).toContain("box"); expect(offer()!.closest("[hidden]")).toBeNull();
-  });
-
-  it("Get Boat opens boat.dev and the claim drafts the email to Boat; both stay for a later visit and save nothing", async () => {
-    const openExternal = vi.fn(async () => true);
-    (window as unknown as { ogb?: unknown }).ogb = { openExternal };
-    page(); openComputers();
-    flushSync(() => buttons()[0]!.click());
-    await vi.waitFor(() => expect(openExternal).toHaveBeenCalledWith("https://boat.dev"));
-    flushSync(() => buttons()[1]!.click());
-    await vi.waitFor(() => expect(openExternal).toHaveBeenCalledWith(boatClaimMailto()));
-    await vi.waitFor(() => expect(track).toHaveBeenCalledWith("boat_offer", { action: "claim", place: "settings" }));
-    expect(track).toHaveBeenCalledWith("boat_offer", { action: "get_boat", place: "settings" });
-    expect(offer()).not.toBeNull();
-    expect(fx.api).not.toHaveBeenCalled();
-  });
-
-  it("goes from its end date on, and on a branded build, while the Boat card stays", () => {
-    BOAT_OFFER.until = Date.now() - 1;
-    page();
-    expect(row("box")).not.toBeNull(); expect(offer()).toBeNull();
-    BOAT_OFFER.until = null;
-    applyBrand({ brand: { name: "Acme Bots" }, source: "file", file: "brand.json" });
-    page();
-    expect(row("box")).not.toBeNull(); expect(offer()).toBeNull();
   });
 });
 

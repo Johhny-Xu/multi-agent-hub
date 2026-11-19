@@ -65,6 +65,10 @@ const EnvPolicyDriver = createAcpDriver({
   },
 });
 
+/** A CLI that needs a newer Node.js than any there is, and one that runs on every Node.js. */
+const NodeTooOldDriver = createAcpDriver({ ...SELECT_MODEL_SUPPORT, driverKind: "nodeTooOldTest", selectModel: undefined, minNodeVersion: "999.0.0" });
+const NodeOkDriver = createAcpDriver({ ...SELECT_MODEL_SUPPORT, driverKind: "nodeOkTest", selectModel: undefined, minNodeVersion: "1.0.0" });
+
 const AsyncAuthDriver = createAcpDriver({
   ...SELECT_MODEL_SUPPORT,
   driverKind: "asyncAuthTest",
@@ -1263,6 +1267,9 @@ describe("ACP turns (fake CLI)", () => {
       { type: "http", name: "browser", url: `${harness}/api/internal/mcp-http/browser`, headers: [{ name: "authorization", value: "Bearer synthetic-browser-capability" }] },
       { name: "notes", command: process.execPath, args: ["/tmp/notes-mcp.js"], env: [] },
     ]);
+    // The agent reaches this server's loopback URL around any proxy it was given.
+    const { env } = JSON.parse(readFileSync(dump, "utf8")) as { env: Record<string, string> };
+    for (const name of ["NO_PROXY", "no_proxy"]) expect(env[name]!.split(",")).toEqual(expect.arrayContaining(["127.0.0.1", "localhost", "::1"]));
   });
 
   it.each([false, true])("mounts Data through the existing stdio transport unless excluded (excluded=%s)", async (excluded) => {
@@ -2153,6 +2160,25 @@ describe("ACP turns (fake CLI)", () => {
     expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(true);
   });
 
+  it("an exit before result on a Node.js older than the engine needs names both versions", async () => {
+    await create(NodeTooOldDriver, "exit-early");
+    await instance.adapter.sendTurn({ threadId: "t-old-node", text: "go" });
+    const failed = await recorder.until((e) => e.type === "runtime.error") as { message: string; text?: unknown };
+    expect(failed.text).toEqual({ key: "chat.notice.acpNodeTooOld",
+      params: { provider: SELECT_MODEL_SUPPORT.displayName, needed: "999.0.0", found: expect.stringMatching(/^\d+\.\d+\.\d+$/) } });
+    expect(failed.message).toMatch(/ needs Node\.js 999\.0\.0 or newer, but this computer has Node\.js \d+\.\d+\.\d+\. Update Node\.js/);
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: false });
+  });
+
+  it("an exit before result on a new enough Node.js keeps the exit words", async () => {
+    await create(NodeOkDriver, "exit-early");
+    await instance.adapter.sendTurn({ threadId: "t-ok-node", text: "go" });
+    const failed = await recorder.until((e) => e.type === "runtime.error") as { message: string; text?: unknown };
+    expect(failed.message).toMatch(/ exited 3 before the prompt result/);
+    expect(failed.text).toBeUndefined();
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: false });
+  });
+
   it("an engine that aborts says so in plain words, with its last output masked", async () => {
     await create(GrokAgentDriver, "abort-in-prompt");
     await instance.adapter.sendTurn({ threadId: "t-abort", text: "go" });
@@ -2360,8 +2386,9 @@ describe("ACP turns (fake CLI)", () => {
     expect(recorder.events).toEqual([]);
   });
 
-  it("defaults the prompt idle guard above an agent's longest normal silence", () => {
+  it("defaults the prompt idle guard to the shared stuck window, above an agent's longest normal silence", () => {
     expect(DEFAULT_ACP_PROMPT_IDLE_MS).toBeGreaterThan(600_000);
+    expect(DEFAULT_ACP_PROMPT_IDLE_MS).toBe(30 * 60_000);
   });
 
   it("an agent that goes silent mid-answer is failed and closed by the prompt idle guard", async () => {
@@ -2545,8 +2572,10 @@ describe("ACP turns (fake CLI)", () => {
     expect(done).toMatchObject({ ok: true });
   });
 
-  it("falls through to session/new when session/load returns null", async () => {
+  it("fails a resumed turn with no recovery text when session/load returns null", async () => {
     process.env.FAKE_ACP_LOAD_NULL = "1";
+    const rpcFile = join(scratch, "null-load-no-recovery.json");
+    process.env.FAKE_ACP_RPC_DUMP = rpcFile;
     await create(GrokAgentDriver);
     await instance.adapter.sendTurn({
       threadId: "t-resume-null",
@@ -2554,10 +2583,12 @@ describe("ACP turns (fake CLI)", () => {
       resumeCursor: "gone-cursor",
     });
 
-    const started = await recorder.until((e) => e.type === "session.started");
-    expect(started).toMatchObject({ sessionId: "fake-acp-session" });
-    const done = await recorder.until((e) => e.type === "turn.completed");
-    expect(done).toMatchObject({ ok: true });
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: false });
+    expect(recorder.events.some((e) => e.type === "session.started")).toBe(false);
+    const methods = JSON.parse(readFileSync(rpcFile, "utf8"));
+    expect(methods).toContain("session/load");
+    expect(methods).not.toContain("session/new");
+    expect(methods).not.toContain("session/prompt");
   });
 
   it.each(["null", "opencode-not-found", "cursor-message"])("rebuilds a missing native session from the canonical recovery text once (%s)", async (failure) => {

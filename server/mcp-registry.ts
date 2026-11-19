@@ -40,6 +40,8 @@ export interface StoredRemoteMcpServer extends RemoteMcpSpec {
   oauth?: McpOAuthClientConfig;
   resultBudget?: number;
   runsOn?: McpRunsOn;
+  /** The id of the bot this connection is for, such as one holding that bot's own key: only that bot reaches it. Absent: every bot's. */
+  bot?: string;
   /** "Show its apps in chat": stored only as `false`; on by default. */
   apps?: false;
 }
@@ -67,6 +69,7 @@ export interface RemoteMcpServerListing {
   apps: boolean;
   oauth?: { clientId: string; scopes: string[]; clientSecretConfigured: boolean };
   runsOn?: McpRunsOn;
+  bot?: string;
 }
 export type McpServerListing = StdioMcpServerListing | RemoteMcpServerListing;
 
@@ -77,6 +80,13 @@ export function isRemoteMcpServer(server: McpServerSpec): server is RemoteMcpSpe
 /** Whether `botId` may start this server: every bot may start one that is no bot's own. */
 export function mcpServerServes(server: object & { bot?: string }, botId: string | undefined): boolean {
   return !server.bot || server.bot === botId;
+}
+
+/** Why a team setup plan cannot give this bot the named server, or null when it can. */
+export function mcpServerProblemFor(servers: Record<string, unknown> | undefined, name: string, botId: string): string | null {
+  const server = servers && Object.hasOwn(servers, name) ? servers[name] : undefined;
+  if (!server || typeof server !== "object") return "no such server";
+  return mcpServerServes(server, botId) ? null : "that server belongs to another bot";
 }
 
 /** How many MCP servers one bot can use: the shared ones plus its own. */
@@ -234,6 +244,7 @@ const remoteEntrySchema = z.object({
   resultBudget: resultBudgetSchema.optional(),
   runsOn: runsOnSchema.optional(),
   apps: z.boolean().optional(),
+  bot: z.string().regex(BOT_ID).optional(),
 }).strict();
 
 const remoteMutationSchema = remoteEntrySchema.extend({
@@ -329,7 +340,7 @@ function parseStdio(raw: unknown, mutation: boolean, existing?: StoredMcpServer)
 }
 
 function botFor(value: string | undefined, mutation: boolean, existing?: StoredMcpServer): { bot?: string } {
-  const bot = value ?? (mutation && existing && !isRemoteMcpServer(existing) ? existing.bot : undefined);
+  const bot = value ?? (mutation ? existing?.bot : undefined);
   return bot ? { bot } : {};
 }
 
@@ -361,6 +372,7 @@ function parseRemote(raw: unknown, mutation: boolean, existing?: StoredMcpServer
       ...(parsed.data.resultBudget !== undefined ? { resultBudget: parsed.data.resultBudget } : {}),
       ...runsOnFor(parsed.data.runsOn, mutation, existing),
       ...appsFor(parsed.data.apps, mutation, existing),
+      ...botFor(parsed.data.bot, mutation, existing),
     },
   };
 }
@@ -465,6 +477,7 @@ export function listMcpServers(raw: Record<string, unknown> | undefined): McpSer
           oauth: { clientId: server.oauth.clientId, scopes: server.oauth.scopes ?? [], clientSecretConfigured: Boolean(server.oauth.clientSecret) },
         } : {}),
         ...(server.runsOn ? { runsOn: server.runsOn } : {}),
+        ...(server.bot ? { bot: server.bot } : {}),
       }];
     }
     return [{

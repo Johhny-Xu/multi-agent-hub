@@ -5,11 +5,6 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 
 const PLAN_LABEL: Record<string, string> = { starter: "Starter", personal: "Personal", pro: "Pro", max: "Max" };
-const CHEAPEST_FIRST: readonly string[] = ["starter", "personal", "pro", "max"];
-function switchesDown(tier: string | undefined, target: string): boolean {
-  const below = CHEAPEST_FIRST.indexOf(target);
-  return tier !== undefined && below >= 0 && CHEAPEST_FIRST.indexOf(tier) > below;
-}
 export function cloudPlanLabel(tier?: string): string {
   return tier === undefined ? "Pro" : Object.hasOwn(PLAN_LABEL, tier) ? PLAN_LABEL[tier] : "Cloud";
 }
@@ -83,41 +78,36 @@ export function usd(dollars: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
 }
 
-export type CloudTrialAction = "manage" | "subscribe" | "status";
+export type CloudTrialAction = "manage" | "status";
 export interface CloudTrialView {
   state: CloudTrialState;
   title: string;
   body: string;
   credit?: string;
-  switchPlan?: string;
   action: { kind: CloudTrialAction; label: string } | null;
 }
 
 export function cloudTrialView(trial: CloudTrial, credit?: CloudCredit): CloudTrialView {
-  const switchTo = trial.switchTo ?? (trial.personalAmount ? { tier: "personal", amount: trial.personalAmount } : null);
   const plan = trial.tier ? cloudPlanLabel(trial.tier) : t("cloudTrial.yourPlan");
   const ends = shortDate(trial.endsAt), deleted = trial.deleteAt ? shortDate(trial.deleteAt) : null;
-  const subscribe = { kind: "subscribe" as const, label: t("cloudTrial.subscribe") };
   switch (trial.state) {
     case "active": return {
       state: "active", title: t("cloudTrial.endsOn", { date: ends }),
       body: trial.amount === null ? t("cloudTrial.activeNoPrice", { plan, date: shortDate(trial.chargeAt ?? trial.endsAt) })
         : t("cloudTrial.active", { plan, price: usd(trial.amount / 100), date: shortDate(trial.chargeAt ?? trial.endsAt) }),
       ...(credit?.state === "active" ? { credit: t("cloudTrial.credit", { granted: usd(credit.grantedUsd), left: usd(credit.remainingUsd) }) } : {}),
-      ...(switchTo && switchesDown(trial.tier, switchTo.tier)
-        ? { switchPlan: t("cloudTrial.preferPlan", { plan: cloudPlanLabel(switchTo.tier), price: usd(switchTo.amount / 100), date: ends }) } : {}),
       action: { kind: "manage", label: t("cloudTrial.manage") },
     };
     case "ending": return trial.keep === "portal"
       ? { state: "ending", title: t("cloudTrial.endsOn", { date: ends }),
-        body: deleted ? t("cloudTrial.ending", { date: deleted }) : t("cloudTrial.endingNoDate"), action: subscribe }
+        body: deleted ? t("cloudTrial.ending", { date: deleted }) : t("cloudTrial.endingNoDate"), action: null }
       : { state: "ending", title: t("cloudTrial.endsOn", { date: ends }),
         body: deleted ? t("cloudTrial.cancelled", { date: deleted }) : t("cloudTrial.cancelledNoDate"), action: null };
     case "processing": return { state: "processing", title: t("cloudTrial.processingTitle"), body: t("cloudTrial.processing"), action: null };
     case "late": return { state: "late", title: t("cloudTrial.lateTitle"),
       body: deleted ? t("cloudTrial.late", { date: deleted }) : t("cloudTrial.lateNoDate"), action: { kind: "status", label: t("cloudTrial.checkPayment") } };
     case "ended": return { state: "ended", title: t("cloudTrial.endedTitle"),
-      body: deleted ? t("cloudTrial.ended", { date: deleted }) : t("cloudTrial.endedNoDate"), action: subscribe };
+      body: deleted ? t("cloudTrial.ended", { date: deleted }) : t("cloudTrial.endedNoDate"), action: null };
   }
 }
 
@@ -202,7 +192,7 @@ export function trialTerms(days: number, price: string): string {
 function planCard(plan: CloudOfferPlan, recommended: string, current: string | null): CloudPlanCard {
   const name = offerPlanLabel(plan), price = usd(plan.amount / 100), mine = plan.tier === current;
   return { tier: plan.tier, name, price, popular: plan.tier === recommended, current: mine,
-    promise: Object.hasOwn(PROMISE, plan.tier) ? t(PROMISE[plan.tier]!) : plan.allowances?.seats ? t("cloudBuy.promise.team", { seats: plan.allowances.seats }) : null,
+    promise: Object.hasOwn(PROMISE, plan.tier) ? t(PROMISE[plan.tier]!) : plan.allowances?.seats ? t("cloudBuy.promise.teamPlan") : null,
     action: mine ? null : plan.trialDays ? t("cloudIntro.start") : t("cloudBuy.card.get", { plan: name }),
     terms: mine ? null : plan.trialDays ? trialTerms(plan.trialDays, price) : t("cloudBuy.card.paid", { price }),
     rows: plan.allowances ? planCardRows(plan.allowances) : [] };

@@ -160,9 +160,7 @@ export function SimpleHelperIntro({ botId, threadId, message, answered, followup
   const chips = answered || shown < ALL || !facts ? [] : introChips({
     aiReady: ai === "own",
     ownBots: state.bots.filter((candidate) => !candidate.hidden && !candidate.defaultBot).length,
-    onCloud: state.config?.cloudHome === true,
     team: Boolean(state.config?.team),
-    remote: typeof window !== "undefined" && window.ogb?.remoteClient?.active === true,
     appsConnected: Boolean(look.apps?.length),
     phonePaired: look.phonePaired,
     importFound: look.importFound,

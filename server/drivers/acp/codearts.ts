@@ -3,7 +3,8 @@
 //
 // The adapter (`codearts_cli.py`) runs one headless task per invocation with its own CodeArts
 // session database, keeps the login in CodeArts' own store, reports a single result envelope, and
-// needs up to 900 s for real work — hence the 900 s default and the bridge's keep-alive heartbeats.
+// can work for a long time without printing. It has no time limit: the bridge and the adapter query the task's status
+// (CPU, I/O, model connection, progress) and only stop one that showed no activity for the stuck window (default 30 min).
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";

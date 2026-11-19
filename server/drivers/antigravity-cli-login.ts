@@ -4,10 +4,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
-import type { AntigravityAuthStart, AntigravityProfile } from "./antigravity-acp.ts";
+import type { AntigravityProfile } from "./antigravity-acp.ts";
+import type { ProviderAuthenticationStart as AntigravityAuthStart, ProviderAuthenticationStatus } from "../contracts.ts";
 
 const AUTH_URL = /https:\/\/accounts\.google\.com\/o\/oauth2\/[^\s"'<>]+/u;
 const FLOW_TTL_MS = 10 * 60_000;
+const EXPIRED = "Google sign-in expired. Start sign-in again.";
 
 type Spawn = (command: string, args: string[], options: { env: NodeJS.ProcessEnv; cwd: string; stdio: ["pipe", "pipe", "pipe"] }) => ChildProcess;
 
@@ -17,6 +19,7 @@ interface CliLoginFlow {
   exited: Promise<void>;
   expiresAt: number;
   timer: ReturnType<typeof setTimeout>;
+  verifying: boolean;
 }
 
 /** Last meaningful CLI line, without anything that looks like a URL or token. */
@@ -28,6 +31,7 @@ function safeFailure(output: string): string {
 
 export class AntigravityCliLoginController {
   private flow: CliLoginFlow | null = null;
+  private ended: ProviderAuthenticationStatus | null = null;
 
   private readonly onSignedIn: () => void;
   private readonly spawnLogin: Spawn;
@@ -90,17 +94,47 @@ export class AntigravityCliLoginController {
       child,
       exited,
       expiresAt,
-      timer: setTimeout(() => { if (this.flow?.id === flow.id) this.cancel(); }, FLOW_TTL_MS),
+      verifying: false,
+      timer: setTimeout(() => {
+        if (this.flow !== flow) return;
+        this.flow = null;
+        this.ended = { phase: "expired", flowId: flow.id, authorizationUrl: null, expiresAt: null, message: EXPIRED };
+        if (flow.child.exitCode === null) flow.child.kill();
+      }, FLOW_TTL_MS),
     };
     flow.timer.unref?.();
     this.flow = flow;
-    void exited.finally(() => {
-      if (this.flow === flow) {
-        clearTimeout(flow.timer);
-        this.flow = null;
-      }
-    }).catch(() => {});
+    void exited.then(() => {
+      if (this.flow !== flow) return;
+      clearTimeout(flow.timer);
+      this.flow = null;
+      this.ended = { phase: "succeeded", flowId: flow.id, authorizationUrl: null, expiresAt: null };
+    }, (error) => {
+      if (this.flow !== flow) return;
+      clearTimeout(flow.timer);
+      this.flow = null;
+      this.ended = {
+        phase: "failed", flowId: flow.id, authorizationUrl: null, expiresAt: null,
+        message: safeFailure(error instanceof Error ? error.message : String(error)),
+      };
+    });
     return { phase: "waiting", flowId: flow.id, authorizationUrl: outcome.url, expiresAt: new Date(expiresAt).toISOString() };
+  }
+
+  /** The browser controller's status protocol, so a CLI flow is never answered as an unknown browser flow. */
+  async get(flowId: string): Promise<ProviderAuthenticationStatus> {
+    const flow = this.flow;
+    if (flow && flow.id === flowId) {
+      if (Date.now() >= flow.expiresAt) return { phase: "expired", flowId, authorizationUrl: null, expiresAt: null, message: EXPIRED };
+      return {
+        phase: flow.verifying ? "verifying" : "waiting",
+        flowId,
+        authorizationUrl: null,
+        expiresAt: new Date(flow.expiresAt).toISOString(),
+      };
+    }
+    if (this.ended?.flowId === flowId) return { ...this.ended };
+    return { phase: "expired", flowId, authorizationUrl: null, expiresAt: null, message: EXPIRED };
   }
 
   /** `code` is the authorization code or the full URL of the page Google lands on. */
@@ -113,6 +147,7 @@ export class AntigravityCliLoginController {
     if (!answer || answer.length > 16_384 || /[\r\n\0]/u.test(answer)) {
       throw new Error("Paste the authorization code or the full URL of the page you landed on.");
     }
+    flow.verifying = true;
     flow.child.stdin?.write(`${answer}\n`);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -123,6 +158,12 @@ export class AntigravityCliLoginController {
           timer.unref?.();
         }),
       ]);
+    } catch (error) {
+      this.ended = {
+        phase: "failed", flowId: flow.id, authorizationUrl: null, expiresAt: null,
+        message: safeFailure(error instanceof Error ? error.message : String(error)),
+      };
+      throw error;
     } finally {
       if (timer) clearTimeout(timer);
       if (this.flow === flow) {
@@ -131,6 +172,7 @@ export class AntigravityCliLoginController {
       }
       if (flow.child.exitCode === null) flow.child.kill();
     }
+    this.ended = { phase: "succeeded", flowId: flow.id, authorizationUrl: null, expiresAt: null };
     this.onSignedIn();
   }
 
@@ -139,6 +181,7 @@ export class AntigravityCliLoginController {
     this.flow = null;
     if (!flow) return;
     clearTimeout(flow.timer);
+    this.ended = { phase: "cancelled", flowId: flow.id, authorizationUrl: null, expiresAt: null };
     if (flow.child.exitCode === null) flow.child.kill();
   }
 }

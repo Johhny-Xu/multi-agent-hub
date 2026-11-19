@@ -4,8 +4,7 @@ import type { CloudUsage } from "../../../electron/cloud-home.mjs";
 import { activeLocale, t } from "@/lib/i18n";
 import { meterAmounts, meterLabel, meterPercent, resetLine } from "@/lib/usage-meter";
 import { CloudCancelSheet, endedLine, type CloudRenewalActions } from "../CloudCancelPlan";
-import { MeterBar, UpgradeButton, type UpgradeUi } from "../CloudUsageMeter";
-import { ProCompareRow } from "../ProIntroduction";
+import { MeterBar } from "../CloudUsageMeter";
 import { SettingRow, SettingsGroup, SettingsRows } from "../SettingsPrimitives";
 import { fetchTraces, formatCost, usagePeriodRange } from "@/lib/usage-trace";
 
@@ -19,10 +18,9 @@ export function planTitle(label: string, renewal?: CloudRenewal | null, trial = 
 }
 
 /** This week: one row per allowance, its bar in ink on an ink 8% track, and when it resets under the card. */
-export function ThisWeek({ usage, upgrade }: { usage: CloudUsage; upgrade?: UpgradeUi }) {
+export function ThisWeek({ usage }: { usage: CloudUsage }) {
   return (
-    <SettingsGroup label={t("settings.plan.thisWeek")} block="this-week" footnote={resetLine(usage)}
-      actions={upgrade ? <UpgradeButton usage={usage} upgrade={upgrade} secondary /> : undefined}>
+    <SettingsGroup label={t("settings.plan.thisWeek")} block="this-week" footnote={resetLine(usage)}>
       <SettingsRows>
         {usage.meters.map((meter) => (
           <div key={meter.kind} data-plan-meter={meter.kind} className="flex flex-col gap-2 px-4 py-3">
@@ -79,14 +77,13 @@ export function KeepPlanButton({ actions, onChanged }: { actions: CloudRenewalAc
 /** One Plan & billing page on every rail: one Plan card (the plan with its one primary, Compare plans, the way to My
  * Cloud, Cancel plan last), then This week. Called as a function (no state of its own), so the tree it returns is the
  * caller's own. */
-export function planLayout({ title, subtitle, message, primary, usage, upgrade, links, extra, cancel, footnote }: {
+export function planLayout({ title, subtitle, message, primary, usage, links, extra, cancel, footnote }: {
   title: string;
   subtitle?: ReactNode;
   message?: ReactNode;
   primary?: ReactNode;
   usage?: CloudUsage | null;
-  upgrade?: UpgradeUi;
-  /** Open My Cloud (absent on My Cloud's own page) and the like, after Compare plans */
+  /** Open My Cloud (absent on My Cloud's own page) and the like */
   links?: ReactNode;
   /** Simple's What this place cost row */
   extra?: ReactNode;
@@ -98,13 +95,12 @@ export function planLayout({ title, subtitle, message, primary, usage, upgrade, 
     <SettingsGroup label={t("settings.simple.billing.plan")} block="plan" footnote={footnote}>
       <SettingsRows>
         <SettingRow title={title} subtitle={subtitle} message={message || undefined}>{primary ?? null}</SettingRow>
-        <ProCompareRow />
         {links}
         {extra}
         {cancel}
       </SettingsRows>
     </SettingsGroup>
-    {usage && usage.meters.length > 0 && <ThisWeek usage={usage} upgrade={upgrade} />}
+    {usage && usage.meters.length > 0 && <ThisWeek usage={usage} />}
   </>;
 }
 

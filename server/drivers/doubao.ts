@@ -14,10 +14,11 @@ import { stripControlPlaneEnv } from "../credential-env.ts";
 import { augmentedPath, userHome } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { noticeFailure } from "../chat-notices.ts";
+import { formatSpan, turnMaxTotalMs, turnStuckMs, watchTurn, type LivenessVerdict } from "./turn-liveness.ts";
 import type { EffortLevel } from "../../shared/wire.ts";
 
 const DRIVER_KIND = "doubaoAgent";
-const DEFAULT_TURN_TIMEOUT_MS = 900_000;
 const AUTH_TIMEOUT_MS = 10_000;
 const SNAPSHOT_TTL_MS = 60_000;
 const MAX_STDOUT_CHARS = 200_000;
@@ -211,7 +212,11 @@ export function createDoubaoDriver(overrides: Partial<DoubaoDeps> = {}): Provide
     async create(input: DriverCreateInput<DoubaoConfig>): Promise<ProviderInstance> {
       const deps: DoubaoDeps = { ...defaultDeps(), ...overrides };
       const env: Record<string, string | undefined> = { ...process.env, ...input.environment, PATH: input.environment.PATH ?? augmentedPath() };
-      const timeoutMs = Number(env.OMB_DOUBAO_TIMEOUT_MS) || DEFAULT_TURN_TIMEOUT_MS;
+      // No time limit: the CLI's process tree is queried every ~30 s (CPU, bytes moved, model connections, output) and a
+      // turn is only stopped as stuck after none of that for OMB_DOUBAO_STUCK_MS / OMB_TURN_STUCK_MS (default 30 min,
+      // 0 = never). OMB_DOUBAO_TIMEOUT_MS, the old limit, is kept as an opt-in total cap.
+      const stuckMs = turnStuckMs(env, "OMB_DOUBAO_STUCK_MS");
+      const maxTotalMs = turnMaxTotalMs(env, "OMB_DOUBAO_MAX_MS", "OMB_DOUBAO_TIMEOUT_MS");
       const listeners = new Set<RuntimeEventListener>();
       const emit = (event: RuntimeEvent) => { for (const listener of Array.from(listeners)) { try { listener(event); } catch {} } };
       const threads = new Map<string, { sessionId?: string; chain: Promise<void> }>();
@@ -241,7 +246,7 @@ export function createDoubaoDriver(overrides: Partial<DoubaoDeps> = {}): Provide
 
       const runTurn = async (thread: { sessionId?: string }, turn: SendTurnInput, state: { turnId: string; aborted: boolean; child?: ChildProcess }) => {
         const base = () => ({ eventId: newEventId(), provider: DRIVER_KIND, threadId: turn.threadId, turnId: state.turnId, createdAt: new Date().toISOString() });
-        const fail = (message: string, extra: Partial<{ limit: "engine"; setup: boolean }> = {}) => {
+        const fail = (message: string, extra: Partial<{ limit: "engine"; setup: boolean; text: ReturnType<typeof noticeFailure>["text"] }> = {}) => {
           emit({ ...base(), type: "runtime.error", message, ...extra } as RuntimeEvent);
           emit({ ...base(), type: "turn.completed", ok: false, stopReason: "error", cost: null } as RuntimeEvent);
         };
@@ -286,29 +291,38 @@ export function createDoubaoDriver(overrides: Partial<DoubaoDeps> = {}): Provide
 
         let stdout = "";
         let stderr = "";
+        let stoppedBy: Exclude<LivenessVerdict, { kind: "running" }> | null = null;
+        const watch = watchTurn({
+          name: "豆包 Doubao",
+          stuckMs,
+          maxTotalMs,
+          maxTotalVar: "OMB_DOUBAO_TIMEOUT_MS",
+          pid: () => child.pid,
+          onStatus: (notice) => {
+            const status = noticeFailure(notice.key, notice.params);
+            emit({ ...base(), type: "runtime.notice", message: status.message, text: status.text } as RuntimeEvent);
+          },
+          onStuck: (verdict) => { stoppedBy = verdict; void stop(child); },
+        });
         child.stdout?.setEncoding("utf8");
         child.stdout?.on("data", (chunk: string) => {
+          watch.output();
           if (stdout.length < MAX_STDOUT_CHARS) stdout += chunk.slice(0, MAX_STDOUT_CHARS - stdout.length);
         });
         child.stderr?.setEncoding("utf8");
         child.stderr?.on("data", (chunk: string) => {
+          watch.output();
           if (stderr.length < MAX_STDOUT_CHARS) stderr += chunk.slice(0, MAX_STDOUT_CHARS - stderr.length);
         });
 
-        let timedOut = false;
         const outcome = await new Promise<{ code: number | null; error?: NodeJS.ErrnoException }>((resolve) => {
           let settled = false;
-          let timer: NodeJS.Timeout | undefined;
           const done = (value: { code: number | null; error?: NodeJS.ErrnoException }) => {
             if (settled) return;
             settled = true;
-            if (timer) clearTimeout(timer);
+            watch.stop();
             resolve(value);
           };
-          timer = setTimeout(() => {
-            timedOut = true;
-            void stop(child);
-          }, timeoutMs);
           child.once("error", (error) => done({ code: null, error }));
           child.once("close", (code) => done({ code: code ?? null }));
         });
@@ -318,8 +332,14 @@ export function createDoubaoDriver(overrides: Partial<DoubaoDeps> = {}): Provide
           interrupted();
           return;
         }
-        if (timedOut) {
-          fail(`豆包 ${Math.round(timeoutMs / 1000)} 秒内没有完成。`);
+        const verdict = stoppedBy as Exclude<LivenessVerdict, { kind: "running" }> | null;
+        if (verdict?.kind === "stuck") {
+          const stuck = noticeFailure(verdict.notice.key, verdict.notice.params);
+          fail(stuck.message, { text: stuck.text });
+          return;
+        }
+        if (verdict) {
+          fail(`豆包运行时间达到 OMB_DOUBAO_TIMEOUT_MS 设定的总时长上限（${formatSpan(maxTotalMs)}），已停止。`);
           return;
         }
         if (outcome.error) {

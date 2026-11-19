@@ -17,6 +17,8 @@ import type {
   RequestOutcome, RuntimeEvent, RuntimeEventListener, SendTurnInput, TurnStartResult,
 } from "../contracts.ts";
 import { userHome } from "../env-path.ts";
+import { noticeFailure } from "../chat-notices.ts";
+import { TurnLiveness, turnMaxTotalMs, turnStuckMs } from "./turn-liveness.ts";
 
 export interface TraecodeConfig {
   cli: string;
@@ -36,7 +38,6 @@ export const TRAECODE_MODELS: ModelCatalog = {
 
 const DEFAULT_GATEWAY = "http://127.0.0.1:8787";
 const DEFAULT_CDP = "http://127.0.0.1:9222";
-const DEFAULT_TURN_TIMEOUT_MS = 900_000;
 const MAX_REPLY_CHARS = 20_000;
 
 const SIGN_IN_NOTE =
@@ -228,7 +229,12 @@ export function createTraecodeDriver(overrides: Partial<TraecodeDeps> = {}): Pro
       const deps: TraecodeDeps = { ...defaultDeps(), ...overrides };
       const env = input.environment;
       const { gateway, cdp } = traecodeEndpoints(env, input.config);
-      const timeoutMs = Math.max(30_000, Number(env.OMB_TRAECODE_TIMEOUT_MS) || DEFAULT_TURN_TIMEOUT_MS);
+      // No time limit: the page itself is the status query (its reply growing, or the app's own "generating" flag), and
+      // a turn is only stuck when neither moved for the stuck window (OMB_TRAECODE_STUCK_MS / OMB_TURN_STUCK_MS, default
+      // 30 min, 0 = never). OMB_TRAECODE_TIMEOUT_MS, the old limit, is kept as an opt-in total cap.
+      const knobs = { ...process.env, ...env };
+      const stuckMs = turnStuckMs(knobs, "OMB_TRAECODE_STUCK_MS");
+      const maxTotalMs = turnMaxTotalMs(knobs, "OMB_TRAECODE_MAX_MS", "OMB_TRAECODE_TIMEOUT_MS");
       const listeners = new Set<RuntimeEventListener>();
       const emit = (event: RuntimeEvent) => { for (const listener of Array.from(listeners)) { try { listener(event); } catch {} } };
       const active = new Map<string, { turnId: string; aborted: boolean }>();
@@ -264,7 +270,7 @@ export function createTraecodeDriver(overrides: Partial<TraecodeDeps> = {}): Pro
 
       const runTurn = async (turn: SendTurnInput, turnId: string, state: { aborted: boolean }) => {
         const base = () => ({ eventId: newEventId(), provider: "traecodeAgent" as const, threadId: turn.threadId, turnId, createdAt: new Date().toISOString() });
-        const fail = (message: string, extra: Partial<{ limit: "engine"; setup: boolean }> = {}) => {
+        const fail = (message: string, extra: Partial<{ limit: "engine"; setup: boolean; text: ReturnType<typeof noticeFailure>["text"] }> = {}) => {
           emit({ ...base(), type: "runtime.error", message, ...extra } as RuntimeEvent);
           emit({ ...base(), type: "turn.completed", ok: false, stopReason: "error", cost: null } as RuntimeEvent);
         };
@@ -288,21 +294,32 @@ export function createTraecodeDriver(overrides: Partial<TraecodeDeps> = {}): Pro
           await postChat(prompt, newChat);
           openThread = turn.threadId;
           if (newChat) baseline = 0;
-          const deadline = deps.now() + timeoutMs;
+          const liveness = new TurnLiveness({ name: "Trae", stuckMs, maxTotalMs, maxTotalVar: "OMB_TRAECODE_TIMEOUT_MS", now: deps.now });
           let last = "";
           let stable = 0;
           let reading: TraePageReading | null = null;
           while (!state.aborted && !disposed) {
-            if (deps.now() > deadline) {
+            const verdict = await liveness.check();
+            if (verdict.kind === "running" && verdict.status) {
+              const status = noticeFailure(verdict.status.key, verdict.status.params);
+              emit({ ...base(), type: "runtime.notice", message: status.message, text: status.text } as RuntimeEvent);
+            }
+            if (verdict.kind !== "running") {
               const partial = cleanTraeReply(last);
               if (partial) say(partial);
-              return fail(`Trae didn't finish within ${Math.round(timeoutMs / 60_000)} min${partial ? " (its reply so far is above)" : ""}.`);
+              if (verdict.kind === "stuck") {
+                const stuck = noticeFailure(verdict.notice.key, verdict.notice.params);
+                return fail(`${stuck.message}${partial ? " (Its reply so far is above.)" : ""}`, { text: stuck.text });
+              }
+              return fail(`${verdict.message}${partial ? " (Its reply so far is above.)" : ""}`);
             }
             await deps.sleep(deps.pollMs);
             try { reading = await read(); } catch { reading = null; continue; }
+            if (reading.generating) liveness.alive();
             if (!reading.composer && reading.count === 0) continue;
             if (reading.count <= baseline) continue;
             const text = reading.text;
+            if (text !== last) liveness.output();
             if (isTraePlaceholder(cleanTraeReply(text))) { stable = 0; continue; }
             if (text === last) stable += 1; else { last = text; stable = 0; }
             if (reading.done && !reading.generating && stable >= 1) break;

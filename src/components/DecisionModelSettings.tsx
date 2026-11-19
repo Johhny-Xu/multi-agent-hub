@@ -9,6 +9,9 @@ import { Select } from "./Select";
 import { WorkersAiKeyCard } from "./WorkersAiKeyCard";
 import { openKeySettings } from "./keys/key-focus";
 
+type CustomApi = "systemone" | "decisions" | "chat";
+const customApiOf = (api: string | undefined): CustomApi => (api === "decisions" || api === "chat" ? api : "systemone");
+
 const KEY_URL = { jev: "https://typesafe.ai", openrouter: "https://openrouter.ai/keys", gemini: "https://aistudio.google.com/api-keys" } as const;
 /** Gemini's key has no desktop credential slot: it always goes through the server's config. */
 const KEY_SLOT = {
@@ -32,7 +35,7 @@ const ROOM_BUDGET_MS = 1_500;
 type Provider = "jev" | "openrouter" | "gemini" | "custom";
 type ModelList = { source: "openrouter" | "builtin"; models: Array<{ id: string; name: string; group: "recommended" | "more" | "chat"; api?: "chat" | "decisions" }> };
 const MODEL_GROUP = { recommended: "decider.model.recommended", more: "decider.model.more", chat: "decider.model.geminiChat" } as const satisfies Record<string, LocaleKey>;
-type TestResult = { ok: true; latencyMs: number } | { ok: false; reason: string; status?: number };
+type TestResult = { ok: true; latencyMs: number } | { ok: false; reason: unknown; status?: number };
 
 const FAILURES: Record<string, LocaleKey> = {
   rejected: "decider.error.rejected",
@@ -112,34 +115,45 @@ export function helpersStatusLine(config: ConfigStatus | null): string {
   return t("decider.status.line", { decisions, extraction: reading });
 }
 
+function failureReason(value: unknown): string {
+  if (typeof value === "string") return value.trim().toLowerCase();
+  if (!value || typeof value !== "object") return "";
+  for (const key of ["reason", "code", "status", "error"] as const) {
+    const nested = failureReason((value as Record<string, unknown>)[key]);
+    if (nested) return nested;
+  }
+  return "";
+}
+
 /** A fixed sentence per failure: the vendor's own body never reaches the UI. */
-export function deciderFailureText(result: { reason: string; status?: number }, included = false, provider: Provider | "workersai" = "jev"): string {
+export function deciderFailureText(result: { reason: unknown; status?: number }, included = false, provider: Provider | "workersai" = "jev"): string {
+  const reason = failureReason(result.reason);
   if (provider === "workersai") {
-    if (result.reason === "http_error") return t("decider.workersAi.error.http", { status: String(result.status ?? "?") });
-    const key = WORKERS_AI_FAILURES[result.reason];
+    if (reason === "http_error") return t("decider.workersAi.error.http", { status: String(result.status ?? "?") });
+    const key = WORKERS_AI_FAILURES[reason];
     return key ? t(key) : t("decider.error.other");
   }
   if (provider === "custom") {
-    if (result.reason === "http_error") return t("decider.custom.error.http", { status: String(result.status ?? "?") });
-    const key = CUSTOM_FAILURES[result.reason];
+    if (reason === "http_error") return t("decider.custom.error.http", { status: String(result.status ?? "?") });
+    const key = CUSTOM_FAILURES[reason];
     return key ? t(key) : t("decider.error.other");
   }
   if (provider === "openrouter") {
     // 402 is OpenRouter's answer for an account with no credits left.
-    if (result.reason === "http_error" && result.status === 402) return t("decider.openrouter.error.credits");
-    if (result.reason === "http_error") return t("decider.openrouter.error.http", { status: String(result.status ?? "?") });
-    const key = OPENROUTER_FAILURES[result.reason];
+    if (reason === "http_error" && result.status === 402) return t("decider.openrouter.error.credits");
+    if (reason === "http_error") return t("decider.openrouter.error.http", { status: String(result.status ?? "?") });
+    const key = OPENROUTER_FAILURES[reason];
     return key ? t(key) : t("decider.error.other");
   }
   if (provider === "gemini") {
-    if (result.reason === "http_error") return t("decider.gemini.error.http", { status: String(result.status ?? "?") });
-    const key = GEMINI_FAILURES[result.reason];
+    if (reason === "http_error") return t("decider.gemini.error.http", { status: String(result.status ?? "?") });
+    const key = GEMINI_FAILURES[reason];
     return key ? t(key) : t("decider.error.other");
   }
-  if (included && result.reason === "http_error" && result.status === 402) return t("decider.included.error.subscription");
-  if (included && INCLUDED_FAILURES[result.reason]) return t(INCLUDED_FAILURES[result.reason]!);
-  if (result.reason === "http_error") return t("decider.error.http", { status: String(result.status ?? "?") });
-  const key = FAILURES[result.reason];
+  if (included && reason === "http_error" && result.status === 402) return t("decider.included.error.subscription");
+  if (included && INCLUDED_FAILURES[reason]) return t(INCLUDED_FAILURES[reason]!);
+  if (reason === "http_error") return t("decider.error.http", { status: String(result.status ?? "?") });
+  const key = FAILURES[reason];
   return key ? t(key) : t("decider.error.other");
 }
 
@@ -173,14 +187,16 @@ function SavedText({ saved, onSave, disabled, label, placeholder, testId }: {
 export function DecisionModelSettings() {
   const { state, dispatch } = useStore();
   const decider = state.config?.decider;
-  const provider = asProvider(decider?.provider);
+  const provider = asProvider(decider?.chosen ?? decider?.provider);
   const openrouter = provider === "openrouter";
   const gemini = provider === "gemini";
   const custom = provider === "custom";
   const keySlot = KEY_SLOT[provider];
   const configured = decider?.configured ?? false;
   const included = configured && decider?.included === true;
-  const usingShared = openrouter && configured && decider?.keySource === "shared";
+  // The shared OpenRouter key decides, whether OpenRouter is chosen or it stands in for a chosen Jev with no key yet.
+  const usingShared = configured && decider?.keySource === "shared";
+  const sharedOpenRouter = openrouter && usingShared;
   const sharedKey = openrouter && decider?.sharedKey === true;
   const ownKey = configured && !included && !usingShared;
   const enabled = decider?.enabled ?? false;
@@ -242,7 +258,7 @@ export function DecisionModelSettings() {
     return () => { cancelled = true; };
   }, [openrouter, models]);
 
-  const choose = (decision: { provider: Provider } | { openrouterModel: string; openrouterApi: "chat" | "decisions" } | { customApi: "systemone" | "decisions" }) => {
+  const choose = (decision: { provider: Provider } | { openrouterModel: string; openrouterApi: "chat" | "decisions" } | { customApi: CustomApi }) => {
     setValue("");
     setVerdict(null);
     void patch(decision);
@@ -301,21 +317,23 @@ export function DecisionModelSettings() {
     setError(null);
     const testingIncluded = !draft && included;
     const testingShared = !draft && usingShared;
+    // The saved independent Gemini key answers a test with no draft; its verdict must not name Jev or OpenRouter.
+    const testingGemini = !draft && configured && decider?.provider === "gemini";
     try {
       const result = await api<TestResult>("/api/decider/test", { method: "POST", body: JSON.stringify(draft ? { key: draft } : {}) });
       setVerdict(result.ok
         ? {
           ok: true,
-          text: openrouter || custom
+          text: openrouter || custom || testingShared || testingGemini
             ? [
-              t(custom ? "decider.custom.test.ok" : testingShared ? "decider.openrouter.test.okShared" : "decider.openrouter.test.ok", { ms: String(result.latencyMs) }),
+              t(testingGemini ? "decider.gemini.test.ok" : custom ? "decider.custom.test.ok" : testingShared ? "decider.openrouter.test.okShared" : "decider.openrouter.test.ok", { ms: String(result.latencyMs) }),
               ...(result.latencyMs > ROOM_BUDGET_MS ? [t("decider.test.slow")] : []),
             ].join(" ")
             : gemini
               ? t("decider.gemini.test.ok", { ms: String(result.latencyMs) })
               : t("decider.test.ok", { ms: String(result.latencyMs) }),
         }
-        : { ok: false, text: deciderFailureText(result, testingIncluded, provider) });
+        : { ok: false, text: deciderFailureText(result, testingIncluded, testingGemini ? "gemini" : testingShared ? "openrouter" : provider) });
     } catch (cause) {
       setVerdict({ ok: false, text: cause instanceof Error ? cause.message : String(cause) });
     } finally {
@@ -385,13 +403,14 @@ export function DecisionModelSettings() {
               <SettingRow title={t("decider.custom.api")}>
                 <Select
                   data-testid="decider-custom-api"
-                  value={decider?.api === "decisions" ? "decisions" : "systemone"}
-                  onChange={(event) => choose({ customApi: event.target.value === "decisions" ? "decisions" : "systemone" })}
+                  value={customApiOf(decider?.api)}
+                  onChange={(event) => choose({ customApi: customApiOf(event.target.value) })}
                   disabled={switching}
                   aria-label={t("decider.custom.api")}
                 >
                   <option value="systemone">{t("decider.custom.api.systemone")}</option>
                   <option value="decisions">{t("decider.custom.api.decisions")}</option>
+                  <option value="chat">{t("decider.custom.api.chat")}</option>
                 </Select>
               </SettingRow>
             </>
@@ -430,7 +449,7 @@ export function DecisionModelSettings() {
                 onChange={(event) => { setVerdict(null); setError(null); setValue(event.target.value); }}
                 onKeyDown={(event) => event.key === "Enter" && void save()}
                 disabled={saving}
-                placeholder={ownKey ? t("keys.replace") : t(usingShared ? "decider.openrouter.key.overridePlaceholder" : COPY[provider].placeholder)}
+                placeholder={ownKey ? t("keys.replace") : t(sharedOpenRouter ? "decider.openrouter.key.overridePlaceholder" : COPY[provider].placeholder)}
                 aria-label={keyLabel}
                 autoComplete="off"
                 spellCheck={false}
@@ -443,7 +462,7 @@ export function DecisionModelSettings() {
                 <><button type="button" data-testid="decider-manage-keys" onClick={() => dispatch(openKeySettings("openrouter"))}
                   className="cursor-pointer text-accent-text hover:underline">{t("decider.openrouter.key.manageLink")}</button>{" "}</>
               )}
-              {!usingShared && provider !== "custom" && (
+              {!sharedOpenRouter && provider !== "custom" && (
                 <a href={KEY_URL[provider]} target="_blank" rel="noopener noreferrer" className="cursor-pointer text-accent-text hover:underline focus-visible:underline">
                   {t(openrouter ? "decider.openrouter.key.getKey" : gemini ? "decider.gemini.key.getKey" : "decider.key.getKey")}
                 </a>
@@ -524,12 +543,12 @@ export function DecisionModelSettings() {
               className="cursor-pointer"
             />
           </SettingRow>
-          <SettingRow title={t("decider.jobs.browserAutomation")} subtitle={<>{t("decider.jobs.browserAutomationDetail")}{!openrouter && !custom && !configured && <><br />{t("decider.jobs.browserAutomationMissingJev")}</>}{(openrouter || custom) && <><br />{t("decider.jobs.browserAutomationJevOnly")}</>}</>}>
+          <SettingRow title={t("decider.jobs.browserAutomation")} subtitle={<>{t("decider.jobs.browserAutomationDetail")}{(gemini || (!openrouter && !custom && !configured)) && <><br />{t("decider.jobs.browserAutomationMissingJev")}</>}{(openrouter || custom) && <><br />{t("decider.jobs.browserAutomationJevOnly")}</>}</>}>
             <Switch
               data-testid="decider-job-browserAutomation"
               aria-label={t("decider.jobs.browserAutomation")}
               checked={enabled && browserAutomation}
-              disabled={!enabled || switching || openrouter || custom}
+              disabled={!enabled || switching || openrouter || custom || gemini}
               onClick={() => void patch({ jobs: { browserAutomation: !browserAutomation } })}
               className="cursor-pointer"
             />

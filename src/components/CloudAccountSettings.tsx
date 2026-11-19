@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CloudAccountState, CloudPlanBridge, CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import type { CloudCredit, CloudMachine, CloudTrial } from "../../electron/cloud-home.mjs";
 import { planTeam, teamPlan } from "../../electron/cloud-team-plan.mjs";
+import { teamPeoplePage } from "@/lib/app-links";
 import { cloudFilesBridge } from "@/lib/cloud-files";
 import { moveLine } from "@/lib/cloud-send";
 import { activeLocale, t } from "@/lib/i18n";
@@ -14,7 +15,6 @@ import { productName } from "@/lib/brand";
 import { type CloudRenewalActions } from "./CloudCancelPlan";
 import { SignOutConfirm } from "./settings/SignOutConfirm";
 import { CancelPlanRow, KeepPlanButton, endedLine, planLayout, planTitle, renewalLine } from "./settings/plan-parts";
-import type { UpgradeUi } from "./CloudUsageMeter";
 import type { CloudUsage } from "../../electron/cloud-home.mjs";
 import { StagingMark } from "./cloud-buy/parts";
 import { CloudSetupSteps } from "./CloudSetupSteps";
@@ -120,7 +120,7 @@ function dashboardLabel(account: CloudAccountState, view: CloudPlanView): string
   return t("cloudAccount.dashboard");
 }
 
-export function CloudPlanOnCloud({ bridge, usage = null, upgrade, extra }: { bridge: CloudPlanBridge; usage?: CloudUsage | null; upgrade?: UpgradeUi; extra?: ReactNode }) {
+export function CloudPlanOnCloud({ bridge, usage = null, extra }: { bridge: CloudPlanBridge; usage?: CloudUsage | null; extra?: ReactNode }) {
   const [plan, setPlan] = useState<CloudPlanSnapshot | null>(null), [failed, setFailed] = useState(false), [refused, setRefused] = useState(false);
   const [reads, setReads] = useState(0);
   useEffect(() => {
@@ -146,7 +146,7 @@ export function CloudPlanOnCloud({ bridge, usage = null, upgrade, extra }: { bri
     : cancelled && renewal ? <KeepPlanButton actions={renewal} onChanged={() => setReads((count) => count + 1)} />
     : plan ? <button type="button" className="ui-button ui-button-primary" data-plan-manage="" onClick={() => act(() => bridge.manage())}>{(plan.trial && !plan.renewal?.cancelled && cloudTrialView(plan.trial).action?.label) || t("settings.plan.manage")}</button> : null;
   return <div data-cloud-plan={plan?.status ?? "loading"} className="contents">
-    {planLayout({ title, primary, usage, upgrade, extra,
+    {planLayout({ title, primary, usage, extra,
       subtitle: plan?.status === "signin" ? t("cloudAccount.onCloudSignIn") : cancelled && plan?.renewal ? endedLine(plan.renewal) : renewalLine(plan?.renewal),
       message: trialLines(plan?.trial, plan?.credit) || failed ? <>{trialLines(plan?.trial, plan?.credit)}{failed && <p role="alert" className="text-danger">{t("cloudAccount.actionFailed")}</p>}</> : undefined,
       cancel: plan?.renewal && renewal ? <CancelPlanRow renewal={plan.renewal} actions={renewal} onChanged={() => setReads((count) => count + 1)} /> : undefined })}
@@ -155,25 +155,31 @@ export function CloudPlanOnCloud({ bridge, usage = null, upgrade, extra }: { bri
 
 /** Security: the public native snapshot carries no credential and cannot activate a plan. */
 /** `onSignIn`: the sheet's email-code sign-in (the browser approval stays for openmausbot://cloud and Sign in again). */
-/** On a Team Cloud: its people and plan live on the Cloud page, where the person signs in with their own email. */
-export function TeamPeopleCard({ team }: { team: { name: string; cloudPage?: string } }) {
+/** On a Team Cloud: its people, seats and roles live on the team's People page on MausBot Cloud, where the person signs in
+ * with their own email. Its admins invite; only its Owner, who pays, adds seats; anyone else is told to ask an admin. */
+export function TeamPeopleCard({ team, admin, owner = false }: { team: { id: string; name: string; cloudPage?: string }; admin: boolean; owner?: boolean }) {
+  const invite = admin || owner ? teamPeoplePage(team, "invite") : null, seats = owner ? teamPeoplePage(team, "seats") : null;
+  const body = owner ? "cloudAccount.teamPeopleOwner" : admin ? "cloudAccount.teamPeopleAdmin" : "cloudAccount.teamPeopleAsk";
   return <Card title={t("cloudAccount.teamPeopleTitle")}>
     <div data-cloud-plan="team" className="flex flex-col items-start gap-3">
-      <p className="text-[13px] text-ink-secondary">{t("cloudAccount.teamPeopleBody", { team: team.name })}</p>
-      {team.cloudPage && <a className="ui-button" href={team.cloudPage} target="_blank" rel="noreferrer">{t("cloudAccount.teamPeopleOpen")}</a>}
+      <p className="text-[13px] text-ink-secondary">{t(body, { team: team.name })}</p>
+      {invite && <div className="flex flex-wrap gap-2">
+        <a className="ui-button" href={invite} target="_blank" rel="noreferrer" data-team-invite="">{t("cloudAccount.teamPeopleInvite")}</a>
+        {seats && <a className="ui-button" href={seats} target="_blank" rel="noreferrer" data-team-seats="">{t("cloudAccount.teamPeopleSeats")}</a>}
+      </div>}
     </div>
   </Card>;
 }
 
 /** One MausBot account, shown as two pages: `account` (who is signed in, sign in and out) and `plan` (the plan, its Cloud
  * and cancelling it). */
-export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamHome, onAddCloud, onSignIn, part = "plan", advanced = true, usage = null, upgrade, extra, avatar }: {
+export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamHome, onAddCloud, onSignIn, part = "plan", advanced = true, usage = null, extra, avatar }: {
   /** the person's picture, for the account card's leading slot */
   avatar?: ReactNode;
   linkRequest?: number; cloudHome?: boolean; teamHome?: { name: string; cloudPage?: string }; onAddCloud?: () => void; onSignIn?: () => void;
   part?: "account" | "plan" | "sign-out"; advanced?: boolean;
   /** Plan & billing's This week, from the plan bridge */
-  usage?: CloudUsage | null; upgrade?: UpgradeUi;
+  usage?: CloudUsage | null;
   /** a row for the Plan card (Simple's What this place cost) */
   extra?: ReactNode;
 } = {}) {
@@ -240,7 +246,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
     const plan = window.ogb?.remoteClient?.active || !cloudHome ? undefined : window.ogb?.cloudPlan;
     if (part !== "plan") return null;
     return cloudHome && teamHome ? null
-      : plan ? <CloudPlanOnCloud bridge={plan} usage={usage} upgrade={upgrade} extra={extra} /> : <p className="px-4 text-[13px] text-ink-secondary">{t("cloudAccount.desktopOnly")}</p>;
+      : plan ? <CloudPlanOnCloud bridge={plan} usage={usage} extra={extra} /> : <p className="px-4 text-[13px] text-ink-secondary">{t("cloudAccount.desktopOnly")}</p>;
   }
   const view = cloudPlanView(account);
   const signed = account && ["connected", "unavailable", "reauth-required"].includes(account.status);
@@ -304,7 +310,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
     : view.kind === "paid" && account.status === "connected" ? planTitle(view.label, account.renewal, trialRunning(account.trial))
     : line ?? t("settings.simple.billing.plan");
   return <>
-    {planLayout({ title, primary: primary || undefined, usage, upgrade, extra, footnote: moneyBack,
+    {planLayout({ title, primary: primary || undefined, usage, extra, footnote: moneyBack,
       subtitle: view.kind === "signed-out" ? t("settings.plan.offer") : cancelled && account?.status === "connected" && account.renewal ? endedLine(account.renewal)
         : view.kind === "paid" && view.checking ? t("cloudAccount.checking") : message ?? (account?.status === "connected" ? renewalLine(account.renewal) : undefined),
       // Only a trial or a staging account has a line here; an empty node would add height to the row.

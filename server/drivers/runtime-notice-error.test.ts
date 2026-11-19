@@ -57,7 +57,8 @@ describe("runtime notice provenance", () => {
     const text = runtimeErrorText(verdict.stop)!;
     expect(text.key).toBe("chat.notice.acpQuietUsageLimit");
     expect(chatNotice("chat.notice.acpQuietUsageLimit", text.params)).toBe(verdict.stop?.message);
-    const stuck = quietVerdict({ name: "Custom ACP", next: { kind: "no-signs" }, logged: null, now: 600_000, quietMs: 600_000, noSignsSince: 0, stuckAfterMs: 100_000 });
+    // No sign of life for the whole stuck window (30 min by default) ends the turn.
+    const stuck = quietVerdict({ name: "Custom ACP", next: { kind: "no-signs" }, logged: null, now: 31 * 60_000, quietMs: 600_000, noSignsSince: 0, stuckAfterMs: 100_000 });
     expect(stuck.stop).toMatchObject({ acpPromptStall: true });
     expect(runtimeErrorText(stuck.stop)?.key).toBe("chat.notice.acpQuietStuck");
   });

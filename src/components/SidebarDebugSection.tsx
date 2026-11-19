@@ -5,13 +5,13 @@ import { SidebarSectionHeader } from "./SidebarSectionHeader";
 
 /** The 调试区: bots an agent/hub integration created, kept out of everyday lists and shown only in Advanced mode. */
 export function SidebarDebugSection({
-  count,
   collapsed,
   onToggle,
   showHeader = true,
   children,
 }: {
-  count: number;
+  /** Kept for callers; the header no longer shows a count (upstream 0.1.169 dropped section counts). */
+  count?: number;
   collapsed: boolean;
   onToggle?: () => void;
   showHeader?: boolean;
@@ -22,7 +22,6 @@ export function SidebarDebugSection({
       {showHeader && (
         <SidebarSectionHeader
           name={t("sidebar.section.debug")}
-          count={count}
           collapsed={collapsed}
           onToggle={onToggle}
           reorderable={false}

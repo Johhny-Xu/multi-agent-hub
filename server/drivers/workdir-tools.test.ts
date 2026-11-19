@@ -37,6 +37,7 @@ function fakeSession(overrides: Partial<ChatToolSession> = {}): ChatToolSession 
     merged: [],
     budget: { limit: 128, listed: 0, servers: [] },
     refit: async () => {},
+    join: async () => [],
     validate: () => {},
     view: (name, input) => ({ title: name, input, ask: false }),
     execute: async () => ({ ok: true, text: "ok" }),

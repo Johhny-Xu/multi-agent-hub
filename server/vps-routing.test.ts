@@ -439,6 +439,28 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
     }
   }, 30_000);
 
+  // Local (multi-VPS) behaviour: a bot with no cloud backend chosen falls back to the saved VPS when Boat is not set up
+  // (resolveCloudBackend), so upstream's "VPS not chosen" refusal never applies here; the cloud option is offered on the VPS.
+  it("offers a Boat-default bot without Boat the saved VPS as its cloud computer", async () => {
+    await api("PUT", "/api/config", { vps: { sshAlias: "production-vps" } });
+    const bot = (await api("POST", "/api/bots")).body.bot;
+    try {
+      rmSync(gateFile, { force: true }); rmSync(`${acpDump}.mcp.json`, { force: true });
+      await api("PATCH", `/api/bots/${bot.id}`, { browser: false, computer: null, modelSelection: { instanceId: "vps", model: "fake-model" } });
+      expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "Use the remote computer" })).status).toBe(202);
+      await until(async () => existsSync(`${acpDump}.mcp.json`), "the turn");
+      const agents = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8")).find((tool: { name: string }) => tool.name === "agents");
+      const token = agents.env.find((entry: { name: string }) => entry.name === "OMB_COMMS_TOKEN").value;
+      const availability = await (await fetch(`${BASE}/api/internal/computer/select`, { headers: { authorization: `Bearer ${token}` } })).json() as any;
+      const cloud = availability.options.find((option: any) => option.surface === "cloud");
+      expect(cloud.available, JSON.stringify(cloud)).toBe(true);
+      expect(String(cloud.reason ?? "")).not.toContain("Boat");
+    } finally {
+      writeFileSync(gateFile, "open");
+      await api("POST", `/api/bots/${bot.id}/interrupt`, {});
+    }
+  }, 30_000);
+
   it.each(["stopped", "missing", "stopped-during-turn"])(
     "lets Auto discover a %s VPS and start or create it through its chat tool",
     async state => {

@@ -43,7 +43,7 @@ export const deciderConfigSchema = z.object({
     .refine((value) => !value || /^https?:\/\//i.test(value), "the custom endpoint address must start with http:// or https://")
     .optional(),
   customModel: z.string().trim().max(CUSTOM_MODEL_ID_MAX).optional(),
-  customApi: z.enum(["systemone", "decisions"]).optional(),
+  customApi: z.enum(["systemone", "decisions", "chat"]).optional(),
   workersAiToken: optionalText,
   workersAiAccountId: z.string().trim().refine((value) => !value || WORKERS_AI_ACCOUNT_ID.test(value), "a Cloudflare account ID is 32 letters and digits").optional(),
   workersAiBaseUrl: z
@@ -108,11 +108,11 @@ export interface DeciderConfig {
   key?: string;
   geminiKey?: string;
   customKey?: string;
-  /** The gateway's root, e.g. `https://gateway.example.com/v1`: requests go to `{customBaseUrl}/systemone` or `/decisions`. */
+  /** The gateway's root, e.g. `https://gateway.example.com/v1`: requests go to `{customBaseUrl}/systemone`, `/decisions` or `/chat/completions`. */
   customBaseUrl?: string;
   customModel?: string;
   /** Absent is `systemone`. */
-  customApi?: "systemone" | "decisions";
+  customApi?: "systemone" | "decisions" | "chat";
   baseUrl?: string;
   /** An operator setting with no UI: the Gemini Decisions API's root, `/decisions` appended. */
   geminiBaseUrl?: string;

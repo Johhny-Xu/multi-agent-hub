@@ -1,12 +1,14 @@
 import { z } from "zod";
 
 import { approvalModeFor, isApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";
-import { normalizeConnectorScopes } from "../../shared/connector-scopes.ts";
+import { normalizeConnectorScopes, widensConnectorScopes } from "../../shared/connector-scopes.ts";
+import { isBotLiveVoice } from "../../shared/live-call.ts";
 import { normalizeOutboundPolicy } from "../../shared/outbound.ts";
 import { normalizePhoneApps } from "../../shared/phone-apps.ts";
 import { parseToolScope, toolScopeWidens } from "../../shared/tool-scope.ts";
 import { parseToolsOff, TOOL_GROUPS } from "../../shared/tool-groups.ts";
 import { isMausColor, MAUS_COLOR_NAMES, type BotUpdateResponse, type WireBot, type WireGroup } from "../../shared/wire.ts";
+import { dropRemovedGrants, MAX_ALWAYS_ALLOW } from "../always-allow.ts";
 import { checkBrowserProfileChange, settleBrowserChange } from "../bot-browser-profile.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
 import { parseBotProfilePatch } from "../bot-profile.ts";
@@ -87,6 +89,8 @@ export interface BotPatchRouteDeps {
   shownThread?(auth: RequestAuth, bot: BotRecord): string;
   /** The Chief of Staff of a scope changed: these bots' flags did. */
   chiefChanged?(changed: readonly BotRecord[]): void;
+  /** The bots of the turns now running, each with the grants its turn reads. */
+  turnBots?: { values(): Iterable<BotRecord> };
 }
 
 export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
@@ -278,7 +282,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         if (body.connectorScopes === null) patch.connectorScopes = undefined;
         else {
           const scopes = normalizeConnectorScopes(body.connectorScopes);
-          if (!scopes) return json(res, 400, { error: "connectorScopes must be { apps: { <toolkit>: read | write } } or null" });
+          if (!scopes) return json(res, 400, { error: "connectorScopes must be { apps: { <toolkit>: read | write }, accounts?: { <toolkit>: [account ids] } } or null" });
           patch.connectorScopes = scopes;
         }
       }
@@ -309,10 +313,20 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         if (body.voiceNoteEveryReply !== null && typeof body.voiceNoteEveryReply !== "boolean") return json(res, 400, { error: "voiceNoteEveryReply must be true, false or null" });
         patch.voiceNoteEveryReply = body.voiceNoteEveryReply ?? undefined;
       }
+      // The bot's own Live call voice; "" or null: the app's voice again.
+      if (body.liveVoice !== undefined) {
+        if (body.liveVoice !== null && body.liveVoice !== "" && !isBotLiveVoice(body.liveVoice)) return json(res, 400, { error: "liveVoice must be a GPT-Live or Gemini Live voice, or empty" });
+        patch.liveVoice = body.liveVoice || undefined;
+      }
       // Spends the Cloud plan's monthly X research calls: an admin decision too.
       if (body.xResearch !== undefined) {
         if (typeof body.xResearch !== "boolean") return json(res, 400, { error: "xResearch must be true or false" });
         patch.xResearch = body.xResearch;
+      }
+      // Lets the bot write the Team Cloud's shared folder from every chat, members' private ones too: an admin decision.
+      if (body.teamFilesEdit !== undefined) {
+        if (typeof body.teamFilesEdit !== "boolean") return json(res, 400, { error: "teamFilesEdit must be true or false" });
+        patch.teamFilesEdit = body.teamFilesEdit || undefined;
       }
       if (body.toolsOff !== undefined) {
         const toolsOff = body.toolsOff === null ? [] : parseToolsOff(body.toolsOff);
@@ -429,23 +443,39 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       }
       let vpsLeftOn: string | null = null;
       if (body.vpsAlias !== undefined && existingBot && cfg.vps?.version !== 2) {
-        const nextAlias = vpsSshAliasForBot(cfg, { ...existingBot, vpsAlias: patch.vpsAlias as string | undefined });
-        if (nextAlias !== vpsSshAliasForBot(cfg, existingBot)) {
+        const VPS_ALIAS_MOVE_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= VPS_ALIAS_MOVE_ATTEMPTS; attempt++) {
           const current = store.bot(m[1]);
           if (!current) return json(res, 404, { error: "no such bot" });
+          const nextAlias = vpsSshAliasForBot(cfg, { ...current, vpsAlias: patch.vpsAlias as string | undefined });
+          if (nextAlias === vpsSshAliasForBot(cfg, current)) break;
           const aliasError = vpsBotAliasChangeError(Boolean(current.busy), activeVpsThreads.has(m[1]));
           if (aliasError) return json(res, 409, { error: aliasError });
           if (vps.vpsLifecycleBusy()) return json(res, 409, { error: VPS_BOT_ALIAS_LIFECYCLE_ERROR });
           const previousAlias = vpsSshAliasForBot(cfg, current);
+          const scannedBusy = current.busy;
+          const scannedName = current.name;
+          const scannedContainer = vps.vpsContainerName(current.id);
           const inventory = previousAlias ? await vps.listManagedVpsComputers(
             [{ instanceId: previousAlias, sshAlias: previousAlias, revision: "" }],
-            [{ botId: current.id, name: current.name, inUse: false }],
+            [{ botId: current.id, name: scannedName, inUse: false }],
           ) : null;
+          const settled = store.bot(m[1]);
+          if (!settled) return json(res, 404, { error: "no such bot" });
+          if (vpsSshAliasForBot(cfg, settled) !== previousAlias
+            || vpsSshAliasForBot(cfg, { ...settled, vpsAlias: patch.vpsAlias as string | undefined }) !== nextAlias
+            || settled.busy !== scannedBusy || settled.name !== scannedName
+            || vps.vpsContainerName(settled.id) !== scannedContainer
+            || activeVpsThreads.has(m[1]) || vps.vpsLifecycleBusy()) {
+            if (attempt === VPS_ALIAS_MOVE_ATTEMPTS) return json(res, 409, { error: VPS_BOT_ALIAS_CHANGE_ERROR });
+            continue;
+          }
           if (inventory && !inventory.available) {
             vpsLeftOn = previousAlias;
-          } else if (inventory?.instances.some((instance) => instance.name === vps.vpsContainerName(current.id))) {
+          } else if (inventory?.instances.some((instance) => instance.name === vps.vpsContainerName(settled.id))) {
             return json(res, 409, { error: VPS_BOT_ALIAS_RESOURCES_ERROR });
           }
+          break;
         }
       }
       if (body.vpsInstanceId !== undefined && existingBot && patch.vpsInstanceId !== existingBot.vpsInstanceId) {
@@ -603,16 +633,18 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         if (!Array.isArray(body.alwaysAllow) || body.alwaysAllow.some((t: unknown) => typeof t !== "string")) {
           return json(res, 400, { error: "alwaysAllow must be a list of tool keys" });
         }
-        patch.alwaysAllow = [...new Set(body.alwaysAllow as string[])].slice(0, 200);
+        const alwaysAllow = [...new Set(body.alwaysAllow as string[])];
+        if (alwaysAllow.length > MAX_ALWAYS_ALLOW) {
+          return json(res, 400, userError("serverError.bot.alwaysAllowFull", { max: MAX_ALWAYS_ALLOW }));
+        }
+        patch.alwaysAllow = alwaysAllow;
       }
       // Known gap: outside the packaged desktop, loopback is the owner, so these loosenings are one curl from
       // the bot they constrain. An originless, session-less loopback caller may loosen only while every bot is idle.
       const loosened: string[] = [];
       const trustPatch = patch as Pick<Partial<BotRecord>, "outbound" | "connectorScopes" | "fallback">;
       if (body.outbound !== undefined && trustPatch.outbound?.policy === "allow" && existingBot?.outbound?.policy !== "allow") loosened.push("outbound");
-      if (body.connectorScopes !== undefined && existingBot?.connectorScopes &&
-          (!trustPatch.connectorScopes || Object.entries(trustPatch.connectorScopes.apps).some(([slug, scope]) =>
-            !existingBot.connectorScopes!.apps[slug] || (scope === "write" && existingBot.connectorScopes!.apps[slug] === "read")))) loosened.push("connectorScopes");
+      if (body.connectorScopes !== undefined && widensConnectorScopes(existingBot?.connectorScopes, trustPatch.connectorScopes)) loosened.push("connectorScopes");
       if (body.phoneApps !== undefined && existingBot) {
         // Compare effective grants: clearing falls back to every app.
         const before = phoneAppsFor(existingBot);
@@ -678,12 +710,12 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         if (toolScopeWidens(freshBrowserBot?.toolScope, patch.toolScope) && auth.kind === "loopback" && !DESKTOP_MANAGED && !browserOrigin && store.bots.some((candidate) => candidate.busy)) {
           return json(res, 409, { error: "A bot is working right now, so this change has to come from the desktop app or a paired device. Try again once every bot is idle." });
         }
-        if (freshBrowserBot && JSON.stringify(freshBrowserBot.toolScope) !== JSON.stringify(patch.toolScope)
-          && (freshBrowserBot.busy || activeGroupTurnForBot(freshBrowserBot.id))) {
-          return json(res, 409, { error: "Stop this bot's turns before changing its tool selection." });
-        }
       }
-      // A running turn cannot unmount custom servers; rechecked after the awaits above.
+      if (body.connectorScopes !== undefined && widensConnectorScopes(freshBrowserBot?.connectorScopes, trustPatch.connectorScopes) &&
+          auth.kind === "loopback" && !DESKTOP_MANAGED && !browserOrigin &&
+          store.bots.some((candidate) => candidate.busy || activeGroupTurnForBot(candidate.id))) {
+        return json(res, 409, { error: "A bot is working right now, so this change has to come from the desktop app or a paired device. Try again once every bot is idle." });
+      }
       if (body.mcpServers !== undefined) {
         if (auth.kind === "session" && !sessions.isLive(auth.session.id)) {
           return json(res, 401, { error: "unauthorized: this session has expired or was revoked" });
@@ -692,11 +724,6 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
             (requestedMcpServers === undefined || requestedMcpServers.some((name) => !freshBrowserBot.mcpServers!.includes(name))) &&
             auth.kind === "loopback" && !DESKTOP_MANAGED && !browserOrigin && store.bots.some((candidate) => candidate.busy)) {
           return json(res, 409, { error: "A bot is working right now, so this change has to come from the desktop app or a paired device. Try again once every bot is idle." });
-        }
-        if (freshBrowserBot &&
-            JSON.stringify(requestedMcpServers?.toSorted()) !== JSON.stringify(freshBrowserBot.mcpServers?.toSorted()) &&
-            (freshBrowserBot.busy || activeGroupTurnForBot(freshBrowserBot.id))) {
-          return json(res, 409, { error: "Stop this bot's turns before changing its MCP servers." });
         }
       }
       if (normalizedSelection && movedTask) {
@@ -737,6 +764,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
           ...(remoteAddress ? { remoteAddress } : {}),
         },
       };
+      if (Array.isArray(patch.alwaysAllow)) dropRemovedGrants(store, deps.turnBots?.values() ?? [], m[1], patch.alwaysAllow);
       if (profile.patch.soul !== undefined) {
         if (freshBrowserBot) assertTeamComputerChangeIdle(freshBrowserBot, { ...freshBrowserBot, ...patch } as BotRecord);
       // Runtime fields keep their fail-closed order; only the profile fields commit atomically.

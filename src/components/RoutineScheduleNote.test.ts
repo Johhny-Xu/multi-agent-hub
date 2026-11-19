@@ -4,19 +4,18 @@ import { schedulePlace } from "./RoutineScheduleNote";
 describe("where a routine runs, said where it is scheduled", () => {
   const free = { kind: "free" } as const, paid = { kind: "paid", label: "Pro", checking: false } as const;
   it("My Cloud runs it 24/7; another server, a browser or companion mode while that server runs", () => {
-    expect(schedulePlace({ cloudHome: true, local: false, plan: null, ready: false, offersAllowed: true })).toEqual({ kind: "cloud" });
-    expect(schedulePlace({ cloudHome: false, local: false, plan: free, ready: false, offersAllowed: true })).toEqual({ kind: "server" });
+    expect(schedulePlace({ cloudHome: true, local: false, plan: null, ready: false })).toEqual({ kind: "cloud" });
+    expect(schedulePlace({ cloudHome: false, local: false, plan: free, ready: false })).toEqual({ kind: "server" });
   });
-  it("This computer: Add a Cloud for someone who may buy where it is offered, Open the Cloud once it is ready, else the note alone", () => {
-    expect(schedulePlace({ cloudHome: false, local: true, plan: free, ready: false, offersAllowed: true })).toEqual({ kind: "local", next: "add-cloud" });
-    expect(schedulePlace({ cloudHome: false, local: true, plan: { kind: "signed-out" }, ready: false, offersAllowed: true })).toEqual({ kind: "local", next: "add-cloud" });
-    expect(schedulePlace({ cloudHome: false, local: true, plan: free, ready: false, offersAllowed: false })).toEqual({ kind: "local", next: null });
-    expect(schedulePlace({ cloudHome: false, local: true, plan: paid, ready: true, offersAllowed: true })).toEqual({ kind: "local", next: "open-cloud" });
-    expect(schedulePlace({ cloudHome: false, local: true, plan: paid, ready: false, offersAllowed: true })).toEqual({ kind: "local", next: null });
+  it("This computer: Open the Cloud once it is ready, else the note alone; never a reason to buy one", () => {
+    expect(schedulePlace({ cloudHome: false, local: true, plan: free, ready: false })).toEqual({ kind: "local", next: null });
+    expect(schedulePlace({ cloudHome: false, local: true, plan: { kind: "signed-out" }, ready: false })).toEqual({ kind: "local", next: null });
+    expect(schedulePlace({ cloudHome: false, local: true, plan: paid, ready: true })).toEqual({ kind: "local", next: "open-cloud" });
+    expect(schedulePlace({ cloudHome: false, local: true, plan: paid, ready: false })).toEqual({ kind: "local", next: null });
     for (const plan of [{ kind: "attention", label: "Pro" }, { kind: "unknown" }, { kind: "reauth", label: "Pro", reason: "expired" }] as const) {
-      expect(schedulePlace({ cloudHome: false, local: true, plan, ready: false, offersAllowed: true })).toEqual({ kind: "local", next: null });
+      expect(schedulePlace({ cloudHome: false, local: true, plan, ready: false })).toEqual({ kind: "local", next: null });
     }
-    expect(schedulePlace({ cloudHome: false, local: true, plan: null, ready: false, offersAllowed: true })).toEqual({ kind: "local", next: null });
+    expect(schedulePlace({ cloudHome: false, local: true, plan: null, ready: false })).toEqual({ kind: "local", next: null });
   });
 });
 

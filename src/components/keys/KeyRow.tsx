@@ -221,7 +221,6 @@ export function KeyRow({
         if (!now.configured) setProblem(t("keys.row.notKept"));
       }
       onSaved?.(now.configured);
-      if (now.configured && via === "settings") target.settingsEvent?.("add_key");
       keySaved(target.analytics, via, current && now.configured && target.test ? await runCheck() : savedKeyResult(target.analytics));
     } catch (cause) {
       if (mine === generation.current) setProblem(errorText(cause));
@@ -334,7 +333,7 @@ export function KeyRow({
       {input}
       {target.href && (
         <p className="text-[13px] leading-[18px] text-ink-secondary">
-          <a href={target.href} target="_blank" rel="noopener noreferrer" onClick={() => { if (via === "settings") target.settingsEvent?.("get_key"); }} className="text-accent-text hover:underline focus-visible:underline">
+          <a href={target.href} target="_blank" rel="noopener noreferrer" className="text-accent-text hover:underline focus-visible:underline">
             {t("keys.row.getKey")}
           </a>
         </p>
@@ -470,7 +469,7 @@ export function KeyRow({
             {(fieldShown && target.href && !settings) || (!fieldShown && saved.configured && target.test) ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {fieldShown && target.href && !settings && (
-                  <a href={target.href} target="_blank" rel="noopener noreferrer" onClick={() => { if (via === "settings") target.settingsEvent?.("get_key"); }} className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
+                  <a href={target.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
                     {t("keys.row.getKey")}
                     <ExternalLink size={11} aria-hidden="true" />
                   </a>

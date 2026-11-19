@@ -1,10 +1,8 @@
-import { useContext, useRef, useState, type ReactNode } from "react";
-import { ArrowUpRight, Gauge, Loader2, X } from "lucide-react";
-
-import type { CloudPlanBridge, CloudPlanSnapshot, CloudUpgradePreview, CloudUpgradeRefusal } from "../../electron/cloud-account.mjs";
+import { useContext, useState, type ReactNode } from "react";
+import { X } from "lucide-react";
+import type { CloudPlanBridge, CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import type { CloudUsage, CloudUsageMeter } from "../../electron/cloud-home.mjs";
-import { cloudPlanChanged, useCloudPlanSnapshot } from "./CloudTrialNotice";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { useCloudPlanSnapshot } from "./CloudTrialNotice";
 import { Card, SettingsLook, SIMPLE_CARD } from "./SettingsPrimitives";
 import { localDesktopPage } from "./onboarding/WelcomeGate";
 import { cloudPlanLabel } from "@/lib/cloud-plan";
@@ -12,14 +10,11 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import {
-  includedUsePercent, meterAmounts, meterBand, meterLabel, meterPercent, nextPlan, readUsageCardDismissed, rememberUsageCardDismissed, resetLine,
-  upgradeConfirmBody, upgradeLabel, upgradePath, usageCardView, type MeterBand,
+  includedUsePercent, meterAmounts, meterBand, meterLabel, meterPercent, readUsageCardDismissed, rememberUsageCardDismissed, resetLine, usageCardView, type MeterBand,
 } from "@/lib/usage-meter";
-import type { LocaleKey } from "@/locales";
 import { useStore } from "@/state/store";
 
 const TEAM_TIERS: readonly string[] = ["team", "business"];
-export type UpgradeSource = "app_usage" | "app_settings" | "app_room";
 
 export function usageBridge(cloudHome: boolean): CloudPlanBridge | undefined {
   if (window.ogb?.remoteClient?.active === true) return undefined;
@@ -60,100 +55,9 @@ export function MeterRow({ meter, compact = false }: { meter: CloudUsageMeter; c
   );
 }
 
-const REFUSAL: Record<CloudUpgradeRefusal, LocaleKey> = {
-  payment_failed: "usageMeter.err.paymentFailed", not_subscribed: "usageMeter.err.notSubscribed", already_on_plan: "usageMeter.err.alreadyOnPlan",
-  plan_change_unavailable: "usageMeter.err.unavailable", confirmation_required: "usageMeter.err.priceChanged", price_changed: "usageMeter.err.priceChanged",
-  rate_limited: "usageMeter.err.rateLimited",
-};
-export type UpgradeNote = { tone: "good" | "info" | "bad"; text: string };
-const failed = (): UpgradeNote => ({ tone: "bad", text: t("usageMeter.err.failed") });
-const done = (tier: string): UpgradeNote => ({ tone: "good", text: t("usageMeter.done", { plan: cloudPlanLabel(tier) }) });
-const pending = (): UpgradeNote => ({ tone: "info", text: t("usageMeter.pending") });
-
-/** `upgraded`: a change already going through settled on this plan, which may not be the one asked for. */
-export async function previewUpgrade(bridge: CloudPlanBridge, usage: CloudUsage, source: UpgradeSource, tier: string | undefined = nextPlan(usage)?.tier):
-  Promise<{ preview: CloudUpgradePreview } | { note: UpgradeNote; upgraded?: string }> {
-  if (upgradePath(usage) !== "app" || !tier || !bridge.upgradePreview) {
-    await bridge.manage();
-    return { note: { tone: "info", text: t("usageMeter.browser") } };
-  }
-  const shown = await bridge.upgradePreview(tier, source);
-  switch (shown.outcome) {
-    case "preview": return { preview: shown.preview };
-    case "settled": return shown.status === "upgraded" ? { note: done(shown.tier), upgraded: shown.tier } : { note: pending() };
-    case "browser": return { note: { tone: "info", text: t("usageMeter.browser") } };
-    case "refused": return { note: { tone: "bad", text: t(REFUSAL[shown.code]) } };
-    default: return { note: failed() };
-  }
-}
-
-/** Security: only the confirm's own button calls this; nothing else sends a plan change. */
-export async function confirmUpgrade(bridge: CloudPlanBridge, preview: CloudUpgradePreview, source: UpgradeSource): Promise<UpgradeNote> {
-  if (!bridge.upgrade) return failed();
-  const result = await bridge.upgrade(preview.plan, source);
-  switch (result.outcome) {
-    case "upgraded": return done(result.tier);
-    case "pending": return pending();
-    case "unconfirmed": return { tone: "info", text: t("usageMeter.unconfirmed") };
-    case "refused": return { tone: "bad", text: t(REFUSAL[result.code]) };
-    default: return failed();
-  }
-}
-
-/** `onUpgraded`: the plan the person's Cloud is on now, once an upgrade went through. */
-export function useUpgrade(bridge: CloudPlanBridge | undefined, usage: CloudUsage | null, source: UpgradeSource, onUpgraded?: (tier: string) => void, dialogLayer?: string) {
-  const [busy, setBusy] = useState<"preview" | "change" | null>(null);
-  const [preview, setPreview] = useState<CloudUpgradePreview | null>(null);
-  const [note, setNote] = useState<UpgradeNote | null>(null);
-  const running = useRef(false);
-  const run = (phase: "preview" | "change", work: () => Promise<void>) => {
-    if (running.current || !bridge) return;
-    running.current = true; setBusy(phase); setNote(null);
-    void work().catch(() => setNote(failed())).finally(() => { running.current = false; setBusy(null); });
-  };
-  const start = (tier?: string) => run("preview", async () => {
-    if (!usage) return;
-    const next = await previewUpgrade(bridge!, usage, source, tier ?? nextPlan(usage)?.tier);
-    if ("preview" in next) setPreview(next.preview);
-    else { setNote(next.note); if (next.upgraded) onUpgraded?.(next.upgraded); cloudPlanChanged(); }
-  });
-  const confirm = () => run("change", async () => {
-    if (!preview) return;
-    try {
-      const note = await confirmUpgrade(bridge!, preview, source);
-      setNote(note);
-      if (note.tone === "good") onUpgraded?.(preview.plan);
-    } finally { setPreview(null); cloudPlanChanged(); }
-  });
-  const dialog = (
-    <ConfirmDialog
-      open={preview !== null}
-      tone="neutral"
-      icon={<Gauge size={18} className="text-accent" />}
-      title={preview ? t("usageMeter.confirm.title", { plan: cloudPlanLabel(preview.plan) }) : ""}
-      body={preview ? upgradeConfirmBody(preview, { trialEndsAt: usage?.trialEndsAt }) : ""}
-      confirmLabel={preview ? t("usageMeter.confirm.action", { plan: cloudPlanLabel(preview.plan) }) : ""}
-      cancelLabel={t("usageMeter.confirm.cancel")}
-      pending={busy === "change"}
-      layer={dialogLayer}
-      onCancel={() => { if (busy !== "change") setPreview(null); }}
-      onConfirm={confirm}
-    />
-  );
-  return { busy, note, start, dialog, confirming: preview !== null };
-}
-
-export function NoteLine({ note }: { note: UpgradeNote | null }) {
-  if (!note) return null;
-  return <p role={note.tone === "bad" ? "alert" : "status"} className={cn("text-[12px] leading-relaxed", note.tone === "bad" ? "text-danger" : note.tone === "good" ? "text-success" : "text-ink-secondary")}>{note.text}</p>;
-}
-
-export type UpgradeUi = { busy: "preview" | "change" | null; note: UpgradeNote | null; onUpgrade: (tier?: string) => void };
-
-export function CloudUsageCardView({ usage, meters, band, upgrade, onHide, onSeeAll, children }: {
-  usage: CloudUsage; meters: CloudUsageMeter[]; band: "near" | "full"; upgrade: UpgradeUi; onHide: () => void; onSeeAll: () => void; children?: ReactNode;
+export function CloudUsageCardView({ usage, meters, band, onHide, onSeeAll, children }: {
+  usage: CloudUsage; meters: CloudUsageMeter[]; band: "near" | "full"; onHide: () => void; onSeeAll: () => void; children?: ReactNode;
 }) {
-  const path = upgradePath(usage), target = nextPlan(usage);
   return (
     <section aria-labelledby="cloud-usage-card-title" data-cloud-usage-card={band}
       className="mb-2 rounded-xl border border-hairline/50 bg-card p-3 text-ink shadow-sm">
@@ -163,15 +67,7 @@ export function CloudUsageCardView({ usage, meters, band, upgrade, onHide, onSee
       </div>
       {meters.map((meter) => <MeterRow key={meter.kind} meter={meter} compact />)}
       <p className="mt-2 text-[12px] text-ink-secondary">{resetLine(usage)}</p>
-      {path !== "top" && (
-        <button type="button" className="ui-button ui-button-primary mt-2.5 w-full justify-center gap-1.5" disabled={upgrade.busy !== null} onClick={() => upgrade.onUpgrade()}>
-          {upgrade.busy === "preview" && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
-          {target ? t("usageMeter.upgradeToShort", { plan: cloudPlanLabel(target.tier) }) : t("usageMeter.upgrade")}
-          {path === "browser" && <ArrowUpRight size={13} aria-hidden="true" />}
-        </button>
-      )}
       <button type="button" className="mt-1.5 w-full py-1 text-center text-[12px] text-ink-secondary hover:text-ink" onClick={onSeeAll}>{t("usageMeter.card.seeAll")}</button>
-      {upgrade.note && <div className="mt-1"><NoteLine note={upgrade.note} /></div>}
       {children}
     </section>
   );
@@ -180,17 +76,14 @@ export function CloudUsageCardView({ usage, meters, band, upgrade, onHide, onSee
 export function CloudUsageCard() {
   const { dispatch } = useStore();
   const advanced = useAdvancedMode();
-  const { usage, bridge, teamHome } = useCloudUsage();
+  const { usage, teamHome } = useCloudUsage();
   const [dismissed, setDismissed] = useState(readUsageCardDismissed);
-  const upgrade = useUpgrade(bridge, usage, "app_usage");
   const view = usageCardView({ usage, teamHome, dismissed });
   if (!view || !usage) return null;
   const hide = () => { rememberUsageCardDismissed(view.dismissKey); setDismissed(view.dismissKey); };
   return (
-    <CloudUsageCardView usage={usage} meters={view.meters} band={view.band} upgrade={{ busy: upgrade.busy, note: upgrade.note, onUpgrade: upgrade.start }}
-      onHide={hide} onSeeAll={() => dispatch({ type: "toggleAppSettings", open: true, section: advanced ? "general" : "usage" })}>
-      {upgrade.dialog}
-    </CloudUsageCardView>
+    <CloudUsageCardView usage={usage} meters={view.meters} band={view.band}
+      onHide={hide} onSeeAll={() => dispatch({ type: "toggleAppSettings", open: true, section: advanced ? "general" : "usage" })} />
   );
 }
 
@@ -203,54 +96,28 @@ function TopPlanNote({ usage }: { usage: CloudUsage }) {
   return <p className="text-[13px] text-ink-secondary">{t(TEAM_TIERS.includes(usage.tier) ? "usageMeter.teamPlan" : "usageMeter.topPlan")}</p>;
 }
 
-function OtherPlans({ usage, upgrade }: { usage: CloudUsage; upgrade: UpgradeUi }) {
-  if (upgradePath(usage) !== "app") return null;
-  return <>{[...usage.upgrades].sort((a, b) => a.amount - b.amount).slice(1).map((other) => (
-    <button key={other.tier} type="button" disabled={upgrade.busy !== null} onClick={() => upgrade.onUpgrade(other.tier)}
-      className="cursor-pointer text-[13px] text-ink-secondary underline underline-offset-2 hover:text-ink disabled:opacity-50">{upgradeLabel(other)}</button>
-  ))}</>;
-}
-
-export function CloudUsageSettingsView({ usage, upgrade, children }: { usage: CloudUsage; upgrade: UpgradeUi; children?: ReactNode }) {
+export function CloudUsageSettingsView({ usage, children }: { usage: CloudUsage; children?: ReactNode }) {
   return (
     <Card title={t("usageMeter.title")} subtitle={t("usageMeter.subtitle", { plan: cloudPlanLabel(usage.tier) })}>
       <div data-cloud-usage={usage.tier}>
         <MeterList usage={usage} />
         <p className="mt-2 text-[12px] text-ink-secondary">{resetLine(usage)}</p>
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          {upgradePath(usage) === "top" ? <TopPlanNote usage={usage} /> : <UpgradeButton usage={usage} upgrade={upgrade} />}
-          <OtherPlans usage={usage} upgrade={upgrade} />
-        </div>
-        {upgrade.note && <div className="mt-2"><NoteLine note={upgrade.note} /></div>}
+        {usage.upgrades.length === 0 && <div className="mt-4"><TopPlanNote usage={usage} /></div>}
       </div>
       {children}
     </Card>
   );
 }
 
-export function useCloudUsageSettings(): { usage: CloudUsage | null; upgrade: UpgradeUi; dialog: ReactNode } {
-  const { usage, bridge, teamHome } = useCloudUsage();
-  const upgrade = useUpgrade(bridge, usage, "app_settings");
-  const shown = usage && !(teamHome && !TEAM_TIERS.includes(usage.tier)) ? usage : null;
-  return { usage: shown, upgrade: { busy: upgrade.busy, note: upgrade.note, onUpgrade: upgrade.start }, dialog: upgrade.dialog };
+export function useCloudUsageSettings(): { usage: CloudUsage | null } {
+  const { usage, teamHome } = useCloudUsage();
+  return { usage: usage && !(teamHome && !TEAM_TIERS.includes(usage.tier)) ? usage : null };
 }
 
 export function CloudUsageSettings() {
-  const { usage, upgrade, dialog } = useCloudUsageSettings();
+  const { usage } = useCloudUsageSettings();
   if (!usage) return null;
-  return <CloudUsageSettingsView usage={usage} upgrade={upgrade}>{dialog}</CloudUsageSettingsView>;
-}
-
-export function UpgradeButton({ usage, upgrade, className, secondary = false }: { usage: CloudUsage; upgrade: UpgradeUi; className?: string; secondary?: boolean }) {
-  const path = upgradePath(usage), target = nextPlan(usage);
-  if (path === "top") return null;
-  return (
-    <button type="button" className={cn("ui-button gap-1.5", !secondary && "ui-button-primary", className)} disabled={upgrade.busy !== null} onClick={() => upgrade.onUpgrade()}>
-      {upgrade.busy === "preview" && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
-      {target ? upgradeLabel(target) : t("usageMeter.upgrade")}
-      {path === "browser" && <ArrowUpRight size={13} aria-hidden="true" />}
-    </button>
-  );
+  return <CloudUsageSettingsView usage={usage} />;
 }
 
 const SUMMARY_BAR: Record<MeterBand, string> = { ok: "bg-ink/80", near: "bg-warning", full: "bg-danger" };
@@ -280,26 +147,21 @@ export function UsageSummaryCard({ kind, title, percent, label, note, children }
   );
 }
 
-export function CloudUsageSummaryView({ usage, upgrade, children }: { usage: CloudUsage; upgrade: UpgradeUi; children?: ReactNode }) {
+export function CloudUsageSummaryView({ usage, children }: { usage: CloudUsage; children?: ReactNode }) {
   const percent = includedUsePercent(usage);
   return (
     <UsageSummaryCard kind="cloud" title={t("settings.simple.billing.included")} percent={percent} label={t("settings.simple.billing.summary", { percent: String(percent) })} note={resetLine(usage)}>
-      <UpgradeButton usage={usage} upgrade={upgrade} className="mt-3.5" />
-      {upgrade.note && <div className="mt-2"><NoteLine note={upgrade.note} /></div>}
       {children}
     </UsageSummaryCard>
   );
 }
 
-export function CloudUsageDetails({ usage, upgrade }: { usage: CloudUsage; upgrade: UpgradeUi }) {
+export function CloudUsageDetails({ usage }: { usage: CloudUsage }) {
   return (
     <Card title={t("usageMeter.title")} subtitle={t("usageMeter.subtitle", { plan: cloudPlanLabel(usage.tier) })}>
       <div data-cloud-usage={usage.tier}>
         <MeterList usage={usage} />
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 empty:hidden">
-          {upgradePath(usage) === "top" && <TopPlanNote usage={usage} />}
-          <OtherPlans usage={usage} upgrade={upgrade} />
-        </div>
+        {usage.upgrades.length === 0 && <div className="mt-3"><TopPlanNote usage={usage} /></div>}
       </div>
     </Card>
   );

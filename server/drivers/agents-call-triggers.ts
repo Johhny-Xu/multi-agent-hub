@@ -15,7 +15,7 @@ export const TRIGGER_TOOL_NAMES: ReadonlySet<string> = new Set(["trigger_info", 
 const LIST_ROUTE = "/api/internal/triggers";
 const EVENTS_ROUTE = "/api/internal/trigger-events";
 const APP_ONLY = ["app", "event", "account"] as const;
-const SAME_CONVERSATION_ONLY = "same_conversation applies only to when=app_event or when=webhook.";
+const SAME_CONVERSATION_ONLY = "same_conversation applies only to when=app_event, when=webhook or when=schedule.";
 const REQUEST_ROUTE = "/api/internal/trigger-requests";
 const TAKES = () => ` trigger takes ${argumentNames(fullInputSchema("trigger"))}.`;
 const SCHEDULE_ONLY = ["schedule", "timeout_minutes", "timeoutMinutes", "clear_timeout", "continuity", "overlap", "run_on_startup", "runOnStartup"] as const;
@@ -421,7 +421,11 @@ async function listTriggers(args: Json, forBotId: string | undefined, context: T
   const now = typeof r.now === "string" ? r.now : new Date().toISOString();
   const timeZone = typeof r.timeZone === "string" && r.timeZone ? r.timeZone : "local computer timezone";
   const clock = `current time: ${now}; timezone: ${timeZone}`;
-  if (typeof r.error === "string") return { text: `${r.error} (${clock})`, isError: true };
+  if (typeof r.error === "string") {
+    // A trigger id that is not this bot's is an answer the bot can pass on; a failed call ends the turn.
+    if (r.missing === true) return { text: `${r.error} (${clock})` };
+    return { text: `${r.error} (${clock})`, isError: true };
+  }
   if (r.trigger) return { text: `Trigger (${clock}):\n${JSON.stringify(r.trigger, null, 2)}` };
   const triggers = Array.isArray(r.triggers) ? r.triggers : [];
   if (!triggers.length) return { text: `This bot has no triggers. Current time: ${now}. Timezone: ${timeZone}.` };
@@ -460,7 +464,7 @@ async function createTrigger(args: Json, forBotId: string | undefined, context: 
     const appOnly = [...APP_ONLY, "filter", "event_config"].find((key) => args[key] !== undefined && args[key] !== null);
     if (appOnly) return { text: `${appOnly} applies only to when=app_event.`, isError: true };
   }
-  if (fields.sameConversation !== undefined && when !== "app_event" && when !== "webhook") return { text: SAME_CONVERSATION_ONLY, isError: true };
+  if (fields.sameConversation !== undefined && when === "limit_reset") return { text: SAME_CONVERSATION_ONLY, isError: true };
   if (when === "app_event") {
     const misplaced = [...SCHEDULE_ONLY, "webhook_event_types", "webhook_payload_filter"].find((key) => args[key] !== undefined && args[key] !== null);
     if (misplaced) return { text: `An app-event trigger fires when the app's event happens, so it takes no ${misplaced}.`, isError: true };

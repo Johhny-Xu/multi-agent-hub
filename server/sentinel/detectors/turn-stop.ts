@@ -3,7 +3,7 @@ import { capTitle, HARNESS_NOTICE, normalizeSignatureText, signatureOf } from ".
 import type { Detector, Observation, Origin } from "../types.ts";
 import { isServerLine } from "../../server-lines.ts";
 
-export const TURN_TIMEOUT_NOTICE = /\b(?:exceeded|made no progress for) \d+ minutes?\b/i;
+export const TURN_TIMEOUT_NOTICE = /\b(?:exceeded|made no progress for) \d+ minutes?\b|\bwas judged stuck by a status check\b/i;
 /** A stopped room turn's row, as written before rows were in the room's language, or in any language now. */
 export function isTurnTimeoutNotice(text: string): boolean {
   return TURN_TIMEOUT_NOTICE.test(text) || isServerLine("server.rooms.turnStalled.one", text) || isServerLine("server.rooms.turnStalled.many", text);

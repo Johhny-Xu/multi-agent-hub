@@ -7,7 +7,9 @@
 // read to the end and then replayed as `session/update` chunks. Text is deliberately not streamed
 // live: the upstream sends `message.snapshot` as the *whole* reply so far, and a chunk already printed
 // cannot be taken back (that is the "66" duplicate the hub's own runner warns about). A long run is
-// kept alive with the same heartbeat CodeArts uses.
+// kept alive with the same heartbeat CodeArts uses. There is no time limit: every SSE chunk (keep-alive pings included)
+// is a sign of life, and a run is only stopped once its stream sent nothing at all for the stuck window (default 30 min;
+// OMB_MEOO_STUCK_MS / OMB_TURN_STUCK_MS, 0 = never). A total cap applies only if OMB_MEOO_MAX_MS / OMB_TURN_MAX_MS is set.
 //
 // Credentials: the agent key is read from `MEOO_AK` or `~/.config/agenthub-meoo/meoo-auth.env`, the
 // project id from `--project`, `MEOO_PROJECT_URL_ID` or `~/.config/agenthub-meoo/project.env`. No key
@@ -19,8 +21,8 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { readMeooEnvValue } from "./acp/meoo-env.ts";
+import { statusUpdate, stuckErrorData, turnMaxTotalMs, turnStuckMs, watchTurn, type TurnNotice } from "./turn-liveness.ts";
 
-const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
 const REPLY_CHUNK = 4_000;
 const BASE_URL = process.env.MEOO_BASE_URL || "https://meoo.com/open/v1";
@@ -44,7 +46,7 @@ interface RunningTask {
 export type RunResult =
   | { kind: "text"; text: string; note?: string }
   | { kind: "cancelled" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; data?: Record<string, unknown> };
 
 /** One run's reply as its event stream builds it. */
 export interface RunProgress {
@@ -245,7 +247,7 @@ async function runAgent(
   session: Session,
   text: string,
   launchModel: string | undefined,
-  timeoutSec: number,
+  limits: { stuckMs: number; maxTotalMs: number; onStatus?: (notice: TurnNotice) => void },
   task: RunningTask,
 ): Promise<RunResult> {
   const key = readAgentKey();
@@ -255,12 +257,22 @@ async function runAgent(
 
   const controller = new AbortController();
   task.abort = () => controller.abort();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutSec * 1_000);
-  timer.unref?.();
+  // Set when the status query stopped the run: why, in the words the person reads.
+  // Assigned in a callback: declared this way so the checks below are not narrowed to its initial null.
+  let stopped = null as { message: string; data?: Record<string, unknown> } | null;
+  const watch = watchTurn({
+    name: "Meoo",
+    stuckMs: limits.stuckMs,
+    maxTotalMs: limits.maxTotalMs,
+    maxTotalVar: "OMB_MEOO_MAX_MS",
+    onStatus: limits.onStatus,
+    onStuck: (verdict) => {
+      stopped = verdict.kind === "stuck"
+        ? { message: verdict.notice.message, data: stuckErrorData(verdict.notice) }
+        : { message: verdict.message };
+      controller.abort();
+    },
+  });
 
   try {
     const wanted = session.model ?? launchModel ?? "";
@@ -313,6 +325,7 @@ async function runAgent(
     };
     let endedEarly = false;
     for await (const chunk of body) {
+      watch.output();
       endedEarly = !consume(reader.push(chunk));
       if (endedEarly) break;
     }
@@ -321,34 +334,28 @@ async function runAgent(
     if (!endedEarly) consume(reader.flush());
 
     if (task.cancelled) return { kind: "cancelled" };
-    if (timedOut) {
-      return {
-        kind: "error",
-        message: `Meoo ran past its ${timeoutSec}-second limit before finishing, so the run was stopped. Send a smaller task, or send it again.`,
-      };
-    }
+    if (stopped) return { kind: "error", ...stopped };
     return runResult(progress);
   } catch (error) {
     if (task.cancelled) return { kind: "cancelled" };
-    if (timedOut) {
-      return {
-        kind: "error",
-        message: `Meoo ran past its ${timeoutSec}-second limit before finishing, so the run was stopped. Send a smaller task, or send it again.`,
-      };
-    }
+    if (stopped) return { kind: "error", ...stopped };
     const message = error instanceof Error ? error.message : String(error);
     if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i.test(message)) {
       return { kind: "error", message: "Meoo could not be reached from this machine. Check the connection, then send the message again." };
     }
     return { kind: "error", message: "Meoo failed to answer this turn. Send the message again to retry." };
   } finally {
-    clearTimeout(timer);
+    watch.stop();
   }
 }
 
 export function startBridge(): void {
   const launchModel = argValue("--model");
-  const timeoutSec = Math.max(1, Number(argValue("--timeout") ?? DEFAULT_TIMEOUT_SEC) || DEFAULT_TIMEOUT_SEC);
+  // --timeout is now the stuck window in seconds (0 = never), not a time limit.
+  const timeoutArg = argValue("--timeout");
+  const stuckMs = timeoutArg !== undefined && Number.isFinite(Number(timeoutArg)) ? Math.max(0, Number(timeoutArg)) * 1000
+    : turnStuckMs(process.env, "OMB_MEOO_STUCK_MS");
+  const maxTotalMs = turnMaxTotalMs(process.env, "OMB_MEOO_MAX_MS");
 
   const sessions = new Map<string, Session>();
   const running = new Map<string, RunningTask>();
@@ -359,8 +366,8 @@ export function startBridge(): void {
   const reply = (id: unknown, result: unknown): void => {
     send({ jsonrpc: "2.0", id, result });
   };
-  const fail = (id: unknown, code: number, message: string): void => {
-    send({ jsonrpc: "2.0", id, error: { code, message } });
+  const fail = (id: unknown, code: number, message: string, data?: Record<string, unknown>): void => {
+    send({ jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } });
   };
   const update = (sessionId: string, value: Record<string, unknown>): void => {
     send({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
@@ -382,7 +389,9 @@ export function startBridge(): void {
 
     let result: RunResult;
     try {
-      result = await runAgent(session, text, launchModel, timeoutSec, task);
+      result = await runAgent(session, text, launchModel, {
+        stuckMs, maxTotalMs, onStatus: (notice) => { if (running.get(sessionId) === task) update(sessionId, statusUpdate(notice)); },
+      }, task);
     } catch {
       // runAgent handles its own failures; this only keeps a surprise from leaving the prompt unanswered.
       result = { kind: "error", message: "Meoo failed to answer this turn. Send the message again to retry." };
@@ -392,7 +401,7 @@ export function startBridge(): void {
     }
 
     if (result.kind === "cancelled") return reply(id, { stopReason: "cancelled" });
-    if (result.kind === "error") return fail(id, -32000, result.message);
+    if (result.kind === "error") return fail(id, -32000, result.message, result.data);
     const body = composeReplyBody(result.text, result.note ?? "");
     // `end_turn` even after a question: this connection cannot send the answer back to that Agent Run, and
     // reporting cancelled or failed would be a different fact.

@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createConnection, createServer, type AddressInfo } from "node:net";
-
+import { OWN_GROUP, stopGroup } from "./group-exec.ts";
 import {
   BASE_IMAGE,
   CUA_DRIVER_VERSION,
@@ -261,7 +261,7 @@ function stopDesktopTunnel(key: string, expected?: DesktopTunnel): boolean {
     if (pending) {
       pending.start.cancelled = true;
       const child = pending.start.child;
-      if (child?.exitCode === null && !child.killed) child.kill("SIGTERM");
+      if (child) stopGroup(child);
       pendingDesktopTunnels.delete(key);
     }
   }
@@ -269,7 +269,7 @@ function stopDesktopTunnel(key: string, expected?: DesktopTunnel): boolean {
   if (!tunnel || desktopTunnels.get(key) !== tunnel) return false;
   desktopTunnels.delete(key);
   clearTimeout(tunnel.expiry);
-  if (tunnel.child.exitCode === null && !tunnel.child.killed) tunnel.child.kill("SIGTERM");
+  stopGroup(tunnel.child);
   return true;
 }
 
@@ -1011,7 +1011,7 @@ export async function vpsComputerAction(
   runner: VpsCommandRunner = defaultRunner,
 ): Promise<VpsComputerStatus> {
   const alias = target.sshAlias;
-  if (!isValidSshAlias(alias)) throw Object.assign(new Error("VPS is not configured — add an SSH config alias in Settings → API keys"), { status: 409 });
+  if (!isValidSshAlias(alias)) throw Object.assign(new Error("VPS is not configured — add an SSH config alias in Settings → AI → Other services"), { status: 409 });
   const key = `${alias}:${vpsContainerName(botId)}`;
   const pending = action === "provision" ? pendingProvisions.get(key) : undefined;
   if (pending) return pending;
@@ -1157,7 +1157,7 @@ async function startDesktopTunnel(target: SshVpsTarget, botId: string, tunnelKey
     shell: false,
     env: { ...process.env, PATH: ssh.path },
     stdio: ["ignore", "ignore", "pipe"],
-    windowsHide: true,
+    ...OWN_GROUP, // with ssh's ProxyCommand, if any, so a stop reaches it
   });
   start.child = child;
   let failure: string | null = null;
@@ -1185,7 +1185,7 @@ async function startDesktopTunnel(target: SshVpsTarget, botId: string, tunnelKey
   }
   const ready = !failure && await loopbackAnswers(localPort);
   if (start.cancelled || failure || !ready) {
-    if (child.exitCode === null && !child.killed) child.kill("SIGTERM");
+    stopGroup(child);
     assertOpen();
     const detail = failure || stderr.trim() || "the SSH port forward did not become ready";
     throw Object.assign(new Error(`Could not open the VPS live desktop: ${detail}`), { status: 502 });

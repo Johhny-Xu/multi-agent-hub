@@ -73,6 +73,22 @@ async function gmailTrigger(triggers: AppTriggerManager, filter = { from: "acme.
 }
 
 describe("AppTriggerManager", () => {
+  it("rejects a concurrent duplicate before one event can queue two runs", async () => {
+    const client = brokerClient(() => ({ url: broker.url, token: owner.token }));
+    const type = await client.triggerType("GMAIL_NEW_GMAIL_MESSAGE");
+    vi.spyOn(client, "triggerType").mockResolvedValue(type);
+    const triggers = manager({ broker: client });
+    const results = await Promise.allSettled([gmailTrigger(triggers), gmailTrigger(triggers)]);
+    const created = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    expect(created).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toMatchObject([{ reason: { status: 409 } }]);
+    expect(triggers.list()).toHaveLength(1);
+    expect(broker.harness.composio.instances.size).toBe(1);
+    await broker.deliver(created[0]!.remote.triggerId!, { subject: "Order #7", sender: "person@acme.com" }, "msg_concurrent");
+    await triggers.pollOnce(undefined, 0);
+    expect(routines.listRuns()).toHaveLength(1);
+  });
+
   it("refuses a bot replacement when a direct edit adds protected instructions during its network wait", async () => {
     const client = brokerClient(() => ({ url: broker.url, token: owner.token }));
     const triggers = manager({ broker: client });
@@ -394,7 +410,7 @@ describe("instructions in the person's words", () => {
     const { TRIGGER_PROMPT } = await import("./system-prompt.ts");
     const { availableTools, catalogProfileFromEnv } = await import("./drivers/agents-catalog.ts");
     const { eventPrompt } = await import("./app-events.ts");
-    expect(TRIGGER_PROMPT).toContain('in the plain words the person would use ("draft a reply", "add the lead to the sheet"): never "event data", "payload", "webhook" or "trigger"');
+    expect(TRIGGER_PROMPT).toContain('in the person\'s plain words ("draft a reply"): never "event data", "payload", "webhook" or "trigger"; they read them, and each run is told where its event is');
     const create = availableTools(catalogProfileFromEnv({})).find((tool) => tool.name === "trigger")!;
     expect(create.description).toContain("write name and instructions as they would say them");
     expect((create.inputSchema.properties as Record<string, { description?: string }>).instructions!.description)

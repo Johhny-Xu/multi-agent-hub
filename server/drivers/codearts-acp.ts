@@ -12,7 +12,10 @@
 // E116: the adapter now runs with `--progress` and prints sanitized progress lines (tool name +
 // title + status, and the model's own text parts) while the task runs; the bridge forwards them as
 // `tool_call` / `agent_thought_chunk` updates so the WebUI shows live work instead of 13 silent
-// minutes. The 900 s is an idle limit measured from the last progress line, not a total cap.
+// minutes. There is no time limit any more: the bridge and the adapter both query the task's status every ~30 s
+// (process tree alive, CPU time moving, bytes read/written, a model connection open, progress lines) and only stop a
+// task that showed none of that for the stuck window (default 30 min, AGENTHUB_CODEARTS_STUCK_SEC / OMB_TURN_STUCK_MS,
+// 0 = never). A total cap exists only if AGENTHUB_CODEARTS_MAX_SEC (or OMB_TURN_MAX_MS) is set.
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -22,11 +25,17 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { AdapterProcessGroups, installAdapterShutdown } from "./adapter-process-group.ts";
+import { formatSpan, statusUpdate, stuckErrorData, stuckNotice, turnMaxTotalMs, turnStuckMs, watchTurn } from "./turn-liveness.ts";
 
-const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
-/** Absolute cap per task (adapter enforces it too: AGENTHUB_CODEARTS_MAX_SEC). */
-const MAX_TOTAL_SEC = Math.max(60, Number(process.env.AGENTHUB_CODEARTS_MAX_SEC ?? 3600) || 3600);
+/** The adapter judges a task stuck first; the bridge's own status query is the backstop this much later. */
+const BACKSTOP_SLACK_MS = 120_000;
+/** No CPU, output or network this long: stuck. 0 = never. */
+export const codeartsStuckMs = (env: Record<string, string | undefined> = process.env): number =>
+  turnStuckMs(env, "AGENTHUB_CODEARTS_STUCK_SEC", "OMB_CODEARTS_STUCK_MS");
+/** Opt-in wall-clock cap (off by default; the adapter enforces it too). */
+export const codeartsMaxTotalMs = (env: Record<string, string | undefined> = process.env): number =>
+  turnMaxTotalMs(env, "AGENTHUB_CODEARTS_MAX_SEC");
 const REPLY_CHUNK = 4_000;
 
 const LOGIN_NOTE =
@@ -47,7 +56,7 @@ interface RunningTask {
 type RunResult =
   | { kind: "text"; text: string }
   | { kind: "cancelled" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; data?: Record<string, unknown> };
 
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -94,10 +103,12 @@ function signedInHome(): string | undefined {
   return candidates.find((home) => home && existsSync(join(home, ".codeartsdoer", "cli-data", "auth.json")));
 }
 
-function errorText(code: string | undefined): string {
+function errorText(code: string | undefined, envelope?: Record<string, unknown> | null): string {
   switch (code) {
+    case "CODEARTS_STUCK":
+      return stuckNotice("CodeArts", stuckQuietMs(envelope)).message;
     case "CODEARTS_TIMEOUT":
-      return `CodeArts ran past its ${DEFAULT_TIMEOUT_SEC}-second limit before finishing, so the task was stopped. Send a smaller task, or send it again.`;
+      return `CodeArts ran for its total limit (AGENTHUB_CODEARTS_MAX_SEC${envelope ? `, ${formatSpan(Number((envelope.error as { max_s?: unknown } | undefined)?.max_s ?? 0) * 1000)}` : ""}), so the task was stopped. Send a smaller task, or send it again.`;
     case "CODEARTS_AUTH_REQUIRED":
     case "CODEARTS_PROVIDER_UNAVAILABLE":
       return LOGIN_NOTE;
@@ -121,6 +132,12 @@ function errorText(code: string | undefined): string {
     default:
       return `CodeArts failed this turn (${code}). Send the message again to retry.`;
   }
+}
+
+/** How long the adapter saw no activity before it judged the task stuck (its envelope says), else the window. */
+function stuckQuietMs(envelope?: Record<string, unknown> | null): number {
+  const quiet = Number((envelope?.error as { quiet_s?: unknown } | undefined)?.quiet_s);
+  return Number.isFinite(quiet) && quiet > 0 ? quiet * 1000 : codeartsStuckMs();
 }
 
 function promptText(prompt: unknown): string {
@@ -152,7 +169,10 @@ export function startBridge(): void {
   const launchModel = argValue("--model");
   const cli = argValue("--cli");
   const autoPermission = argFlag("--auto");
-  const timeoutSec = Math.max(1, Number(argValue("--timeout") ?? DEFAULT_TIMEOUT_SEC) || DEFAULT_TIMEOUT_SEC);
+  // --timeout is now the stuck window in seconds (0 = never), not a time limit.
+  const timeoutArg = argValue("--timeout");
+  const stuckMs = timeoutArg !== undefined && Number.isFinite(Number(timeoutArg)) ? Math.max(0, Number(timeoutArg)) * 1000 : codeartsStuckMs();
+  const maxTotalMs = codeartsMaxTotalMs();
   const home = signedInHome();
 
   const sessions = new Map<string, Session>();
@@ -165,15 +185,15 @@ export function startBridge(): void {
   const reply = (id: unknown, result: unknown): void => {
     send({ jsonrpc: "2.0", id, result });
   };
-  const fail = (id: unknown, code: number, message: string): void => {
-    send({ jsonrpc: "2.0", id, error: { code, message } });
+  const fail = (id: unknown, code: number, message: string, data?: Record<string, unknown>): void => {
+    send({ jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } });
   };
   const update = (sessionId: string, value: Record<string, unknown>): void => {
     send({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
   };
 
   const runTask = (session: Session, text: string): Promise<RunResult> => new Promise((resolveRun) => {
-    const args = [script, "--task", text, "--cwd", session.cwd, "--timeout", String(timeoutSec), "--progress"];
+    const args = [script, "--task", text, "--cwd", session.cwd, "--timeout", String(Math.round(stuckMs / 1000)), "--progress"];
     const model = session.model ?? launchModel;
     if (model) args.push("--model", model);
     if (cli && isAbsolute(cli)) args.push("--cli", cli);
@@ -188,16 +208,14 @@ export function startBridge(): void {
     let stdout = "";
     let settled = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
-    let hardStop: ReturnType<typeof setTimeout> | null = null;
-    let totalStop: ReturnType<typeof setTimeout> | null = null;
+    let watch: ReturnType<typeof watchTurn> | null = null;
     let pending = "";
 
     const finish = (result: RunResult): void => {
       if (settled) return;
       settled = true;
       if (heartbeat) clearInterval(heartbeat);
-      if (hardStop) clearTimeout(hardStop);
-      if (totalStop) clearTimeout(totalStop);
+      watch?.stop();
       if (running.get(session.id)?.child === child) running.delete(session.id);
       resolveRun(result);
     };
@@ -219,20 +237,21 @@ export function startBridge(): void {
     running.set(session.id, { child, cancelled: false, settle: finish });
     heartbeat = setInterval(() => update(session.id, { sessionUpdate: "codearts_bridge_heartbeat" }), HEARTBEAT_MS);
     heartbeat.unref?.();
-    // The adapter enforces its own deadlines; these are the backstops if it cannot. The idle
-    // backstop restarts on every progress line (E116); the total one never does.
-    const stopForTimeout = (): void => {
-      void groups.kill(child);
-      finish({ kind: "error", message: errorText("CODEARTS_TIMEOUT") });
-    };
-    const armIdle = (): void => {
-      if (hardStop) clearTimeout(hardStop);
-      hardStop = setTimeout(stopForTimeout, (timeoutSec + 60) * 1_000);
-      hardStop.unref?.();
-    };
-    armIdle();
-    totalStop = setTimeout(stopForTimeout, (MAX_TOTAL_SEC + 120) * 1_000);
-    totalStop.unref?.();
+    // The adapter judges the task by its own status queries; this watch is the backstop if it cannot, and it is what
+    // tells the person how a long quiet task is doing. It stops nothing that still uses CPU, moves bytes or prints.
+    watch = watchTurn({
+      name: "CodeArts",
+      stuckMs: stuckMs > 0 ? stuckMs + BACKSTOP_SLACK_MS : 0,
+      maxTotalMs: maxTotalMs > 0 ? maxTotalMs + BACKSTOP_SLACK_MS : 0,
+      maxTotalVar: "AGENTHUB_CODEARTS_MAX_SEC",
+      pid: () => child.pid,
+      onStatus: (notice) => { if (!settled) update(session.id, statusUpdate(notice)); },
+      onStuck: (verdict) => {
+        void groups.kill(child);
+        if (verdict.kind === "stuck") finish({ kind: "error", message: verdict.notice.message, data: stuckErrorData(verdict.notice) });
+        else finish({ kind: "error", message: verdict.message });
+      },
+    });
     const seenTools = new Set<string>();
     const onProgress = (line: string): void => {
       let value: Record<string, unknown>;
@@ -242,7 +261,7 @@ export function startBridge(): void {
         return;
       }
       if (!value || value.type !== "progress" || settled) return;
-      armIdle();
+      watch?.output();
       if (value.event === "tool") {
         const status = value.status === "completed" ? "completed" : value.status === "error" ? "failed"
           : value.status === "pending" ? "pending" : "in_progress";
@@ -276,7 +295,8 @@ export function startBridge(): void {
     });
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", () => {
-      // The adapter's diagnostics can carry vendor log text; never forward them.
+      // The adapter's diagnostics can carry vendor log text; never forward them. They still show it is alive.
+      if (!settled) watch?.output();
     });
     child.once("error", () => {
       void groups.kill(child);
@@ -293,7 +313,11 @@ export function startBridge(): void {
       if (envelope && status === "completed" && text.trim()) return finish({ kind: "text", text });
       if (envelope && status === "completed") return finish({ kind: "error", message: errorText("CODEARTS_EMPTY_RESPONSE") });
       const code = (envelope?.error as { code?: unknown } | undefined)?.code;
-      finish({ kind: "error", message: errorText(typeof code === "string" ? code : undefined) });
+      if (code === "CODEARTS_STUCK") {
+        const notice = stuckNotice("CodeArts", stuckQuietMs(envelope));
+        return finish({ kind: "error", message: notice.message, data: stuckErrorData(notice) });
+      }
+      finish({ kind: "error", message: errorText(typeof code === "string" ? code : undefined, envelope) });
     });
   });
 
@@ -307,7 +331,7 @@ export function startBridge(): void {
 
     const result = await runTask(session, text);
     if (result.kind === "cancelled") return reply(id, { stopReason: "cancelled" });
-    if (result.kind === "error") return fail(id, -32000, result.message);
+    if (result.kind === "error") return fail(id, -32000, result.message, result.data);
     for (let offset = 0; offset < result.text.length; offset += REPLY_CHUNK) {
       update(sessionId, {
         sessionUpdate: "agent_message_chunk",

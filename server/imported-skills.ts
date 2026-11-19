@@ -351,7 +351,7 @@ export function importedSkillsFor(botId: string, shadowed: ReadonlySet<string>, 
     : stored;
 }
 
-export const IMPORTED_CHANGED_WARNING = "its files changed after it was brought in — bring it in again from Settings → Replay welcome tour";
+export const IMPORTED_CHANGED_WARNING = "its files changed after it was brought in — bring it in again from Settings → Import & export → Bring things in → From your AI apps";
 
 export type ImportedSkillListing = SkillListing & { origin: "imported"; listed: boolean; file?: string };
 

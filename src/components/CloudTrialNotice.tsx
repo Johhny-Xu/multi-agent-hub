@@ -38,7 +38,6 @@ export function CloudTrialNoticeCard({ view, failed = false, onAction, onClose }
     <div id="cloud-trial-notice-body">
       <p className="mt-1.5 text-[13px] leading-relaxed text-ink-secondary">{view.body}</p>
       {view.credit && <p className="mt-1.5 text-[13px] text-ink-secondary">{view.credit}</p>}
-      {view.switchPlan && <p className="mt-1.5 text-[13px] text-ink-secondary">{view.switchPlan}</p>}
     </div>
     <div className="mt-3 flex flex-wrap items-center gap-3">
       {view.action ? <>

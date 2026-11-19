@@ -7,8 +7,11 @@
 // the turn's stop reason and token usage. The MiniMax login lives in the account's own
 // `~/.minimax/auth` store; the raw stderr, which can carry vendor diagnostics, is never forwarded.
 //
-// One turn can legitimately take minutes, so the bridge keeps the ACP session alive with a
-// periodic heartbeat and stops the child at the same deadline it gives `mcode`.
+// One turn can legitimately take a long time, so the bridge keeps the ACP session alive with a
+// periodic heartbeat. There is no time limit: every ~30 s the bridge queries the turn's status (process tree alive, CPU
+// time, bytes moved, model connections, stream events) and only stops a turn that showed none of that for the stuck
+// window (default 30 min; OMB_MCODE_STUCK_MS / OMB_TURN_STUCK_MS, 0 = never). `mcode --timeout` is passed only when a
+// total cap is asked for (OMB_MCODE_MAX_MS / OMB_TURN_MAX_MS).
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -18,8 +21,8 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { AdapterProcessGroups, installAdapterShutdown } from "./adapter-process-group.ts";
+import { statusUpdate, stuckErrorData, turnMaxTotalMs, turnStuckMs, watchTurn } from "./turn-liveness.ts";
 
-const DEFAULT_TIMEOUT_SEC = 900;
 const HEARTBEAT_MS = 20_000;
 
 /** The bridge's own keepalive cadence; a test shortens it to observe one heartbeat quickly. */
@@ -54,7 +57,7 @@ interface RunningTask {
 type RunResult =
   | { kind: "text"; text: string; streamed: boolean; usage?: Usage }
   | { kind: "cancelled" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; data?: Record<string, unknown> };
 
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -112,7 +115,7 @@ function cliPath(): string {
 function errorText(reason: string): string {
   switch (reason) {
     case "timeout":
-      return `MiniMax Code ran past its ${DEFAULT_TIMEOUT_SEC}-second limit before finishing, so the task was stopped. Send a smaller task, or send it again.`;
+      return "MiniMax Code reached the total time limit set for it (OMB_MCODE_MAX_MS), so the task was stopped. Send a smaller task, or send it again.";
     case "auth":
       return LOGIN_NOTE;
     case "empty":
@@ -336,7 +339,11 @@ export function startBridge(): void {
   const cli = cliPath();
   const launchModel = argValue("--model");
   const autoPermission = argFlag("--auto");
-  const timeoutSec = Math.max(1, Number(argValue("--timeout") ?? DEFAULT_TIMEOUT_SEC) || DEFAULT_TIMEOUT_SEC);
+  // --timeout is now the stuck window in seconds (0 = never), not a time limit.
+  const timeoutArg = argValue("--timeout");
+  const stuckMs = timeoutArg !== undefined && Number.isFinite(Number(timeoutArg)) ? Math.max(0, Number(timeoutArg)) * 1000
+    : turnStuckMs(process.env, "OMB_MCODE_STUCK_MS");
+  const maxTotalMs = turnMaxTotalMs(process.env, "OMB_MCODE_MAX_MS");
   const home = signedInHome();
 
   const sessions = new Map<string, Session>();
@@ -349,8 +356,8 @@ export function startBridge(): void {
   const reply = (id: unknown, result: unknown): void => {
     send({ jsonrpc: "2.0", id, result });
   };
-  const fail = (id: unknown, code: number, message: string): void => {
-    send({ jsonrpc: "2.0", id, error: { code, message } });
+  const fail = (id: unknown, code: number, message: string, data?: Record<string, unknown>): void => {
+    send({ jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } });
   };
   const update = (sessionId: string, value: Record<string, unknown>): void => {
     send({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
@@ -363,7 +370,8 @@ export function startBridge(): void {
       "--prompt-mode", "work",
       "--permission", autoPermission ? "full" : "smart",
       "--output-format", "stream-json",
-      "--timeout", `${timeoutSec}s`,
+      // mcode has no run timeout unless given one: pass it only for an opt-in total cap.
+      ...(maxTotalMs > 0 ? ["--timeout", `${Math.ceil(maxTotalMs / 1000)}s`] : []),
       ...(model ? ["--model", model] : []),
       ...(session.nativeSessionId ? ["--session", session.nativeSessionId] : []),
       text,
@@ -375,13 +383,13 @@ export function startBridge(): void {
     const projector = new McodeTurnProjector((value) => update(session.id, value));
     let settled = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
-    let hardStop: ReturnType<typeof setTimeout> | null = null;
+    let watch: ReturnType<typeof watchTurn> | null = null;
 
     const finish = (result: RunResult): void => {
       if (settled) return;
       settled = true;
       if (heartbeat) clearInterval(heartbeat);
-      if (hardStop) clearTimeout(hardStop);
+      watch?.stop();
       if (running.get(session.id)?.child === child) running.delete(session.id);
       resolveRun(result);
     };
@@ -411,6 +419,7 @@ export function startBridge(): void {
     let pending = "";
     const feed = (chunk: string): void => {
       if (settled) return;
+      watch?.output();
       pending += chunk;
       // Line buffering: a chunk may end mid-JSON, so only whole lines are parsed.
       let newline = pending.indexOf("\n");
@@ -439,18 +448,29 @@ export function startBridge(): void {
     running.set(session.id, { child, cancelled: false, settle: finish });
     heartbeat = setInterval(() => update(session.id, { sessionUpdate: "mcode_bridge_heartbeat" }), heartbeatMs());
     heartbeat.unref?.();
-    // `mcode` enforces its own deadline; this is the backstop if it cannot.
-    hardStop = setTimeout(() => {
-      void groups.kill(child);
-      finish({ kind: "error", message: errorText("timeout") });
-    }, (timeoutSec + 60) * 1_000);
-    hardStop.unref?.();
+    // Status queries instead of a deadline: a turn that keeps using CPU, moving bytes or holding its model connection
+    // is working, however long it is quiet; one that shows nothing for the stuck window is stopped and told why.
+    watch = watchTurn({
+      name: "MiniMax Code",
+      stuckMs,
+      // `mcode` enforces an opt-in cap itself; this is the backstop if it cannot.
+      maxTotalMs: maxTotalMs > 0 ? maxTotalMs + 60_000 : 0,
+      maxTotalVar: "OMB_MCODE_MAX_MS",
+      pid: () => child.pid,
+      onStatus: (notice) => { if (!settled) update(session.id, statusUpdate(notice)); },
+      onStuck: (verdict) => {
+        void groups.kill(child);
+        if (verdict.kind === "stuck") finish({ kind: "error", message: verdict.notice.message, data: stuckErrorData(verdict.notice) });
+        else finish({ kind: "error", message: errorText("timeout") });
+      },
+    });
 
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => feed(chunk));
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (chunk: string) => {
-      // Never forward vendor diagnostics verbatim; only the login hint is recognised.
+      // Never forward vendor diagnostics verbatim; only the login hint is recognised. Any line still shows it is alive.
+      if (!settled) watch?.output();
       if (!settled && /sign in to minimax|run `?mcode login`?/i.test(chunk)) projector.markAuthFailure();
     });
     child.once("error", () => {
@@ -494,7 +514,7 @@ export function startBridge(): void {
 
     const result = await runTask(session, text);
     if (result.kind === "cancelled") return reply(id, { stopReason: "cancelled" });
-    if (result.kind === "error") return fail(id, -32000, result.message);
+    if (result.kind === "error") return fail(id, -32000, result.message, result.data);
     // The deltas were already streamed as they arrived; only a run that produced none is sent here.
     if (!result.streamed) {
       for (let offset = 0; offset < result.text.length; offset += 4_000) {

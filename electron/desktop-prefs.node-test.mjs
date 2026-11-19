@@ -6,86 +6,62 @@ import path from "node:path";
 import test from "node:test";
 import vm from "node:vm";
 import { createDesktopPrefs, createDesktopText, DESKTOP_NOTICES, DESKTOP_PORTS, jsonFile, registerDesktopPrefs } from "./desktop-prefs.mjs";
-import { ONBOARDING_CLOUD_HINT, onboardingHints, WELCOME_VERSION } from "./onboarding-record.mjs";
+import { ONBOARDING_CLOUD_HINT, onboardingHints } from "./onboarding-record.mjs";
 
 const require = createRequire(import.meta.url);
 const environments = require("./environments.cjs");
 const localOrigin = require("./local-origin.cjs");
 
-const POPUP = "whats-new-2026-11", BOAT = "boat-credit-2026-11", GROK = "grok-move-2026-11", MODELGO = "modelgo-offer-2026-11";
-const NOON = new Date(2026, 9, 16, 12).getTime();
+const GROK = "grok-move-2026-11";
 const LOCAL = "http://127.0.0.1:18799", CLOUD = "https://omb-u-1.fly.dev", VPS = "https://bots.example.test";
 
-test("a page on an older release keeps working with the longer list: its own ids record as before, and it never reads the new one", () => {
-  let saved = { seen: [POPUP, GROK, "gone-notice"] };
+test("a page on an older release keeps working: a notice it does not know is never recorded, and the one it does is", () => {
+  let saved = { seen: [GROK, "gone-notice"] };
   const prefs = createDesktopPrefs({ read: () => saved, write: value => { saved = structuredClone(value); } });
-  assert.deepEqual(prefs.seen(), [POPUP, GROK]);
-  prefs.markSeen(BOAT);
-  assert.deepEqual(saved.seen, [POPUP, GROK, BOAT], "the new id is kept beside the ones an older page records");
-  assert.ok(prefs.seen().includes(BOAT) && prefs.seen().includes(POPUP), "the lookups an older page makes");
+  assert.deepEqual(prefs.seen(), [GROK]);
+  prefs.markSeen("boat-credit-2026-11");
+  assert.deepEqual(saved.seen, [GROK, "gone-notice"], "an id outside the list is never written");
+  assert.deepEqual(prefs.seen(), [GROK], "and an id this build does not know never reads back");
 });
 
-test("What's new, Boat's credit offer and the Grok Bot move are the notices a page can record; seen and analytics survive a restart; a broken record never stops the app", () => {
-  assert.deepEqual([...DESKTOP_NOTICES], [POPUP, BOAT, GROK, MODELGO]);
+test("the Grok Bot move is the one notice a page can record; seen survives a restart; a broken record never stops the app", () => {
+  assert.deepEqual([...DESKTOP_NOTICES], [GROK]);
   let saved = null;
   const writes = [];
   const prefs = createDesktopPrefs({ read: () => saved, write: value => { writes.push(value); saved = structuredClone(value); } });
-  assert.deepEqual(prefs.seen(), []); assert.equal(prefs.analytics(), null);
+  assert.deepEqual(prefs.seen(), []);
   for (const id of ["other-notice", "__proto__", "", 42]) prefs.markSeen(id);
   assert.equal(writes.length, 0, "nothing a page names outside the list is written");
-  prefs.markSeen(POPUP); prefs.markSeen(POPUP);
-  assert.deepEqual(prefs.seen(), [POPUP]); assert.equal(writes.length, 1);
-  prefs.markSeen(BOAT);
-  assert.deepEqual(prefs.seen(), [POPUP, BOAT]); assert.equal(writes.length, 2);
-  prefs.setAnalytics(false);
+  prefs.markSeen(GROK); prefs.markSeen(GROK);
+  assert.deepEqual(prefs.seen(), [GROK]); assert.equal(writes.length, 1);
   const restarted = createDesktopPrefs({ read: () => saved, write: value => { saved = value; } });
-  assert.deepEqual(restarted.seen(), [POPUP, BOAT]); assert.equal(restarted.analytics(), false);
-  restarted.setAnalytics("yes"); assert.equal(restarted.analytics(), false, "only true turns it on");
-  restarted.setAnalytics(true); assert.equal(restarted.analytics(), true);
+  assert.deepEqual(restarted.seen(), [GROK]);
 
   const broken = createDesktopPrefs({ read: () => { throw new Error("unreadable"); }, write: () => { throw new Error("read-only disk"); } });
   assert.deepEqual(broken.seen(), []);
-  broken.markSeen(POPUP); broken.setAnalytics(false);
-  assert.deepEqual(broken.seen(), [POPUP], "kept for this launch when the file cannot be written");
-  assert.equal(broken.analytics(), false);
-  for (const record of ["nonsense", [POPUP], { seen: "all", shown: [], analytics: "off" }, { seen: [POPUP, "<b>"], shown: { [POPUP]: "today" } }]) {
+  broken.markSeen(GROK);
+  assert.deepEqual(broken.seen(), [GROK], "kept for this launch when the file cannot be written");
+  for (const record of ["nonsense", [GROK], { seen: "all" }, { seen: [GROK, "<b>"] }]) {
     const prefs = createDesktopPrefs({ read: () => record, write: () => {} });
-    assert.equal(prefs.analytics(), null, JSON.stringify(record));
-    assert.ok(prefs.seen().every(id => id === POPUP), JSON.stringify(record));
+    assert.ok(prefs.seen().every(id => id === GROK), JSON.stringify(record));
   }
 });
 
-test("an announcement card's mark and the last sponsor day are kept beside the fixed notices, the newest few only", () => {
-  let saved = { seen: [POPUP] };
-  const prefs = createDesktopPrefs({ read: () => saved, write: value => { saved = structuredClone(value); } });
-  prefs.markSeen("announcement:phone-app"); prefs.markSeen("announcement:phone-app");
-  prefs.markSeen("announcement-sponsor:2026-11-01"); prefs.markSeen("announcement-sponsor:2026-12-01");
-  assert.deepEqual(prefs.seen(), [POPUP, "announcement:phone-app", "announcement-sponsor:2026-12-01"], "one sponsor day: the latest");
-  for (const id of ["announcement:", "announcement:Bad Id", "announcement:x", `announcement:${"x".repeat(41)}`, "announcement-sponsor:soon", "announcement:../../x"]) prefs.markSeen(id);
-  assert.deepEqual(prefs.seen(), [POPUP, "announcement:phone-app", "announcement-sponsor:2026-12-01"], "nothing outside the two shapes is kept");
-  for (let index = 0; index < 45; index++) prefs.markSeen(`announcement:card-${index}`);
-  const marks = prefs.seen().filter(id => id.startsWith("announcement:"));
-  assert.equal(marks.length, 40); assert.equal(marks.at(-1), "announcement:card-44"); assert.ok(prefs.seen().includes(POPUP));
-  const restarted = createDesktopPrefs({ read: () => saved, write: () => {} });
-  assert.deepEqual(restarted.seen(), prefs.seen(), "survives a restart");
-});
-
-test("a write that fails leaves the last whole record on disk, analytics opt-out included", () => {
+test("a write that fails leaves the last whole record on disk", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "desktop-prefs-"));
   try {
     const file = path.join(dir, "desktop-prefs.json");
-    createDesktopPrefs(jsonFile(file)).setAnalytics(false);
-    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { seen: [], analytics: false });
+    createDesktopPrefs(jsonFile(file)).markSeen(GROK);
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { seen: [GROK] });
     // As a full disk or a file-size limit does: the file is opened and emptied, then the write fails.
     const full = { ...fs, writeFileSync: target => { fs.writeFileSync(target, ""); throw Object.assign(new Error("file too large"), { code: "EFBIG" }); } };
     const launch = createDesktopPrefs({ ...jsonFile(file, full) });
-    launch.markSeen(POPUP);
-    assert.deepEqual(launch.seen(), [POPUP], "kept for this launch");
+    launch.markSeen(GROK);
+    assert.deepEqual(launch.seen(), [GROK], "kept for this launch");
     assert.throws(() => jsonFile(file, full).write({ seen: [] }), /file too large/);
     assert.deepEqual(readdirSync(dir), ["desktop-prefs.json"], "no temporary file is left behind");
     const next = createDesktopPrefs(jsonFile(file));
-    assert.equal(next.analytics(), false, "the opt-out survives");
-    assert.deepEqual(next.seen(), []);
+    assert.deepEqual(next.seen(), [GROK], "the last whole record");
     assert.deepEqual(createDesktopPrefs(jsonFile(path.join(dir, "missing.json"))).seen(), [], "no file yet");
     const notepad = path.join(dir, "config.json");
     fs.writeFileSync(notepad, `\uFEFF${JSON.stringify({ onboarding: { hintsSeen: [ONBOARDING_CLOUD_HINT] } })}`);
@@ -93,32 +69,29 @@ test("a write that fails leaves the last whole record on disk, analytics opt-out
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-const WELCOMED = { onboarding: { completedAt: "2026-10-01T09:00:00.000Z", version: WELCOME_VERSION, hintsSeen: [] } };
-function desktopMain({ offered = true, page = event => event.page, config = () => WELCOMED, record = null } = {}) {
+function desktopMain({ offered = true, page = event => event.page, record = null } = {}) {
   const handlers = new Map(), listeners = new Map(), calls = [], told = [], languages = [];
-  let saved = record, now = NOON;
+  let saved = record;
   registerDesktopPrefs({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), on: (channel, listener) => listeners.set(channel, listener) },
     read: () => saved, write: value => { saved = structuredClone(value); }, page,
     cloudOffered: async () => { calls.push("offered"); return offered; },
-    localConfig: () => config(),
     languageChanged: (language, sender) => told.push([language, sender]),
     onLanguage: language => languages.push(language),
-    now: () => now,
     systemName: async () => "Ada Lovelace",
   });
   const ask = (channel, page, ...args) => handlers.get(channel)({ page, sender: `${page}-page` }, ...args);
   const answer = channel => page => { const event = { page }; listeners.get(channel)(event); return event.returnValue; };
-  return { ask, read: answer("desktop-analytics:read"), language: answer("desktop-language:read"), told, languages, calls, channels: [...handlers.keys()], saved: () => saved, later: ms => { now += ms; } };
+  return { ask, language: answer("desktop-language:read"), told, languages, calls, channels: [...handlers.keys()], saved: () => saved };
 }
 
 test("every page of this desktop's window reads and records the same notices; nothing else is answered", async () => {
   const main = desktopMain();
-  assert.deepEqual(main.channels, ["desktop-notices:state", "desktop-notices:seen", "desktop-profile:system-name", "desktop-analytics:set", "desktop-language:set", "window-frame:state", "window-frame:set"]);
+  assert.deepEqual(main.channels, ["desktop-notices:state", "desktop-notices:seen", "desktop-profile:system-name", "desktop-language:set", "window-frame:state", "window-frame:set"]);
   for (const page of ["local", "cloud", "server"]) assert.deepEqual(await main.ask("desktop-notices:state", page), { seen: [], cloud: true });
-  await main.ask("desktop-notices:seen", "server", POPUP);
-  assert.deepEqual(await main.ask("desktop-notices:state", "local"), { seen: [POPUP], cloud: true });
-  for (const channel of main.channels) assert.throws(() => main.ask(channel, null, POPUP), /only available in this app's window/, channel);
+  await main.ask("desktop-notices:seen", "server", GROK);
+  assert.deepEqual(await main.ask("desktop-notices:state", "local"), { seen: [GROK], cloud: true });
+  for (const channel of main.channels) assert.throws(() => main.ask(channel, null, GROK), /only available in this app's window/, channel);
   assert.deepEqual((await desktopMain({ offered: false }).ask("desktop-notices:state", "server")).cloud, false);
 });
 
@@ -126,47 +99,6 @@ test("a first run's default name for the profile goes to this computer's own pag
   const main = desktopMain();
   assert.equal(await main.ask("desktop-profile:system-name", "local"), "Ada Lovelace");
   for (const page of ["cloud", "server"]) assert.throws(() => main.ask("desktop-profile:system-name", page), /only available in this app's window/, page);
-});
-
-test("This computer's own record counts on every page before its page loads on this build: an earlier close; the welcome's Cloud beat does not", async () => {
-  assert.equal(ONBOARDING_CLOUD_HINT, "onboarding-cloud-v1");
-  const record = (onboarding) => () => ({ composio: { apiKey: "" }, onboarding });
-  for (const [hint, seen] of [[POPUP, [POPUP]], [ONBOARDING_CLOUD_HINT, []]]) {
-    const main = desktopMain({ config: record({ completedAt: "2026-10-01", version: 1, hintsSeen: ["tour-finished", hint] }) });
-    for (const page of ["local", "cloud", "server"]) assert.deepEqual(await main.ask("desktop-notices:state", page), { seen, cloud: true }, `${hint} ${page}`);
-    assert.equal(main.saved(), null, "read, never written into this desktop's record");
-  }
-  assert.deepEqual(onboardingHints({ onboarding: { completedAt: "x", version: 2, hintsSeen: ["a", 1, null, "b"] } }), ["a", "b"]);
-});
-
-test("every desktop has What's new still to show, whatever This computer's welcome record says or lacks", async () => {
-  // An install from before the welcome kept a record, a welcome never finished, no config.json, or one main cannot read.
-  const records = [() => ({ onboarding: { completedAt: "", version: 0, hintsSeen: [] } }), () => ({ composio: {} }), () => null, () => "nonsense",
-    () => { throw new Error("ENOENT"); }, () => { throw new SyntaxError("Unexpected token"); }, () => ({ onboarding: { hintsSeen: POPUP } }), () => ({ onboarding: { hintsSeen: [{ id: POPUP }] } })];
-  for (const config of records) {
-    for (const page of ["local", "cloud", "server"]) {
-      const main = desktopMain({ config }), name = `${String(config)} ${page}`;
-      assert.deepEqual(await main.ask("desktop-notices:state", page), { seen: [], cloud: true }, name);
-    }
-  }
-});
-
-test("the analytics switch is This computer's page's to set; a server's page in the window is told only that it is off", async () => {
-  const main = desktopMain();
-  for (const page of ["local", "cloud", "server", null]) assert.equal(main.read(page), null, String(page));
-  await main.ask("desktop-analytics:set", "local", false);
-  assert.equal(main.read("local"), false);
-  assert.equal(main.read("cloud"), false, "My Cloud's page starts with analytics off");
-  assert.equal(main.read("server"), false);
-  assert.equal(main.read(null), null, "a page outside this desktop's window is told nothing");
-  for (const page of ["cloud", "server"]) assert.throws(() => main.ask("desktop-analytics:set", page, true), /only available/);
-  assert.equal(main.read("local"), false);
-  await main.ask("desktop-analytics:set", "local", true);
-  assert.equal(main.read("local"), true);
-  assert.equal(main.read("cloud"), null, "a server's page never learns it is on");
-  assert.equal(main.read("server"), null);
-  const broken = desktopMain({ page: () => { throw new Error("Object has been destroyed"); } });
-  assert.equal(broken.read("local"), null);
 });
 
 test("the app language picked on any page of the window is the one every page reads, and it outlives a restart", async () => {
@@ -242,7 +174,7 @@ test("a page of the window says which language it shows, and main hears it only 
 });
 
 const PRELOAD = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-function preload(origin, { activation = false, saved = null, language = null } = {}) {
+function preload(origin, { activation = false, language = null } = {}) {
   let bridge;
   const invoked = [], synced = [], sent = [], heard = new Map();
   vm.runInNewContext(PRELOAD, {
@@ -250,41 +182,26 @@ function preload(origin, { activation = false, saved = null, language = null } =
     location: { origin }, navigator: { userActivation: { isActive: activation } }, TextEncoder, localStorage: { getItem: () => null },
     require: () => ({ webUtils: {}, contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } },
       ipcRenderer: { on(channel, handler) { heard.set(channel, handler); }, removeListener() {}, send(...args) { sent.push(args); },
-        sendSync: channel => { synced.push(channel); return channel === "desktop-analytics:read" ? saved : channel === "desktop-language:read" ? language : undefined; },
+        sendSync: channel => { synced.push(channel); return channel === "desktop-language:read" ? language : undefined; },
         invoke: (...args) => { invoked.push(args); return Promise.resolve(true); } } }),
   });
   return { bridge, invoked, synced, sent, tell: (channel, ...args) => heard.get(channel)({}, ...args) };
 }
 
-test("the preload gives every page of the window the notices and the switch's state, and only This computer's page a way to set it", async () => {
-  for (const origin of [CLOUD, VPS]) {
-    const page = preload(origin, { saved: false });
+test("the preload gives every page of the window the notices, and no page a desktop analytics switch", async () => {
+  for (const origin of [LOCAL, CLOUD, VPS]) {
+    const page = preload(origin, { activation: true });
     assert.equal(typeof page.bridge.desktopNotices.state, "function", origin);
-    assert.equal(page.bridge.cloudAccount, undefined, origin);
-    const asked = () => page.synced.filter(channel => channel.startsWith("desktop-"));
-    assert.deepEqual(asked(), [], "nothing is asked until analytics asks");
-    assert.equal(page.bridge.desktopAnalytics.enabled(), false, "turned off on this desktop");
-    assert.deepEqual(asked(), ["desktop-analytics:read"]);
-    assert.equal(page.bridge.desktopAnalytics.set, undefined, "a server's page cannot change the desktop's switch");
-    await page.bridge.desktopNotices.state(); await page.bridge.desktopNotices.seen({ toString: () => POPUP });
-    assert.deepEqual(page.invoked, [["desktop-notices:state"], ["desktop-notices:seen", POPUP]]);
+    assert.equal(page.bridge.desktopAnalytics, undefined, "no page carries a switch telemetry could read");
+    assert.equal(page.bridge.updatesConsent, undefined, "nor the product-updates question");
+    await page.bridge.desktopNotices.state(); await page.bridge.desktopNotices.seen({ toString: () => GROK });
+    assert.deepEqual(page.invoked, [["desktop-notices:state"], ["desktop-notices:seen", GROK]]);
     assert.deepEqual(Object.keys(page.bridge.desktopNotices), ["state", "seen", "shown"], "no page moves the window to this computer");
   }
-  const local = preload(LOCAL, { activation: true, saved: false });
-  assert.equal(typeof local.bridge.desktopNotices.state, "function");
-  assert.deepEqual(local.synced, [], "nothing is asked until analytics asks");
-  assert.equal(local.bridge.desktopAnalytics.enabled(), false, "answered at once, before anything loads");
-  assert.equal(local.bridge.desktopAnalytics.enabled(), false);
-  assert.deepEqual(local.synced, ["desktop-analytics:read"], "asked once a page");
-  await local.bridge.desktopAnalytics.set(true);
-  assert.equal(local.bridge.desktopAnalytics.enabled(), true);
-  assert.deepEqual(local.invoked, [["desktop-analytics:set", true]]);
-  const unsaved = preload(LOCAL);
-  for (let i = 0; i < 3; i++) assert.equal(unsaved.bridge.desktopAnalytics.enabled(), null);
-  assert.deepEqual(unsaved.synced, ["desktop-analytics:read"], "no choice saved yet is asked once too");
-  assert.equal(preload(LOCAL, { saved: "off" }).bridge.desktopAnalytics.enabled(), null);
   const safe = PRELOAD.match(/const REMOTE_SAFE = new Set\(\[([^\]]*)\]\)/)[1];
-  assert.ok(safe.includes('"desktopNotices"')); assert.ok(safe.includes('"desktopAnalytics"'));
+  assert.ok(safe.includes('"desktopNotices"'));
+  assert.ok(!safe.includes('"desktopAnalytics"'));
+  assert.ok(!safe.includes('"updatesConsent"'));
 });
 
 test("the preload gives every page of the window the app language this computer keeps", async () => {
@@ -350,7 +267,6 @@ test("production wiring: main answers this computer's page, My Cloud's own page 
   vm.runInContext(main.slice(start, end), context);
   assert.equal(options.prefs, context.nativeText.prefs, "the record main read before the tray and the startup screen");
   assert.match(main, /const nativeText = createDesktopText\(app\), nativeT = nativeText\.t;/);
-  assert.equal(options.localConfig(), "/home/.openmausbot/config.json", "This computer's own workspace, whichever server the window shows");
   assert.deepEqual([options.frame.made(), options.frame.restarts], [false, true], "Windows: the frame its window was made with, until a restart");
   options.frame.changed();
   assert.equal(broadcasts, 1, "the pages hear the frame change");
@@ -421,8 +337,8 @@ test("registerDesktopPrefs works on the store main hands it", async () => {
   const handlers = new Map();
   registerDesktopPrefs({ prefs, ipcMain: { handle: (c, h) => handlers.set(c, h), on: () => {} }, read: () => null, write: () => {},
     page: () => "local", cloudOffered: async () => false });
-  await handlers.get("desktop-analytics:set")({}, false);
-  assert.equal(prefs.analytics(), false);
+  await handlers.get("desktop-notices:seen")({}, GROK);
+  assert.deepEqual(prefs.seen(), [GROK]);
 });
 
 test("the window draws its own frame until the person turns it off, and the choice survives a restart", () => {

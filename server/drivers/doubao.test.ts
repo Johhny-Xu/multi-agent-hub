@@ -334,14 +334,37 @@ describe("豆包 CLI driver", () => {
     expect(events.at(-1)).toMatchObject({ type: "turn.completed", ok: false, stopReason: "interrupted" });
   });
 
-  it("stops a turn that runs past OMB_DOUBAO_TIMEOUT_MS", async () => {
+  it("still stops a turn at an explicit OMB_DOUBAO_TIMEOUT_MS total cap", async () => {
     const fake = fakeDoubao({ plans: [{ hang: true }], sessions: [[], []] });
     const { instance: inst, events } = await start(fake, {}, { OMB_DOUBAO_TIMEOUT_MS: "1200" });
     await inst.adapter.sendTurn({ threadId: "t1", text: "x" });
     await settle(events);
     expect(fake.kills[0]).toContain("SIGTERM");
-    expect(events.find((event) => event.type === "runtime.error")).toMatchObject({ message: expect.stringContaining("秒内没有完成") });
+    expect(events.find((event) => event.type === "runtime.error")).toMatchObject({ message: expect.stringContaining("总时长上限") });
     expect(events.at(-1)).toMatchObject({ type: "turn.completed", ok: false, stopReason: "error" });
+  });
+
+  it("judges a silent turn stuck by status query, and says why", async () => {
+    // The fake CLI has no process to query and prints nothing: only the stuck window can end it.
+    const fake = fakeDoubao({ plans: [{ hang: true }], sessions: [[], []] });
+    const { instance: inst, events } = await start(fake, {}, { OMB_DOUBAO_STUCK_MS: "800" });
+    await inst.adapter.sendTurn({ threadId: "t1", text: "x" });
+    await settle(events);
+    expect(fake.kills[0]).toContain("SIGTERM");
+    const error = events.find((event) => event.type === "runtime.error") as { message?: string; text?: { key?: string } } | undefined;
+    expect(error?.message).toContain("judged stuck by a status check");
+    expect(error?.text?.key).toBe("chat.notice.turnStuck");
+  });
+
+  it("has no time limit by default", async () => {
+    const fake = fakeDoubao({ plans: [{ hang: true }], sessions: [[], []] });
+    const { instance: inst, events } = await start(fake);
+    await inst.adapter.sendTurn({ threadId: "t1", text: "x" });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(events.find((event) => event.type === "runtime.error")).toBeUndefined();
+    expect(fake.kills[0] ?? []).toHaveLength(0);
+    await inst.adapter.interruptTurn("t1");
+    await settle(events);
   });
 
   it("snapshots a missing CLI, a signed-out CLI and a signed-in one, cached for a minute", async () => {

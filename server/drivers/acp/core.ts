@@ -19,15 +19,21 @@ import { DeviceAuthController, deviceAuthInstanceSurface } from "../device-auth.
 import { AcpBrowserAuth, acpBrowserAuthInstanceSurface } from "./browser-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { captureCliTree, CLI_VERSION_TIMEOUT_MS, describeSpawnFailure, execCli, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts";
+import { boxAudienceKey, captureCliTree, CLI_VERSION_TIMEOUT_MS, describeSpawnFailure, execCli, killCliTree, sharedBoxScope, spawnCli } from "../../procs.ts"; import { stopEngineTrees } from "../../engine-stop.ts";
 import { runAcpOneShot } from "./background-text.ts";
+import { acpCapabilities } from "./capabilities.ts";
 import { acpNativeLogMessage } from "./tool-log.ts";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
 import {
   classifyQuiet, describeQuiet, formatQuietLimit, quietNoticeText, lastSeenPhrase, LIMIT_WORDS, LogTail, promptIdleTimeoutMs, quietKey, quietNoticeMs, quietTickMs, quietVerdict, sampleProcessTree, toolDrainMs,
   type LogSignal, type ProcessSample, type QuietState,
 } from "./quiet-status.ts";
+import { sampleTurnTree, TurnLiveness, type LivenessSample } from "../turn-liveness.ts";
 import { acpMissingSession } from "./rpc-error.ts";
+
+/** A bridge's notice params, as the strings a chat notice takes. */
+const stringParams = (params: Record<string, unknown>): Record<string, string> =>
+  Object.fromEntries(Object.entries(params).filter(([, value]) => ["string", "number"].includes(typeof value)).map(([key, value]) => [key, String(value).slice(0, 200)]));
 import { readSessionReport } from "./session-reports.ts";
 import { acpTurnSteering, advertisedCommands } from "./steer.ts";
 import { pickSessionModel, SessionModelControls } from "./session-model-controls.ts";
@@ -59,8 +65,8 @@ import { acpSessionOperationKey, acpShellRequest, answersAlone, permissionLaunch
 import { openQuestionRequest, questionRequestFor } from "./question-requests.ts";
 import { commandSummary, toolDetailPreview } from "../../tool-summary.ts";
 import { acpToolEndEvents } from "./tool-items.ts";
-import { AcpHost } from "./host.ts";
-import { exitDetail } from "./exit-report.ts";
+import { AcpHost } from "./host.ts"; import { SignInRequests } from "./driver-hooks.ts";
+import { exitBeforeResult } from "./exit-report.ts"; import { readNodeVersion } from "./node-version.ts";
 import { endTurn, trackRunningTool, type AcpAskFinish, type AcpSession, type AcpTurn } from "./turn-state.ts";
 import { recoveryPromptFor } from "../../resume-recovery.ts";
 import { noticeFailure } from "../../chat-notices.ts";
@@ -69,7 +75,7 @@ import { startupFailureRecoverable } from "./startup-recovery.ts";
 import { engineFailure, engineFailureKind } from "../engine-errors.ts";
 import { acpRuntimeFailure, acpStopFailure } from "./failure-words.ts";
 import { narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
-import { acpMcpServers } from "../turn-mcp.ts"; import { acpToolOutput, acpToolProgress } from "../tool-progress.ts";
+import { acpMcpServers } from "../turn-mcp.ts"; import { acpOwnMcpOverHttp, loopbackUnproxied, noteAcpMcpHttp } from "../own-mcp-http.ts"; import { acpToolOutput, acpToolProgress } from "../tool-progress.ts";
 import { learnedToolCountLimit, mcpToolBudget, retryUnderToolLimit } from "../../tool-count-limit.ts"; import { instanceEnvNames } from "../../bot-box/env.ts";
 
 import { isAccountError } from "./acp-support.ts";
@@ -142,7 +148,6 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
   }
   const DRIVER_KIND = support.driverKind;
   const SOURCE = support.nativeSource;
-  const mcpCapable = support.mcp !== false;
   const decodeConfig = decodeAcpConfig(support.defaultCli);
   const DENY_TIMEOUT_NOTE =
     "OpenMausBot: nobody answered this permission request in time. Skip this action and finish what you can without it.";
@@ -220,6 +225,9 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       const closingChildren = new Map<ReturnType<typeof spawnCli>, { force: () => Promise<boolean> }>();
       const closeGraceMs = () => envOr("OMB_ACP_CLOSE_GRACE_MS", 5_000);
       const killGraceMs = () => envOr("OMB_ACP_KILL_GRACE_MS", 5_000);
+      // Other agents get 5 s to leave on their own after EOF, as before, then their tree is stopped; no turn waits for them,
+      // dispose does.
+      const leaving = new Set<ReturnType<typeof spawnCli>>();
       const retireChild = async (threadId: string, child: ReturnType<typeof spawnCli>): Promise<boolean> => {
         let children = retiring.get(threadId);
         if (!children) retiring.set(threadId, children = new Set());
@@ -237,14 +245,25 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           if (immediate) void existing.force();
           return;
         }
+        leaving.add(child);
         let promise: Promise<boolean> | null = null;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const startKill = (): Promise<boolean> => {
           if (!promise) {
             if (timer) clearTimeout(timer);
             child.off("exit", onExit);
-            promise = killCliTree(child, killGraceMs()).finally(() => {
-              closingChildren.delete(child);
+            promise = killCliTree(child, killGraceMs()).then((stopped) => {
+              // Only a confirmed stop drops the child: dispose must still be able to retry one whose kill did not take.
+              if (stopped) {
+                closingChildren.delete(child);
+                leaving.delete(child);
+              } else {
+                promise = null;
+              }
+              return stopped;
+            }, (error) => {
+              promise = null;
+              throw error;
             });
           }
           return promise;
@@ -384,6 +403,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         let noSignsSince: number | null = null;
         let notices = 0;
         let probing = false;
+        let livePrevious: LivenessSample | null = null;
+        let livePreviousAt = 0;
         let state: QuietState | null = null;
         const promptStartedAt = Date.now();
         let readAt = promptStartedAt;
@@ -413,8 +434,13 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               && now - logged.at > (logged.signal.delayMs ?? 60_000) + 120_000) logged = null;
           probing = true;
           const sample = session.child.pid ? await sampleProcessTree(session.child.pid) : { cpuMs: null, connections: null };
+          // Status query (turn-liveness.ts): CPU moving, bytes moving, or a connection to a remote model is work, so the
+          // prompt's silence guard starts over; only a turn with none of that for the whole window is stopped.
+          const live = session.child.pid ? await sampleTurnTree(session.child.pid).catch(() => null) : null;
           probing = false;
           if (current.state.settled || session.current !== current) return;
+          if (live && TurnLiveness.activity(livePrevious, live, livePrevious ? now - livePreviousAt : 0).length) session.acp.touch();
+          if (live) { livePrevious = live; livePreviousAt = now; }
           let next = classifyQuiet({
             logged: logged?.signal ?? null, context, sample, previous, sinceMs: previous ? now - previousAt : 0,
           });
@@ -470,7 +496,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         }
       };
 
-      const hosts = new Set<AcpHost>();
+      const hosts = new Set<AcpHost>(), signIn = new SignInRequests(support, instanceId);
       // Between turns nothing is brokered; the agent must never block on an unanswered request.
       const refuse = (msg: any, send: (obj: unknown) => void) => {
         const question = questionRequestFor(support.questionRequests, msg.method);
@@ -491,7 +517,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         if (running) return running;
         const child = spawnCli(launch.command, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"], box: { allowEnv: instanceEnvNames(input.environment, env), botThreads: hostKey !== null, ro: launch.ro } }, "bot");
         const host = new AcpHost(child, hostKey, { source: SOURCE, logMessage: nativeLogMessage, unrouted: refuse });
-        hosts.add(host);
+        hosts.add(host); signIn.watch(host);
         child.once("close", () => hosts.delete(host));
         child.once("error", () => hosts.delete(host));
         return host;
@@ -509,7 +535,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const commandCwd = permissionLaunchCwd(cwd);
         const host = hostFor(threadId, launch, argv, env, cwd, hostKey);
         const acp = host.link(threadId, cwd);
-        const send = (obj: unknown) => acp.send(obj);
+        const send = (obj: unknown) => acp.send(obj); const nodeVersion = support.minNodeVersion ? readNodeVersion(env) : undefined;
 
         const handleClientFileRequest = async (msg: any, current: AcpTurn): Promise<void> => {
           const fail = (error: unknown) => send({
@@ -765,6 +791,15 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               if (finished) toolEnded((typeof u.toolCallId === "string" && u.toolCallId) ? u.toolCallId : current.unkeyedToolIds.shift());
               break;
             }
+            case "omb_turn_status": {
+              // A bridge's status query of a long quiet turn (turn-liveness.ts): shown, translated, as a notice.
+              const notice = u.notice;
+              const known = notice && (notice.key === "chat.notice.turnStillRunning" || notice.key === "chat.notice.turnStuck")
+                && notice.params && typeof notice.params === "object";
+              if (known) emit({ ...base(threadId, current.turnId), type: "runtime.notice", ...noticeFailure(notice.key, stringParams(notice.params)) });
+              else if (typeof u.message === "string" && u.message) emit({ ...base(threadId, current.turnId), type: "runtime.notice", message: u.message.slice(0, 400) });
+              break;
+            }
             case "usage_update":
             case "session_info_update":
             case "plan": {
@@ -819,16 +854,15 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             emit({ ...base(threadId, current.turnId), type: "runtime.error", ...describeSpawnFailure(e, launch.command, cwd) });
             settle(threadId, session, false, "spawn_error");
           },
-          exit: (code, signal) => {
+          exit: function exit(code, signal, found?: string | null) {
             session.dead = true;
+            // An engine with a Node.js minimum waits for the version read at launch, to say when that is too old.
+            if (nodeVersion && found === undefined) return void nodeVersion.then((version) => exit(code, signal, version ?? null));
             const current = session.current;
             if (current?.state.cancelling) return;
             if (current) {
-              if (!current.state.stopped) emit({
-                ...base(threadId, current.turnId),
-                type: "runtime.error",
-                message: `${support.displayName} exited ${code ?? signal ?? "unexpectedly"} before the prompt result${exitDetail(code, signal, session.stderr)}`,
-              });
+              if (!current.state.stopped) emit({ ...base(threadId, current.turnId), type: "runtime.error",
+                ...exitBeforeResult(support.displayName, code, signal, session.stderr, support.minNodeVersion, found) });
               settle(threadId, session, current.state.stopped, current.state.stopped ? "cancelled" : "exit_before_result");
             } else if (sessions.get(threadId) === session) {
               // The identity check keeps an old child's exit from unlinking its replacement.
@@ -876,7 +910,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         }
         const resolvedModel = support.resolveTurnModel?.(turn.model, env, catalog.models);
         const toolLimitKey = JSON.stringify([instanceId, resolvedModel ?? null]);
-        const mcpServers = acpMcpServers(turn, { http: support.ownMcpOverHttp === true, engine: support.driverKind,
+        const mcpServers = acpMcpServers(turn, { http: loopbackUnproxied(env, support.ownMcpOverHttp === true || acpOwnMcpOverHttp(instanceId, support.mcpServersFromLaunch === true)), engine: support.driverKind,
           toolBudget: mcpToolBudget(learnedToolCountLimit(toolLimitKey), support.engineTools ?? 32) });
         support.applyTurnEnv?.(env, {
           model: resolvedModel, requestedModel: turn.model, fullAuto: turnConfig.fullAuto === true, botId: turn.botId, cwd, toolScope: turn.toolScope,
@@ -913,7 +947,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           ? createHash("sha256").update(support.toolScopeCacheKey({ config: turnConfig, env, cwd })).digest("hex") : null;
         const processContract = [launch.command, launch.args ?? [], spawnArgs,
           support.sessionScopedApproval ? null : turnConfig.fullAuto === true, envFingerprint,
-          support.spawnFingerprint?.(spawnEnv, turnConfig) ?? null, launch.ro ?? []];
+          support.spawnFingerprint?.(spawnEnv, turnConfig) ?? null, launch.ro ?? [], boxAudienceKey(cwd)];
         const contractKey = JSON.stringify([...processContract, cwd, turn.toolScope ?? null, inheritedScopeFingerprint]);
         const launchModel = support.sessionModelEnv && cliTurn.model && /^[\w.:/-]{1,200}$/u.test(cliTurn.model)
           && catalog.accountModels?.has(cliTurn.model) ? cliTurn.model : undefined;
@@ -963,7 +997,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           idleMs?: number,
           idleMessage?: string | (() => string),
         ): Promise<any> =>
-          session.acp.request(method, params, timeoutMs, receive, idleMs, idleMessage);
+          signIn.refused(session.host) ?? session.acp.request(method, params, timeoutMs, receive, idleMs, idleMessage);
 
         const state: AcpTurn["state"] = { settled: false, promptSent: false, text: "", textMessageId: null, producedItem: false, repliedText: false, startupActivity: false, stopped: false, usagePeak: null, usageLast: null, usageCompacted: false, cancelling: false, outputTokens: null };
         let acknowledge = () => {};
@@ -1052,7 +1086,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   "initialize",
                   {
                     protocolVersion: 1,
-                    clientInfo: { name: "openmausbot", version: "0.0.0" },
+                    clientInfo: support.clientInfo?.(instanceId) ?? { name: "openmausbot", version: "0.0.0" },
                     clientCapabilities: {
                       fs: {
                         readTextFile: support.clientFileSystem === true,
@@ -1063,7 +1097,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                     },
                   },
                   INIT_TIMEOUT,
-                ));
+                )); noteAcpMcpHttp(instanceId, session.initResult);
               }
               if (!skipSubscriptionAuthForLocalInject(turn.model) && !session.authenticated) {
                 const methods: Array<{ id?: string }> = Array.isArray(session.initResult?.authMethods)
@@ -1074,8 +1108,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   try {
                     await session.host.once("authenticate", () => request("authenticate", { methodId }, INIT_TIMEOUT));
                     session.authenticated = true;
-                  } catch {
-                    if (support.authFailure !== "continue") throw new Error(support.loginNote);
+                  } catch (error) {
+                    if (signIn.asked(error) || support.authFailure !== "continue") throw signIn.asked(error) ?? new Error(support.loginNote);
                   }
                 } else if (support.authFailure === "fail") {
                   throw new Error(support.loginNote);
@@ -1109,7 +1143,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 try {
                   await request(
                     support.resumeMethod === "resume" ? "session/resume" : "session/load",
-                    { sessionId: cursor, cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams },
+                    { sessionId: cursor, cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams, ...support.sessionSetupParams?.(init) },
                     LOAD_SESSION_TIMEOUT,
                     (result) => {
                       if (result) {
@@ -1143,6 +1177,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               }
               sessionAllows.delete(threadId);
               if (cursor) {
+                if (!turn.recoveryText?.trim()) throw new Error(`${support.displayName} session could not be resumed and the turn carries no recovery text to rebuild from`);
                 const recovery = recoveryPromptFor({
                   recoveryText: turn.recoveryText,
                   currentText: turn.text,
@@ -1151,7 +1186,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 promptTurn = { ...turn, text: recovery.text };
                 rebuiltFromReplay = recovery.replayed;
               }
-              await request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams }, NEW_SESSION_TIMEOUT, (result) => {
+              await request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams, ...support.sessionSetupParams?.(init) }, NEW_SESSION_TIMEOUT, (result) => {
                 session.sessionId = typeof result?.sessionId === "string" ? result.sessionId : null;
                 session.sessionKey = sessionKey;
                 receiveModelVariants(result, true);
@@ -1274,7 +1309,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             }
             if (variant !== undefined && requestedVariantOption().currentValue !== variant) {
               throw new Error(`${support.displayName} changed variant before the prompt`);
-            }
+            } const promptOutcome = await support.promptOutcome?.(instanceId, sessionId);
             if (state.settled || state.stopped || session.closing) throw new Error("turn stopped");
             state.promptSent = true;
             if (!support.promptUnreachedModel) acknowledge();
@@ -1337,7 +1372,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   : {}),
               });
             }
-            const reason = result?.stopReason;
+            const reason = result?.stopReason, reported = await promptOutcome?.(result); if (reported) throw reported;
             const drained = reason === "end_turn" ? await drainRunningTools(current) : true;
             if (reason === "end_turn" && !drained && !state.settled && !state.stopped) {
               emit({ ...base(threadId, turnId), type: "runtime.notice",
@@ -1353,7 +1388,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               });
               settle(threadId, session, false, reason ?? "failed");
             }
-          } catch (e) {
+          } catch (raw) { const e = signIn.asked(raw) ?? raw;
             if (pendingSplitReceipt && state.promptSent && state.usageCompacted) {
               deletePromptSplitReceipt(DRIVER_KIND, pendingSplitReceipt.key);
             }
@@ -1398,7 +1433,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 ...((e as any)?.acpUsageLimit === true || (code === "quota_or_region_restriction" && LIMIT_WORDS.test(message)) ? support.limitFacts?.(message, cliTurn.model) ?? { limit: "engine" as const } : {}), // waited out, or the engine gave up: another AI can carry on
               });
               // Never replay an accepted prompt (it may have run tools); evict before listeners start the next turn.
-              if (!needsAuth && !accountError && ((e as any)?.acpPromptStall === true || (e as any)?.acpUsageLimit === true || (e as any)?.acpSessionFailure === true
+              if (signIn.is(e)) closeSession(threadId, "sign-in-required"); else if (!needsAuth && !accountError && ((e as any)?.acpPromptStall === true || (e as any)?.acpUsageLimit === true || (e as any)?.acpSessionFailure === true
                   || code === "upstream_outage") && session.child.exitCode === null && !session.closing) {
                 closeSession(threadId, (e as any)?.acpPromptStall === true ? "prompt-stall" : "rpc-failure");
               } else if (approvalUnconfirmed && session.child.exitCode === null && !session.closing) {
@@ -1507,23 +1542,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         snapshot,
         adapter: {
           provider: DRIVER_KIND,
-          capabilities: {
-            sessionModelSwitch: "unsupported",
-            agentsMcp: mcpCapable,
-            customMcp: mcpCapable,
-            computerMcp: mcpCapable,
-            composioMcp: mcpCapable,
-            browserMcp: mcpCapable,
-            dataMcp: mcpCapable, emailMcp: mcpCapable, deviceMcp: mcpCapable,
-            images: support.images !== false,
-            nativeImageInput: support.images === true,
-            effortLevels: support.effortLevels,
-            modelVariants: support.modelVariants === true,
-            localComputerMcp: mcpCapable,
-            contextReading: "meter",
-            engineAdmission: true, ...(support.askTool ? { askTool: { kind: "native" as const, name: support.askTool } } : {}),
-            ...(support.steer ? { queueing: true } : {}),
-          },
+          capabilities: acpCapabilities(support),
           sendTurn,
           interruptTurn: async (threadId) => active.get(threadId)?.interrupt(),
           ...(support.steer ? { steer: async (threadId: string, text: string, images?: readonly TurnImageInput[]) =>
@@ -1565,12 +1584,17 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           await deviceSignIn?.dispose(); await browserSignIn?.dispose();
           const disposingSessions = Array.from(sessions);
           for (const { stop } of active.values()) stop();
-          for (const [threadId, session] of disposingSessions) {
-            closeSession(threadId, "dispose");
-            settle(threadId, session, true, "cancelled");
+          try {
+            for (const [threadId, session] of disposingSessions) {
+              closeSession(threadId, "dispose");
+              settle(threadId, session, true, "cancelled");
+            }
+            await awaitAllClosing();
+          } finally {
+            listeners.clear();
+            // Engines lead sessions of their own, so nothing stops them once this server exits.
+            await stopEngineTrees([...disposingSessions.map(([, session]) => session.child), ...[...retiring.values()].flatMap((children) => [...children]), ...leaving]);
           }
-          await awaitAllClosing();
-          listeners.clear();
         },
       };
     },

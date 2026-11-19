@@ -1473,10 +1473,10 @@ describe("zcode ACP bridge poll resilience", () => {
     expect(bridge.state().polls).toBeGreaterThanOrEqual(2);
   });
 
-  it("ends the turn with TURN_TIMEOUT and stops the native session when every poll times out", async () => {
+  it("judges the turn stuck by status query and stops the native session when every poll times out", async () => {
     const bridge = startPollBridge("timeout", 1);
     const sessionId = await newPollSession(bridge);
-    await expect(pollPrompt(bridge, sessionId, "stuck task")).rejects.toThrow(/TURN_TIMEOUT/);
+    await expect(pollPrompt(bridge, sessionId, "stuck task")).rejects.toThrow(/judged stuck by a status check/);
     await waitFor(() => bridge.state().stops > 0);
     expect(bridge.state().stops).toBeGreaterThan(0);
     expect(bridge.state().polls).toBeGreaterThan(1);
@@ -1485,7 +1485,7 @@ describe("zcode ACP bridge poll resilience", () => {
   it("gives up when the polls keep timing out even though events still arrive", async () => {
     const bridge = startPollBridge("timeout-with-events", 1);
     const sessionId = await newPollSession(bridge);
-    await expect(pollPrompt(bridge, sessionId, "stuck task")).rejects.toThrow(/TURN_TIMEOUT/);
+    await expect(pollPrompt(bridge, sessionId, "stuck task")).rejects.toThrow(/judged stuck by a status check/);
     await waitFor(() => bridge.state().stops > 0);
     expect(bridge.state().stops).toBeGreaterThan(0);
     // The arriving events keep the silence window open, so only the streak bound ends this turn.

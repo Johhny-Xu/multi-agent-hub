@@ -50,6 +50,7 @@ function render() {
     browser: byTestId("decider-job-browserAutomation")[0]!,
     textModel: byTestId("decider-job-browserTextModel")[0]!,
     proxy: byTestId("decider-proxy-save")[0],
+    customApi: byTestId("decider-custom-api")[0],
     save: byTestId("decider-save")[0]!,
     test: byTestId("decider-test")[0]!,
     manage: byTestId("decider-manage-keys")[0],
@@ -135,6 +136,18 @@ describe("DecisionModelSettings", () => {
     expect(deciderFailureText({ reason: "http_error", status: 500 }, false, "custom")).toBe("Your endpoint sent back an error (500).");
   });
 
+  it("offers OpenAI-compatible chat as a custom endpoint protocol and saves it", async () => {
+    fixture.config = status({ provider: "custom", model: "gemini-2.5-flash", api: "chat", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", configured: true, enabled: true, jobs: { roomRouting: true } });
+    const view = render();
+    expect(optionsOf(view.customApi!)).toEqual(["systemone", "decisions", "chat"]);
+    expect(view.customApi!.props.value).toBe("chat");
+    expect(view.html).toContain("OpenAI-compatible chat");
+    fixture.api.mockResolvedValue(fixture.config);
+    change(view.customApi!, "chat");
+    await flush();
+    expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ decider: { customApi: "chat" } }) });
+  });
+
   it("lists only the jobs that work: no coming-soon rows", () => {
     const view = render();
     for (const label of ["Browser clicks", "Tool selection", "Where work runs", "Coming soon"]) expect(view.html).not.toContain(label);
@@ -215,6 +228,42 @@ describe("DecisionModelSettings", () => {
     expect(view.save.props.disabled).toBe(true);
     expect(view.input.props.placeholder).toBe("Paste your TypeSafe API key");
     expect(view.test.props.disabled).toBe(false);
+  });
+
+  it("does not treat Gemini keys saved for speech or images as an independent Decision key", () => {
+    fixture.config = status({ provider: "gemini", configured: false, enabled: false, jobs: { roomRouting: true } });
+    const view = render();
+    expect(view.master.props.disabled).toBe(true);
+    expect(view.save.props.disabled).toBe(true);
+    expect(view.html).not.toContain("Clear");
+  });
+
+  it("Test names Gemini when the saved Gemini key answers, and keeps a picked OpenRouter selected", async () => {
+    fixture.config = status({ provider: "gemini", chosen: "openrouter", configured: true, enabled: true, jobs: { roomRouting: true } });
+    expect(render().provider!.props.value).toBe("openrouter");
+    fixture.api.mockResolvedValueOnce({ ok: true, latencyMs: 410 });
+    click(render().test);
+    await flush();
+    expect(fixture.api).toHaveBeenCalledWith("/api/decider/test", { method: "POST", body: "{}" });
+    expect(render().html).toContain("Gemini Decision 1 answered in 410 ms.");
+    expect(render().provider!.props.value).toBe("openrouter");
+    fixture.api.mockResolvedValueOnce({ ok: false, reason: "rejected", status: 400 });
+    click(render().test);
+    await flush();
+    expect(render().html).toContain("Gemini rejected this API key. Check it at aistudio.google.com/api-keys.");
+    expect(render().provider!.props.value).toBe("openrouter");
+  });
+
+  it("clears an independent Gemini key without touching another provider's settings", async () => {
+    fixture.config = gemini({ configured: true, enabled: true });
+    const view = render();
+    expect(view.save.props.disabled).toBe(false);
+    expect(view.html).toContain("Clear");
+    fixture.api.mockResolvedValueOnce(gemini({ configured: false, enabled: false }));
+    click(view.save);
+    await flush();
+    expect(fixture.api).toHaveBeenCalledExactlyOnceWith("/api/config", { method: "PUT", body: JSON.stringify({ decider: { geminiKey: "" } }) });
+    expect(render().save.props.disabled).toBe(true);
   });
 
   it("with an own key saved as well, shows Connected and offers Clear, as without Cloud Pro", () => {
@@ -342,14 +391,14 @@ describe("DecisionModelSettings", () => {
       expect(helpersStatusLine(fixture.config)).not.toContain("your Jev key");
     });
 
-    it("shows the proxy card, and keeps browser automation and the text model on Jev's terms", () => {
+    it("shows the proxy card, disables browser automation without Jev, and leaves the text model available", () => {
       fixture.config = gemini({ configured: true, enabled: true });
       const view = render();
       expect(view.proxy).toBeDefined();
-      expect(view.browser.props.disabled).toBe(false);
+      expect(view.browser.props.disabled).toBe(true);
       expect(view.textModel.props.disabled).toBe(false);
+      expect(view.html).toContain("Requires a configured TypeSafe Jev API key.");
       expect(view.html).not.toContain("Browser automation requires TypeSafe Jev and is not supported by OpenRouter.");
-      expect(view.html).not.toContain("Requires a configured TypeSafe Jev API key.");
     });
 
     it("shows the proxy card for Jev and Gemini, never for OpenRouter", () => {
@@ -361,12 +410,15 @@ describe("DecisionModelSettings", () => {
     });
 
     it("maps every Gemini failure without an upstream body", () => {
-      const text = (result: { reason: string; status?: number }) => deciderFailureText(result, false, "gemini");
+      const text = (result: { reason: unknown; status?: number }) => deciderFailureText(result, false, "gemini");
       expect(text({ reason: "unreachable" })).toBe("Could not reach Gemini. Check your connection.");
       expect(text({ reason: "timeout" })).toBe("Gemini did not answer in time. Try again.");
       expect(text({ reason: "overloaded" })).toBe("Gemini Decision 1 is overloaded right now. Try again shortly.");
       expect(text({ reason: "misconfigured" })).toBe("The Gemini decision model is misconfigured. Check its endpoint and request.");
       expect(text({ reason: "http_error", status: 503 })).toBe("Gemini sent back an error (503). Try again in a moment.");
+      expect(text({ reason: " REJECTED " })).toBe("Gemini rejected this API key. Check it at aistudio.google.com/api-keys.");
+      expect(text({ reason: { error: { reason: "BLOCKED" } } })).toBe("Gemini blocked this request for safety reasons. Change the content and try again.");
+      expect(text({ reason: { code: "RATE_LIMITED" } })).toBe("Gemini is limiting requests right now. Try again in a moment.");
       expect(text({ reason: "something-new" })).toBe("The test did not finish. Try again.");
     });
   });
@@ -509,6 +561,24 @@ describe("DecisionModelSettings", () => {
         click(view.master);
         await flush();
         expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ decider: { enabled: true } }) });
+      });
+
+      it("keeps a chosen Jev selected with Jev's key field, and saves a pasted Jev key in Jev's slot", async () => {
+        fixture.config = openrouter({ ...SHARED, chosen: "jev", enabled: true });
+        const view = render();
+        expect(view.provider!.props.value).toBe("jev");
+        expect(view.model).toBeUndefined();
+        expect(view.input.props["aria-label"]).toBe("Jev API key");
+        expect(view.input.props.placeholder).toBe("Paste your TypeSafe API key");
+        expect(view.html).toContain("Using your OpenRouter API key");
+        expect(view.html).toContain("https://typesafe.ai");
+        expect(view.html).not.toContain("Clear");
+        fixture.api.mockResolvedValueOnce(status({ provider: "jev", configured: true, enabled: true, jobs: { roomRouting: true } }));
+        type(view.input, KEY);
+        click(render().save);
+        await flush();
+        expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ decider: { key: KEY } }) });
+        expect(render().provider!.props.value).toBe("jev");
       });
 
       it("links to where the key is managed", () => {

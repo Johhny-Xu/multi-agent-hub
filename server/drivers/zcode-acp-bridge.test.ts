@@ -175,10 +175,10 @@ describe("zcode ACP bridge", () => {
     expect(bridge.updates().filter((entry) => entry.update?.sessionUpdate === "agent_message_chunk")).toHaveLength(2);
   });
 
-  it("times out a silent turn, stops it, and opens a new native session for the retry", async () => {
+  it("judges a silent turn stuck by status query, stops it, and opens a new native session for the retry", async () => {
     const bridge = startBridge("timeout-then-ok", 1);
     const sessionId = await newSession(bridge);
-    await expect(prompt(bridge, sessionId, "stuck task")).rejects.toThrow(/TURN_TIMEOUT/);
+    await expect(prompt(bridge, sessionId, "stuck task")).rejects.toThrow(/judged stuck by a status check/);
     const retry = await prompt(bridge, sessionId, "stuck task");
     expect(retry.stopReason).toBe("end_turn");
     expect(chunkText(bridge.updates())).toBe("OK after timeout");

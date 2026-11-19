@@ -85,11 +85,11 @@ describe("Trae Code driver", () => {
     return cli;
   }
 
-  async function start(deps: ReturnType<typeof fakeTrae>["deps"], config: Record<string, unknown> = {}) {
+  async function start(deps: ReturnType<typeof fakeTrae>["deps"], config: Record<string, unknown> = {}, environment: Record<string, string> = {}) {
     const driver = createTraecodeDriver(deps);
     instance = await driver.create({
       instanceId: "traecode-contract", displayName: "Trae Code", enabled: true,
-      environment: { HOME: scratch },
+      environment: { HOME: scratch, ...environment },
       config: driver.decodeConfig({ cli: installed(), ...config }),
     });
     const events: RuntimeEvent[] = [];
@@ -251,14 +251,43 @@ describe("Trae Code driver", () => {
     expect(events.find((e) => e.type === "runtime.error")).toMatchObject({ limit: "engine" });
   });
 
-  it("times out a turn that never finishes, keeping what it wrote", async () => {
-    const trae = fakeTrae([{ count: 1, text: "half done", generating: true }]);
+  it("judges a frozen turn stuck by its page status, keeping what it wrote", async () => {
+    // The reply stopped growing and the app no longer says it is generating: no activity for the stuck window.
+    const trae = fakeTrae([{ count: 1, text: "half done", generating: false }]);
     trae.deps.pollMs = 60_000;
     const { instance: inst, events } = await start(trae.deps);
     await inst.adapter.sendTurn({ threadId: "t1", text: "x" });
     await settle(events);
     expect(replyOf(events)).toBe("half done");
-    expect(events.find((e) => e.type === "runtime.error")).toMatchObject({ message: expect.stringContaining("didn't finish") });
+    const error = events.find((e) => e.type === "runtime.error") as { message?: string; text?: { key?: string } } | undefined;
+    expect(error?.message).toContain("judged stuck by a status check");
+    expect(error?.message).toContain("30 min");
+    expect(error?.text?.key).toBe("chat.notice.turnStuck");
+  });
+
+  it("keeps a turn the app still reports as generating past the old 15-minute limit, with status updates", async () => {
+    const trae = fakeTrae([
+      ...Array.from({ length: 25 }, () => ({ count: 1, text: "working", generating: true })),
+      { count: 1, text: "final answer", done: true, generating: false },
+    ]);
+    trae.deps.pollMs = 60_000;
+    const { instance: inst, events } = await start(trae.deps);
+    await inst.adapter.sendTurn({ threadId: "t1", text: "x" });
+    await settle(events);
+    expect(events.find((e) => e.type === "runtime.error")).toBeUndefined();
+    expect(replyOf(events)).toBe("final answer");
+    const status = events.find((e) => e.type === "runtime.notice") as { message?: string; text?: { key?: string } } | undefined;
+    expect(status?.message).toContain("is still running");
+    expect(status?.text?.key).toBe("chat.notice.turnStillRunning");
+  });
+
+  it("still honours an explicit total cap from OMB_TRAECODE_TIMEOUT_MS", async () => {
+    const trae = fakeTrae([{ count: 1, text: "busy", generating: true }]);
+    trae.deps.pollMs = 60_000;
+    const { instance: inst, events } = await start(trae.deps, {}, { OMB_TRAECODE_TIMEOUT_MS: String(5 * 60_000) });
+    await inst.adapter.sendTurn({ threadId: "t1", text: "x" });
+    await settle(events);
+    expect(events.find((e) => e.type === "runtime.error")).toMatchObject({ message: expect.stringContaining("OMB_TRAECODE_TIMEOUT_MS") });
   });
 
   it("interrupts a running turn by pressing stop", async () => {

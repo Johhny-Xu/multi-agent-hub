@@ -6,7 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { introStaged, stageIntro, useChiefStepOpen } from "@/lib/default-bot";
 import { setLocale } from "@/lib/i18n";
-import { WHATS_NEW_NOTICE } from "@/lib/notices";
 import { EMPTY_ONBOARDING, MET_CHIEF_HINT, WELCOME_VERSION } from "@/lib/onboarding";
 import { saveWelcomeDraft } from "@/lib/welcome-draft";
 import type { InstanceInfo } from "@/state/store";
@@ -175,7 +174,6 @@ describe("What's new", () => {
     await act(async () => {});
     expect(seen).not.toHaveBeenCalled();
     expect(saved()[0].onboarding.hintsSeen).toEqual([MET_CHIEF_HINT]);
-    expect(localStorage.getItem(WHATS_NEW_NOTICE)).toBeNull();
   });
 });
 

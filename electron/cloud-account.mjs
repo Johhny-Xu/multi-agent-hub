@@ -908,28 +908,6 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       }
       return { url: result.url, token: result.token };
     },
-    /** The account's answer to the product-updates question (GET /api/cloud/desktop/updates-consent), as the Admin sends it. */
-    async updatesConsent() {
-      const current = grant;
-      if (!current || state().status !== "connected") throw new Error("Sign in to MausBot Cloud first.");
-      return request("updates-consent", { token: current.token, signal: AbortSignal.timeout(10_000) });
-    },
-    async recordUpdatesConsent(status, textVersion) {
-      const current = grant;
-      if (!current || state().status !== "connected") throw new Error("Sign in to MausBot Cloud first.");
-      const result = await request("updates-consent", { method: "POST", body: { status, textVersion }, token: current.token, signal: AbortSignal.timeout(10_000) });
-      if (result?.cloudContractVersion !== 1 || result.consent?.status !== status) throw new Error("Invalid Cloud consent response.");
-    },
-    /** No sign-in: an email typed in the app (POST /api/updates-consent). Returns the receipt that can withdraw it. */
-    async updatesConsentByEmail({ email, installId, textVersion }) {
-      const result = await request(null, { method: "POST", path: "/api/updates-consent", body: { status: "opted_in", email, installId, textVersion }, signal: AbortSignal.timeout(10_000) });
-      if (typeof result?.receipt !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(result.receipt)) throw new Error("Invalid Cloud consent response.");
-      return result.receipt;
-    },
-    async withdrawUpdatesConsent({ status, receipt }) {
-      const result = await request(null, { method: "POST", path: "/api/updates-consent", body: { status, receipt }, signal: AbortSignal.timeout(10_000) });
-      if (result?.ok !== true) throw new Error("Invalid Cloud consent response.");
-    },
     /** Another account takes over: nothing more is asked or written for this sign-in. */
     quiesce() { quiet = true; reset(); },
     /** Reads the sign-in saved in `store` afresh: nothing of the one before stays. Told once, when the Admin has answered. */

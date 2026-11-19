@@ -1,17 +1,14 @@
 // Dev-only gallery of the room card, served at /room-card-preview.html; not in the packaged app.
-// ?state=memory|stopped|disk|tip|trial|upgraded|restarting|confirm&layout=desktop|phone&skin=midnight|daylight&lang=de
+// ?state=memory|stopped|disk|tip|trial&layout=desktop|phone&skin=midnight|daylight&lang=de
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Bot, CalendarClock, Gauge, LayoutGrid, MessageSquare, Plus, Search, Settings } from "lucide-react";
+import { Bot, CalendarClock, LayoutGrid, MessageSquare, Plus, Search, Settings } from "lucide-react";
 import type { CloudRoom, CloudUsage } from "../electron/cloud-home.mjs";
 import { InitialsAvatar } from "@/components/Avatar";
-import { ConfirmDialogCard } from "@/components/ConfirmDialog";
 import { CloudRoomCardView } from "@/components/CloudRoomCard";
-import { cloudPlanLabel } from "@/lib/cloud-plan";
-import { loadLocale, t } from "@/lib/i18n";
+import { loadLocale } from "@/lib/i18n";
 import { roomCardView } from "@/lib/room-card";
 import { SKIN_IDS, type SkinId } from "@/lib/skins";
-import { upgradeConfirmBody } from "@/lib/usage-meter";
 import "./styles.css";
 
 const RESETS = Date.UTC(2026, 10, 1);
@@ -25,15 +22,11 @@ const STATES: Record<string, { usage: CloudUsage; room: CloudRoom }> = {
   trial: { usage: { ...STARTER, trialEndsAt: Date.UTC(2026, 10, 3) }, room: { id: "e", cause: { kind: "memory", waits: 4, waitMinutes: 9, stopped: 0 }, plan: PRO_PLAN } },
 };
 const noop = () => {};
-const IDLE = { busy: null, note: null, onUpgrade: noop };
 
 function Card({ state }: { state: string }) {
   const sample = STATES[state] ?? STATES.memory!;
-  if (state === "upgraded" || state === "restarting") {
-    return <CloudRoomCardView view={null} upgrade={IDLE} browser={false} upgraded="pro" restart={state === "restarting" ? "restarting" : null} onNotNow={noop} onRestart={noop} />;
-  }
   const view = roomCardView({ room: sample.room, usage: sample.usage, busy: false, hidden: null, usageCardShown: false });
-  return <CloudRoomCardView view={view} upgrade={IDLE} browser={false} upgraded={null} restart={null} onNotNow={noop} onRestart={noop} />;
+  return <CloudRoomCardView view={view} onNotNow={noop} />;
 }
 
 function row(Icon: typeof Bot, label: string, active = false) {
@@ -73,25 +66,13 @@ function Phone({ state }: { state: string }) {
   </div>;
 }
 
-function Confirm({ layout }: { layout: string }) {
-  const preview = { plan: "pro", trial: false, price: 4900, chargeNow: 3120, tax: 0, nextBillingAt: Date.UTC(2026, 10, 18) };
-  return <div className="relative h-full">
-    {layout === "phone" ? <Phone state="memory" /> : <Desktop state="memory" />}
-    <div className="absolute inset-0 flex items-center justify-center bg-black/55 p-6">
-      <ConfirmDialogCard open tone="neutral" icon={<Gauge size={18} className="text-accent" />} title={t("usageMeter.confirm.title", { plan: cloudPlanLabel("pro") })}
-        body={upgradeConfirmBody(preview)} confirmLabel={t("usageMeter.confirm.action", { plan: cloudPlanLabel("pro") })} cancelLabel={t("usageMeter.confirm.cancel")}
-        onCancel={noop} onConfirm={noop} />
-    </div>
-  </div>;
-}
-
 function Preview() {
   const params = new URLSearchParams(location.search);
   const skin = (SKIN_IDS as readonly string[]).includes(params.get("skin") ?? "") ? params.get("skin") as SkinId : "midnight";
   document.documentElement.dataset.skin = skin;
   const state = params.get("state") ?? "memory", layout = params.get("layout") ?? "desktop";
   return <div className="h-screen overflow-hidden">
-    {state === "confirm" ? <Confirm layout={layout} /> : layout === "phone" ? <Phone state={state} /> : <Desktop state={state} />}
+    {layout === "phone" ? <Phone state={state} /> : <Desktop state={state} />}
   </div>;
 }
 

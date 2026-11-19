@@ -36,6 +36,7 @@ runMcpBridge({
   args,
   env,
   label: "VPS Cua Driver",
+  consoleChild: true,
   // Probe the transport, not the driver: a busy desktop mid-tool-call must never look dead.
   liveness: { command: "docker", args: vpsDockerArgs(sshAlias, ["version", "--format", "{{.Server.Version}}"]) },
   ...(controlUrl && controlToken ? { gate: { url: controlUrl, token: controlToken } } : {}),

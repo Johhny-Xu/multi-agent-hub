@@ -286,6 +286,12 @@ export function attachWorkdirTools(session: ChatToolSession, cwd: string, scope?
     get budget() { return session.budget; },
     get hasLocalComputer() { return session.hasLocalComputer; },
     refit: (limit) => session.refit(limit),
+    // A late join lays the MCP tools out again; the working-directory tools go back on after it.
+    async join() {
+      const lines = await session.join();
+      if (lines !== undefined) for (const definition of defs) if (!session.definitions.includes(definition)) session.definitions.push(definition);
+      return lines;
+    },
     close: () => session.close(),
     validate(name, args) {
       if (mounted.has(name) && isWorkdirToolName(name)) {

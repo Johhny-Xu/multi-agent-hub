@@ -3,17 +3,21 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import type { WhatsNewView } from "@/lib/whats-new";
 
 vi.mock("@/components/Avatar", () => ({ MausAvatar: () => null }));
 vi.mock("@/components/EngineLibrary", () => ({ engineReady: () => true }));
 const { otherDialogOpen, useOtherDialogOpen } = await import("./notice-dialogs");
-const { WhatsNewPopup } = await import("./whats-new/WhatsNewPopup");
+const { SimpleModePrompt } = await import("./SimpleModePrompt");
+const { NewLookNotice } = await import("./NewLookNotice");
 const { Spotlight } = await import("./onboarding/Spotlight");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const VIEW: WhatsNewView = { slides: ["pro", "team"], audience: "none", signedIn: false, staging: false,
-  plans: { pro: { name: "Pro", terms: "Pro · $49/month + tax" }, team: { name: "Team", terms: "Team · $169/month + tax" } } };
+const storage = new Map<string, string>();
+vi.stubGlobal("localStorage", {
+  getItem: (key: string) => storage.get(key) ?? null,
+  setItem: (key: string, value: string) => void storage.set(key, value),
+  removeItem: (key: string) => void storage.delete(key),
+});
 const done = vi.fn();
 let roots: Root[];
 const mount = async (element: ReturnType<typeof createElement>) => {
@@ -21,10 +25,10 @@ const mount = async (element: ReturnType<typeof createElement>) => {
   roots.push(root);
   await act(async () => { root.render(element); });
 };
-const showPopup = () => mount(createElement(WhatsNewPopup, { view: VIEW, report: () => {}, onBuy: () => {}, onDone: done }));
+const showPopup = () => mount(createElement(SimpleModePrompt, { onClose: done }));
 
-beforeEach(() => { setLocale("en"); roots = []; done.mockClear(); });
-afterEach(async () => { for (const root of roots) await act(async () => root.unmount()); document.body.replaceChildren(); vi.useRealTimers(); });
+beforeEach(() => { setLocale("en"); roots = []; done.mockClear(); storage.clear(); });
+afterEach(async () => { for (const root of roots) await act(async () => root.unmount()); document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 it("knows when another dialog is open, and notices it opening and closing", async () => {
   vi.useFakeTimers();
@@ -57,7 +61,7 @@ it("any dialog on screen counts, modal or not, the tour's cards and the card tha
   const inside = document.querySelector('[role="dialog"]')!.appendChild(document.createElement("div"));
   inside.setAttribute("role", "alertdialog");
   expect(otherDialogOpen(), "inside the popup").toBe(false);
-  for (const own of ["data-simple-mode-prompt", "data-updates-consent-popup"]) {
+  for (const own of ["data-simple-mode-prompt", "data-new-look-notice"]) {
     const popup = document.body.appendChild(document.createElement("div"));
     popup.setAttribute(own, ""); popup.setAttribute("role", "dialog");
     expect(otherDialogOpen(), own).toBe(false);
@@ -65,20 +69,13 @@ it("any dialog on screen counts, modal or not, the tour's cards and the card tha
   }
 });
 
-it("the first conversation's spotlight is a dialog the popup waits for, and an Escape meant for the spotlight reaches it", async () => {
+it("the first conversation's spotlight is a dialog the queue waits for", async () => {
   const gotIt = vi.fn();
   await mount(createElement(Spotlight, { anchor: null, placement: "below", primary: { label: "Got it", onClick: gotIt }, onDone: gotIt, children: "Approve this step" }));
   expect(document.querySelector('[role="dialog"]')!.getAttribute("aria-modal"), "the spotlight is not modal").toBeNull();
   expect(otherDialogOpen()).toBe(true);
-  const spotButton = [...document.querySelectorAll("button")].find(button => button.textContent === "Got it")!;
-  await showPopup(); spotButton.focus();
-  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-  await act(async () => { spotButton.dispatchEvent(escape); });
-  expect(done).not.toHaveBeenCalled(); expect(escape.defaultPrevented).toBe(false);
-  expect(gotIt).toHaveBeenCalledOnce();
-  const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
-  await act(async () => { spotButton.dispatchEvent(tab); });
-  expect(tab.defaultPrevented, "nor does it pull Tab out of the spotlight").toBe(false);
+  await mount(createElement(NewLookNotice, { onClose: done }));
+  expect(otherDialogOpen(), "the queue's own popup still does not count").toBe(true);
 });
 
 it("the calendar's Quick create (a dialog with only a label) counts too", () => {

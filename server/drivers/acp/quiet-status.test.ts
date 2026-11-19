@@ -278,13 +278,30 @@ describe("an engine waiting out a limit", () => {
 
 describe("ending a quiet turn early", () => {
   const base = { logged: null, noSignsSince: null, now: 1_000_000, quietMs: 420_000, name: "OpenCode Go", stuckAfterMs: 180_000 };
-  it("reads no sign of life as between requests at first, and stops the turn as stuck once it lasts five minutes", () => {
+  it("reads no sign of life as between requests at first, and stops the turn as stuck once it lasts the stuck window (30 min)", () => {
     expect(quietVerdict({ ...base, next: { kind: "no-signs" } })).toEqual({ next: { kind: "between-requests" }, noSignsSince: 1_000_000, stop: null });
     expect(quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 1_000_000 - 200_000 })).toMatchObject({ next: { kind: "no-signs" }, stop: null });
-    const stuck = quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 1_000_000 - 300_000 }).stop;
+    // Five minutes with no sign of life used to end the turn; a status query now waits the whole stuck window.
+    expect(quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 1_000_000 - 300_000 }).stop).toBeNull();
+    expect(quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 1_000_000 - 29 * 60_000 }).stop).toBeNull();
+    const stuck = quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 1_000_000 - 30 * 60_000 }).stop;
     expect(stuck?.message).toBe("OpenCode Go sent nothing for 7 min with no tool running, no open request to its model and no CPU use, so the turn was stopped as stuck. Send the message again to retry.");
     expect(stuck).toMatchObject({ acpPromptStall: true });
     expect(quietVerdict({ ...base, next: { kind: "waiting-model", nearFullContext: false }, noSignsSince: 1 }), "a sign of life starts it over").toEqual({ next: { kind: "waiting-model", nearFullContext: false }, noSignsSince: null, stop: null });
+  });
+
+  it("takes the stuck window from OMB_ACP_NO_SIGNS_STOP_MS, then OMB_TURN_STUCK_MS, and never stops with 0", () => {
+    const saved = { a: process.env.OMB_ACP_NO_SIGNS_STOP_MS, b: process.env.OMB_TURN_STUCK_MS };
+    try {
+      delete process.env.OMB_ACP_NO_SIGNS_STOP_MS;
+      process.env.OMB_TURN_STUCK_MS = String(10 * 60_000);
+      expect(quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 1_000_000 - 10 * 60_000 }).stop).not.toBeNull();
+      process.env.OMB_ACP_NO_SIGNS_STOP_MS = "0";
+      expect(quietVerdict({ ...base, next: { kind: "no-signs" }, noSignsSince: 0 }).stop).toBeNull();
+    } finally {
+      if (saved.a === undefined) delete process.env.OMB_ACP_NO_SIGNS_STOP_MS; else process.env.OMB_ACP_NO_SIGNS_STOP_MS = saved.a;
+      if (saved.b === undefined) delete process.env.OMB_TURN_STUCK_MS; else process.env.OMB_TURN_STUCK_MS = saved.b;
+    }
   });
 
   it("ends the turn as a usage limit two minutes after the request that failed on one, and never for another error", () => {

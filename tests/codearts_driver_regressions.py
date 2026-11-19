@@ -261,16 +261,125 @@ class CodeArtsDriver(unittest.TestCase):
             self.assertNotIn(argument, command)
 
     def test_default_timeout_covers_real_work(self):
-        """300s 会在真活上误杀：跑 npm install / 生成多文件页面时文件已写完却报 timeout。"""
-        self.assertGreaterEqual(driver.DEFAULT_TIMEOUT_SEC, 900)
+        """固定时长会在真活上误杀（只思考不输出的长任务）；--timeout 现在是卡住窗口，默认 30 分钟。"""
+        self.assertGreaterEqual(driver.DEFAULT_TIMEOUT_SEC, 1800)
         calls = []
         def fake(command, **kwargs):
             calls.append((command, kwargs))
             return ("provider/chosen\n", "", 0) if "models" in command else (success(), "", 0)
         with patch.dict(os.environ, {driver.AUTO_PERMISSION_ENV: "0"}):
             driver.run_task(task="x", cli=sys.executable, model="provider/chosen", capture=fake)
-        # capture 收到的是剩余时间（deadline - now），会比默认值略小
-        self.assertGreater(calls[-1][1]["timeout"], driver.DEFAULT_TIMEOUT_SEC - 60)
+        # 任务拿到的是完整的卡住窗口，不是「剩余时间」
+        self.assertEqual(calls[-1][1]["timeout"], driver.DEFAULT_TIMEOUT_SEC)
+
+    def test_stuck_window_and_total_cap_come_from_env(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(driver._env_seconds(("AGENTHUB_CODEARTS_MAX_SEC", "OMB_TURN_MAX_MS"), 0.0), 0.0)
+            self.assertEqual(driver._env_seconds(("AGENTHUB_CODEARTS_STUCK_SEC", "OMB_TURN_STUCK_MS"), 1800.0), 1800.0)
+        with patch.dict(os.environ, {"OMB_TURN_STUCK_MS": "600000"}, clear=True):
+            self.assertEqual(driver._env_seconds(("AGENTHUB_CODEARTS_STUCK_SEC", "OMB_TURN_STUCK_MS"), 1800.0), 600.0)
+        with patch.dict(os.environ, {"AGENTHUB_CODEARTS_STUCK_SEC": "0", "OMB_TURN_STUCK_MS": "600000"}, clear=True):
+            self.assertEqual(driver._env_seconds(("AGENTHUB_CODEARTS_STUCK_SEC", "OMB_TURN_STUCK_MS"), 1800.0), 0.0)
+        with patch.dict(os.environ, {"AGENTHUB_CODEARTS_MAX_SEC": "7200"}, clear=True):
+            self.assertEqual(driver._env_seconds(("AGENTHUB_CODEARTS_MAX_SEC", "OMB_TURN_MAX_MS"), 0.0), 7200.0)
+
+    def test_zero_stuck_window_is_accepted(self):
+        calls = []
+        def fake(command, **kwargs):
+            calls.append(kwargs)
+            return (success(), "", 0)
+        result = driver.run_task(task="x", cli=sys.executable, timeout=0, capture=fake)
+        self.assertFalse(result["is_error"])
+        self.assertEqual(calls[-1]["timeout"], 0)
+        self.assertTrue(driver.run_task(task="x", cli=sys.executable, timeout=-1, capture=fake)["is_error"])
+
+    def test_quiet_but_busy_task_is_not_stuck(self):
+        """只思考不输出：没有 stdout，但 CPU 在涨 → 不能判定卡住。"""
+        cpu = [0.0]
+        def busy(_pid):
+            cpu[0] += 1.0
+            return {"alive": True, "cpu": cpu[0], "io": 0, "connections": 0, "external": 0}
+        out, _err, code = driver._capture([sys.executable, "-c", "import time;time.sleep(1.2)"], cwd=str(ROOT),
+                                          env=dict(driver.os.environ), timeout=0.4, sampler=busy, tick=0.05)
+        self.assertEqual(code, 0)
+
+    def test_open_model_connection_counts_as_alive(self):
+        def streaming(_pid):
+            return {"alive": True, "cpu": 0.0, "io": 0, "connections": 1, "external": 1}
+        _out, _err, code = driver._capture([sys.executable, "-c", "import time;time.sleep(1.0)"], cwd=str(ROOT),
+                                           env=dict(driver.os.environ), timeout=0.3, sampler=streaming, tick=0.05)
+        self.assertEqual(code, 0)
+
+    def test_moving_bytes_through_a_local_proxy_count_as_alive(self):
+        io = [0]
+        def proxied(_pid):
+            io[0] += 100
+            return {"alive": True, "cpu": 0.0, "io": io[0], "connections": 1, "external": 0}
+        _out, _err, code = driver._capture([sys.executable, "-c", "import time;time.sleep(1.0)"], cwd=str(ROOT),
+                                           env=dict(driver.os.environ), timeout=0.3, sampler=proxied, tick=0.05)
+        self.assertEqual(code, 0)
+
+    def test_idle_loopback_connection_alone_is_not_alive(self):
+        def idle(_pid):
+            return {"alive": True, "cpu": 1.0, "io": 500, "connections": 2, "external": 0}
+        with self.assertRaises(driver.AdapterError) as raised:
+            driver._capture([sys.executable, "-c", "import time;time.sleep(30)"], cwd=str(ROOT),
+                            env=dict(driver.os.environ), timeout=0.3, sampler=idle, tick=0.05)
+        self.assertEqual(raised.exception.code, "CODEARTS_STUCK")
+        self.assertGreaterEqual(raised.exception.detail["quiet_s"], 0.3)
+        self.assertIn("no CPU", raised.exception.detail["reason"])
+
+    def test_activity_rules(self):
+        base = {"alive": True, "cpu": 10.0, "io": 100, "connections": 0, "external": 0}
+        self.assertEqual(driver.activity(None, base, 30), [])
+        self.assertEqual(driver.activity(base, dict(base, cpu=10.05), 30), [])  # 空转定时器
+        self.assertEqual(driver.activity(base, dict(base, cpu=11.0), 30), ["cpu"])
+        self.assertEqual(driver.activity(base, dict(base, io=101), 30), ["io"])
+        self.assertEqual(driver.activity(base, dict(base, external=1, connections=1), 30), ["network"])
+        unknown = {"alive": True, "cpu": None, "io": None, "connections": 1, "external": None}
+        self.assertEqual(driver.activity(unknown, unknown, 30), ["network"])
+
+    def test_sample_tree_reads_proc_tree_group_io_and_peers(self):
+        files = {
+            "/proc/100/stat": "100 (python3) S 1 100 100 0 -1 0 0 0 0 0 150 50 0 0 20 0 1 0 1 0 0",
+            "/proc/101/stat": "101 (codearts (cli)) S 100 100 100 0 -1 0 0 0 0 0 300 100 0 0 20 0 1 0 1 0 0",
+            "/proc/102/stat": "102 (orphan) S 1 100 100 0 -1 0 0 0 0 0 10 0 0 0 20 0 1 0 1 0 0",
+            "/proc/200/stat": "200 (other) S 1 200 200 0 -1 0 0 0 0 0 999 0 0 0 20 0 1 0 1 0 0",
+            "/proc/100/io": "rchar: 10\nwchar: 5\n", "/proc/101/io": "rchar: 1000\nwchar: 20\n", "/proc/102/io": "rchar: 0\nwchar: 0\n",
+            "/proc/100/net/tcp": "  sl  local rem st tx rx tr tm retr uid timeout inode\n"
+                                 "   0: 0100007F:9C40 0100007F:1ED2 01 00000000:00000000 00:00000000 00000000 1000 0 777\n"
+                                 "   1: 0A00000A:9C41 08080808:01BB 01 00000000:00000000 00:00000000 00000000 1000 0 778\n"
+                                 "   2: 0A00000A:9C42 08080808:01BB 06 00000000:00000000 00:00000000 00000000 1000 0 779\n",
+            "/proc/100/net/tcp6": "  sl header\n",
+        }
+        links = {"/proc/100/ns/net": "net:[1]", "/proc/101/ns/net": "net:[1]", "/proc/102/ns/net": "net:[1]",
+                 "/proc/101/fd/3": "socket:[777]", "/proc/101/fd/4": "socket:[778]", "/proc/101/fd/5": "socket:[779]"}
+        def read(path):
+            if path in files:
+                return files[path]
+            raise FileNotFoundError(path)
+        def listdir(path):
+            if path == "/proc":
+                return ["100", "101", "102", "200", "self"]
+            if path == "/proc/101/fd":
+                return ["3", "4", "5"]
+            raise FileNotFoundError(path)
+        def readlink(path):
+            if path in links:
+                return links[path]
+            raise FileNotFoundError(path)
+        sample = driver.sample_tree(100, read=read, listdir=listdir, readlink=readlink)
+        self.assertEqual(sample["alive"], True)
+        self.assertAlmostEqual(sample["cpu"], 6.1)
+        self.assertEqual(sample["io"], 1035)
+        self.assertEqual(sample["connections"], 2)
+        self.assertEqual(sample["external"], 1)
+        self.assertEqual(driver.sample_tree(999, read=read, listdir=listdir, readlink=readlink)["alive"], False)
+
+    def test_stuck_envelope_says_why(self):
+        value = driver.envelope("timeout", code="CODEARTS_STUCK", detail={"quiet_s": 1800.0, "reason": "no CPU, output or network activity"})
+        self.assertEqual(value["error"]["code"], "CODEARTS_STUCK")
+        self.assertEqual(value["error"]["quiet_s"], 1800.0)
 
     def test_auto_permission_resolution_prefers_env_then_auth_file(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -450,8 +559,19 @@ class CodeArtsDriver(unittest.TestCase):
             self.assertEqual(result["AGENTHUB_WORKER_ID"], "codearts")
 
     def test_timeout_kills_only_owned_process(self):
+        # A sleeping task shows no CPU, output or network: it is judged stuck by the status query.
         with self.assertRaises(driver.AdapterError) as raised:
             driver._capture([sys.executable, "-c", "import time;time.sleep(30)"], cwd=str(ROOT), env=dict(driver.os.environ), timeout=0.1)
+        self.assertEqual(raised.exception.code, "CODEARTS_STUCK")
+
+    def test_opt_in_total_cap_still_stops(self):
+        cpu = [0.0]
+        def busy(_pid):
+            cpu[0] += 1.0
+            return {"alive": True, "cpu": cpu[0], "io": 0, "connections": 0, "external": 0}
+        with self.assertRaises(driver.AdapterError) as raised:
+            driver._capture([sys.executable, "-c", "import time;time.sleep(30)"], cwd=str(ROOT), env=dict(driver.os.environ),
+                            timeout=10, max_total=0.3, sampler=busy, tick=0.05)
         self.assertEqual(raised.exception.code, "CODEARTS_TIMEOUT")
 
     def test_posix_group_ownership_is_consumed_once_even_after_leader_exits(self):
@@ -484,7 +604,7 @@ class CodeArtsDriver(unittest.TestCase):
                 else:
                     self.assertNotEqual(report['runner']['pgid'], report['child']['pgid'])
                 if 'timeout' in case:
-                    self.assertEqual(report['result'], 'CODEARTS_TIMEOUT')
+                    self.assertEqual(report['result'], 'CODEARTS_STUCK')
                 elif not case.startswith('outer_'):
                     self.assertEqual(report['result'], 'returned')
 

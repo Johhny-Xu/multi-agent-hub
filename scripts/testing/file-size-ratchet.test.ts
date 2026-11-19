@@ -23,7 +23,7 @@ const LINES: Record<string, number> = {
   "server/store.ts": 2427,
   "src/components/Sidebar.tsx": 1721,
   "server/drivers/claude.ts": 2090,
-  "server/drivers/agents-call.ts": 1002,
+  "server/drivers/agents-call.ts": 1004,
   "server/drivers/acp/core.ts": 1704,
   "server/drivers/codex.ts": 1718,
   "server/routines.ts": 1567,
@@ -41,7 +41,7 @@ const LINES: Record<string, number> = {
   "scripts/mcp-server.ts": 1411,
   "server/boat.ts": 1253,
   "server/drivers/pi.ts": 1033,
-  "server/plan-usage.ts": 1115,
+  "server/plan-usage.ts": 1120, // OMB 0.1.165 upstream merge (2026-11-18): +5 lines from upstream
   "server/container-computer.ts": 1175,
   "src/components/ModelPicker.tsx": 1045,
   "src/components/PhoneSetupFlow.tsx": 1089,
@@ -52,7 +52,7 @@ const LINES: Record<string, number> = {
   "server/browser/viewers/core.ts": 1017,
   "server/checkin/checkin.mjs": 3800,
   "server/checkin/vendor-quota.mjs": 1676,
-  "server/drivers/zcode-acp.ts": 1784,
+  "server/drivers/zcode-acp.ts": 1816,
   "server/hub-compat/dispatch.ts": 2033,
   "server/service-accounts.ts": 1191,
   "shared/wire.ts": 1012,
@@ -60,10 +60,13 @@ const LINES: Record<string, number> = {
   // 2026-11-13 fork: DuMate / Gemini Decision 1 / box relay / workdir tools grew five listed files by a few lines (pins raised once; only down from here)
   "server/drivers/openai-chat.ts": 1032,
   // 2026-11-14 维护者选择放宽（不拆分）：按当时行数登记，只能减不能增
+  // OMB 0.1.165 upstream merge (2026-11-18): browser-runtime re-pinned at the merged count (growth came from upstream)
   "server/cloud-browser.ts": 1371,
-  "server/browser-runtime.ts": 1013,
+  "server/browser-runtime.ts": 1026,
   "server/cloud-cdp-proxy.ts": 1365,
   "server/drivers/web-chat/core.ts": 1069,
+  // OMB 0.1.169 upstream merge (2026-11-19): agents-call and zcode-acp re-pinned at the merged counts
+  "electron/data-dir-lease.node-test.mjs": 846, // the data-folder lease's own tests: many platform cases (Windows probes in data-dir-lease-windows.node-test.mjs)
 };
 
 const SOURCE_DIRS = ["server", "shared", "src", "scripts", "evals", "electron", "companion"];

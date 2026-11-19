@@ -22,13 +22,39 @@ function mcpStartFailure(message: string, provider: string) {
   return server === "composio" ? noticeFailure("chat.notice.acpMcpAppsFailed", { provider }) : noticeFailure("chat.notice.acpMcpServerFailed", { server, provider });
 }
 
+/** A failure the agent reported as an ordinary reply, already in the words the person reads. */
+export class AcpReportedFailure extends Error {
+  readonly facts: { message: string; text?: ServerText; limitResetsAt?: number };
+  readonly acpUsageLimit: boolean;
+
+  constructor(facts: { message: string; text?: ServerText; limitResetsAt?: number }, usageLimit: boolean) {
+    super(facts.message);
+    this.facts = facts;
+    this.acpUsageLimit = usageLimit;
+  }
+}
+
 export function acpRuntimeFailure(error: unknown, provider: string, account?: { message?: string; text?: ServerText }) {
   if (account?.message !== undefined) return { message: account.message, text: account.text };
+  if (error instanceof AcpReportedFailure) return error.facts;
   const message = error instanceof Error ? error.message : String(error);
   // Account wording, when given, wins over the MCP rewrite.
   const mcp = account?.text ? null : mcpStartFailure(message, provider);
   if (mcp) return mcp;
+  // A bridge that stopped a turn by its status query (turn-liveness.ts) says why in words the chat can translate.
+  const stuck = bridgeStuckNotice(error);
+  if (stuck && !account?.text) return stuck;
   const failure = engineFailure(provider, message) ?? { message };
   const text = account?.text ?? runtimeErrorText(error) ?? failure.text;
   return text ? { ...failure, text } : failure;
+}
+
+/** The ACP error data a bridge attaches to a turn it judged stuck: `{ ombNotice: { key, params } }`. */
+export function bridgeStuckNotice(error: unknown) {
+  const notice = (error as { data?: { ombNotice?: { key?: unknown; params?: unknown } } } | null)?.data?.ombNotice;
+  if (!notice || notice.key !== "chat.notice.turnStuck" || !notice.params || typeof notice.params !== "object") return null;
+  const params = Object.fromEntries(Object.entries(notice.params as Record<string, unknown>)
+    .filter(([key, value]) => (key === "name" || key === "window") && typeof value === "string")
+    .map(([key, value]) => [key, (value as string).slice(0, 80)]));
+  return typeof params.name === "string" && typeof params.window === "string" ? noticeFailure("chat.notice.turnStuck", params) : null;
 }
