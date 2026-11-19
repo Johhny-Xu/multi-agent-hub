@@ -9,7 +9,7 @@ export const TOOL_SCOPE_SUPPORT = {
   codebuddyAgent: "mcp", codebuddyCnAgent: "mcp", qoderAgent: "mcp", qoderCnAgent: "mcp",
   codeartsAcpAgent: "mcp", mcodeAgent: "mcp", meooAgent: "mcp", perchAgent: "mcp",
   mimocodeAgent: "mcp", traecodeAgent: "mcp", doubaoAgent: "mcp",
-  harkWeb: "mcp",
+  harkWeb: "mcp", museRelay: "mcp",
 } as const;
 
 export function assertToolScopeSupported(engine: string, value: unknown): ToolScope | undefined {

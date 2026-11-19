@@ -29,6 +29,7 @@ import { GreenferenceDriver } from "./greenference.ts";
 import { ModelgoDriver } from "./modelgo.ts";
 import { MetaDriver } from "./meta.ts";
 import { MuseCodeDriver } from "./muse-code.ts";
+import { MuseRelayDriver } from "./muse-relay.ts";
 import { MinimaxDriver } from "./minimax.ts";
 import { CodeBuddyDriver, CodeBuddyCnDriver } from "./acp/codebuddy.ts";
 import { QoderDriver, QoderCnDriver } from "./acp/qoder.ts";
@@ -74,6 +75,7 @@ export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
   ModelgoDriver,
   MetaDriver,
   MuseCodeDriver,
+  MuseRelayDriver,
   DeepSeekAgentDriver,
   // Chinese coding CLIs. CodeBuddy and Qoder each register twice: one international, one CN endpoint.
   CodeBuddyDriver, CodeBuddyCnDriver,

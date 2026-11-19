@@ -52,6 +52,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   traecodeAgent: { resume: false },
   doubaoAgent: { resume: false },
   harkWeb: { resume: false },
+  museRelay: CHAT_ROW,
   "openai-compat": CHAT_ROW,
   grok: CHAT_ROW,
   minimax: CHAT_ROW,

@@ -26,6 +26,7 @@ import { OllamaModels, ollamaShortStatus } from "./OllamaStatusLine";
 import { isAddedServer } from "@/lib/openai-compat-endpoints";
 import { InstanceProviderMark } from "./ProviderIcons";
 import { HiddenEngines, HiddenProviderRows, useHiddenProviders } from "./HiddenProviders";
+import { MuseRelayCard } from "./MuseRelayCard";
 import { AdminOnly } from "./AdminOnly";
 
 export { HiddenEngines };
@@ -507,7 +508,9 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
     <EngineCard instance={instance} bare={bare}>
       {instance.disabled === true && <p data-engine-disabled={instance.instanceId} className="mb-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.disableHint")}</p>}
       {policyNote}
-      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} description={instance.codexEndpoint ? t("agentEndpoints.codexHint") : undefined} unframed />}
+      {!engineReady(instance) && instance.driverKind !== "museRelay" && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} description={instance.codexEndpoint ? t("agentEndpoints.codexHint") : undefined} unframed />}
+      {/* A relay has no sign-in of its own: the card holds its connections instead. */}
+      {instance.driverKind === "museRelay" && <MuseRelayCard instanceId={instance.instanceId} />}
       {engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
       {engineReady(instance) && instance.serverKind === "ollama" && <OllamaModels instance={instance} className="mt-3" />}
       {/* A server added by address (LM Studio, Ollama, a gateway) is removed here too, not only from API keys. */}
@@ -653,7 +656,7 @@ export function EnginesSettings({ simple = false, more }: { simple?: boolean; mo
   const { state } = useStore();
   // Leaving Settings ends the "now uses the copy OpenMausBot installed" lines.
   useEffect(() => forgetAppCopySwitches, []);
-  const listed = state.instances.filter((i) => i.readOnly || i.cli !== undefined || i.cliDefault !== undefined || i.snapshot.state === "unavailable" || isApiKeyEngine(i) || i.claudeEndpoint !== undefined || i.claudeBedrock !== undefined || i.codexEndpoint !== undefined);
+  const listed = state.instances.filter((i) => i.readOnly || i.cli !== undefined || i.cliDefault !== undefined || i.snapshot.state === "unavailable" || isApiKeyEngine(i) || i.claudeEndpoint !== undefined || i.claudeBedrock !== undefined || i.codexEndpoint !== undefined || i.driverKind === "museRelay");
   const { groups, groupOf, rows } = groupedAccounts(listed);
   // A hidden ordinary Claude instance takes its card, and the endpoint section inside it, away. A hosted
   // workspace lists every engine read-only and refuses instance changes, so there the section has no Add.

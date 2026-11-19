@@ -128,6 +128,9 @@ export type RuntimeEvent = RuntimeEventBase &
      * store and never forwarded to renderer SSE. `fromTool`: a tool's result
      * returned the image to the engine; the bot did not make or send it. */
     | { type: "item.completed"; itemType: "assistant_image"; data: string; alt?: string; fromTool?: true }
+    /** A file the engine already saved and validated on the server. Never
+     * bytes or a public URL: the path stays private to the attachment store. */
+    | { type: "item.completed"; itemType: "assistant_file"; kind: "image" | "file"; path: string; mime: string; name?: string }
     | { type: "content.delta"; streamKind: "assistant_text" | "reasoning_text"; delta: string; /** A room reply as it goes out: the member speaking. */ botId?: string }
     | {
         type: "request.opened";

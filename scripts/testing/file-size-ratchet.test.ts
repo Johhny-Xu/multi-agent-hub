@@ -65,7 +65,8 @@ const LINES: Record<string, number> = {
   "server/browser-runtime.ts": 1026,
   "server/cloud-cdp-proxy.ts": 1365,
   "server/drivers/web-chat/core.ts": 1069,
-  // OMB 0.1.169 upstream merge (2026-11-19): agents-call and zcode-acp re-pinned at the merged counts
+  // OMB 0.1.169 upstream merge (2026-11-19): agents-call and zcode-acp re-pinned at the merged counts; the Muse relay host (11-18) registered at its size, re-pinned after the 11-19 lease fix
+  "server/muse-relay.ts": 1256,
   "electron/data-dir-lease.node-test.mjs": 846, // the data-folder lease's own tests: many platform cases (Windows probes in data-dir-lease-windows.node-test.mjs)
 };
 

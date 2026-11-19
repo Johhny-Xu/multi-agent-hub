@@ -11,6 +11,10 @@ export function engineReady(instance: InstanceInfo): boolean {
   if (instance.driverKind === "clineAgent") {
     return instance.snapshot.state === "available" && instance.snapshot.authenticated === true;
   }
+  // A relay has no sign-in of its own: it runs as soon as it is there, and its card says whether a connection exists.
+  if (instance.driverKind === "museRelay") {
+    return instance.snapshot.state === "available";
+  }
   return instance.snapshot.state === "available" &&
     (instance.access === "custom" || instance.snapshot.authenticated !== false);
 }
@@ -19,7 +23,7 @@ const providers: Record<string, string> = {
   claudeAgent: "Anthropic", codex: "OpenAI", grok: "xAI", grokAgent: "xAI",
   kimiAgent: "Moonshot AI", droidAgent: "Factory", cursorAgent: "Cursor",
   antigravityAgent: "Google", opencodeGo: "OpenCode", qwenAgent: "Qwen",
-  hermesAgent: "Nous Research", clineAgent: "Cline", copilotAgent: "GitHub", commandCodeAgent: "Command Code", kiroAgent: "Amazon Web Services", devinAgent: "Cognition", piAgent: "pi.dev", mistral: "Mistral AI", mistralVibeAgent: "Mistral AI", cerebras: "Cerebras", groq: "Groq", greenference: "Greenference", modelgo: "ModelGo", meta: "Meta", museCode: "Meta", deepseekAgent: "DeepSeek", zcodeAgent: "ZCode",
+  hermesAgent: "Nous Research", clineAgent: "Cline", copilotAgent: "GitHub", commandCodeAgent: "Command Code", kiroAgent: "Amazon Web Services", devinAgent: "Cognition", piAgent: "pi.dev", mistral: "Mistral AI", mistralVibeAgent: "Mistral AI", cerebras: "Cerebras", groq: "Groq", greenference: "Greenference", modelgo: "ModelGo", meta: "Meta", museCode: "Meta", museRelay: "Meta", deepseekAgent: "DeepSeek", zcodeAgent: "ZCode",
   harkWeb: "Hark",
 };
 

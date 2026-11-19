@@ -48,6 +48,7 @@ const EXPECTED: Record<string, EngineCapabilities> = {
   traecodeAgent: replayed,
   doubaoAgent: replayed,
   harkWeb: replayed,
+  museRelay: replayed,
   "openai-compat": chat,
   grok: chat,
   minimax: chat,
@@ -105,9 +106,9 @@ describe("replaysTranscriptNatively", () => {
     expect(chatKinds.length).toBeGreaterThanOrEqual(7);
   });
 
-  it("is true for every driver built on createOpenAIChatRuntime, and for no other", () => {
+  it("is true for the chat-completions family and the structured transcript relay", () => {
     for (const kind of BUILT_IN_DRIVERS.map((driver) => driver.driverKind)) {
-      expect(replaysTranscriptNatively(kind), kind).toBe(chatKinds.includes(kind));
+      expect(replaysTranscriptNatively(kind), kind).toBe(kind === "museRelay" || chatKinds.includes(kind));
     }
     expect(replaysTranscriptNatively("someFutureEngine")).toBe(false);
     expect(replaysTranscriptNatively(undefined)).toBe(false);

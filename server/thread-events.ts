@@ -1,5 +1,5 @@
 import { closeSync, fstatSync, openSync, readSync, type Stats } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import type { RuntimeEvent } from "./contracts.ts";
 import type { InspectorEntry, InspectorPage, NativeRecord } from "../shared/inspector.ts";
 
@@ -194,7 +194,13 @@ export function isRuntimeEvent(value: unknown): value is RuntimeEvent {
     case "item.updated":
       return (value.itemType === "tool" || value.itemType === "reasoning") && numberOrNullOrMissing(value.tokens);
     case "item.completed":
-      return value.itemType === "assistant_text" ? typeof value.text === "string" : value.itemType === "tool" && typeof value.ok === "boolean";
+      if (value.itemType === "assistant_text") return typeof value.text === "string";
+      if (value.itemType === "assistant_file") {
+        return (value.kind === "image" || value.kind === "file")
+          && typeof value.path === "string" && isAbsolute(value.path) && !value.path.includes("\0")
+          && typeof value.mime === "string" && stringOrMissing(value.name);
+      }
+      return value.itemType === "tool" && typeof value.ok === "boolean";
     case "content.delta":
       return (value.streamKind === "assistant_text" || value.streamKind === "reasoning_text") && typeof value.delta === "string";
     case "request.opened":

@@ -20,12 +20,15 @@ export interface WebhookIngress {
 }
 
 export function json(res: ServerResponse, status: number, body: JsonValue): void {
+  // Fixed length, not chunked: a chunked body over HTTP/1.1 through Cloudflare got cut at 8 KB for Muse's relay client.
+  const payload = Buffer.from(JSON.stringify(body), "utf8");
   res.writeHead(status, {
     "content-type": "application/json",
+    "content-length": String(payload.length),
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
   });
-  res.end(JSON.stringify(body));
+  res.end(payload);
 }
 
 export async function readRawBody(req: IncomingMessage): Promise<string> {

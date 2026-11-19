@@ -5,12 +5,12 @@ import { reserveGmailDrafts } from "./gmail-draft-policy.ts";
 import { createGmailDrafts } from "./host/gmail-drafts.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ToolResults, TOOL_RESULT_MAX_CHARS } from "./tool-results.ts";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { authorizeExternalRuntime, externalRuntimeIsActive, type ExternalRuntimeGrant } from "./external-runtime.ts";
 import { z } from "zod";
 import { selectReplay, replayToolCalls, DEFAULT_REBUILD_BYTES, MAX_SUMMARY_BYTES } from "./context-rebuild.ts";
@@ -490,6 +490,7 @@ import { connectorCallsIn, outboundCallsIn } from "../shared/outbound.ts";
 import { connectorAccessDecision, describeConnectorScopes } from "../shared/connector-scopes.ts";
 import { bindThreadLogCapProvider, threadLogCapOrDefault } from "./thread-log-rotation.ts";
 import { listenWebhookIngress, type WebhookIngress } from "./webhook-ingress.ts"; import { createBotApiHost } from "./bot-api-host.ts"; import { BotApiManager } from "./bot-api.ts"; import { BOT_API_PARTS, BOT_API_REFUSAL, BOT_API_TOOLS, botApiRouteRefused } from "./bot-api-fence.ts";
+import { createMuseRelayHost } from "./routes/muse-relay.ts"; import { defaultMuseRelayHub } from "./muse-relay.ts";
 import { addressFor } from "./webhook-address.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./member-turn.ts";
 import { WebhookManager } from "./webhooks.ts";
@@ -6467,7 +6468,7 @@ bus.subscribe((event: RuntimeEvent) => {
   // A goal coordinator's artifacts are private too; never leak one into the public room.
   if (
     event.type === "item.completed" &&
-    event.itemType === "assistant_image" &&
+    (event.itemType === "assistant_image" || event.itemType === "assistant_file") &&
     (goalCoordinatorTurn || ambiguousCoordinatorText)
   ) return;
   if (
@@ -6491,13 +6492,13 @@ bus.subscribe((event: RuntimeEvent) => {
     };
     broadcast({ kind: "runtime", event: publicAssistantEvent });
   }
-  const privateImageEvent = event.type === "item.completed" && event.itemType === "assistant_image";
-  if (!privateImageEvent) {
+  const privateAttachmentEvent = event.type === "item.completed" && (event.itemType === "assistant_image" || event.itemType === "assistant_file");
+  if (!privateAttachmentEvent) {
     // Exact executable input is internal; the bus's persistence redactor does not scrub the live event.
     const publicEvent = event.type === "request.opened" ? { ...event, command: undefined, commandLine: undefined, reads: undefined } : publicReplyEvent(event, groupSpeakers.get(event.threadId)?.botId);
     broadcast({ kind: "runtime", event: publicEvent });
   }
-  if (event.type === "turn.completed") { const note = runComputers.turnEnded(event.threadId, event.ok); if (note) store.appendMessage(event.threadId, { role: "bot", kind: "activity", tool: { name: `recovery: ${note}`, ok: true } }); } const routineRun = privateImageEvent ? null : (routines?.handleRuntimeEvent(event) ?? null);
+  if (event.type === "turn.completed") { const note = runComputers.turnEnded(event.threadId, event.ok); if (note) store.appendMessage(event.threadId, { role: "bot", kind: "activity", tool: { name: `recovery: ${note}`, ok: true } }); } const routineRun = privateAttachmentEvent ? null : (routines?.handleRuntimeEvent(event) ?? null);
   const replayed = savedSteps.dispatch.answering(event); limitClock.noteRuntimeEvent(replayed ? undefined : runningTurnEngines.get(event.threadId)?.instanceId, event);
   const ownerBot = store.botByThread(event.threadId); // A quick route's model is the one this turn ran on, so its holds and its working turns are that model's.
   const bot = ownerBot ? botForThread(ownerBot.id, event.threadId) ?? undefined : undefined; if (bot && !replayed) limitTakeover.noteRuntimeEvent(bot.id, { ...bot.modelSelection, model: quickFallback.routedModel(event.threadId) ?? bot.modelSelection.model }, event);
@@ -6581,6 +6582,27 @@ bus.subscribe((event: RuntimeEvent) => {
               ok: false,
             },
           });
+        }
+      } else if (event.itemType === "assistant_file") {
+        const rel = relative(ATTACHMENTS_DIR, event.path);
+        let valid = Boolean(rel) && !rel.startsWith("..") && !rel.includes("/") && !rel.includes("\\") && existsSync(event.path);
+        if (valid) {
+          try {
+            const stat = lstatSync(event.path);
+            valid = stat.isFile() && !stat.isSymbolicLink();
+          } catch {
+            valid = false;
+          }
+        }
+        if (!valid) {
+          pushMessage({ role: "bot", kind: "activity", tool: { name: serverLine(threadLanguage(event.threadId), "server.museRelay.fileNotAttached"), ok: false } });
+        } else {
+          const key = turnAttachmentKey(event.threadId, event.turnId);
+          const current = turnAttachmentsByTurn.get(key) ?? [];
+          current.push(event.kind === "file"
+            ? { kind: "file", path: event.path, mime: event.mime, name: event.name ?? basename(event.path) }
+            : { kind: "image", path: event.path, mime: event.mime, ...(event.name ? { name: event.name } : {}) });
+          turnAttachmentsByTurn.set(key, current);
         }
       } else if (event.itemType === "tool" && event.itemId) {
         const itemKey = `${event.threadId}:${event.itemId}`;
@@ -9641,6 +9663,11 @@ const webhooks = new WebhookManager({
     return store.createTask(trigger.botId, "Updates", false)?.threadId;
   }, ...createWebhookRoomPost({ store, cfg, roomTalks }) });
 const webhookRequests = new WebhookRequestService({ store, webhooks, botName: (botId) => store.bot(botId)?.name ?? "the bot" }); const botApi = createBotApiHost({ store, manager: botApiManager, actsAsOwner: { available: botApiAsOwnerAvailable, refusal: (auth) => !botApiAsOwnerAvailable() ? "A key can act as the owner only on a server one person uses (no members and at most one admin, named by address), not on a team's Cloud or a shared or hosted workspace." : (sharedWorkspaceFullAccessEnabled() ? auth.scopes.includes("admin") : ownHome.owner(auth) || (CLOUD_PERSONAL && cloudOwnerSession(auth)) || (auth.kind === "loopback" && auth.trust !== "service" && auth.scopes.includes("admin") && !CLOUD_HOME)) ? null : "Only this server's owner can let a key act as them." }, startTurn, threadBusy, canStart: canAdmitDirectTurn, canConfine: (botId) => registry.get(store.bot(botId)?.modelSelection.instanceId ?? "")?.adapter.capabilities.guestTurns === "confined", discard: (botId, threadId) => { store.deleteTask(botId, threadId); }, included: () => !cloudPlanTier.starter(), opened: (threadId) => { if (CLOUD_OWNER_KEY) threadStarters.set(threadId, CLOUD_OWNER_KEY); }, hooksBaseUrl: () => webhookIngressStatus().baseUrl, manageRefusal: (auth, botId) => auth.scopes.includes("admin") || (CLOUD_TEAM && levelOf(auth, botId) === "edit") ? null : refusalFor(store.bot(botId)?.name ?? "this bot", "edit").error, claimRequest: () => { cloudPower?.arrived("/hooks", {}); moveFreeze.assertTurns(); return workspaceMaintenance.request(); }, record: (auth, row) => appendAdminAction(DATA_DIR, { ...row, actor: decisionActorFor(auth) }) });
+const museRelay = createMuseRelayHost({
+  hub: defaultMuseRelayHub(),
+  instanceDriver: (instanceId) => persistableInstanceConfigs(cfg)[instanceId]?.driver,
+  canManage: ownerOrAdmin,
+});
 const appTriggers = createAppTriggerHost({ store, webhooks, webhookBase: () => webhookIngressStatus().baseUrl, routines: () => routines!, botState: unattendedDispatchState, timeZone: routineTimeZone, emit: broadcast, connectionMode: () => composio.connectionMode(cfg),
   access: composio.brokerAccess, connectedApps: () => composio.connectedServices(cfg), visibleBot: (auth, botId) => visibleTo(viewerFor(auth)).bot(botId),
   audit: (row) => appendDecision(DATA_DIR, { ...row, decision: "auto-approved", source: "routine" }) });
@@ -9655,7 +9682,8 @@ let webhookIngressError: string | null = null;
 try {
   webhookIngress = await listenWebhookIngress(webhooks, {
     port: WEBHOOK_PORT, socketPath: process.env.OMB_WEBHOOK_SOCKET?.trim() || undefined, publicBaseUrl: WEBHOOK_PUBLIC_URL,
-    claimRequest: () => { cloudPower?.arrived("/hooks", {}); moveFreeze.assertTurns(); return workspaceMaintenance.request(); }, door: botApi.door,
+    claimRequest: () => { cloudPower?.arrived("/hooks", {}); moveFreeze.assertTurns(); return workspaceMaintenance.request(); },
+    door: async (req, res, url) => (await museRelay.door(req, res, url)) || botApi.door(req, res, url),
   });
   const advertised = WEBHOOK_PUBLIC_URL ? ` (advertised as ${webhookIngress.baseUrl})` : "";
   console.log(`openmausbot webhook receiver on http://${webhookIngress.host}:${webhookIngress.port}${webhookIngress.socketServer ? ` and ${process.env.OMB_WEBHOOK_SOCKET?.trim()}` : ""}${advertised}`);
@@ -9669,7 +9697,7 @@ const webhookIngressStatus = () => ({
   baseUrl: webhookIngress?.baseUrl ?? `http://127.0.0.1:${WEBHOOK_PORT}`,
   ...(webhookIngressError ? { error: webhookIngressError } : {}),
 });
-ROUTES.push(createTeamFilesRoutes({ files: teamFilesHost.files, actor: (auth) => auth.kind === "session" && auth.session.email ? { person: personKey(auth.session), admin: auth.scopes.includes("admin") } : null, personName: (person) => teamHost.personName(person), botName: (botId) => store.bot(botId)?.name })); ROUTES.push(createWebhookRoutes({ webhooks, ingress: webhookIngressStatus, visible: (auth) => visibleTo(viewerFor(auth)) }), botApi.routes);
+ROUTES.push(createTeamFilesRoutes({ files: teamFilesHost.files, actor: (auth) => auth.kind === "session" && auth.session.email ? { person: personKey(auth.session), admin: auth.scopes.includes("admin") } : null, personName: (person) => teamHost.personName(person), botName: (botId) => store.bot(botId)?.name })); ROUTES.push(createWebhookRoutes({ webhooks, ingress: webhookIngressStatus, visible: (auth) => visibleTo(viewerFor(auth)) }), botApi.routes, museRelay.routes);
 
 const RUNTIME_KEEP_MS = 30 * 24 * 60 * 60_000;
 let runtimePrunedAt = 0;
@@ -15800,6 +15828,7 @@ const gracefulShutdown = createGracefulShutdown({
       cacheKeepWarm.dispose(); warmSummaries.dispose();
       skillReview.stop();
       webhookIngress?.server.close(); webhookIngress?.socketServer?.close();
+      museRelay.close();
       tunnelListener?.close(); void tailnetShare.close(); phoneRelay?.stop(); stopCloudHomeConnectedApps();
     },
     () => phoneScreen.closeAll(),

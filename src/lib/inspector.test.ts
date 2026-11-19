@@ -63,6 +63,26 @@ describe("summarizeRuntime", () => {
     expect(summary).not.toContain("\n");
   });
 
+  it("labels relay attachments separately from tool results", () => {
+    expect(summarizeRuntime({
+      ...base,
+      type: "item.completed",
+      itemType: "assistant_file",
+      kind: "file",
+      path: "/attachments/result.txt",
+      mime: "text/plain",
+      name: "result.txt",
+    })).toEqual({ summary: "assistant file attached", tone: "plain" });
+    expect(summarizeRuntime({
+      ...base,
+      type: "item.completed",
+      itemType: "assistant_file",
+      kind: "image",
+      path: "/attachments/result.png",
+      mime: "image/png",
+    }).summary).toBe("assistant image attached");
+  });
+
   it("marks an agent-composed ask without changing the tool-origin form", () => {
     expect(
       summarizeRuntime({
