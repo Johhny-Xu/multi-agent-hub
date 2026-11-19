@@ -22,6 +22,7 @@ import re
 import signal
 import ssl
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -33,6 +34,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 import urllib.request
 import base64
+from concurrent.futures import ThreadPoolExecutor
 
 SCHEMA_VERSION = 1
 
@@ -46,10 +48,29 @@ IMAGE_LIMIT = 10 << 20
 FILE_LIMIT = 100 << 20
 MAX_CONFIG_BYTES = 64 << 10
 MAX_STATE_BYTES = 1 << 20
-# Some paths to the Muse sandbox cut HTTP response bodies near 8 KB, so the poll asks for deliveries by
-# reference and fetches each input in raw slices of at most INPUT_SLICE_BYTES (base64 keeps a response < 6 KB).
-INPUT_SLICE_BYTES = 4096
-INPUT_SLICE_ATTEMPTS = 5
+# Some paths to the Muse sandbox cut HTTP response bodies near 3.4 KB, so the poll asks for deliveries by
+# reference and fetches each input in raw slices of at most INPUT_SLICE_BYTES (base64 keeps a response ~2.1 KB).
+INPUT_SLICE_BYTES = 1536
+INPUT_SLICE_ATTEMPTS = 8
+# The background heartbeat loop (started by claim, stopped by complete/fail) renews the lease every
+# 30 s and gives up on its own after 30 minutes, so a worker that dies cannot hold a turn forever.
+HEARTBEAT_INTERVAL_SECONDS = 30
+HEARTBEAT_MAX_SECONDS = 30 * 60
+# Slices are fetched in parallel: each is its own TLS+CONNECT round trip through Muse's egress proxy, so 6 serial
+# slices cost ~6 round trips before the worker can even be woken.
+INPUT_SLICE_PARALLEL = 6
+# About one request in four dies on Muse's egress proxy (reason=network, ~1.3 s), and the next one usually works.
+# Such a failure, a timeout or a 502/503/504 without Retry-After is "transient": the first POLL_QUICK_RETRIES
+# consecutive ones are retried at once inside the same poll (or, when this run has no time left, on the very next run
+# without backoff); exponential backoff starts only after that. send-text/complete/fail/heartbeat retry the same
+# request (same eventId and seq, so the server dedupes it) up to EVENT_QUICK_RETRIES times while that stays cheap.
+TRANSIENT_KINDS = frozenset({"network", "timeout", "http_502", "http_503", "http_504", "truncated"})
+POLL_QUICK_RETRIES = 3
+POLL_QUICK_WINDOW_S = 8.0
+EVENT_QUICK_RETRIES = 2
+EVENT_QUICK_WINDOW_S = 10.0
+QUICK_PAUSE_S = 0.25
+TRACE_MAX_BYTES = 256 << 10
 MAX_INPUT_BYTES = 16 << 20
 # Long replies go out as several text events of at most this many UTF-8 bytes each, so no request body is large.
 TEXT_PART_BYTES = 4096
@@ -120,10 +141,10 @@ class PermanentError(RelayError):
 
 
 class RetriableError(RelayError):
-    def __init__(self, kind: str, retry_ms: int = 0):
+    def __init__(self, kind: str, retry_ms: int = 0, detail: str | None = None):
         self.kind = kind
         self.retry_ms = retry_ms
-        super().__init__(kind)
+        super().__init__(detail if detail is not None else kind)
 
 
 class Cancelled(RelayError):
@@ -606,6 +627,24 @@ class StateStore:
             self.write_json(marker, {"schemaVersion": SCHEMA_VERSION, "turnId": turn_id, "at": now_iso()})
         self.remove(self.path("pending", turn_id))
 
+    def holds_delivery(self, turn_id: str, delivery_id: str) -> str | None:
+        """Where this exact delivery already sits (pending, processing or a finished turn), if anywhere."""
+        try:
+            if self.load_ledger(turn_id).get("terminal"):
+                return "terminal"
+        except StateError:
+            pass
+        for sub in ("processing", "pending"):
+            path = self.path(sub, turn_id)
+            if not path.exists():
+                continue
+            try:
+                if self.read_json(path).get("deliveryId") == delivery_id:
+                    return sub
+            except StateError:
+                pass
+        return None
+
     def save_delivery(self, delivery: dict) -> str:
         turn_id = delivery["turnId"]
         if self.is_cancelled(turn_id):
@@ -674,6 +713,25 @@ def _https_proxy_for(host: str):
     return parts.hostname, parts.port or 1080, headers
 
 
+def _parse_content_length(value: str | None) -> int | None:
+    """Content-Length as an int, or None when the header is missing or malformed."""
+    if value is None:
+        return None
+    try:
+        parsed = int(value.strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _response_detail(status: int, content_type: str | None, raw: bytes) -> str:
+    """Diagnostic suffix for a ContractError: HTTP status, Content-Type, body size, and (only for a non-JSON body) the first 80 bytes. Never logs token, Authorization, or JSON content."""
+    detail = f"status={status} content_type={content_type or '-'} bytes={len(raw)}"
+    if raw and raw.lstrip()[:1] != b"{":
+        detail += f" head={raw[:80]!r}"
+    return detail
+
+
 def _http_request(
     cfg: Config,
     method: str,
@@ -713,6 +771,13 @@ def _http_request(
         status = response.status
         raw = response.read(max_response + 1)
         retry_after = response.getheader("Retry-After")
+        content_type = response.getheader("Content-Type")
+        content_length = _parse_content_length(response.getheader("Content-Length"))
+    except http.client.IncompleteRead as exc:
+        got = len(getattr(exc, "partial", None) or b"")
+        want = getattr(exc, "expected", None)
+        detail = f"truncated got={got}" + (f" want={want}" if want is not None else "")
+        raise RetriableError("truncated", detail=detail) from None
     except (http.client.HTTPException, OSError) as exc:
         raise RetriableError(_network_kind(exc)) from None
     finally:
@@ -733,15 +798,19 @@ def _http_request(
     if not (200 <= status <= 299):
         raise PermanentError(f"http_{status}")
     if len(raw) > max_response:
-        raise ContractError("response is too large")
+        raise ContractError(f"response is too large: {_response_detail(status, content_type, raw)}")
+    if content_length is not None and len(raw) < content_length:
+        raise RetriableError("truncated", detail=f"truncated got={len(raw)} want={content_length}")
     if not raw:
-        raise ContractError("empty response")
+        raise ContractError(f"empty response: {_response_detail(status, content_type, raw)}")
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        raise ContractError("response is not valid JSON") from None
+        if content_length is None and raw.lstrip()[:1] == b"{":
+            raise RetriableError("truncated", detail=f"truncated got={len(raw)}") from None
+        raise ContractError(f"response is not valid JSON: {_response_detail(status, content_type, raw)}") from None
     if not isinstance(parsed, dict):
-        raise ContractError("response is not a JSON object")
+        raise ContractError(f"response is not a JSON object: {_response_detail(status, content_type, raw)}")
     return parsed
 
 
@@ -782,6 +851,59 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _env_int(name: str, default: int, low: int, high: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(low, min(high, value))
+
+
+def _quick_retryable(exc: Exception) -> bool:
+    """A transport hiccup worth repeating at once; a server that asked for a pause (Retry-After) gets its pause."""
+    return isinstance(exc, RetriableError) and exc.kind in TRANSIENT_KINDS and not exc.retry_ms
+
+
+def _run_deadline() -> float | None:
+    """Epoch second by which the hook run that called us must be done (OMB_RELAY_RUN_DEADLINE), if any."""
+    raw = os.environ.get("OMB_RELAY_RUN_DEADLINE", "").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def _time_left() -> float | None:
+    deadline = _run_deadline()
+    return None if deadline is None else deadline - time.time()
+
+
+def _quick(call, what: str, turn_id: str | None = None):
+    """Runs one idempotent request, repeating it at once on a transient failure while that stays cheap."""
+    retries = _env_int("OMB_RELAY_EVENT_QUICK_RETRIES", EVENT_QUICK_RETRIES, 0, 5)
+    started = time.monotonic()
+    tries = 0
+    while True:
+        try:
+            return call()
+        except RetriableError as exc:
+            left = _time_left()
+            if (
+                tries >= retries
+                or not _quick_retryable(exc)
+                or time.monotonic() - started > EVENT_QUICK_WINDOW_S
+                or (left is not None and left < 3)
+            ):
+                raise
+            tries += 1
+            trace("quick_retry", what=what, turn=turn_id[:8] if turn_id else None, reason=exc.kind, n=tries)
+            _sleep(QUICK_PAUSE_S * tries)
+
+
 def _validate_delivery_ref(delivery: dict) -> dict:
     """A poll delivery sent with inputMode=ref: the envelope plus inputBytes/inputSha256, no input."""
     if not isinstance(delivery, dict):
@@ -816,6 +938,12 @@ def _input_subpath(turn_id: str) -> str:
     return f"/turns/{quote(turn_id, safe='')}/input"
 
 
+def _safe_trace_value(text: str, limit: int = 200) -> str:
+    """Collapse a diagnostic message into the trace log's safe alphabet (letters, digits, _ . : + -); trace() replaces anything else with 'invalid'."""
+    out = re.sub(r"[^A-Za-z0-9_.:+-]+", "_", text).strip("_")
+    return out[:limit] or "none"
+
+
 def _fetch_input_slice(cfg: Config, ref: dict, offset: int) -> bytes:
     """One slice, retried on network trouble or a damaged answer; a 409 (StaleDelivery) is not retried."""
     total = ref["inputBytes"]
@@ -828,29 +956,49 @@ def _fetch_input_slice(cfg: Config, ref: dict, offset: int) -> bytes:
     }
     last = RetriableError("input_slice")
     for attempt in range(INPUT_SLICE_ATTEMPTS):
+        started = time.monotonic()
         try:
             response = _post_json(cfg, _input_subpath(ref["turnId"]), payload, timeout=20.0)
             if response.get("schemaVersion") != SCHEMA_VERSION:
-                raise ContractError("input slice schemaVersion is invalid")
+                raise ContractError(f"input slice schemaVersion is invalid: got {response.get('schemaVersion')!r}")
             if response.get("offset") != offset or response.get("total") != total:
-                raise ContractError("input slice does not match the delivery")
+                raise ContractError(
+                    f"input slice offset/total mismatch: got offset={response.get('offset')!r} total={response.get('total')!r} want offset={offset} total={total}"
+                )
             data = response.get("data")
             if not isinstance(data, str):
-                raise ContractError("input slice data is invalid")
+                raise ContractError(f"input slice data is invalid: type={type(data).__name__}")
             try:
                 chunk = base64.b64decode(data.encode("ascii"), validate=True)
             except (ValueError, UnicodeEncodeError):
-                raise ContractError("input slice data is not base64") from None
+                raise ContractError(f"input slice data is not base64: len={len(data)}") from None
             if len(chunk) != want:
-                raise ContractError("input slice has the wrong length")
+                raise ContractError(f"input slice has the wrong length: got {len(chunk)} want {want}")
             return chunk
         except RetriableError as exc:
             last = exc
-        except ContractError:
+            kind = exc.kind
+            detail = str(exc)
+        except ContractError as exc:
             last = RetriableError("input_slice_invalid")
+            kind = "input_slice_invalid"
+            detail = str(exc)
+        trace(
+            "input_slice_try",
+            **{
+                "turn": ref["turnId"][:8],
+                "attempt": ref["attempt"],
+                "offset": offset,
+                "want": want,
+                "try": attempt + 1,
+                "kind": kind,
+                "detail": _safe_trace_value(detail),
+                "ms": int((time.monotonic() - started) * 1000),
+            },
+        )
         if attempt + 1 < INPUT_SLICE_ATTEMPTS:
             _sleep(min(2.0, 0.25 * (2 ** attempt)))
-    raise RetriableError(last.kind, last.retry_ms)
+    raise RetriableError(last.kind, last.retry_ms, detail=str(last))
 
 
 def fetch_delivery_input(cfg: Config, ref: dict) -> dict:
@@ -860,10 +1008,15 @@ def fetch_delivery_input(cfg: Config, ref: dict) -> dict:
     lease expiry redelivers the turn.
     """
     total = ref["inputBytes"]
-    buffer = bytearray()
-    while len(buffer) < total:
-        buffer += _fetch_input_slice(cfg, ref, len(buffer))
-    raw = bytes(buffer)
+    offsets = list(range(0, total, INPUT_SLICE_BYTES))
+    if len(offsets) == 1:
+        raw = _fetch_input_slice(cfg, ref, 0)
+    else:
+        # The first slice goes alone so the server confirms the claim once; the rest go in parallel.
+        first = _fetch_input_slice(cfg, ref, 0)
+        with ThreadPoolExecutor(max_workers=min(INPUT_SLICE_PARALLEL, len(offsets) - 1)) as pool:
+            rest = list(pool.map(lambda offset: _fetch_input_slice(cfg, ref, offset), offsets[1:]))
+        raw = first + b"".join(rest)
     if len(raw) != total or hashlib.sha256(raw).hexdigest() != ref["inputSha256"]:
         raise RetriableError("input_sha_mismatch")
     try:
@@ -1034,6 +1187,34 @@ def emit(**fields) -> None:
     print(" ".join(parts))
 
 
+_TRACE_DIR: Path | None = None
+
+
+def trace(event: str, **fields) -> None:
+    """One timestamped line in <stateDir>/trace.log for latency forensics: ids are shortened, never text or tokens."""
+    if _TRACE_DIR is None:
+        return
+    now = time.time()
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + f".{int(now * 1000) % 1000:03d}Z"
+    parts = [stamp, event]
+    for key, value in fields.items():
+        text = "-" if value is None else str(value)
+        if not SAFE_VALUE_RE.match(text):
+            text = "invalid"
+        parts.append(f"{key}={text}")
+    path = _TRACE_DIR / "trace.log"
+    try:
+        if path.exists() and path.stat().st_size > TRACE_MAX_BYTES:
+            os.replace(path, _TRACE_DIR / "trace.log.1")
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, (" ".join(parts) + "\n").encode("ascii", "replace"))
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+
+
 def cmd_poll(args) -> int:
     try:
         store = StateStore(resolve_state_dir())
@@ -1041,6 +1222,9 @@ def cmd_poll(args) -> int:
         print(f"ERROR config: {exc}", file=sys.stderr)
         return EXIT_CONFIG
 
+    global _TRACE_DIR
+    _TRACE_DIR = store.root
+    started = time.monotonic()
     state = load_watch_state(store)
     now = time.time()
     if now < state["nextPollAt"]:
@@ -1052,17 +1236,42 @@ def cmd_poll(args) -> int:
         )
         return EXIT_OK
 
+    # Consecutive failures before this poll's request; quick retries in this run add to it, a good answer resets it.
+    prior = state["failures"]
+    quick_limit = _env_int("OMB_RELAY_POLL_QUICK_RETRIES", POLL_QUICK_RETRIES, 0, 5)
     try:
         cfg = load_config()
         payload = {"schemaVersion": SCHEMA_VERSION, "waitMs": args.wait_ms, "limit": args.limit, "inputMode": "ref"}
-        response = _post_json(
-            cfg,
-            "/poll",
-            payload,
-            timeout=args.wait_ms / 1000.0 + 20.0,
-            max_response=MAX_POLL_RESPONSE,
-        )
+        while True:
+            timeout = args.wait_ms / 1000.0 + 20.0
+            left = _time_left()
+            if left is not None:
+                # Never outlive the hook run (Muse kills a hook after 60 s, mid-write if need be).
+                timeout = min(timeout, max(3.0, left))
+            try:
+                response = _post_json(cfg, "/poll", payload, timeout=timeout, max_response=MAX_POLL_RESPONSE)
+                break
+            except RetriableError as exc:
+                left = _time_left()
+                if (
+                    not _quick_retryable(exc)
+                    or prior + 1 > quick_limit
+                    or time.monotonic() - started > POLL_QUICK_WINDOW_S
+                    or (left is not None and left < 4)
+                ):
+                    raise
+                prior += 1
+                trace("poll_retry", reason=exc.kind, ms=int((time.monotonic() - started) * 1000), failures=prior)
+                _sleep(QUICK_PAUSE_S)
+        prior = 0
         checked = validate_poll(response, args.limit)
+        if checked["deliveries"] or checked["cancellations"]:
+            trace(
+                "poll",
+                ms=int((time.monotonic() - started) * 1000),
+                deliveries=",".join(f"{d['turnId'][:8]}:a{d['attempt']}" for d in checked["deliveries"]) or None,
+                cancellations=len(checked["cancellations"]),
+            )
         for turn_id in checked["cancellations"]:
             store.mark_cancelled(turn_id)
         # Fetch every referenced input before saving anything, so a failure leaves no half-saved delivery.
@@ -1073,17 +1282,36 @@ def cmd_poll(args) -> int:
                 continue
             if store.is_cancelled(delivery["turnId"]):
                 continue
+            held = store.holds_delivery(delivery["turnId"], delivery["deliveryId"])
+            if held:
+                # OMB sent a delivery we already hold again (it resends an untouched claim once per poll): keep the
+                # copy we have; save_delivery would dedupe it anyway, so skip the input fetch.
+                trace("duplicate", turn=delivery["turnId"][:8], attempt=delivery["attempt"], held=held)
+                continue
+            fetch_started = time.monotonic()
             try:
                 complete.append(fetch_delivery_input(cfg, delivery))
+                trace("input", turn=delivery["turnId"][:8], attempt=delivery["attempt"], bytes=delivery["inputBytes"],
+                      ms=int((time.monotonic() - fetch_started) * 1000))
             except StaleDelivery:
                 # Superseded, lapsed or finished on the server: nothing to keep for this delivery.
+                trace("input_stale", turn=delivery["turnId"][:8], attempt=delivery["attempt"])
                 continue
+            except RelayError as exc:
+                trace("input_failed", turn=delivery["turnId"][:8], attempt=delivery["attempt"],
+                      reason=_error_reason(exc), ms=int((time.monotonic() - fetch_started) * 1000))
+                raise
         queued = 0
         for delivery in complete:
             record = dict(delivery)
             record["schemaVersion"] = SCHEMA_VERSION
             record["receivedAt"] = now_iso()
-            if store.save_delivery(record) == "queued":
+            lease_s = _lease_seconds(delivery.get("leaseUntil"), checked["serverTime"])
+            if lease_s is not None:
+                record["leaseSeconds"] = lease_s
+            outcome = store.save_delivery(record)
+            trace("saved", turn=delivery["turnId"][:8], attempt=delivery["attempt"], outcome=outcome)
+            if outcome == "queued":
                 queued += 1
         recovered = state["failures"] > 0
         save_watch_state(
@@ -1099,9 +1327,21 @@ def cmd_poll(args) -> int:
         if isinstance(exc, Terminated):
             raise
         reason = _error_reason(exc)
-        failures = state["failures"] + 1
-        delay = min(300.0, 5.0 * (2 ** min(failures - 1, 6)))
-        notify = failures == 1 or failures % 5 == 0
+        failures = prior + 1
+        trace("poll_error", reason=reason, ms=int((time.monotonic() - started) * 1000), failures=failures)
+        if _quick_retryable(exc) and failures <= quick_limit:
+            # Still within the quick retries (this run ran out of time for them): no pause before the next run.
+            delay = 0.0
+        elif reason in TRANSIENT_KINDS:
+            # Backoff only starts after the quick retries: 1 s, 2 s, 4 s ... 300 s.
+            delay = min(300.0, 1.0 * (2 ** min(max(failures - quick_limit - 1, 0), 9)))
+        else:
+            # 1 s, 2 s, 4 s ... 300 s: one dropped answer must not cost a 5 s pause against a 10 s target.
+            delay = min(300.0, 1.0 * (2 ** min(failures - 1, 9)))
+        if isinstance(exc, RetriableError) and exc.retry_ms:
+            delay = max(delay, exc.retry_ms / 1000.0)
+        before = state["failures"]
+        notify = before == 0 or failures // 5 > before // 5
         save_watch_state(
             store,
             {
@@ -1138,7 +1378,7 @@ def _do_heartbeat(cfg: Config, store: StateStore, turn_id: str | None, delivery_
     if turn_id:
         payload["turnId"] = turn_id
         payload["deliveryId"] = delivery_id
-    response = _post_json(cfg, "/heartbeat", payload, timeout=20.0)
+    response = _quick(lambda: _post_json(cfg, "/heartbeat", payload, timeout=20.0), "heartbeat", turn_id)
     result = validate_heartbeat(response)
     if result["cancelled"] and turn_id:
         store.mark_cancelled(turn_id)
@@ -1158,6 +1398,117 @@ def _do_heartbeat(cfg: Config, store: StateStore, turn_id: str | None, delivery_
     return result
 
 
+def _work_dir() -> Path:
+    """The worker's scratch directory (reply.txt and the heartbeat pid file live here)."""
+    override = os.environ.get("OMB_RELAY_WORK_DIR", "")
+    return Path(override) if override else Path.home() / "omb-muse-relay-work"
+
+
+def _hb_pid_path(turn_id: str) -> Path:
+    return _work_dir() / f"hb-{turn_id}.pid"
+
+
+def _is_our_heartbeat_process(pid: int, turn_id: str) -> bool:
+    """True only when /proc/<pid>/cmdline shows our heartbeat-loop for this turn.
+
+    This is the guard that keeps a stop from ever killing an unrelated process that reused the pid:
+    the loop is started as `omb_relay.py heartbeat-loop --turn <turnId> --delivery <deliveryId>`, so all
+    three markers must be present. A plain `heartbeat` (one-shot, no `-loop`) does not match.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+    text = raw.decode("utf-8", "replace").replace("\x00", " ")
+    return "omb_relay.py" in text and "heartbeat-loop" in text and turn_id in text
+
+
+def _stop_heartbeat(turn_id: str) -> bool:
+    """SIGTERM the heartbeat loop for this turn, if the pid file names our own loop process.
+
+    Returns True when a loop was stopped (or its stale pid file removed); False when there was
+    nothing to stop, or the pid file points at a process that is not our heartbeat loop (then the
+    file is left alone and nothing is killed).
+    """
+    path = _hb_pid_path(turn_id)
+    try:
+        raw = path.read_text().strip()
+    except OSError:
+        return False
+    try:
+        pid = int(raw)
+    except ValueError:
+        return False
+    if pid <= 0:
+        return False
+    if not _is_our_heartbeat_process(pid, turn_id):
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    trace("heartbeat_stopped", turn=turn_id[:8], pid=pid)
+    return True
+
+
+def _heartbeat_loop_enabled() -> bool:
+    return os.environ.get("OMB_RELAY_HEARTBEAT_LOOP", "1") != "0"
+
+
+def _spawn_heartbeat_loop(turn_id: str, delivery_id: str) -> int | None:
+    """Start the background heartbeat loop for a claimed turn and record its pid.
+
+    Returns the pid, or None when the loop is disabled or could not be started. A failure here
+    never fails the claim: the loop is best-effort, and recover reclaims a claim that goes silent.
+    The loop is detached (its own session, stdio to /dev/null) so it outlives the claim command
+    and never holds the worker's pipes open.
+    """
+    if not _heartbeat_loop_enabled():
+        return None
+    pid_path = _hb_pid_path(turn_id)
+    try:
+        existing = int(pid_path.read_text().strip())
+    except (OSError, ValueError):
+        existing = None
+    if existing and existing > 0 and _is_our_heartbeat_process(existing, turn_id):
+        return existing
+    try:
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(pid_path.parent, 0o700)
+    except OSError:
+        return None
+    script = str(Path(__file__).resolve())
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, script, "heartbeat-loop", "--turn", turn_id, "--delivery", delivery_id],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            cwd=str(Path(script).parent),
+        )
+    except OSError:
+        return None
+    try:
+        fd = os.open(pid_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, str(proc.pid).encode("ascii"))
+        finally:
+            os.close(fd)
+    except OSError:
+        # The loop is running but its pid is not recorded; it still exits on its own when the turn
+        # goes terminal or the 30-minute cap hits, and the loop also records its own pid at startup.
+        return None
+    trace("heartbeat_started", turn=turn_id[:8], pid=proc.pid)
+    return proc.pid
+
+
 def cmd_pending_count(args) -> int:
     store = StateStore(resolve_state_dir())
     print(len(store.list_pending()))
@@ -1165,7 +1516,9 @@ def cmd_pending_count(args) -> int:
 
 
 def cmd_claim(args) -> int:
+    global _TRACE_DIR
     store = StateStore(resolve_state_dir())
+    _TRACE_DIR = store.root
     for pending in store.list_pending():
         try:
             record = store.read_json(pending)
@@ -1188,7 +1541,21 @@ def cmd_claim(args) -> int:
                     current = None
                 if current and current.get("deliveryId") == delivery_id:
                     store.remove(pending)
-                continue
+                    continue
+                newer = isinstance(record.get("attempt"), int) and (
+                    not current or not isinstance(current.get("attempt"), int) or record["attempt"] > current["attempt"]
+                )
+                if not newer:
+                    continue
+                # The server re-delivered this turn, so the older claim is dead there (its events would get 409):
+                # retire it instead of leaving the newer delivery stuck in pending until recover's stale window.
+                if current:
+                    store.detach_processing(turn_id, str(current.get("deliveryId") or ""), "stale")
+                else:
+                    store.quarantine(processing, "stale")
+                trace("superseded", turn=turn_id[:8], attempt=record.get("attempt"))
+                if processing.exists():
+                    continue
             try:
                 ledger = store.load_ledger(turn_id)
             except StateError:
@@ -1212,11 +1579,18 @@ def cmd_claim(args) -> int:
             record.update(checked)
             record["claimedAt"] = now_iso()
             record["claimedAtEpoch"] = time.time()
+            trace("claimed", turn=turn_id[:8], attempt=checked["attempt"])
             store.write_json(processing, record)
             ledger["deliveryId"] = checked["deliveryId"]
             if ledger.get("staleDeliveryId") == checked["deliveryId"]:
                 ledger["staleDeliveryId"] = None
             store.save_ledger(turn_id, ledger)
+            # The client owns the lease now: start the background heartbeat loop. A spawn failure
+            # must never fail the claim; the loop is best-effort and recover reclaims a silent claim.
+            try:
+                _spawn_heartbeat_loop(checked["turnId"], checked["deliveryId"])
+            except Exception:
+                trace("heartbeat_spawn_failed", turn=turn_id[:8])
             output = {
                 "schemaVersion": SCHEMA_VERSION,
                 "turnId": checked["turnId"],
@@ -1241,7 +1615,79 @@ def cmd_claim(args) -> int:
     return EXIT_NO_PENDING
 
 
+PENDING_PICKUP_SECONDS = 75
+
+
+def _parse_iso(raw) -> float | None:
+    if not isinstance(raw, str):
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _lease_seconds(lease_until, server_time) -> int | None:
+    """The lease the server granted at claim, measured on its own clock (no skew): 20 s new servers, 120 s old."""
+    until = _parse_iso(lease_until)
+    now = _parse_iso(server_time)
+    if until is None or now is None:
+        return None
+    seconds = int(round(until - now))
+    return seconds if 0 < seconds <= 3600 else None
+
+
+def _received_epoch(record: dict, path: Path) -> float:
+    raw = record.get("receivedAt")
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return time.time()
+
+
+def cmd_keepalive(args, cfg: Config, store: StateStore) -> int:
+    """Drop pending deliveries no worker claimed within the server's pickup window (60 s after the last slice).
+
+    It sends nothing: only the worker may tell OMB it holds a turn (k31p review, 2026-11-19), so a worker that never
+    starts is not masked. Once the window has passed OMB redelivers the turn, and while a stale copy sits in pending
+    the hook would never poll for that redelivery; removing it lets the next round fetch the fresh attempt.
+    """
+    global _TRACE_DIR
+    _TRACE_DIR = store.root
+    dropped = waiting = 0
+    for pending in store.list_pending():
+        try:
+            record = store.read_json(pending)
+            turn_id = require_id(record.get("turnId"), "pending turnId")
+        except (StateError, ContractError):
+            continue
+        age = time.time() - _received_epoch(record, pending)
+        # An older OMB gives a fresh claim its full lease (120 s) and redelivers only after it; wait that long there.
+        lease = record.get("leaseSeconds")
+        limit = PENDING_PICKUP_SECONDS
+        if isinstance(lease, int) and not isinstance(lease, bool) and 0 < lease <= 3600:
+            limit = max(limit, lease + 5)
+        if age <= limit:
+            waiting += 1
+            continue
+        with store.turn_guard(turn_id, blocking=False) as acquired:
+            if not acquired:
+                continue
+            store.remove(pending)
+        dropped += 1
+        trace("pending_unclaimed", turn=turn_id[:8], attempt=record.get("attempt"), age_s=int(age))
+    emit(waiting=waiting, dropped=dropped)
+    return EXIT_OK
+
+
 def cmd_heartbeat(args, cfg: Config, store: StateStore) -> int:
+    global _TRACE_DIR
+    _TRACE_DIR = store.root
     if args.delivery and not args.turn:
         raise UsageError("--delivery requires --turn")
     if args.turn and not args.delivery:
@@ -1249,13 +1695,114 @@ def cmd_heartbeat(args, cfg: Config, store: StateStore) -> int:
     turn_id = require_id(args.turn, "turnId", UsageError) if args.turn else None
     delivery_id = require_id(args.delivery, "deliveryId", UsageError) if args.delivery else None
     result = _do_heartbeat(cfg, store, turn_id, delivery_id)
+    if turn_id:
+        trace("heartbeat", turn=turn_id[:8], cancelled=result["cancelled"])
     emit(status="ok", cancelled=result["cancelled"])
     return EXIT_OK
 
 
+def cmd_heartbeat_loop(args, cfg: Config, store: StateStore) -> int:
+    """Background lease keeper for one claimed turn: heartbeat every 30 s until the turn goes
+    terminal, the server says stale/cancelled, or the 30-minute cap hits.
+
+    The first beat runs immediately (it is the post-claim heartbeat that earns the full 120 s lease);
+    a SIGTERM (from complete/fail/heartbeat-stop) interrupts the sleep and ends the process.
+    """
+    global _TRACE_DIR
+    _TRACE_DIR = store.root
+    turn_id = require_id(args.turn, "turnId", UsageError)
+    delivery_id = require_id(args.delivery, "deliveryId", UsageError)
+    # Best-effort: record our own pid, so complete/fail can stop us even if the spawner could not.
+    try:
+        pid_path = _hb_pid_path(turn_id)
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(pid_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, str(os.getpid()).encode("ascii"))
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+    started = time.monotonic()
+    trace("heartbeat_loop_started", turn=turn_id[:8], pid=os.getpid())
+    try:
+        while True:
+            if time.monotonic() - started > HEARTBEAT_MAX_SECONDS:
+                trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="timeout")
+                return EXIT_OK
+            try:
+                ledger = store.load_ledger(turn_id)
+            except StateError:
+                ledger = {}
+            if ledger.get("terminal"):
+                trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="terminal")
+                return EXIT_OK
+            try:
+                result = _do_heartbeat(cfg, store, turn_id, delivery_id)
+            except StaleDelivery:
+                trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="stale")
+                return EXIT_OK
+            except Cancelled:
+                trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="cancelled")
+                return EXIT_OK
+            except RetriableError as exc:
+                trace("heartbeat_loop_retry", turn=turn_id[:8], kind=exc.kind)
+            except (ContractError, PermanentError, AuthError):
+                trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="rejected")
+                return EXIT_OK
+            else:
+                if result.get("cancelled"):
+                    trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="cancelled")
+                    return EXIT_OK
+                trace("heartbeat", turn=turn_id[:8], cancelled=False)
+            time.sleep(HEARTBEAT_INTERVAL_SECONDS)
+    finally:
+        # Remove our pid file so a later complete/fail does not read a stale pid.
+        try:
+            pid_path = _hb_pid_path(turn_id)
+            if pid_path.exists():
+                try:
+                    if int(pid_path.read_text().strip()) == os.getpid():
+                        pid_path.unlink()
+                except (OSError, ValueError):
+                    pass
+        except OSError:
+            pass
+
+
+def cmd_heartbeat_stop(args) -> int:
+    """Manually stop the background heartbeat loop for a turn (same logic complete/fail use)."""
+    turn_id = require_id(args.turn, "turnId", UsageError)
+    stopped = _stop_heartbeat(turn_id)
+    emit(status="ok", stopped=stopped)
+    return EXIT_OK
+
+
+def _read_stdin_guarded() -> bytes:
+    """Read stdin for a --text-file - fallback, but never block on an empty pipe: a terminal, a closed stdin, or 2 s without data is a usage error (exit 2)."""
+    import select
+
+    try:
+        if sys.stdin.isatty():
+            raise UsageError("text needs --text-file: stdin is a terminal")
+    except (AttributeError, OSError, ValueError):
+        pass
+    try:
+        ready, _, _ = select.select([sys.stdin], [], [], 2.0)
+    except (OSError, ValueError, TypeError):
+        # Not a real file (e.g. an in-memory stream in tests): read directly, it cannot block.
+        ready = [sys.stdin]
+    if not ready:
+        raise UsageError("text needs --text-file: no stdin data within 2 s")
+    raw = sys.stdin.buffer.read(MAX_TEXT + 1)
+    if not raw:
+        raise UsageError("text needs --text-file: stdin is closed")
+    return raw
+
+
 def _read_text(path: str) -> str:
     if path == "-":
-        raw = sys.stdin.buffer.read(MAX_TEXT + 1)
+        raw = _read_stdin_guarded()
     else:
         try:
             st = os.lstat(path)
@@ -1422,7 +1969,12 @@ def _run_event(
         if state == "confirmed":
             return {"duplicate": True, "eventId": event_id, "seq": seq}
         try:
-            response = request(event_id, seq)
+            if kind == "file":
+                # An upload is not cheap to repeat: the caller retries it on exit 7 as before.
+                response = request(event_id, seq)
+            else:
+                # Same eventId and seq each time: the server answers a repeat as a duplicate, never a second event.
+                response = _quick(lambda: request(event_id, seq), kind, turn_id)
             checked = validate_event_response(response, event_id, seq)
         except RetriableError as exc:
             inflight = ledger.get("inflight") or {}
@@ -1473,7 +2025,7 @@ def cmd_send_text(args, cfg: Config, store: StateStore) -> int:
     if args.delta and args.final:
         raise UsageError("--delta and --final are mutually exclusive")
     kind = "delta" if args.delta else "text"
-    text = _read_text(args.text_file)
+    text = args.text if args.text is not None else _read_text(args.text_file)
     if len(text.encode("utf-8")) > MAX_TEXT:
         raise PermanentError("too_large")
     item_id = require_id(args.item_id or f"{turn_id}-main", "itemId", UsageError)
@@ -1683,6 +2235,8 @@ def cmd_send_file(args, cfg: Config, store: StateStore) -> int:
 def cmd_complete(args, cfg: Config, store: StateStore) -> int:
     turn_id = require_id(args.turn, "turnId", UsageError)
     delivery_id = require_id(args.delivery, "deliveryId", UsageError)
+    # Stop the background heartbeat loop before the terminal event, so no beat lands after complete.
+    _stop_heartbeat(turn_id)
     content_hash = hashlib.sha256(b"completed").hexdigest()
 
     def request(event_id: str, seq: int) -> dict:
@@ -1714,6 +2268,8 @@ def cmd_complete(args, cfg: Config, store: StateStore) -> int:
 def cmd_fail(args, cfg: Config, store: StateStore) -> int:
     turn_id = require_id(args.turn, "turnId", UsageError)
     delivery_id = require_id(args.delivery, "deliveryId", UsageError)
+    # Stop the background heartbeat loop before the terminal event, same as complete.
+    _stop_heartbeat(turn_id)
     text = _read_text(args.text_file) if args.text_file else ""
     if len(text.encode("utf-8")) > MAX_TEXT:
         raise PermanentError("too_large")
@@ -1795,7 +2351,9 @@ def cmd_retry_inflight(args, cfg: Config, store: StateStore) -> int:
                     payload["itemId"] = inflight["itemId"]
                 if "text" in inflight:
                     payload["text"] = inflight["text"]
-                response = _post_json(cfg, _event_subpath(turn_id), payload, timeout=30.0)
+                response = _quick(
+                    lambda: _post_json(cfg, _event_subpath(turn_id), payload, timeout=30.0), "retry_" + kind, turn_id
+                )
             checked = validate_event_response(response, event_id, seq)
         except RetriableError as exc:
             inflight["attempts"] = int(inflight.get("attempts", 0)) + 1
@@ -1969,9 +2527,17 @@ def build_parser() -> argparse.ArgumentParser:
     heartbeat.add_argument("--turn")
     heartbeat.add_argument("--delivery")
 
+    loop = sub.add_parser("heartbeat-loop", help="background lease keeper for one claimed turn")
+    loop.add_argument("--turn", required=True)
+    loop.add_argument("--delivery", required=True)
+
+    stop = sub.add_parser("heartbeat-stop", help="stop the background heartbeat loop for a turn")
+    stop.add_argument("--turn", required=True)
+
     text = sub.add_parser("send-text", help="send a delta or final text event")
     text.add_argument("--turn", required=True)
     text.add_argument("--delivery", required=True)
+    text.add_argument("--text")
     text.add_argument("--text-file", default="-")
     text.add_argument("--item-id")
     text.add_argument("--delta", action="store_true")
@@ -2007,7 +2573,10 @@ def build_parser() -> argparse.ArgumentParser:
     finish.add_argument("--reason", required=True, choices=("cancelled", "stale", "abandoned"))
 
     recover = sub.add_parser("recover", help="recycle stale claims and quarantine corrupt state")
-    recover.add_argument("--stale-seconds", type=int, default=900)
+    # The server lease is 120 s: a claim silent for longer is already dead there.
+    recover.add_argument("--stale-seconds", type=int, default=180)
+
+    sub.add_parser("keepalive", help="drop pending deliveries no worker claimed before OMB redelivers them")
 
     return parser
 
@@ -2037,8 +2606,14 @@ def main(argv=None) -> int:
             return cmd_poll(args)
         cfg = load_config()
         store = StateStore(cfg.state_dir)
+        global _TRACE_DIR
+        _TRACE_DIR = store.root
         if args.command == "heartbeat":
             return cmd_heartbeat(args, cfg, store)
+        if args.command == "heartbeat-loop":
+            return cmd_heartbeat_loop(args, cfg, store)
+        if args.command == "heartbeat-stop":
+            return cmd_heartbeat_stop(args)
         if args.command == "send-text":
             return cmd_send_text(args, cfg, store)
         if args.command == "send-file":
@@ -2053,6 +2628,8 @@ def main(argv=None) -> int:
             return cmd_finish(args, cfg, store)
         if args.command == "recover":
             return cmd_recover(args, cfg, store)
+        if args.command == "keepalive":
+            return cmd_keepalive(args, cfg, store)
         raise UsageError("unknown command")
     except Terminated:
         return EXIT_TERMINATED

@@ -9,7 +9,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | `omb-watch.sh` | Muse hook 脚本：单实例锁 → 回收陈旧 claim → 有 pending 先 wake → 否则长轮询 → 落盘成功后才 wake |
-| `omb_relay.py` | Python 3.10+ 标准库客户端与本地状态机：poll/claim/heartbeat/send-text/send-file/complete/fail/retry-inflight/finish/recover |
+| `omb_relay.py` | Python 3.10+ 标准库客户端与本地状态机：poll/claim/heartbeat/send-text/send-file/complete/fail/retry-inflight/finish/recover/heartbeat-loop/heartbeat-stop |
 | `AGENTS.md` | 给 Muse 自己执行的部署与 worker 操作契约，含 Henry 的一句话入口 |
 | `fixtures/fake_omb.py` | 测试用 fake OMB 数据面（本地 HTTP，不连接真实 OMB） |
 | `tests/` | fake runtime、fake OMB、临时目录下的单元与端到端测试 |
@@ -77,11 +77,11 @@ Henry → OMB bot（museRelay 实例）
 
 ### 小响应（inputMode=ref）
 
-Muse 沙箱到 OMB 的链路会在约 8–11 KB 处静默截断 HTTP 响应体，所以客户端的 poll 总是带 `"inputMode":"ref"`：
+Muse 沙箱到 OMB 的链路会在约 3.4 KB 处静默截断 HTTP 响应体，所以客户端的 poll 总是带 `"inputMode":"ref"`：
 
 - poll 里的每个 delivery 不带 `input`，改带 `inputBytes`（input 的 UTF-8 JSON 字节数）和 `inputSha256`。不带该字段的旧客户端照旧收到内联 `input`。
-- 客户端随后 `POST /turns/<turnId>/input`，body `{"schemaVersion":1,"deliveryId":D,"offset":N,"length":L}`（`L` ≤ 4096 原始字节），返回 `{"schemaVersion":1,"offset":N,"total":T,"data":"<base64>"}`，每个响应 < 6 KB。只有当前、租约未过期的 delivery 能读，否则 409；鉴权与其他 turn 端点相同。
-- 每片网络错误/429/5xx/损坏最多重试 5 次（短退避）。拼好后校验长度和 SHA-256，再 `json.loads` 并走与内联 delivery 相同的校验，然后才落盘 pending。任何失败都不落盘（本轮记为可重试错误，如 `input_sha_mismatch`），服务端租约过期后会重投；片请求遇 409 则跳过该 delivery。
+- 客户端随后 `POST /turns/<turnId>/input`，body `{"schemaVersion":1,"deliveryId":D,"offset":N,"length":L}`（`L` ≤ 1536 原始字节），返回 `{"schemaVersion":1,"offset":N,"total":T,"data":"<base64>"}`，每个响应约 2.1 KB。6 个切片并行取。只有当前、租约未过期的 delivery 能读，否则 409；鉴权与其他 turn 端点相同。
+- 每片网络错误/429/5xx/损坏最多重试 8 次（短退避）。响应体被截断时客户端能识别（Content-Length 对不上，或无 Content-Length 但 JSON 以 `{` 开头却不完整），按临时传输错误重试；`trace.log` 里的 `input_slice_try` 会记下每次失败的 kind 和字节数（`truncated got=<收到> want=<应有>`）。拼好后校验长度和 SHA-256，再 `json.loads` 并走与内联 delivery 相同的校验，然后才落盘 pending。任何失败都不落盘（本轮记为可重试错误，如 `input_sha_mismatch`），服务端租约过期后会重投；片请求遇 409 则跳过该 delivery。
 - 长回复：`send-text` 的最终 `text` 超过 4096 字节（且该 item 没发过 delta、没指定 `--event-id`）时，客户端按顺序拆成多个 ≤4096 字节的 `text` 事件，itemId 为 `<itemId>`、`<itemId>-p2`、`<itemId>-p3`…，每段在 OMB 里是一个独立气泡。中途失败后用同一命令重跑，会从第一段未确认的地方继续，输出带 `parts=N`。
 
 ## CLI
@@ -92,6 +92,8 @@ python3 omb_relay.py pending-count
 python3 omb_relay.py claim
 python3 omb_relay.py poll --wait-ms 20000 --limit 1
 python3 omb_relay.py heartbeat [--turn T --delivery D]
+python3 omb_relay.py heartbeat-loop --turn T --delivery D
+python3 omb_relay.py heartbeat-stop --turn T
 python3 omb_relay.py send-text --turn T --delivery D --text-file reply.txt [--final] [--delta] [--item-id I] [--event-id E]
 python3 omb_relay.py send-file --turn T --delivery D --path file.png [--name N] [--mime M] [--event-id E]
 python3 omb_relay.py complete --turn T --delivery D [--event-id E]
@@ -102,6 +104,19 @@ python3 omb_relay.py recover --stale-seconds 900
 ```
 
 `claim` 输出一个 JSON delivery（含 `input`、`nextSeq`，以及崩溃后需要优先重试的 `resume`）。其他命令输出一行 `key=value` 状态，例如 `status=ok duplicate=false eventId=evt-... seq=1`。
+
+## 心跳循环（客户端自己管）
+
+worker 不用自己起 heartbeat，也不用自己停。`claim` 成功后客户端自动起一个后台 `heartbeat-loop` 进程（每 30 秒续租一次，第一拍立即发，拿到满 120 秒租约），pid 写进 `~/omb-muse-relay-work/hb-<turnId>.pid`。`complete` 和 `fail` 在发请求前由客户端在代码里停掉它：读 pid 文件、核对 `/proc/<pid>/cmdline` 里同时有 `omb_relay.py`、`heartbeat-loop` 和这个 turnId，才对那一个 pid 发 SIGTERM，再删掉 pid 文件。循环在三种情况下自己退出：turn 已是终态、收到 stale 或 cancelled、超过 30 分钟上限。手动停用 `heartbeat-stop --turn <turnId>`，逻辑相同。
+
+- 开关：环境变量 `OMB_RELAY_HEARTBEAT_LOOP=0` 关掉 claim 的自动起循环（默认开；测试里用它关掉，避免后台进程）。
+- 工作目录：环境变量 `OMB_RELAY_WORK_DIR` 覆盖（默认 `~/omb-muse-relay-work`，回复文本和 pid 文件都在这里）。
+- worker 流程只有三步：claim → send-text --text-file → complete。
+
+## worker 约束（血的教训）
+
+- `send-text` 必须带 `--text-file`（例如 `--text-file ~/omb-muse-relay-work/reply.txt`）。不带它时命令会去读 stdin，一根开着又不送数据的管子会让它一直阻塞（曾经卡住 6 分钟，租约过期、服务端重投、turn 被占住）。现在不带 `--text-file` 且 stdin 是终端、已关闭或 2 秒内没数据时，客户端直接以退出码 2 退出并提示用 `--text-file`，不再阻塞。
+- **禁止使用 `pkill`、`pkill -f`、`killall`。** 它们会匹配到 worker 自己的 shell 命令行，把自己杀掉，导致 complete 没执行（曾经因此多等了约 22 秒）。停心跳只能由客户端按 pid 停，或用 `heartbeat-stop`；worker 不要自己杀任何进程。
 
 退出码：
 
@@ -165,15 +180,13 @@ python3 omb_relay.py recover --stale-seconds 900
 全部使用 fake runtime、fake OMB 和临时目录，不登录真实 Muse、不访问线上 OMB。
 
 ```bash
-python3 -m py_compile integrations/muse-relay/omb_relay.py \
-  integrations/muse-relay/fixtures/fake_omb.py integrations/muse-relay/tests/*.py
-python3 -m unittest discover -s integrations/muse-relay/tests -p 'test_relay_client.py' -v
-python3 -m unittest discover -s integrations/muse-relay/tests -p 'test_state.py' -v
-python3 -m unittest discover -s integrations/muse-relay/tests -p 'test_watch.py' -v
-python3 -m unittest discover -s integrations/muse-relay/tests -p 'test_worker.py' -v
+python3 -m py_compile omb_relay.py fixtures/fake_omb.py tests/*.py
+python3 -m unittest discover -s tests
 ```
 
-`test_watch.py` 需要 `bash` 和 `flock`，缺少时会 skip。测试覆盖：先落盘后 wake、重复 wake 只有一个 claim、崩溃恢复不覆盖 pending、丢响应原 ID 重试、旧租约 409 停止、429/5xx 退避、取消、SIGTERM、文件幂等与限制、token 不出现在日志/状态/输出。
+共 87 个测试，覆盖：先落盘后 wake、重复 wake 只有一个 claim、崩溃恢复不覆盖 pending、丢响应原 ID 重试、旧租约 409 停止、429/5xx 退避、取消、SIGTERM、文件幂等与限制、token 不出现在日志/状态/输出、分片取 input（小响应、并行、截断重试与字节数记录）、stdin 保护（send-text 不带 --text-file 时不阻塞）、客户端心跳循环（complete 停掉循环进程、pid 指向别的进程时不杀）。
+
+`test_watch.py` 需要 `bash` 和 `flock`，缺少时会 skip。
 
 ## 首版限制
 

@@ -221,7 +221,8 @@ class StateMachineTest(unittest.TestCase):
     def test_retry_inflight_resolves_lost_response(self):
         turn_id, claim = poll_and_claim(self.box, self.fake)
         delivery = claim["deliveryId"]
-        self.fake.event_drops = 1
+        # The server records the event but every answer (first try and quick retries) is lost.
+        self.fake.event_drops = 1 + support.omb_relay.EVENT_QUICK_RETRIES
         lost = self.send_text(turn_id, delivery, "only once")
         self.assertEqual(lost.returncode, 7)
         self.assertIn("status=retry", lost.stdout)
@@ -236,7 +237,7 @@ class StateMachineTest(unittest.TestCase):
     def test_claim_reports_resume_after_crash(self):
         turn_id, claim = poll_and_claim(self.box, self.fake)
         delivery = claim["deliveryId"]
-        self.fake.event_drops = 1
+        self.fake.event_drops = 1 + support.omb_relay.EVENT_QUICK_RETRIES
         self.send_text(turn_id, delivery, "in flight")
         processing = self.box.processing_files()[0]
         os.replace(processing, self.box.state / "pending" / processing.name)

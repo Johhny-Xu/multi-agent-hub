@@ -144,7 +144,7 @@ class WorkerFlowTest(unittest.TestCase):
     def test_5xx_is_retriable(self):
         turn_id, claim = poll_and_claim(self.box, self.fake)
         delivery = claim["deliveryId"]
-        self.fake.script_events(503)
+        self.fake.script_events(503, count=1 + support.omb_relay.EVENT_QUICK_RETRIES)
         first = self.send(turn_id, delivery, "again")
         self.assertEqual(first.returncode, 7)
         self.assertEqual(fields(first.stdout)["reason"], "http_503")

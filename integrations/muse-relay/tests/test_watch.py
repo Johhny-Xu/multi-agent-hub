@@ -99,6 +99,31 @@ class WatchScriptTest(unittest.TestCase):
         self.assertTrue(list((self.box.state / "stale").iterdir()))
         self.assertIn("WAKE_AFTER_PERSIST", self.box.read_trace())
 
+    def test_claim_retires_older_processing_for_a_redelivery(self):
+        turn_id, first = poll_and_claim(self.box, self.fake)
+        self.box.write_pending(turn_id, delivery_id="del-newer", attempt=first["attempt"] + 1)
+        claimed = self.box.run("claim")
+        self.assertEqual(claimed.returncode, 0, claimed.stderr)
+        self.assertEqual(json.loads(claimed.stdout)["deliveryId"], "del-newer")
+        self.assertTrue(list((self.box.state / "stale").iterdir()))
+
+    def test_keepalive_drops_only_unclaimed_pending_past_the_pickup_window(self):
+        self.fake.add_turn()
+        polled = self.box.run("poll", "--wait-ms", "0")
+        self.assertIn("status=deliveries", polled.stdout)
+        before = self.fake.request_count()
+        fresh = self.box.run("keepalive")
+        self.assertIn("waiting=1", fresh.stdout)
+        self.assertEqual(len(self.box.pending_files()), 1)
+        path = self.box.pending_files()[0]
+        record = self.box.read_json(path)
+        record["receivedAt"] = "2000-01-01T00:00:00Z"
+        path.write_text(json.dumps(record))
+        old = self.box.run("keepalive")
+        self.assertIn("dropped=1", old.stdout)
+        self.assertEqual(self.box.pending_files(), [])
+        self.assertEqual(self.fake.request_count(), before)
+
     def test_recover_recycles_stale_claim_without_poll(self):
         poll_and_claim(self.box, self.fake)
         age_processing(self.box)

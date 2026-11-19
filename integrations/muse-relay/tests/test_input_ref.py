@@ -49,7 +49,9 @@ class InputRefTest(unittest.TestCase):
         self.assertEqual(polls[0]["input_mode"], "ref")
         slices = [r for r in self.fake.requests_snapshot() if r["endpoint"] == "input"]
         self.assertEqual(len(slices), -(-size // omb_relay.INPUT_SLICE_BYTES))
-        self.assertEqual([r["offset"] for r in slices], [i * 4096 for i in range(len(slices))])
+        # Slices after the first are fetched in parallel, so only the set of offsets is fixed (the first goes alone).
+        self.assertEqual(slices[0]["offset"], 0)
+        self.assertEqual(sorted(r["offset"] for r in slices), [i * omb_relay.INPUT_SLICE_BYTES for i in range(len(slices))])
         self.assertLessEqual(self.fake.max_response(), RESPONSE_CAP)
         pending = self.box.pending_files()
         self.assertEqual(len(pending), 1)
@@ -201,7 +203,8 @@ class LongReplyTest(unittest.TestCase):
         text = "".join(f"段落 {index}: " + "y" * 300 + "\n" for index in range(40))
         self.assertGreater(len(text.encode("utf-8")), 3 * omb_relay.TEXT_PART_BYTES)
         parts = omb_relay.split_text(text)
-        self.fake.script_events(503, count=1, skip=1)  # the first part goes through, the second gets a 503
+        # The first part goes through; the second gets a 503 on its first try and on every quick retry.
+        self.fake.script_events(503, count=1 + omb_relay.EVENT_QUICK_RETRIES, skip=1)
         first = self.send(turn_id, delivery, text, "--final")
         self.assertEqual(first.returncode, 7, first.stdout + first.stderr)
         self.assertEqual(self.fake.event_types(turn_id), ["text"])

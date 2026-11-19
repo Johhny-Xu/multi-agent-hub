@@ -78,6 +78,10 @@ class Sandbox:
         env["OMB_RELAY_CONFIG"] = str(self.config)
         env["OMB_RELAY_PYTHON"] = sys.executable
         env["OMB_RELAY_STATE_DIR"] = str(self.state)
+        env["OMB_RELAY_WORK_DIR"] = str(self.work)
+        # Claim must not spawn a real background loop in tests; the loop is exercised
+        # directly by test_heartbeat_loop.py with controlled fake processes.
+        env["OMB_RELAY_HEARTBEAT_LOOP"] = "0"
         env["HATCH_HOOK_RUNTIME"] = str(self.runtime)
         env["TRACE_CALLS"] = str(self.trace)
         for key, value in extra.items():

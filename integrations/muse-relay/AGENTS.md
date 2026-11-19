@@ -101,13 +101,21 @@ python3 ~/omb-muse-relay/omb_relay.py poll --wait-ms 0
 bash ~/omb-muse-relay/omb-watch.sh
 ```
 
+hook 环境变量（都可选）：
+
+- `OMB_RELAY_LOOP_SECONDS`：一次运行里持续短轮询的秒数，默认 `0`（每次运行只 poll 一次，旧行为），上限 `45`。hook 单次超时 60 秒、每 5 秒触发、重叠的运行被 flock 静默丢弃时，推荐 `42`：运行在约 44 秒结束，正好赶上下一次 5 秒触发，最长运行也留在 55 秒以内。
+- `OMB_RELAY_POLL_INTERVAL_MS`：循环里两次 poll 开始之间的间隔，默认 `2500`，最小 `1000`。
+- `OMB_RELAY_WAIT_MS`：每次 poll 的服务器端等待，默认 `0`（立即返回；egress 代理会掐断长轮询）。
+
 脚本自己会 source `$HATCH_HOOK_RUNTIME`。它做这些事：
 
 1. 拿 `$stateDir/watch.lock` 的单实例锁；拿不到就安静退出。
-2. 跑 `recover`，回收超过 15 分钟没有心跳的 claim，隔离损坏的状态文件。
-3. 有 pending：`wake "muse_relay_turn" '{"count":N}'`，不再 poll。
-4. 没有 pending：长轮询 25 秒；deliveries/cancellations 先原子落盘并 `fsync`，CLI 退出后才 wake；空结果 `silent`。
-5. 非法/空响应、网络错误、429/5xx 都按失败处理并退避，不会当成“没有任务”。
+2. 跑 `recover`，回收超过 3 分钟没有心跳的 claim，隔离损坏的状态文件。
+3. 有 pending：先丢掉超过 OMB 接手窗口仍没人认领的副本（不发请求），还有 pending 就 `wake "muse_relay_turn" '{"count":N}'`，不再 poll。
+4. 没有 pending：短轮询（按上面的变量循环）；deliveries/cancellations 先原子落盘并 `fsync`，CLI 退出后才 wake；空结果 `silent`。同一份投递被 OMB 重发（同一 deliveryId）时只保留一份。
+5. 网络错误、超时、502/503/504（没有 Retry-After）是“瞬时错误”：连续的前 3 次在同一次 poll 里立即重试，之后才指数退避（1、2、4… 秒，最多 300 秒）。非法/空响应、429、带 Retry-After 的错误照旧按失败处理并退避，不会当成“没有任务”。循环中途出错只暂停循环，不结束这次运行。
+
+`heartbeat`、`send-text`、`complete`、`fail`、`retry-inflight` 遇到瞬时错误时，会用同一个 eventId/seq 立即重试最多 2 次（服务器按 eventId 去重，不会多出一条消息），所以退出码 `7` 会少很多；真的拿到 `7` 时，契约不变：等 `retry_ms` 后重跑同一条命令。
 
 如果 hook runtime 的约定不是“每 5 秒跑一次脚本”，先停下来确认它到底怎么调度、`wake` 会不会把 payload 传给一个 agent turn。不要假设。
 
@@ -128,6 +136,8 @@ python3 omb_relay.py claim
   - `input.system`、`input.transcript`：只属于这个 OMB turn 的上下文。不要把其他 thread、其他 turn 或你主聊天的内容混进回复。
   - `nextSeq`：下一个序号；客户端会自动分配，你不需要手动传 `seq`。
   - `resume`：如果不为 null，说明上一次发送的结果未知（崩溃或丢响应）。先做 5.2。
+
+**claim 成功后客户端会自动起一个后台 heartbeat 循环**（`heartbeat-loop`，每 30 秒续租一次，第一拍立即发，拿到满 120 秒租约），你不要自己跑 `heartbeat`，也不要自己起停循环；`complete` 和 `fail` 会在发请求前由客户端停掉它。循环在 turn 终态、收到 stale/cancelled 或 30 分钟上限时自己退出。手动停用 `heartbeat-stop --turn <turnId>`。环境变量 `OMB_RELAY_HEARTBEAT_LOOP=0` 关掉自动起循环（默认开）。
 
 处理完一个 turn 后可以再 `claim` 下一个；没有 pending 就结束。不要并行处理同一个 turn。
 
@@ -152,13 +162,7 @@ python3 omb_relay.py retry-inflight --turn <turnId> --delivery <deliveryId>
 
 - 只针对当前 turn；不要声称创建了 Meta 原生会话或 OMB 线程。
 - 需要 Henry 在主聊天确认的高风险操作，停下来，用一条简短回复说明需要他确认；不要把 OMB 的审批模式、工具白名单或 MCP 说成已经传给你。
-- 长任务期间每约 60 秒续租：
-
-```bash
-python3 omb_relay.py heartbeat --turn <turnId> --delivery <deliveryId>
-```
-
-输出 `cancelled=true` 表示 OMB 已取消这个 turn：立即停止生成，按 5.6 清理，不要发送迟到的结果。
+- 续租由客户端的后台 heartbeat 循环负责，你不用管；如果 `send-text` 或 `complete` 返回已取消（退出码 8）或旧租约（退出码 4），按 5.6 清理，不要发送迟到的结果。
 
 ### 5.4 发送文本
 
@@ -169,6 +173,8 @@ python3 omb_relay.py send-text \
   --turn <turnId> --delivery <deliveryId> \
   --text-file ~/omb-muse-relay-work/reply.txt --final
 ```
+
+- **`send-text` 必须带 `--text-file`，绝不能不带它去读 stdin。** 不带时命令会去读一根可能开着又不送数据的管子、一直阻塞（曾经卡住 6 分钟，租约过期、服务端重投、turn 被占住）。现在不带 `--text-file` 且 stdin 是终端、已关闭或 2 秒内没数据时，客户端直接以退出码 2 退出并提示用 `--text-file`。
 
 - 最终必须至少有一个完整 `text` 事件，然后才能 `complete`。
 - `delta` 可选。除非你能保证同一 `itemId` 的所有 delta 拼接起来**正好等于**最终 text，否则不要发 delta；客户端会拒绝不匹配的最终 text（`reason=delta_mismatch`，退出码 5）。
@@ -225,6 +231,7 @@ python3 omb_relay.py fail --turn <turnId> --delivery <deliveryId> \
 - 不要用旧 `deliveryId` 或旧 `eventId` 去“补发”到新租约。
 - 不要手工编辑 `pending/`、`processing/`、`ledger/` 里的文件来绕过冲突；需要恢复时用 `recover`。
 - 不要删除 `stateDir` 或 `watch.lock` 来“解决”卡住；先看 `recover` 的输出和 `watch.state.json` 的 `lastReason`。
+- **不要用 `pkill`、`pkill -f`、`killall`。** 它们会匹配到你自己的 shell 命令行，把你自己杀掉，导致 `complete` 没执行（曾经因此多等了约 22 秒）。停心跳只能由客户端按 pid 停，或用 `heartbeat-stop`；不要自己杀任何进程。
 - 不要为了测试去连接真实 OMB 的生产数据；本地验证只用 `fixtures/fake_omb.py`。
 - 不要声称已经完成真实部署或真实 Muse 验证，除非下面的验收项真的跑过。
 
@@ -236,7 +243,7 @@ python3 omb_relay.py fail --turn <turnId> --delivery <deliveryId> \
 2. Henry 在 OMB 里给这个 bot 发一句话；5 秒内 hook 应 wake，回复出现在**原 thread**，不是新会话。
 3. 发一条需要较长生成的请求；期间 `heartbeat` 持续续租，最终只有一条完整回复，没有重复。
 4. 让 Muse 返回一个小文件；文件作为附件落一次，大小和内容正确，没有 base64 或公网路径泄漏。
-5. 在 OMB 里中断一个 turn；Muse 的 `heartbeat` 看到 `cancelled=true` 后停止，迟到的发送被 409 拒绝。
+5. 在 OMB 里中断一个 turn；客户端的 heartbeat 循环看到 `cancelled=true` 后自己退出，迟到的发送被 409 拒绝，worker 从 `send-text`/`complete` 的退出码 8 得知已取消并清理。
 6. 在发送过程中断网或杀掉 worker；恢复后用原 eventId 重试，OMB 只落一条消息。
 7. 在 OMB 里轮换 token；旧 token 立刻 401，更新配置后 polling 恢复。旧 token 不应出现在任何日志里。
 8. 重启 OMB；旧的非终态 turn 由 OMB 标记 `server_restarted`，不会被自动重放；Muse 侧收到 409 时停止，不把旧结果写进新回合。
