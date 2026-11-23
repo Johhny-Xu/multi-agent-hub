@@ -1996,13 +1996,13 @@ function codeArtsTimeSec(v) {
  * 月度、一次性活动不在开放期或已领时上游自己给 claimable=false，自然跳过。
  */
 export function classifyCodeArtsCampaigns(items = [], nowSec = Math.floor(Date.now() / 1000)) {
-  const out = { claimable: [], claimed: [], upcoming: [], ineligible: [] };
+  const out = { claimable: [], claimed: [], upcoming: [], ineligible: [], ended: [] };
   for (const it of Array.isArray(items) ? items : []) {
     if (!it || typeof it !== 'object') continue;
     const status = String(it.status || '').toUpperCase();
     const start = codeArtsTimeSec(it.extra?.startTime);
     const end = codeArtsTimeSec(it.extra?.endTime);
-    if (end && end <= nowSec) continue;               // 已结束
+    if (end && end <= nowSec) { out.ended.push(it); continue; }  // 已结束：不是失败，也不再重试
     if (it.claimable === true) {
       if (start && start > nowSec) out.upcoming.push(it); // 理论上不会：没开窗却亮按钮，按待开窗处理
       else out.claimable.push(it);
@@ -2018,13 +2018,33 @@ export function classifyCodeArtsCampaigns(items = [], nowSec = Math.floor(Date.n
 
 function codeArtsAmount(c) {
   const amount = Number(c?.benefitAmount) || 0;
-  const unit = c?.benefitUnit === 'CREDIT' ? '积分' : (c?.benefitUnit || '');
-  return { amount, unit, text: `${amount}${unit}` };
+  const isCredit = c?.benefitUnit === 'CREDIT';
+  const unit = isCredit ? '积分' : (c?.benefitUnit || '');
+  return { amount, isCredit, unit, text: `${amount}${unit}` };
+}
+
+/**
+ * 连签只认上游给出的数值字段。
+ * 标题里带「每日」「签到」的活动里既有每日签到、也有一次性的报名礼（同为 USER_LOGIN），
+ * 按标题或类型猜都会把报名礼算成连签，所以拿不到明确天数就记 0。
+ */
+function codeArtsStreak(campaign, claimJson) {
+  const candidates = [
+    claimJson?.consecutiveDays,
+    claimJson?.data?.consecutiveDays,
+    campaign?.consecutiveDays,
+    campaign?.extra?.consecutiveDays,
+  ];
+  for (const value of candidates) {
+    const days = Number(value);
+    if (Number.isFinite(days) && days > 0) return Math.floor(days);
+  }
+  return 0;
 }
 
 /** 领一条活动；返回该活动的结果行 */
 async function claimCodeArtsCampaign(fetcher, ak, sk, campaign) {
-  const { amount, text } = codeArtsAmount(campaign);
+  const { amount, isCredit, text } = codeArtsAmount(campaign);
   const title = campaign.title || `活动 ${campaign.campaignId}`;
   let claimRes;
   try {
@@ -2040,7 +2060,14 @@ async function claimCodeArtsCampaign(fetcher, ak, sk, campaign) {
   const bizCode = Number(cj.code ?? NaN);
   const bizMsg = String(cj.message || cj.error_msg || '');
   if (bizCode === 0) {
-    return { status: 'success', title, credits: amount, message: `「${title}」+${text}` };
+    return {
+      status: 'success',
+      title,
+      // 非积分奖励照样领，但不能记成积分：概览里的积分只累计 CREDIT。
+      credits: isCredit ? amount : 0,
+      consecutiveDays: codeArtsStreak(campaign, cj),
+      message: `「${title}」+${text}`,
+    };
   }
   // 40001 = 权益还没刷新（本期已领）
   if (bizCode === 40001) {
@@ -2102,7 +2129,18 @@ export async function checkinCodeArtsOne(ak, sk, deps = {}) {
   const who = userName ? `${userName} ` : '';
   const groups = classifyCodeArtsCampaigns(items, nowSec);
   if (!groups.claimable.length && !groups.claimed.length && !groups.upcoming.length) {
-    return { ok: false, status: 'failed', message: `${benefitNote}${who}没有找到可领取的活动（共 ${items.length} 个活动）` };
+    // 没有可领的活动不等于签到失败：没资格 / 活动已结束都是终态，不该占用失败重试预算。
+    const quiet = [];
+    if (groups.ineligible.length) quiet.push(`无资格 ${groups.ineligible.length} 个`);
+    if (groups.ended.length) quiet.push(`已结束 ${groups.ended.length} 个`);
+    const detail = quiet.length ? `（${quiet.join('、')}，共 ${items.length} 个活动）` : `（共 ${items.length} 个活动）`;
+    return {
+      ok: true,
+      status: groups.ineligible.length ? 'ineligible' : (groups.ended.length ? 'ended' : 'unavailable'),
+      message: `${benefitNote}${who}没有可领取的活动${detail}`,
+      credits: 0,
+      consecutiveDays: 0,
+    };
   }
 
   // 3. 逐条领取（串行：同一账号并发领取容易撞上游幂等/限流）
@@ -2113,6 +2151,7 @@ export async function checkinCodeArtsOne(ak, sk, deps = {}) {
   const already = claims.filter((r) => r.status === 'already');
   const bad = claims.filter((r) => !['success', 'already'].includes(r.status));
   const credits = ok.reduce((s, r) => s + r.credits, 0);
+  const streak = Math.max(0, ...ok.map((r) => Number(r.consecutiveDays) || 0));
 
   const parts = [];
   if (ok.length) parts.push(`领取成功 ${ok.map((r) => r.message).join('、')}`);
@@ -2125,15 +2164,17 @@ export async function checkinCodeArtsOne(ak, sk, deps = {}) {
     parts.push(`待开放 ${groups.upcoming.map((c) => `「${c.title}」`).join('')}（${new Date(retryAt * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })} 开放，到点自动补领）`);
   }
   const message = `${benefitNote}${who}${parts.join('；')}`;
+  // 失败与待开窗可以同时存在：这时也必须带上开窗时刻，否则失败重试预算会在开窗前烧完，补领永远轮不到。
+  const pendingWindow = retryAt ? { pendingReason: 'awaiting_window', retryAt } : {};
 
   if (bad.length) {
     const expired = bad.some((r) => r.status === 'expired');
-    return { ok: false, status: ok.length ? 'partial' : (expired ? 'expired' : 'failed'), message, credits, consecutiveDays: ok.length ? 1 : 0 };
+    return { ok: false, status: ok.length ? 'partial' : (expired ? 'expired' : 'failed'), ...pendingWindow, message, credits, consecutiveDays: streak };
   }
   if (groups.upcoming.length) {
-    return { ok: true, status: (ok.length || claimedTitles.length) ? 'partial' : 'pending', pendingReason: 'awaiting_window', retryAt, message, credits, consecutiveDays: ok.length ? 1 : 0 };
+    return { ok: true, status: (ok.length || claimedTitles.length) ? 'partial' : 'pending', ...pendingWindow, message, credits, consecutiveDays: streak };
   }
-  if (ok.length) return { ok: true, status: 'success', message, credits, consecutiveDays: 1 };
+  if (ok.length) return { ok: true, status: 'success', message, credits, consecutiveDays: streak };
   return { ok: true, status: 'already', message, credits: 0, consecutiveDays: 0 };
 }
 
@@ -2206,6 +2247,8 @@ export async function checkinCodeArts(overrideToken = null) {
   const isBad = (r) => ['failed', 'expired'].includes(r.status) || (r.status === 'partial' && !r.ok);
   const isPending = (r) => r.status === 'pending' || (r.status === 'partial' && r.ok);
   const isSigned = (r) => ['success', 'already', 'partial'].includes(r.status);
+  // 无资格 / 已结束 / 无活动：今天不用再处理，但也不是失败，不该进 badOnes 触发重试。
+  const isQuiet = (r) => ['ineligible', 'ended', 'unavailable'].includes(r.status);
   const okOnes = results.filter((r) => Number(r.credits) > 0);
   const badOnes = results.filter(isBad);
   const pendOnes = results.filter(isPending);
@@ -2216,11 +2259,17 @@ export async function checkinCodeArts(overrideToken = null) {
       : (badOnes.every((r) => r.status === 'expired') ? 'expired' : 'failed');
   } else if (pendOnes.length) {
     status = anySigned ? 'partial' : 'pending';
+  } else if (results.some((r) => r.status === 'success')) {
+    status = 'success';
+  } else if (results.some((r) => r.status === 'already')) {
+    status = 'already';
   } else {
-    status = results.some((r) => r.status === 'success') ? 'success' : 'already';
+    // 只剩无资格 / 已结束的账号：保留这个原因，别粉饰成「今日已领取」。
+    status = (results.find(isQuiet) || {}).status || 'already';
   }
   const retryAt = results.reduce((min, r) => (r.retryAt && (!min || r.retryAt < min) ? r.retryAt : min), 0);
-  const pendingReason = (pendOnes.find((r) => r.pendingReason) || {}).pendingReason || '';
+  // 失败+待开窗的账号也要把原因透出：平台靠它豁免失败预算，到点补领。
+  const pendingReason = (results.find((r) => r.pendingReason) || {}).pendingReason || '';
 
   return {
     platform: 'codearts',
@@ -3378,10 +3427,15 @@ export function qoderPeriodNeedsCheck(p = {}, today = getTodayStr(), nowSec = Ma
  *  不留余量的话 tick 会差几秒错过、白等一整小时（09:11:39 的 tick 对 09:11:40 的 retryAt）。 */
 export const RETRY_AT_GRACE_SEC = 120;
 
+/** 到点的「等开窗」与之前失败的重试预算无关：预算耗在别的活动上，也不能吞掉这次开窗补领。 */
+const awaitingWindowDue = (p = {}) =>
+  p.pendingReason === 'awaiting_window' && ['failed', 'pending', 'partial'].includes(p.status) && Number(p.retryAt) > 0;
+
 export function platformNeedsRetry(p = {}, today = getTodayStr(), nowSec = Math.floor(Date.now() / 1000), plat = '') {
   if (p.retryAt && nowSec + RETRY_AT_GRACE_SEC < Number(p.retryAt)) return false;
   if (p.status === 'restricted') return false;
   if (p.lastDate !== today) return true;
+  if (awaitingWindowDue(p)) return true;
   if (p.status === 'partial' && Array.isArray(p.accounts)) {
     const remaining = p.accounts.filter((r) => !['success', 'already'].includes(r?.status));
     if (remaining.length && remaining.every((r) => r.status === 'restricted')) return false;
@@ -3651,7 +3705,7 @@ export function nextAutoCheckinDelay(state, nowMs = Date.now()) {
     .filter(([plat, p]) => {
       const budget = Number(p?.retryBudget) || retryBudgetFor(plat) || 8;
       return ['failed', 'pending', 'partial'].includes(p?.status)
-        && (p.retryCount || 0) < budget && Number(p.retryAt) > 0;
+        && ((p.retryCount || 0) < budget || awaitingWindowDue(p)) && Number(p.retryAt) > 0;
     })
     .map(([, p]) => Number(p.retryAt) * 1000);
   if (retryTimes.some((at) => at <= nowMs)) return 0;

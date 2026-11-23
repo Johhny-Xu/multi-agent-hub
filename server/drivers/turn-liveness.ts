@@ -304,8 +304,17 @@ export class TurnLiveness {
         && sample.cpuMs - previous.cpuMs >= Math.max(CPU_ACTIVE_FLOOR_MS, spanMs * share)) active.push("cpu");
     if (countIo && previous && sample.ioBytes !== null && previous.ioBytes !== null && sample.ioBytes !== previous.ioBytes) active.push("io");
     // A connection to a remote peer is a model request in flight. Through a local proxy only the bytes moving show it,
-    // so a loopback connection counts by itself only where bytes cannot be read.
-    if ((sample.external ?? 0) > 0 || (sample.ioBytes === null && sample.external === null && (sample.connections ?? 0) > 0)) active.push("network");
+    // so a loopback connection counts by itself only where bytes cannot be read. A connection that stays open and idle is
+    // not work: it earns one sample of grace when it first appears, then only a change in the count counts, or a stuck
+    // request behind a keep-alive socket would never reach the stuck window.
+    const blind = sample.ioBytes === null && sample.external === null;
+    if (previous === null) {
+      if ((sample.external ?? 0) > 0 || (blind && (sample.connections ?? 0) > 0)) active.push("network");
+    } else if (sample.external !== previous.external) {
+      active.push("network");
+    } else if (blind && previous.external === null && sample.connections !== previous.connections) {
+      active.push("network");
+    }
     return active;
   }
 
@@ -361,7 +370,12 @@ export function watchTurn(opts: TurnLivenessOptions & {
   onStatus?: (notice: TurnNotice) => void;
   onStuck: (verdict: Exclude<LivenessVerdict, { kind: "running" }>) => void;
 }): TurnWatch {
-  const liveness = new TurnLiveness(opts);
+  // An explicit option wins; otherwise the two variables named above the defaults apply, as the constants promise.
+  const liveness = new TurnLiveness({
+    ...opts,
+    statusAfterMs: opts.statusAfterMs ?? durationFromEnv(process.env, ["OMB_TURN_STATUS_AFTER_MS"], DEFAULT_STATUS_AFTER_MS),
+    statusEveryMs: opts.statusEveryMs ?? durationFromEnv(process.env, ["OMB_TURN_STATUS_EVERY_MS"], DEFAULT_STATUS_EVERY_MS),
+  });
   let stopped = false, checking = false;
   const tick = async () => {
     if (stopped || checking) return;

@@ -242,12 +242,15 @@ export function createMuseRelayHost(deps: MuseRelayHostDeps): MuseRelayHost {
         saved = { path: image.path, name, mime: image.mime, bytes: image.bytes };
       } else {
         let bytes = 0;
+        const leaseDeliveryId: string = deliveryId;
         async function* chunks() {
           for await (const chunk of req) {
             const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
             bytes += buffer.length;
             if (bytes > limit) throw new MuseRelayError(413, "The file is too large");
             hash.update(buffer);
+            // Reads are the upload's proof of life: a body slower than the lease must not be redelivered.
+            hub.acknowledgeFileUpload(connectionId, turnId, leaseDeliveryId, uploadId);
             yield buffer;
           }
         }

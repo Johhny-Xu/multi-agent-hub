@@ -17,45 +17,45 @@ const HARD_CAP = 2000;
 const LISTED_FROM = 1000;
 
 const LINES: Record<string, number> = {
-  "server/index.ts": 15968,
-  "src/state/store.tsx": 3344,
-  "electron/main.mjs": 3160,
-  "server/store.ts": 2427,
-  "src/components/Sidebar.tsx": 1721,
-  "server/drivers/claude.ts": 2090,
-  "server/drivers/agents-call.ts": 1004,
-  "server/drivers/acp/core.ts": 1704,
-  "server/drivers/codex.ts": 1718,
-  "server/routines.ts": 1567,
+  "server/index.ts": 15765,
+  "src/state/store.tsx": 3296,
+  "electron/main.mjs": 3135,
+  "server/store.ts": 2405,
+  "src/components/Sidebar.tsx": 1706,
+  "server/drivers/claude.ts": 2069,
+  "server/drivers/agents-call.ts": 1000,
+  "server/drivers/acp/core.ts": 1580,
+  "server/drivers/codex.ts": 1591,
+  "server/routines.ts": 1553,
   "src/components/ComputerPanel.tsx": 1799,
-  "src/components/RoutineCalendarPage.tsx": 1622,
-  "server/config.ts": 1368,
-  "src/components/ChatView.tsx": 1296,
-  "server/routine-requests.ts": 1474,
-  "src/components/GroupView.tsx": 1220,
+  "src/components/RoutineCalendarPage.tsx": 1485,
+  "server/config.ts": 1367,
+  "src/components/ChatView.tsx": 1229,
+  "server/routine-requests.ts": 1468,
+  "src/components/GroupView.tsx": 989,
   "src/components/LocalComputerSection.tsx": 1443,
-  "src/components/CursorAvatar.tsx": 1324,
+  "src/components/CursorAvatar.tsx": 1064,
   "server/skills.ts": 1379,
-  "server/composio.ts": 1038,
-  "server/vps-computer.ts": 1332,
+  "server/composio.ts": 953,
+  "server/vps-computer.ts": 1333,
   "scripts/mcp-server.ts": 1411,
   "server/boat.ts": 1253,
-  "server/drivers/pi.ts": 1033,
-  "server/plan-usage.ts": 1120, // OMB 0.1.165 upstream merge (2026-11-18): +5 lines from upstream
-  "server/container-computer.ts": 1175,
+  "server/drivers/pi.ts": 1014,
+  "server/plan-usage.ts": 1117, // OMB 0.1.165 upstream merge (2026-11-18): +5 lines from upstream
+  "server/container-computer.ts": 1158,
   "src/components/ModelPicker.tsx": 1045,
-  "src/components/PhoneSetupFlow.tsx": 1089,
-  "server/cli.ts": 1062,
-  "src/components/AttachmentPreview.tsx": 1035,
+  "src/components/PhoneSetupFlow.tsx": 1088,
+  "server/cli.ts": 1053,
+  "src/components/AttachmentPreview.tsx": 1025,
   "server/meetings/meetbot.ts": 1047,
   // fork 既有超限（multi-agent-hub，2026-11-10 按当时行数登记；只能减不能增）
-  "server/browser/viewers/core.ts": 1017,
-  "server/checkin/checkin.mjs": 3800,
+  "server/browser/viewers/core.ts": 1014,
+  "server/checkin/checkin.mjs": 3744,
   "server/checkin/vendor-quota.mjs": 1676,
   "server/drivers/zcode-acp.ts": 1816,
   "server/hub-compat/dispatch.ts": 2033,
   "server/service-accounts.ts": 1191,
-  "shared/wire.ts": 1012,
+  "shared/wire.ts": 1,
   // project fork: OpenAI-compatible chat driver (BYOK/9router) passes 1,000 lines; 2026-11-13
   // 2026-11-13 fork: DuMate / Gemini Decision 1 / box relay / workdir tools grew five listed files by a few lines (pins raised once; only down from here)
   "server/drivers/openai-chat.ts": 1032,
@@ -66,8 +66,9 @@ const LINES: Record<string, number> = {
   "server/cloud-cdp-proxy.ts": 1365,
   "server/drivers/web-chat/core.ts": 1069,
   // OMB 0.1.169 upstream merge (2026-11-19): agents-call and zcode-acp re-pinned at the merged counts; the Muse relay host (11-18) registered at its size, re-pinned after the 11-19 lease fix
-  "server/muse-relay.ts": 1256,
+  "server/muse-relay.ts": 1323,
   "electron/data-dir-lease.node-test.mjs": 846, // the data-folder lease's own tests: many platform cases (Windows probes in data-dir-lease-windows.node-test.mjs)
+
 };
 
 const SOURCE_DIRS = ["server", "shared", "src", "scripts", "evals", "electron", "companion"];

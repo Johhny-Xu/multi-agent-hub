@@ -128,6 +128,14 @@ function settingsError(error: z.ZodError): Error {
   return new Error(field && issue.message.startsWith(String(issue.path[0])) ? issue.message : `${field || "the bot"} is not valid`);
 }
 
+export type NewBotApproval = "ask" | "auto" | "full";
+
+/** The approval a new bot gets, or undefined to keep the default. */
+export function newBotApproval(saved: NewBotDefaults | undefined, hosted: boolean): NewBotApproval | undefined {
+  const mode = saved?.profile.approvalMode;
+  return mode === "custom" || (mode === "full" && hosted) ? undefined : mode;
+}
+
 export const DEFAULT_NEW_BOT_BROWSER_PROFILE = "mychrome";
 
 export function resolveBotCreationDefaults(

@@ -1,12 +1,12 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { SettingRow, SettingsEmptyRow, SettingsGroup, SettingsLook, SettingsRows } from "./SettingsPrimitives";
+import { Segmented, SettingRow, SettingsEmptyRow, SettingsGroup, SettingsLook, SettingsRows } from "./SettingsPrimitives";
 import { ArrowLeft, ChevronRight, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { activeLocale, documentLanguage, t } from "@/lib/i18n";
 import { listenLiveFrames } from "@/lib/live-events";
 import { modelColor, modelFamily } from "@/lib/model-color";
 import { formatTokens, hasFiniteCost, headlineTokens } from "@/lib/usage";
-import { currentBotName, fetchTraces, formatCost, formatDuration, runTitle, USAGE_PERIODS, usageExportHref, usagePeriodRange, type UsagePeriod } from "@/lib/usage-trace";
+import { currentBotName, fetchTraces, formatCost, formatDuration, localPeriodRange, runTitle, USAGE_PERIODS, usageExportHref, type UsagePeriod } from "@/lib/usage-trace";
 import { api, useStore } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import type { TraceList, TraceRootSummary } from "../../shared/usage-trace";
@@ -18,6 +18,7 @@ import { UsageBudgetCards, type BudgetState } from "./UsageBudget";
 import { UsageCapsCard, type UsageCapView } from "./UsageCaps";
 import { TraceView } from "./usage/TraceView";
 import { LiveBadge, modelName, StatStrip, totalsStats } from "./usage/TraceWaterfall";
+import { UsageInsightsPanel, type InsightMetric } from "./usage/UsageInsights";
 
 export type UsageGroupBy = "bot" | "model" | "user" | "day" | "engine" | "routine" | "department";
 const OTHER_GROUPINGS: readonly UsageGroupBy[] = ["model", "user", "department", "day", "engine", "routine"];
@@ -75,7 +76,7 @@ const PERIOD_LABEL_KEYS: Record<UsagePeriod, LocaleKey> = {
   week: "usage.page.week",
   month: "usage.history.thisMonth",
   lastMonth: "usage.history.lastMonth",
-  days30: "usage.history.last30Days",
+  days30: "usage.history.last30Days", days90: "usage.history.last90Days",
 };
 
 const LIVE_REFRESH_MS = 2_000;
@@ -314,7 +315,8 @@ export function RunRow({ root, onOpen }: { root: TraceRootSummary; onOpen: () =>
 export function UsageSection() {
   const settings = useContext(SettingsLook);
   const [period, setPeriod] = useState<UsagePeriod>("month");
-  const range = useMemo(() => usagePeriodRange(period), [period]);
+  const [metric, setMetric] = useState<InsightMetric>("cost");
+  const range = useMemo(() => localPeriodRange(period), [period]);
   const [list, setList] = useState<TraceList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -347,6 +349,15 @@ export function UsageSection() {
     void fetchTraces(range, list.next).then((page) => setList((current) => current ? { ...page, roots: [...current.roots, ...page.roots] } : page));
   };
   const untimed = list?.roots.some((root) => !root.timed);
+  // Upstream's controls: the period, and what the insights measure. The settings layout keeps the period select as
+  // the summary group's own action, so only the measure toggle travels with the insights there.
+  const choosePeriod = (next: UsagePeriod) => { setPeriod(next); setOpen(null); };
+  const measure = (
+    <Segmented<InsightMetric> value={metric} onChange={setMetric} label={t("insights.measure")}
+      options={[{ value: "cost", label: t("insights.spend") }, { value: "tokens", label: t("insights.tokens") }]} />
+  );
+  const insights = <UsageInsightsPanel range={range} version={version} metric={metric} groupLabel={usageGroupLabel}
+    card={settings ? SIMPLE_CARD : "rounded-2xl border border-hairline/50 bg-card"} />;
 
   if (settings) {
     const totals = list?.totals;
@@ -376,6 +387,8 @@ export function UsageSection() {
               </div>
             </SettingsRows>
           </SettingsGroup>
+          <div className="flex flex-wrap items-center gap-2" data-testid="usage-controls">{measure}</div>
+          {insights}
           <CostCaveats summary={summary} />
           <SettingsWhereItWent range={range} version={version} onSummary={setSummary} />
           <SettingsGroup label={t("usage.page.runs")} block="runs" footnote={untimed ? t("usage.page.untimedNote") : undefined}
@@ -398,10 +411,11 @@ export function UsageSection() {
     <div className="flex flex-col gap-4" data-testid="usage-page">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
         <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-ink-secondary">{t("usage.page.subtitle")}</p>
-        <div className="flex items-center gap-2">
-          <Select size="sm" value={period} onChange={(event) => { setPeriod(event.target.value as UsagePeriod); setOpen(null); }} aria-label={t("usage.history.period")}>
+        <div className="flex items-center gap-2" data-testid="usage-controls">
+          <Select size="sm" value={period} onChange={(event) => choosePeriod(event.target.value as UsagePeriod)} aria-label={t("usage.history.period")}>
             {USAGE_PERIODS.map((option) => <option key={option} value={option}>{t(PERIOD_LABEL_KEYS[option])}</option>)}
           </Select>
+          {measure}
           <a href={usageExportHref(range)} download className="ui-button flex items-center gap-1.5">
             <Download size={13} />{t("usage.history.export")}
           </a>
@@ -420,6 +434,7 @@ export function UsageSection() {
             {list ? <StatStrip items={totalsStats(list.totals, t("trace.stat.time"))} />
               : <div className="flex items-center gap-2 px-4 py-2.5 text-[13px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("common.checking")}</div>}
           </section>
+          {insights}
           <CostCaveats summary={summary} />
           <WhereItWent range={range} version={version} onSummary={setSummary} />
           <Card title={t("usage.page.runs")} subtitle={t("usage.page.runsHint")}>

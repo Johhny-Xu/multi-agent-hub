@@ -57,6 +57,13 @@ const tracked = (pid: number | undefined): Pick<ProviderAdapter, "enginePid"> =>
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 const treeSample = (cpuMs: number, extra: Partial<LivenessSample> = {}): LivenessSample =>
   ({ alive: true, cpuMs, ioBytes: 0, connections: 0, external: 0, ...extra });
+/** A status query a test settles by hand, to hold one out across a sweep's deadline. */
+interface Deferred<T> { promise: Promise<T>; resolve: (value: T) => void }
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
 
 describe("TurnWatchdog status queries", () => {
   it("does not stop a silent turn whose engine keeps using CPU (a model thinking without printing)", async () => {
@@ -67,15 +74,41 @@ describe("TurnWatchdog status queries", () => {
     expect(stalls).toHaveLength(0);
   });
 
-  it("counts a connection to a remote model, or bytes moving through a local proxy, as activity", async () => {
+  it("counts a connection to a remote model once, and bytes moving through a local proxy as they move", async () => {
     let io = 0;
     const remote = rig({ engineSample: async () => treeSample(0, { connections: 1, external: 1 }) });
     const proxied = rig({ engineSample: async () => treeSample(0, { connections: 1, ioBytes: (io += 10) }) });
-    for (const r of [remote, proxied]) {
-      r.dog.watch("t1", "bot1");
-      for (let i = 0; i < 20; i += 1) { r.tick(STALL / 4); r.dog.sweep(); await flush(); }
-      expect(r.stalls).toHaveLength(0);
+    proxied.dog.watch("t1", "bot1");
+    for (let i = 0; i < 20; i += 1) { proxied.tick(STALL / 4); proxied.dog.sweep(); await flush(); }
+    expect(proxied.stalls).toHaveLength(0);
+    // A keep-alive connection that never changes earns one sample of grace, then the turn is silent and stops.
+    remote.dog.watch("t1", "bot1");
+    for (let i = 0; i < 20 && !remote.stalls.length; i += 1) { remote.tick(STALL / 4); remote.dog.sweep(); await flush(); }
+    expect(remote.stalls).toHaveLength(1);
+  });
+
+  it("samples no tree for an engine process shared with other threads' sessions", async () => {
+    const sample = vi.fn(async () => treeSample(1_000));
+    const shared = { enginePid: () => ENGINE_PID, engineProcessShared: () => true, engineLivenessPid: () => undefined };
+    expect(await engineTreeSample(shared, "t1", sample)).toBeNull();
+    expect(sample).not.toHaveBeenCalled();
+    const own = { enginePid: () => ENGINE_PID, engineProcessShared: () => false, engineLivenessPid: () => ENGINE_PID };
+    expect(await engineTreeSample(own, "t1", sample)).toEqual(treeSample(1_000));
+    expect(sample).toHaveBeenCalledWith(ENGINE_PID);
+  });
+
+  it("stops a silent turn behind a shared process while a busy thread on it stays alive", async () => {
+    const shared = { enginePid: () => ENGINE_PID, engineProcessShared: () => true, engineLivenessPid: () => undefined };
+    const r = rig({ engineSample: (turn) => engineTreeSample(shared, turn.threadId) });
+    r.dog.watch("quiet", "bot1");
+    r.dog.watch("busy", "bot1");
+    for (let i = 0; i < 8; i += 1) {
+      r.tick(STALL / 2 + 1);
+      r.dog.observe({ ...text, threadId: "busy" });
+      r.dog.sweep();
+      await flush();
     }
+    expect(r.stalls.map((turn) => turn.threadId)).toEqual(["quiet"]);
   });
 
   it("stops a turn whose engine shows no CPU, bytes or remote connection for the stall window, and names why", async () => {
@@ -551,7 +584,8 @@ describe("a shell command that keeps working", () => {
       r.dog.observe(shellStarted("tool-1", "sleep 100000"));
       await run(r, TOOL_STALL - 1);
       expect(r.stalls).toHaveLength(0);
-      await run(r, 2);
+      // The deadline asks its own read first and judges on that answer at the next sweep.
+      await run(r, STALL + 2);
       expect(r.limits).toEqual([TOOL_STALL]);
     }
   });
@@ -586,6 +620,7 @@ describe("a shell command that keeps working", () => {
     r.dog.watch("t1", "bot1");
     r.dog.observe(shellStarted("tool-1", "make build"));
     await run(r, TOOL_STALL);
+    await run(r, 1);
     expect(r.limits).toEqual([TOOL_STALL]);
   });
 
@@ -596,7 +631,7 @@ describe("a shell command that keeps working", () => {
     await run(r, TOOL_STALL - STALL);
     r.dog.observe(shellStarted("tool-2", "make test"));
     r.dog.observe(toolEnded("tool-1"));
-    await run(r, TOOL_STALL);
+    await run(r, TOOL_STALL + 1);
     expect(r.limits).toEqual([TOOL_STALL]);
   });
 
@@ -608,6 +643,123 @@ describe("a shell command that keeps working", () => {
     expect(await engineCommandCpuMs({}, "t1", 99, sample)).toBeNull();
     expect(await engineCommandCpuMs(undefined, "t1", 99, sample)).toBeNull();
     expect(sample).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the deadline waits for its status queries", () => {
+  it("judges a turn that reaches the deadline while a query is out only after the answer, and spares it when the answer shows work", async () => {
+    const reads: Deferred<LivenessSample | null>[] = [];
+    const r = rig({ engineSample: () => { const read = deferred<LivenessSample | null>(); reads.push(read); return read.promise; } });
+    r.dog.watch("t1", "bot1");
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    expect(reads).toHaveLength(1);
+    reads[0]!.resolve(treeSample(0));
+    await flush();
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    expect(reads, "the deadline asks once more").toHaveLength(2);
+    expect(r.stalls, "it does not stop before the answer").toHaveLength(0);
+    reads[1]!.resolve(treeSample(5_000));
+    await flush();
+    r.dog.sweep();
+    expect(r.stalls, "the answer showed CPU work").toHaveLength(0);
+    expect(r.dog.watching("t1")).toBe(true);
+  });
+
+  it("stops the turn once both answers show nothing, and only once", async () => {
+    const reads: Deferred<LivenessSample | null>[] = [];
+    const r = rig({ engineSample: () => { const read = deferred<LivenessSample | null>(); reads.push(read); return read.promise; } });
+    r.dog.watch("t1", "bot1");
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    reads[0]!.resolve(treeSample(0));
+    await flush();
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    reads[1]!.resolve(treeSample(0));
+    await flush();
+    r.dog.sweep();
+    expect(r.stalls).toHaveLength(1);
+    r.dog.sweep();
+    expect(r.stalls).toHaveLength(1);
+    expect(r.limits).toEqual([STALL]);
+  });
+
+  it("lets a shell command's CPU answer save the turn at the deadline", async () => {
+    const reads: Deferred<number | null>[] = [];
+    const r = rig({ commandCpuMs: () => { const read = deferred<number | null>(); reads.push(read); return read.promise; } });
+    const answer = async (ms: number) => { reads[reads.length - 1]!.resolve(ms); await flush(); };
+    r.dog.watch("t1", "bot1");
+    r.dog.observe(shellStarted("tool-1", "make build"));
+    for (let i = 0; i < 4; i += 1) {
+      r.tick(STALL);
+      r.dog.sweep();
+      await flush();
+      await answer(1_000);
+    }
+    r.tick(STALL);
+    r.dog.sweep();
+    await flush();
+    expect(r.stalls, "the tool limit has not come yet").toHaveLength(0);
+    await answer(5_000);
+    r.dog.sweep();
+    expect(r.stalls, "the command used CPU across the deadline").toHaveLength(0);
+    r.tick(TOOL_STALL);
+    r.dog.sweep();
+    await flush();
+    await answer(5_000);
+    r.dog.sweep();
+    expect(r.stalls).toHaveLength(1);
+    expect(r.limits).toEqual([TOOL_STALL]);
+  });
+
+  it("judges once a query that never answers reaches its own timeout", async () => {
+    const r = rig({ readTimeoutMs: 20, engineSample: () => new Promise<LivenessSample | null>(() => {}) });
+    r.dog.watch("t1", "bot1");
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    expect(r.stalls, "the first query's timeout already freed the slot").toHaveLength(0);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    r.dog.sweep();
+    expect(r.stalls).toHaveLength(1);
+  });
+
+  it("never lets a late answer from an old turn refresh the turn that replaced it", async () => {
+    const reads: Deferred<LivenessSample | null>[] = [];
+    const r = rig({ engineSample: () => { const read = deferred<LivenessSample | null>(); reads.push(read); return read.promise; } });
+    r.dog.watch("t1", "bot1");
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    reads[0]!.resolve(treeSample(0));
+    await flush();
+    r.tick(STALL / 2);
+    r.dog.sweep();
+    await flush();
+    r.dog.watch("t1", "bot1");
+    r.tick(3_000);
+    reads[1]!.resolve(treeSample(5_000));
+    await flush();
+    r.tick(STALL - 3_000 - 1);
+    r.dog.sweep();
+    expect(r.stalls).toHaveLength(0);
+    r.tick(2);
+    r.dog.sweep();
+    await flush();
+    reads[2]?.resolve(treeSample(0));
+    await flush();
+    r.dog.sweep();
+    expect(r.stalls, "the old turn's answer did not extend the new turn").toHaveLength(1);
   });
 });
 

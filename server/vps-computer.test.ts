@@ -1418,6 +1418,7 @@ describe("a missing Docker CLI", () => {
     const command = dockerCliInstallCommand(process.platform)!;
     const inventory = await listManagedVpsComputers([TARGET], [], runner);
     expect(inventory.available).toBe(false);
+    expect(inventory.unreachable).toBeUndefined();
     expect(inventory.problem).toContain(command);
     expect(inventory.problem).not.toMatch(/ENOENT/);
 
@@ -1426,3 +1427,4 @@ describe("a missing Docker CLI", () => {
     expect(status.problem).not.toMatch(/ENOENT/);
   });
 });
+

@@ -17,6 +17,9 @@ export interface WatchedTurn {
   waitingOnHuman: boolean;
   waitingOnComputer: boolean;
   runningTools: Map<string, RunningTool>;
+  /** The turn reached its silence limit while a status query was still out: the sweep judges again once the answers
+   * are in, because a sample that lands after the deadline may prove the turn woke up. */
+  pendingStall?: { silentMs: number; reason: StallReason; markedAt: number };
 }
 
 /** A tool call the turn's engine started and has not ended; command: the shell command it runs, when it runs one. */
@@ -64,11 +67,21 @@ export function stallNotice(turn: Partial<Pick<WatchedTurn, "runningTools">>, si
   return { key: "chat.notice.stalled", params: { minutes: Math.round(silentMs / 60_000) } };
 }
 
+/** What liveness sampling needs from a driver's engine process: the process running a turn, unless that process serves
+ * other threads' sessions too. A shared process's CPU, bytes and connections belong to no thread in particular, so a
+ * silent turn behind one is judged only by its own events, output and engine status. */
+export interface EngineLiveness {
+  enginePid?(threadId: string): number | undefined;
+  engineProcessShared?(threadId: string): boolean;
+  engineLivenessPid?(threadId: string): number | undefined;
+}
+
 /** A status query of the thread's engine process tree (CPU, bytes moved, connections); null when the driver tracks no
- * engine process for it. */
-export async function engineTreeSample(adapter: Pick<ProviderAdapter, "enginePid"> | null | undefined, threadId: string,
+ * engine process for it, or when that process is shared and its work cannot be attributed to this thread. */
+export async function engineTreeSample(adapter: EngineLiveness | null | undefined, threadId: string,
   sample: (pid: number) => Promise<LivenessSample> = sampleTurnTree): Promise<LivenessSample | null> {
-  const pid = adapter?.enginePid?.(threadId);
+  if (adapter?.engineProcessShared?.(threadId)) return null;
+  const pid = adapter?.engineLivenessPid?.(threadId) ?? adapter?.enginePid?.(threadId);
   return pid === undefined ? null : sample(pid);
 }
 
@@ -132,6 +145,9 @@ export interface TurnWatchdogOptions {
    * moving, bytes moving or a connection to a remote model counts as an event, so a model that thinks for a long time
    * without printing is not stopped as silent. */
   engineSample?: (turn: WatchedTurn) => Promise<LivenessSample | null>;
+  /** How long one status query may stay unanswered before the sweep judges without it; default 10 s, or the stall
+   * window when that is shorter. */
+  readTimeoutMs?: number;
   /** silentMs: the silence that stopped the turn, stallMs, toolStallMs, parkedStallMs or engineExitStallMs. reason: why
    * the turn was stopped, so the person is told what actually happened to it. */
   onStall: (turn: WatchedTurn, silentMs: number, reason: StallReason) => void;
@@ -144,10 +160,11 @@ export interface TurnWatchdogOptions {
 export class TurnWatchdog {
   private turns = new Map<string, WatchedTurn>();
   private unheldSince = new Map<string, number>();
-  /** Each turn's last read of its shell command's CPU time: the command it was read for (by start) and whether a read is out. */
-  private cpu = new WeakMap<WatchedTurn, { since: number; ms: number | null; reading: boolean }>();
-  /** Each turn's last status query of its engine tree. */
-  private engine = new WeakMap<WatchedTurn, { sample: LivenessSample | null; at: number; reading: boolean }>();
+  /** Each turn's last read of its shell command's CPU time: the command it was read for (by start), whether a read is
+   * out, and the read's generation so a late answer cannot overwrite a newer one. */
+  private cpu = new WeakMap<WatchedTurn, { since: number; ms: number | null; reading: boolean; token: number }>();
+  /** Each turn's last status query of its engine tree, with the read's generation. */
+  private engine = new WeakMap<WatchedTurn, { sample: LivenessSample | null; at: number; reading: boolean; token: number }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private opts: TurnWatchdogOptions;
 
@@ -257,16 +274,51 @@ export class TurnWatchdog {
       const aliveAt = this.opts.engineAliveAt?.(turn);
       if (aliveAt !== undefined && aliveAt > turn.lastEventAt) turn.lastEventAt = Math.min(at, aliveAt);
       const limit = this.silenceLimit(turn);
-      if (limit === null) continue;
-      // server/testing/group-local-vm-hooks.mjs rewrites the silentMs comparison below: keep that name.
+      if (limit === null) { turn.pendingStall = undefined; continue; }
       const { ms: silentMs, reason } = limit;
-      if (at - turn.lastEventAt >= this.opts.stallMs) this.readCommandCpu(turn);
-      if (at - turn.lastEventAt >= Math.min(ENGINE_QUERY_AFTER_MS, this.opts.stallMs / 2)) this.readEngine(turn);
-      if (at - turn.lastEventAt < silentMs) continue;
+      const silent = at - turn.lastEventAt;
+      if (this.withinLimit(at, turn, silentMs)) {
+        turn.pendingStall = undefined;
+        this.sample(turn, silent);
+        continue;
+      }
+      if (!turn.pendingStall) {
+        // The deadline: ask both processes once more, and judge on their answers rather than on the old silence.
+        turn.pendingStall = { silentMs, reason, markedAt: at };
+        this.sample(turn, silent);
+        if (this.sampling(turn)) continue;
+      } else if (this.sampling(turn)) {
+        continue;
+      }
+      // A sample that landed since the deadline refreshed lastEventAt when the turn really woke up.
+      if (this.withinLimit(at, turn, silentMs)) { turn.pendingStall = undefined; continue; }
       this.turns.delete(turn.threadId);
       this.opts.onStall(turn, silentMs, reason);
     }
     this.freeUnheld(at);
+  }
+
+  /** Still inside the turn's silence limit. server/testing/group-local-vm-hooks.mjs rewrites this comparison: keep the
+   * expression and its names as they are. */
+  private withinLimit(at: number, turn: WatchedTurn, silentMs: number): boolean {
+    return at - turn.lastEventAt < silentMs;
+  }
+
+  /** Starts the status queries a turn silent for `silent` ms is due: its shell command's CPU time at the turn limit,
+   * its engine tree from half of it. */
+  private sample(turn: WatchedTurn, silent: number): void {
+    if (silent >= this.opts.stallMs) this.readCommandCpu(turn);
+    if (silent >= Math.min(ENGINE_QUERY_AFTER_MS, this.opts.stallMs / 2)) this.readEngine(turn);
+  }
+
+  /** A status query is still out: the deadline waits for its answer instead of judging on evidence it has not seen. */
+  private sampling(turn: WatchedTurn): boolean {
+    return this.cpu.get(turn)?.reading === true || this.engine.get(turn)?.reading === true;
+  }
+
+  private readTimeoutMs(): number {
+    if (this.opts.readTimeoutMs !== undefined) return this.opts.readTimeoutMs;
+    return this.opts.stallMs > 0 ? Math.min(10_000, this.opts.stallMs) : 10_000;
   }
 
   /** null: the turn may wait on, parked while its engine is not known to be gone. */
@@ -286,10 +338,21 @@ export class TurnWatchdog {
     const last = this.cpu.get(turn);
     if (last?.reading) return;
     const since = command.startedAt, previous = last?.since === since ? last.ms : null;
-    this.cpu.set(turn, { since, ms: previous, reading: true });
+    const token = (last?.token ?? 0) + 1;
+    this.cpu.set(turn, { since, ms: previous, reading: true, token });
+    // A read that never answers must not hold the deadline: its own timeout frees the slot, and a later read then owns
+    // the entry, so the late answer is dropped.
+    const timer = setTimeout(() => {
+      const current = this.cpu.get(turn);
+      if (current?.token === token && current.reading) this.cpu.set(turn, { ...current, reading: false });
+    }, this.readTimeoutMs());
+    timer.unref?.();
     void Promise.resolve().then(() => read(turn, since)).catch(() => null).then((ms) => {
+      clearTimeout(timer);
+      const current = this.cpu.get(turn);
+      if (current?.token !== token) return;
       // A read that failed keeps the last one to compare with.
-      this.cpu.set(turn, { since, ms: ms ?? previous, reading: false });
+      this.cpu.set(turn, { since, ms: ms ?? previous, reading: false, token });
       if (ms !== null && previous !== null && ms !== previous && this.turns.get(turn.threadId) === turn) turn.lastEventAt = Math.max(turn.lastEventAt, this.now());
     });
   }
@@ -300,12 +363,20 @@ export class TurnWatchdog {
     if (!read || parked(turn)) return;
     const last = this.engine.get(turn);
     if (last?.reading) return;
-    this.engine.set(turn, { sample: last?.sample ?? null, at: last?.at ?? 0, reading: true });
+    const token = (last?.token ?? 0) + 1;
+    this.engine.set(turn, { sample: last?.sample ?? null, at: last?.at ?? 0, reading: true, token });
+    const timer = setTimeout(() => {
+      const current = this.engine.get(turn);
+      if (current?.token === token && current.reading) this.engine.set(turn, { ...current, reading: false });
+    }, this.readTimeoutMs());
+    timer.unref?.();
     void Promise.resolve().then(() => read(turn)).catch(() => null).then((sample) => {
+      clearTimeout(timer);
+      if (this.engine.get(turn)?.token !== token) return;
       const at = this.now();
-      if (!sample) { this.engine.set(turn, { sample: last?.sample ?? null, at: last?.at ?? 0, reading: false }); return; }
+      if (!sample) { this.engine.set(turn, { sample: last?.sample ?? null, at: last?.at ?? 0, reading: false, token }); return; }
       const active = TurnLiveness.activity(last?.sample ?? null, sample, last?.sample ? at - last.at : 0).length > 0;
-      this.engine.set(turn, { sample, at, reading: false });
+      this.engine.set(turn, { sample, at, reading: false, token });
       if (active && this.turns.get(turn.threadId) === turn) turn.lastEventAt = Math.max(turn.lastEventAt, at);
     });
   }

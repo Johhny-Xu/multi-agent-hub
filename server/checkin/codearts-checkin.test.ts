@@ -10,7 +10,10 @@ const tempHome = await mkdtemp(join(tmpdir(), 'agenthub-codearts-checkin-'));
 process.env.AGENTHUB_HOME = tempHome;
 process.env.AGENTHUB_CHECKIN_STATE = join(tempHome, 'checkin-state.json');
 
-const { classifyCodeArtsCampaigns, checkinCodeArtsOne } = await import('./checkin.mjs');
+type PlatformNeedsRetry = (state: { status?: string; lastDate?: string; retryAt?: number; retryCount?: number; retryBudget?: number; [key: string]: unknown }, today: string, nowSec: number, plat?: string) => boolean;
+const checkinMod = await import('./checkin.mjs');
+const { classifyCodeArtsCampaigns, checkinCodeArtsOne } = checkinMod;
+const { platformNeedsRetry } = checkinMod as unknown as { platformNeedsRetry: PlatformNeedsRetry };
 
 const NOW = Date.parse('2026-11-17T02:30:00Z') / 1000; // 10:30 UTC+8
 
@@ -93,4 +96,130 @@ test('一条领失败：partial（ok=false），其余照领；40001 视为已�
   assert.equal(r.status, 'partial');
   assert.equal(r.ok, false);
   assert.equal(r.credits, 150);
+});
+
+// ---- BUGSCAN-1119 C09：领取失败与未来开窗同时存在 ----
+
+const TODAY = '2026-11-17';
+
+function upcoming(id: number, title: string, start: string) {
+  return { ...row(id, title, 'USER_LOGIN', 1000, 'ENTRY', false), extra: { startTime: start, endTime: '2026-12-31T15:59:00Z', triggerMode: 'MANUAL_CLAIM' } };
+}
+
+test('领失败 + 多个待开窗：保留最早的 retryAt 和 awaiting_window', async () => {
+  const items = [
+    row(40, '每日签到', 'USER_LOGIN', 1000, 'ELIGIBLE', true),
+    upcoming(39, '月度礼', '2026-11-17T08:00:00Z'),
+    upcoming(38, '另一个待开窗', '2026-11-17T03:00:00Z'),
+  ];
+  const { fn } = fakeFetch(items, (id) => (id === 40 ? { code: 4006, message: '名额已领完' } : { code: 0 }));
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 'failed');
+  assert.equal(r.pendingReason, 'awaiting_window');
+  assert.equal(r.retryAt, Date.parse('2026-11-17T03:00:00Z') / 1000);
+  assert.ok(r.message.includes('待开放'));
+});
+
+test('开窗前不重试，开窗后即使预算耗尽也补领一次', () => {
+  const base = { status: 'failed', lastDate: TODAY, pendingReason: 'awaiting_window', retryCount: 8, retryBudget: 8 };
+  assert.equal(platformNeedsRetry({ ...base, retryAt: NOW + 600 }, TODAY, NOW), false);
+  assert.equal(platformNeedsRetry({ ...base, retryAt: NOW - 200 }, TODAY, NOW), true);
+  // 普通失败仍受预算限制，不开这个口子。
+  assert.equal(platformNeedsRetry({ status: 'failed', lastDate: TODAY, retryCount: 8, retryBudget: 8, retryAt: 0 }, TODAY, NOW), false);
+});
+
+test('补领后没有 upcoming 的新结果不再携带旧 retryAt', async () => {
+  const { fn } = fakeFetch([row(40, '每日签到', 'USER_LOGIN', 1000, 'ELIGIBLE', true)]);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.status, 'success');
+  assert.equal(r.retryAt, undefined);
+  assert.equal(r.pendingReason, undefined);
+  // 状态文件按 res.retryAt || 0 / res.pendingReason || '' 落盘，下一次普通失败重新受预算限制。
+  const next = { status: 'failed', lastDate: TODAY, retryAt: r.retryAt || 0, pendingReason: r.pendingReason || '', retryCount: 8, retryBudget: 8 };
+  assert.equal(platformNeedsRetry(next, TODAY, NOW), false);
+});
+
+// ---- BUGSCAN-1119 C10：无资格 / 已结束不是失败 ----
+
+test('只有无资格活动：ineligible，ok=true，不进入失败重试', async () => {
+  const { fn, claimed } = fakeFetch([row(1, '未参与', 'ENTRY', 100, 'ENTRY', false)]);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.deepEqual(claimed, []);
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 'ineligible');
+  assert.equal(r.credits, 0);
+  assert.equal(r.consecutiveDays, 0);
+  assert.equal(r.retryAt, undefined);
+  assert.equal(platformNeedsRetry({ status: r.status, lastDate: TODAY, retryAt: r.retryAt || 0, retryCount: 0 }, TODAY, NOW), false);
+});
+
+test('只有已结束活动：ended，不进入失败重试', async () => {
+  const { fn } = fakeFetch([row(2, '已结束的活动', 'USER_LOGIN', 1000, 'ENTRY', false, '2026-11-01T00:00:00Z', '2026-11-10T00:00:00Z')]);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 'ended');
+  assert.equal(r.retryAt, undefined);
+  assert.equal(platformNeedsRetry({ status: r.status, lastDate: TODAY, retryAt: 0, retryCount: 0 }, TODAY, NOW), false);
+});
+
+test('无资格与已结束混合：报 ineligible 并列出两个数量', async () => {
+  const items = [
+    row(1, '未参与', 'ENTRY', 100, 'ENTRY', false),
+    row(2, '已结束的活动', 'USER_LOGIN', 1000, 'ENTRY', false, '2026-11-01T00:00:00Z', '2026-11-10T00:00:00Z'),
+  ];
+  const { fn } = fakeFetch(items);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.status, 'ineligible');
+  assert.ok(r.message.includes('无资格 1 个'));
+  assert.ok(r.message.includes('已结束 1 个'));
+});
+
+test('空活动列表：unavailable，不进入失败重试', async () => {
+  const { fn } = fakeFetch([]);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 'unavailable');
+  assert.equal(platformNeedsRetry({ status: r.status, lastDate: TODAY, retryAt: 0, retryCount: 0 }, TODAY, NOW), false);
+});
+
+// ---- BUGSCAN-1119 C11：非积分奖励与连签分开算 ----
+
+test('非 CREDIT 奖励照样显示，但积分为 0', async () => {
+  const items = [{ ...row(50, '实物周边', 'USER_LOGIN', 1, 'ELIGIBLE', true), benefitUnit: 'PIECE' }];
+  const { fn } = fakeFetch(items);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.status, 'success');
+  assert.equal(r.credits, 0);
+  assert.ok(r.message.includes('1PIECE'));
+});
+
+test('积分与非积分混合时只累计 CREDIT', async () => {
+  const items = [
+    row(34, '每日签到领150积分', 'USER_LOGIN', 150, 'ELIGIBLE', true),
+    { ...row(50, '实物周边', 'USER_LOGIN', 1, 'ELIGIBLE', true), benefitUnit: 'PIECE' },
+  ];
+  const { fn } = fakeFetch(items);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.status, 'success');
+  assert.equal(r.credits, 150);
+  assert.ok(r.message.includes('1PIECE'));
+});
+
+test('没有上游连签字段时，一次性活动不算连签', async () => {
+  const { fn } = fakeFetch([row(42, 'Skill创新赛报名礼', 'USER_LOGIN', 2000, 'ELIGIBLE', true)]);
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.status, 'success');
+  assert.equal(r.consecutiveDays, 0);
+});
+
+test('上游给出连签天数时照实记录，多个活动取最大', async () => {
+  const items = [
+    row(40, '每日签到', 'USER_LOGIN', 1000, 'ELIGIBLE', true),
+    row(34, '另一条每日签到', 'USER_LOGIN', 150, 'ELIGIBLE', true),
+  ];
+  const { fn } = fakeFetch(items, (id) => (id === 40 ? { code: 0, consecutiveDays: 3 } : { code: 0 }));
+  const r = await checkinCodeArtsOne('ak', 'sk', { fetch: fn, nowSec: NOW });
+  assert.equal(r.status, 'success');
+  assert.equal(r.consecutiveDays, 3);
 });

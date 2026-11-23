@@ -1,41 +1,33 @@
-// docs/analytics.md is the promise of what the app sends: its Events table has a row for exactly the product events the
-// app can send, and the docs site shows the same page.
-import { execFileSync } from "node:child_process";
+// docs/analytics.md is the promise of what the app sends, and this version sends nothing: the module is a no-op, so the
+// test holds the source and both copies of the page to that promise instead of an event table that no longer exists.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const ROOT = new URL("../../", import.meta.url);
-const EVENT = /\b(?:track|capture)\(\s*["'`]([a-z][a-z0-9_]*)["'`]/g;
-
-function sentEvents(): string[] {
-  const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "src"], { cwd: ROOT, encoding: "utf8" })
-    .split("\n")
-    .filter((file) => /\.(ts|tsx)$/.test(file) && !file.includes(".test."));
-  const events = new Set<string>();
-  for (const file of files) {
-    for (const match of readFileSync(new URL(file, ROOT), "utf8").matchAll(EVENT)) events.add(match[1]!);
-  }
-  return [...events].sort();
-}
-
-/** The event names in the first column of the "## Events" table; one row may name several. */
-function eventRows(docs: string): string[] {
-  const start = docs.indexOf("\n## Events\n");
-  const end = docs.indexOf("\n## ", start + 1);
-  return docs.slice(start, end === -1 ? undefined : end).split("\n")
-    .filter((line) => line.startsWith("| `"))
-    .flatMap((line) => [...line.split("|")[1]!.matchAll(/`([^`]+)`/g)].map((match) => match[1]!));
-}
-
 const read = (path: string) => readFileSync(new URL(path, ROOT), "utf8").replace(/\r\n/g, "\n");
 
-describe("docs/analytics.md", () => {
-  it("has an Events row for every event the app sends, and for no other", () => {
-    const events = sentEvents();
-    expect(events).toEqual(expect.arrayContaining(["app_opened", "app_snapshot", "api_key_saved", "message_sent", "onboarding_cloud"]));
-    const rows = eventRows(read("docs/analytics.md"));
-    expect(rows.filter((event) => !event.startsWith("$")).sort(), "Give each event its own row in docs/analytics.md").toEqual(events);
-    expect(rows.filter((event) => event.startsWith("$")), "PostHog's own events the app causes").toEqual([]);
+describe("product telemetry", () => {
+  it("stays a no-op: no client, no request, no telemetry preference", async () => {
+    const source = read("src/lib/analytics.ts");
+    expect(source).not.toMatch(/posthog/i);
+    expect(source).not.toMatch(/\bfetch\s*\(|sendBeacon|XMLHttpRequest/);
+    expect(source).not.toMatch(/omb-analytics-opt-out/);
+    const analytics = await import("../../src/lib/analytics.ts");
+    expect(analytics.analyticsEnabled()).toBe(false);
+    expect(() => analytics.track("app_opened", { platform: "desktop" })).not.toThrow();
+    analytics.setAnalyticsEnabled(true);
+    expect(analytics.analyticsEnabled(), "no preference can turn it back on").toBe(false);
+  });
+
+  it("says in both copies that telemetry is off and nothing is sent", () => {
+    for (const path of ["docs/analytics.md", "apps/docs/content/docs/security/analytics.mdx"]) {
+      const docs = read(path);
+      expect(docs, path).toContain("**Product telemetry is off.**");
+      expect(docs, path).toMatch(/no events, no daily snapshot/i);
+      expect(docs, path).toMatch(/loads no third-party analytics client/i);
+      expect(docs, path).not.toMatch(/`app_snapshot` is one count/, "no removed event described as sent");
+      expect(docs, path).not.toMatch(/\| `app_opened` \|/, "no removed event in a current table");
+    }
   });
 
   it("is the page the docs site shows", () => {

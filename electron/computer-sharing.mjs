@@ -283,9 +283,9 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, lo
       lending: lent.map(env => env.id),
       clouds: (paused ? [...ownClouds(), ...environments().filter(env => records[env.id]?.own && records[env.id].enabled === true)] : lent).map(env => env.name),
       // Lent, but the Cloud hasn't accepted this computer yet (or lost it): the menu must not say it can use it. A
-      // sleeping My Cloud still can; it wakes when a bot needs this computer.
+      // sleeping My Cloud still can; it wakes when a bot needs this computer. Such a Cloud takes it as the one typed on (typing); a server of their own doesn't.
       waiting: lent.filter(env => !status.get(env.id)?.connected && status.get(env.id)?.problem !== "asleep").map(env => env.name),
-      ...(problems.length ? { problems } : {}),
+      ...(problems.length ? { problems } : {}), ...(lent.some(env => records[env.id]?.cloud && !ownHomeId(env) && (status.get(env.id)?.connected || status.get(env.id)?.problem === "asleep")) ? { typing: true } : {}),
       using: using.map(env => env.name),
       ...(bots.length ? { bots } : {}),
       paused,
@@ -899,8 +899,8 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, lo
       if (lent?.enabled !== true || !Array.isArray(lent.folders)) return { off: true };
       return { lendingId: lent.id, folders: lent.folders.map(({ id, path: where, name, write }) => ({ id, path: where, name, write: write === true })), protectedPaths: protectedRoots, ...(paused ? { paused: true } : {}) };
     },
-    /** Lending to My Cloud is running, so it calls My Cloud whenever it is awake. */
-    lendingToCloud: () => [...running.keys()].some(id => Boolean(records[id]?.cloud)),
+    /** Lending to My Cloud is running, so it calls My Cloud whenever it is awake. `lendingSomewhere`: anything is lent now. */
+    lendingToCloud: () => [...running.keys()].some(id => Boolean(records[id]?.cloud)), lendingSomewhere: () => summary().lending.length > 0,
     /** A server is using this computer now: a job running on it, or its browsing going through this computer. */
     busy: () => summary().busy !== null,
     saveCloud,

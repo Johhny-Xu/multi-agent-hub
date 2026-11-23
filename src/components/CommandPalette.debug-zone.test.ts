@@ -20,6 +20,17 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 
+vi.mock("@/state/apart-from-turns", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/state/apart-from-turns")>(),
+  useBotsApartFromTurns: () => fixture.state.bots ?? [],
+  useGroupsApartFromTurns: () => fixture.state.groups ?? [],
+}));
+
+vi.mock("@/state/store-ref", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/state/store-ref")>(),
+  useStoreRef: () => ({ state: () => fixture.state as AppState, dispatch: () => {} }),
+}));
+
 import { CommandPalette } from "./CommandPalette";
 
 const bot = (id: string, name: string): Bot => ({

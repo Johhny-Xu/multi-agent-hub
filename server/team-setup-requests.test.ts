@@ -12,7 +12,14 @@ import type { BotRecord, OptionCardData } from "./store.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import type { DirectApply } from "./direct-apply.ts";
 
-function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean }>, extra: Partial<ConstructorParameters<typeof TeamSetupRequestService>[0]> = {}) {
+function harness(
+  caps?: Record<string, { driverKind: string; agentsMcp: boolean }>,
+  extraOrApproval?: Partial<ConstructorParameters<typeof TeamSetupRequestService>[0]> | (() => "ask" | "auto" | "full" | undefined),
+  approval?: () => "ask" | "auto" | "full" | undefined,
+) {
+  // upstream passes the approval level as the second argument, the local fork passes the extra options
+  const extra = typeof extraOrApproval === "function" ? {} : (extraOrApproval ?? {});
+  const newBotApproval = typeof extraOrApproval === "function" ? extraOrApproval : approval;
   const bots: BotRecord[] = [];
   const messages: Array<{ id: string; role?: string; card?: OptionCardData }> = [];
   const teams = ["", "Work", "Engineering", "Private"];
@@ -24,7 +31,7 @@ function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean 
   };
   const chief = bot("Clive", { chiefOfStaff: true, managedSections: ["Engineering"] });
   const peer = bot("Ada");
-  const apply = vi.fn((request: TeamSetupRequest): TeamSetupResult => {
+  const apply = vi.fn((request: TeamSetupRequest, _approval?: string): TeamSetupResult => {
     const result: TeamSetupResult = { state: "applied", newTeams: request.newTeams, bots: request.operations.map((op) => {
       const target = bots.find((item) => item.id === op.botId) ?? bot(op.botId);
       Object.assign(target, op.fields);
@@ -66,6 +73,7 @@ function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean 
     },
     ...(caps ? { driverCapabilities: (instanceId: string) => caps[instanceId] } : {}),
     ...extra,
+    ...(newBotApproval ? { newBotApproval } : {}),
   });
   const propose = (operations: unknown[], newTeams: string[] = []) => service.propose({ botId: chief.id, threadId: chief.threadId, plan: { reason: "Requested specialist setup", operations, newTeams } });
   const submit = (operations: unknown[], newTeams: string[] = []) => service.submit({ botId: chief.id, threadId: chief.threadId, plan: { reason: "Requested specialist setup", operations, newTeams } });
@@ -76,6 +84,13 @@ const specialist = (key: string, section: string, modelSelection = { instanceId:
   fields: { name: key, title: "Specialist", soul: "Finish the assigned work.", section, modelSelection } });
 
 describe("reviewed Chief team setup", () => {
+  it("applies a reviewed setup with the saved New bot level for the bots it creates", async () => {
+    const h = harness(undefined, () => "auto");
+    const request = h.propose([specialist("Analyst", "Engineering")]);
+    expect((await h.resolve(request.requestId))?.result.state).toBe("applied");
+    expect(h.apply).toHaveBeenCalledWith(expect.objectContaining({ requestId: request.requestId }), "auto");
+  });
+
   it("reviews promotion in an authorized team without changing anything on denial", async () => {
     const h = harness(); h.peer.section = "Engineering";
     const before = structuredClone(h.store.bots);
@@ -104,6 +119,16 @@ describe("reviewed Chief team setup", () => {
     expect(card.detail).toContain("Default AI and model");
     expect(card.detail).not.toContain("peer coordination");
     expect(card.detail).not.toContain("approval levels");
+  });
+  it("explains at proposal time that a team listed as new already exists, instead of the stale-card message", async () => {
+    const h = harness();
+    const before = h.messages.length;
+    expect(() => h.propose([specialist("Mira", "Private")], ["Private"]))
+      .toThrow(/^Team "Private" already exists, so it can't be a new team\. That is the Private department, which Clive is not in charge of\. .*Nothing was proposed\.$/);
+    expect(() => h.propose([specialist("Mira", "Engineering")], ["Engineering"]))
+      .toThrow(/^Team "Engineering" already exists, so it can't be a new team\. Leave it out of newTeams and use it as an existing team\. Nothing was proposed\.$/);
+    await expect(h.submit([specialist("Mira", "Private")], ["Private"])).rejects.toThrow(/already exists/);
+    expect(h.messages.length).toBe(before);
   });
   it("creates a Chief in a new team and permits explicit replacement regardless of operation order", async () => {
     const h = harness();

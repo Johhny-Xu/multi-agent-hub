@@ -80,8 +80,8 @@ const GLYPH_HEIGHT = 14;
 const BASELINE_INSET = 2;
 const TALLEST = GLYPH_HEIGHT - BASELINE_INSET;
 const GLYPH_WIDTH = BAR_STEP * USAGE_BARS - (BAR_STEP - BAR_WIDTH);
-const TONE_INK: Record<UsageTone, string> = { fine: "text-success", near: "text-warning", out: "text-danger" };
-const TONE_TRACK: Record<UsageTone, string> = { fine: "bg-success", near: "bg-warning", out: "bg-danger" };
+const TONE_INK: Record<UsageTone, string> = { fine: "text-ink-tertiary", near: "text-warning", out: "text-danger" };
+const TONE_TRACK: Record<UsageTone, string> = { fine: "bg-ink-tertiary", near: "bg-warning", out: "bg-danger" };
 
 /** Four rising bars on whole pixels, filled for the usage left; at the limit every bar is empty and struck through. */
 export function UsageGlyph({ limit, className }: { limit: EngineLimit; className?: string }) {
@@ -127,7 +127,7 @@ export function UsageRows({ limit }: { limit: EngineLimit }) {
   const [checking, setChecking] = useState(false);
   const { dispatch } = useStore();
   const now = Date.now();
-  const checkedAt = limitsCheckedAt();
+  const checkedAt = limit.checkedAt ?? limitsCheckedAt();
   return (
     <div data-usage-rows className="flex flex-col gap-2.5">
       <div className="flex items-baseline justify-between gap-3">
@@ -137,7 +137,7 @@ export function UsageRows({ limit }: { limit: EngineLimit }) {
       {usageRows(limit).map((row) => (
         <div key={row.window} data-usage-row={row.window} className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-3 text-[12px] leading-4">
-            <span className="shrink-0 text-ink-secondary">{windowLabel(row.window)}</span>
+            <span className="shrink-0 text-ink-secondary">{windowLabel(row.window, limit.meter)}</span>
             <span className={cn("ms-auto min-w-0 truncate text-end tabular-nums", row.tone === "fine" ? "text-ink" : TONE_INK[row.tone])}>
               <span className="font-medium">{row.tone === "out" ? t("limits.windowAtLimit") : t("planUsage.left", { remaining: row.left })}</span>
               {row.resetsAt !== null && row.resetsAt > now && ` · ${t("limits.resets", { time: resetTime(row.resetsAt, now) })}`}

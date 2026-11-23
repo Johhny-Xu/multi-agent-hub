@@ -54,11 +54,18 @@ class FakeOMB:
         lease_seconds: int = 120,
         poll_hold_seconds: float = 0.2,
         port: int = 0,
+        file_chunk_delay: float = 0.0,
+        file_chunk_bytes: int = 4096,
     ):
         self.token = token
         self.connection_id = connection_id
         self.lease_seconds = lease_seconds
         self.poll_hold_seconds = poll_hold_seconds
+        # Upload bodies arrive slowly when this is set, so a test can outlive a short lease while a
+        # concurrent poll looks for work; each chunk renews the lease exactly as the real server does.
+        self.file_chunk_delay = file_chunk_delay
+        self.file_chunk_bytes = file_chunk_bytes
+        self.upload_renewals = 0
         self.prefix = f"/hooks/muse-relay/v1/{connection_id}"
         self.lock = threading.RLock()
         self.cond = threading.Condition(self.lock)
@@ -232,7 +239,7 @@ class FakeOMB:
         with self.lock:
             self.requests.append(record)
 
-    def handle_post(self, path: str, query: str, headers, body: bytes) -> Reply:
+    def handle_post(self, path: str, query: str, headers, body: bytes, fault: str | None = None) -> Reply:
         parsed = urlsplit(path)
         clean_path = parsed.path
         if not clean_path.startswith(self.prefix + "/"):
@@ -256,7 +263,7 @@ class FakeOMB:
             return self._input(turn_id, headers, body)
         if sub.startswith("/turns/") and sub.endswith("/files"):
             turn_id = sub[len("/turns/") : -len("/files")]
-            return self._files(turn_id, query, headers, body)
+            return self._files(turn_id, query, headers, body, fault)
         self._record("unknown", clean_path, query, headers, body, {})
         return Reply(404, {"error": "not_found"})
 
@@ -406,10 +413,14 @@ class FakeOMB:
             turn = self.turns.get(turn_id)
             if not turn:
                 return Reply(404, {"error": "unknown_turn"})
-            if turn["deliveryId"] != payload.get("deliveryId"):
-                return Reply(409, {"error": "stale_delivery"})
+            # Same order as the real server: a cancelled turn answers cancelled to whoever beats,
+            # a finished one answers 409 (which is why a finished retry must never beat first).
             if turn["cancelled"]:
                 return Reply(200, {"schemaVersion": SCHEMA_VERSION, "ok": True, "leaseUntil": None, "cancelled": True})
+            if turn["terminal"]:
+                return Reply(409, {"error": "finished"})
+            if turn["deliveryId"] != payload.get("deliveryId"):
+                return Reply(409, {"error": "stale_delivery"})
             turn["leaseUntil"] = time.time() + self.lease_seconds
             return Reply(
                 200,
@@ -501,7 +512,7 @@ class FakeOMB:
             return Reply(drop=True)
         return Reply(200, result)
 
-    def _files(self, turn_id: str, query: str, headers, body: bytes) -> Reply:
+    def _files(self, turn_id: str, query: str, headers, body: bytes, fault: str | None = None) -> Reply:
         params = parse_qs(query)
         delivery_id = (params.get("deliveryId") or [None])[0]
         event_id = (params.get("eventId") or [None])[0]
@@ -524,6 +535,8 @@ class FakeOMB:
             },
         )
         with self.lock:
+            if fault:
+                return Reply(409, {"error": fault})
             if self.file_faults:
                 fault = self.file_faults.pop(0)
                 return Reply(fault["status"], {"error": "scripted"}, dict(fault["headers"]))
@@ -591,6 +604,51 @@ class FakeOMB:
             return Reply(drop=True)
         return Reply(200, result)
 
+    def is_upload(self, path: str) -> bool:
+        return path.startswith(self.prefix + "/turns/") and path.endswith("/files")
+
+    def read_upload_body(self, path: str, stream, length: int) -> tuple[bytes, str | None]:
+        """Reads a file upload in chunks, renewing the lease on every chunk like the real server.
+
+        With `file_chunk_delay` set the body arrives slowly, so the upload can outlive a short lease;
+        `fault` names the delivery problem noticed mid-upload (the answer is then 409).
+        """
+        parsed = urlsplit(path)
+        sub = parsed.path[len(self.prefix) :]
+        turn_id = sub[len("/turns/") : -len("/files")]
+        delivery_id = (parse_qs(parsed.query).get("deliveryId") or [None])[0]
+        chunks: list[bytes] = []
+        fault = None
+        left = length
+        while left > 0:
+            chunk = stream.read(min(self.file_chunk_bytes, left))
+            if not chunk:
+                break
+            left -= len(chunk)
+            chunks.append(chunk)
+            if self.file_chunk_delay:
+                time.sleep(self.file_chunk_delay)
+            if fault is None:
+                fault = self._renew_upload_lease(turn_id, delivery_id)
+        return b"".join(chunks), fault
+
+    def _renew_upload_lease(self, turn_id: str, delivery_id: str) -> str | None:
+        with self.lock:
+            turn = self.turns.get(turn_id)
+            if not turn:
+                return "unknown_turn"
+            if turn["cancelled"]:
+                return "cancelled"
+            if turn["terminal"]:
+                return "finished"
+            if turn["deliveryId"] != delivery_id:
+                return "stale_delivery"
+            if turn["leaseUntil"] <= time.time():
+                return "stale_delivery"
+            turn["leaseUntil"] = time.time() + self.lease_seconds
+            self.upload_renewals += 1
+        return None
+
 
 def _make_handler(fake: FakeOMB):
     class Handler(BaseHTTPRequestHandler):
@@ -605,8 +663,12 @@ def _make_handler(fake: FakeOMB):
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 length = 0
-            body = self.rfile.read(length) if length > 0 else b""
-            reply = fake.handle_post(parsed.path, parsed.query, self.headers, body)
+            fault = None
+            if length > 0 and fake.is_upload(parsed.path):
+                body, fault = fake.read_upload_body(self.path, self.rfile, length)
+            else:
+                body = self.rfile.read(length) if length > 0 else b""
+            reply = fake.handle_post(parsed.path, parsed.query, self.headers, body, fault)
             if reply.drop:
                 self.close_connection = True
                 try:

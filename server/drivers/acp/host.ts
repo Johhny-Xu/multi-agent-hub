@@ -2,11 +2,22 @@
 // sessions in one process (ACP keys every session request and update by sessionId), so a sharing driver links many
 // threads to one host; every other driver links exactly one.
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 import { engineMemory } from "../../engine-memory.ts";
+import { engineOwners } from "../../engine-owners.ts";
+import { threadsRefused } from "../../host-fault.ts";
+import { processBudget } from "../../process-room.ts";
 import { appendNative } from "../native.ts";
+import type { AcpPromptCompletion } from "./driver-hooks.ts";
 import { StderrTail } from "./exit-report.ts";
 import { acpRpcError } from "./rpc-error.ts";
+
+/** How long a prompt the agent's own notification ended still waits for its session/prompt reply, which carries the
+ * prompt's token usage and, in recorded traffic, follows the notification at once. */
+const REPLY_AFTER_END_MS = 2_000;
+/** A stderr line longer than this is not the short line a refused thread start writes. */
+const STDERR_LINE_CHARS = 4096;
 
 /** A catalog can contain credential-bearing native configuration, including late replies. */
 export function acpNativeIncomingLogMessage(message: any, privateResponses: { has(id: number): boolean }): unknown {
@@ -91,6 +102,8 @@ interface Pending {
   timer: ReturnType<typeof setTimeout> | null;
   idleTimer: ReturnType<typeof setTimeout> | null;
   armIdle: () => void;
+  /** A session/prompt: the id its `_meta` gave it and its session. */
+  prompt: { id: string; sessionId: unknown } | null;
 }
 
 export interface AcpHostOptions {
@@ -100,11 +113,14 @@ export interface AcpHostOptions {
   logMessage(msg: any): unknown;
   /** A request for a session no thread holds: it must still be answered or the agent blocks. */
   unrouted(msg: any, send: (obj: unknown) => void): void;
+  promptCompletion?: AcpPromptCompletion;
 }
 
 export class AcpLink implements AcpConnection {
   sessionId: string | null = null;
   inbound: AcpInbound | null = null;
+  /** Hears every `session/update` routed to this link, replayed history included, before the thread reads it. */
+  onUpdate: ((params: any) => void) | null = null;
   closed = false;
   #lastInboundAt = Date.now();
   readonly host: AcpHost;
@@ -153,6 +169,9 @@ export class AcpHost {
   authenticated = false;
   /** The last stderr lines, masked, for the exit message. */
   readonly stderrTail = new StderrTail();
+  /** Before its first message, the agent said it could not start its threads for want of room. */
+  startRefused = false;
+  #spoke = false;
   dead = false;
   /** Takes no new sessions; it ends when its last one closes. */
   draining = false;
@@ -177,6 +196,7 @@ export class AcpHost {
     this.child = child;
     this.key = key;
     this.options = options;
+    if (key !== null) engineOwners.shareable(child);
     let buf = "";
     // decode as UTF-8 across chunk boundaries — a raw `buf += chunk` splits
     // multibyte characters that straddle two reads and corrupts the text
@@ -194,20 +214,37 @@ export class AcpHost {
         } catch {
           continue;
         }
+        this.#spoke = true;
         this.#receive(msg);
       }
     });
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => this.stderrTail.write(chunk));
+    let partial = "";
+    const watch = (lines: string[]) => { if (!this.startRefused && !this.#spoke && lines.some(threadsRefused)) this.#refuseStart(); };
+    child.stderr.on("data", (chunk: string) => {
+      this.stderrTail.write(chunk);
+      const lines = (partial + chunk).split("\n");
+      partial = (lines.pop() ?? "").slice(-STDERR_LINE_CHARS);
+      watch(lines);
+    });
     child.on("error", (error) => {
       this.dead = true;
       for (const link of this.#listening()) link.inbound?.error(error);
     });
     child.on("close", (code, signal) => {
       this.dead = true;
+      watch([partial]);
       this.stderrTail.flush();
       for (const link of this.#listening()) link.inbound?.exit(code, signal);
     });
+  }
+
+  /** Counted as the refused spawn it is: the process budget learns the limit and holds new work, and each linked thread's
+   * turn ends as one the server had no room for. */
+  #refuseStart(): void {
+    this.startRefused = true;
+    processBudget.spawnFailed("EAGAIN");
+    for (const link of this.links) engineMemory.spawnRefused("EAGAIN", true, link.threadId);
   }
 
   /** Room for `threadId` in `folder`: alive, not draining, under `limit` sessions open and `lifetime` ever opened, and
@@ -224,13 +261,14 @@ export class AcpHost {
     this.links.add(link);
     this.opened += 1;
     engineMemory.attach(this.child, threadId);
+    engineOwners.attach(this.child, threadId);
     return link;
   }
 
   unlink(link: AcpLink): void {
     if (!this.links.delete(link)) return;
     if (!this.links.size) this.#lastOut = link;
-    if (![...this.links].some((other) => other.threadId === link.threadId)) engineMemory.detach(this.child, link.threadId);
+    if (![...this.links].some((other) => other.threadId === link.threadId)) { engineMemory.detach(this.child, link.threadId); engineOwners.detach(this.child, link.threadId); }
   }
 
   #listening(): AcpLink[] {
@@ -261,6 +299,9 @@ export class AcpHost {
     return new Promise<any>((resolve, reject) => {
       this.#private.prune();
       const id = this.#nextId++;
+      const completion = method === "session/prompt" ? this.options.promptCompletion : undefined;
+      const prompt = completion ? { id: `omb-prompt-${randomUUID()}`, sessionId: (params as { sessionId?: unknown } | null)?.sessionId } : null;
+      if (completion && prompt) params = { ...params as object, _meta: { ...(params as { _meta?: object } | null)?._meta, ...completion.meta(prompt.id) } };
       const pending: Pending = {
         link,
         method,
@@ -270,6 +311,7 @@ export class AcpHost {
         timer: null,
         idleTimer: null,
         armIdle: () => {},
+        prompt,
       };
       // Both deadlines end the request through here, so the other timer can never fire afterwards.
       const finish = (error: Error): void => {
@@ -340,6 +382,25 @@ export class AcpHost {
     return only;
   }
 
+  /** A notification that ends a prompt answers it, unless the prompt's own reply comes within REPLY_AFTER_END_MS. A
+   * notification that names no prompt ends one only when it is its session's one prompt out. */
+  #promptEnded(msg: any): void {
+    const ended = this.options.promptCompletion?.read(msg);
+    if (!ended) return;
+    const prompts = [...this.#pending].filter(([, pending]) => pending.prompt !== null && pending.prompt.sessionId === ended.sessionId
+      && (ended.promptId === null || pending.prompt.id === ended.promptId));
+    if (prompts.length !== 1) return;
+    const [id, pending] = prompts[0]!;
+    const timer = setTimeout(() => {
+      if (this.#pending.get(id) !== pending) return;
+      this.#pending.delete(id);
+      if (pending.timer) clearTimeout(pending.timer);
+      if (pending.idleTimer) clearTimeout(pending.idleTimer);
+      pending.resolve(ended.result);
+    }, REPLY_AFTER_END_MS);
+    timer.unref?.();
+  }
+
   #receive(msg: any): void {
     this.#private.prune();
     const link = this.#route(msg);
@@ -361,8 +422,12 @@ export class AcpHost {
     } else if (msg.id !== undefined && msg.method) {
       if (link?.inbound && !link.closed) link.inbound.request(msg);
       else this.options.unrouted(msg, (obj) => this.write(obj, link?.threadId ?? null));
-    } else if (msg.method && link && !link.closed) {
-      link.inbound?.notification(msg);
+    } else if (msg.method) {
+      this.#promptEnded(msg);
+      if (link && !link.closed) {
+        if (msg.method === "session/update") link.onUpdate?.(msg.params);
+        link.inbound?.notification(msg);
+      }
     }
   }
 }

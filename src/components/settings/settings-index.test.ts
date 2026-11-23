@@ -38,8 +38,8 @@ describe("the pages", () => {
   // bots, Desktops & browser, Spending, Data and General in their places. HUB-HIDE keeps Hub out of both, and this
   // project's daily check-ins page adds one more.
   it.each(["local only", "This computer, with My Cloud", "My Cloud's page in the desktop window", "My Cloud in a browser (owner)"] as const)(
-    "shows Simple's ten entries for %s", (who) => {
-      expect(ids({ ...PEOPLE[who], advanced: false })).toEqual(["overview", "phone", "ai", "vault", "transfer", "daily", "account", "plan", "app", "appearance"]);
+    "shows Simple's eleven entries for %s", (who) => {
+      expect(ids({ ...PEOPLE[who], advanced: false })).toEqual(["overview", "phone", "ai", "vault", "usage", "transfer", "daily", "account", "plan", "app", "appearance"]);
     });
 
   it("never offers the Hub page, in Simple or in Advanced, and keeps Daily in both", () => {
@@ -83,11 +83,13 @@ describe("the pages", () => {
 
   it("finds every Advanced-only row from Simple, marked Advanced; Simple's own homes win for moved rows", () => {
     const simple = fullContext({ advanced: false });
-    for (const query of ["parallel threads", "effort", "spending", "send", "storage"]) {
+    for (const query of ["parallel threads", "effort", "send", "storage"]) {
       const hit = find(query, simple)[0];
       expect(hit, query).toBeDefined();
       expect(hit!.advanced, query).toBe(true);
     }
+    expect(find("spending", simple)[0]).toMatchObject({ entry: { page: "usage" } });
+    expect(find("spending", simple)[0]?.advanced).toBeUndefined();
     expect(find("language", simple)[0]?.entry.page).toBe("app");
     expect(find("backups", simple)[0]).toMatchObject({ entry: { page: "transfer" }, advanced: undefined });
   });

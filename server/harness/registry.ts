@@ -3,6 +3,7 @@ import { findCliCandidates } from "../env-path.ts";
 import { installNpmEngine, npmAvailable, serverInstallFor, standaloneLookupPath } from "../engine-install.ts";
 import { installStandaloneEngine, isAppStandaloneCopy, type StandaloneInstalled } from "../engine-standalone.ts";
 import { pinnedNpmVersion } from "../engine-versions.ts";
+import { withBotMemoryCap } from "../bot-memory-cap.ts";
 import { withEngineMemory } from "../engine-memory.ts";
 import { withEngineHomes } from "../engine-homes/engine-homes.ts";
 import { withLocalContext } from "../drivers/local-inject.ts";
@@ -194,13 +195,13 @@ export class ProviderRegistry {
       // The RAW config: decodeConfig fills in the driver default, which would flag every instance as overridden.
       const rawCli = cliOfRaw(entry.config);
       if (rawCli) this.cliByInstance.set(instanceId, rawCli);
-      const live = withLocalContext(withUnaskedStops(withEngineHomes(withEngineMemory(withTurnScope(await driver.create({
+      const live = withLocalContext(withUnaskedStops(withEngineHomes(withBotMemoryCap(withEngineMemory(withTurnScope(await driver.create({
         instanceId,
         displayName: entry.displayName ?? driver.metadata.displayName,
         environment: entry.environment ?? {},
         enabled: entry.enabled ?? true,
         config,
-      }))))));
+      })))))));
       this.shareSnapshot(live);
       return { instanceId, live: decorate ? decorate(live) : live };
     } catch (e) {
@@ -460,13 +461,14 @@ export class ProviderRegistry {
   }
 
   /** `reuse`: answer from a status read since the last forgetSnapshots(); one older than `ms` is read again in the background
-   * and `changed` runs when that read differs. */
-  describe(options: { known?: boolean; reuse?: { ms: number; changed(): void } } = {}) {
+   * and `changed` runs when that read differs. One older than `maxAgeMs` is not reused: its engine is read first. */
+  describe(options: { known?: boolean; reuse?: { ms: number; maxAgeMs?: number; changed(): void } } = {}) {
     return this.describeWith((instance) => {
       const seed = options.known && this.unread?.has(instance.instanceId) ? this.seeds.get(instance.instanceId) : undefined;
       if (seed) return Promise.resolve(seed);
       const last = options.reuse && this.readsOf.get(instance);
       if (!options.reuse || !last || last.generation !== this.snapshotGeneration) return this.read(instance);
+      if (options.reuse.maxAgeMs !== undefined && Date.now() - last.at >= options.reuse.maxAgeMs) return this.read(instance);
       if (Date.now() - last.at >= options.reuse.ms) {
         const { changed } = options.reuse;
         void this.read(instance).then((snapshot) => { if (JSON.stringify(snapshot) !== JSON.stringify(last.snapshot)) changed(); });
@@ -550,7 +552,7 @@ export class ProviderRegistry {
           displayName: inst.displayName ?? inst.driverKind,
           snapshot,
           models: inst.models,
-          ...(inst.modelsUnconfirmed ? { modelsUnconfirmed: true } : {}),
+          ...(inst.modelsUnconfirmed ? { modelsUnconfirmed: true, ...(inst.modelsUnreadable ? { modelsUnreadable: inst.modelsUnreadable } : {}) } : {}),
           capabilities: {
             computerMcp: inst.adapter.capabilities.computerMcp === true,
             agentsMcp: inst.adapter.capabilities.agentsMcp === true,

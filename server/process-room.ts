@@ -1,6 +1,7 @@
 // A server in a container may hold only so many processes and threads (its cgroup's pids.max); past that every spawn
 // fails with EAGAIN. The gate that holds turns for memory (engine-memory.ts) asks here whether one more engine fits.
 import { readFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { nameBucket, parseReapedChildrenMs, type ProcessRow } from "./perf/process-buckets.ts";
 import { linuxProcessList } from "./perf/process-sampler.ts";
 import { containerLimited, readPids } from "./process-limits.ts";
@@ -10,6 +11,14 @@ import type { ShortageCode } from "./process-shortage.ts";
  * 6 processes with 44 threads (a scripted engine on Node 24, 2026-11-16); a real engine CLI and the commands it runs add
  * to that. */
 export const ENGINE_TASKS = 60;
+/** Grok's engine is a native binary whose async runtime pre-warms a blocking pool of 16 threads before it answers (the count
+ * grok 1.0.x names when that fails, "blocking pool pre-warm stalled after 14 of 16 threads") and runs a worker thread per
+ * CPU; counted on top of the generic estimate, not measured. */
+const GROK_RUNTIME_THREADS = 16;
+
+/** What one engine of `driverKind` holds against pids.max while it works. */
+export const engineTasks = (driverKind: string, cpus: number = availableParallelism()): number =>
+  driverKind === "grokAgent" ? ENGINE_TASKS + GROK_RUNTIME_THREADS + cpus : ENGINE_TASKS;
 /** One more session in an engine process that is already running: its tool servers. */
 export const SESSION_TASKS = 40;
 /** One bot's browser: 13 processes with 163 threads (agent-browser 0.37.0 and Chromium 156 on one page, 2026-11-16). */
@@ -27,6 +36,8 @@ const BROWSER_START_MS = 60_000;
 const BROWSER_WAIT_MS = 20_000;
 export const BROWSER_NO_ROOM = "This server is close to its limit on running programs, so another browser cannot open now. " +
   "Try the browser again in a few minutes, or carry on without it.";
+
+const MIN_HEADROOM = 0.1;
 
 /** Kept below the limit for what nobody counts ahead: a command's own children, a probe, a thread pool growing. */
 export const margin = (limit: number) => Math.max(32, Math.round(limit * 0.1));
@@ -97,6 +108,15 @@ export class ProcessBudget {
     if (this.now() < this.holdUntil) return true;
     const limit = this.limit(), { current } = this.state();
     return limit !== null && current !== null && current + held + this.browsersHeld() + tasks > limit - margin(limit);
+  }
+
+  /** How much room for processes is left, for how long an idle engine stays loaded (idle-policy.ts): 1 with half the limit
+   * or more free below its margin, down to a tenth as it fills; 1 where no limit is known. */
+  headroom(): number {
+    if (this.now() < this.holdUntil) return MIN_HEADROOM;
+    const limit = this.limit(), { current } = this.state();
+    if (limit === null || current === null) return 1;
+    return Math.min(1, Math.max(MIN_HEADROOM, (limit - margin(limit) - this.browsersHeld() - current) / (limit / 2)));
   }
 
   /** What the browsers let in still hold against the limit beyond what the count shows of them: each counts at its full

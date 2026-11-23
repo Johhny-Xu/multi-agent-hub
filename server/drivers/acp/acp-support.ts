@@ -17,6 +17,7 @@ import { type AcpModelSelection } from "./session-model-controls.ts";
 import { type AcpMcpServer } from "../turn-mcp.ts";
 import { type LogSignal } from "./quiet-status.ts";
 import type { AcpDriverHooks } from "./driver-hooks.ts";
+import type { AcpBackgroundWork } from "./background-work.ts";
 
 export type AccountErrorCode = Extract<ProviderErrorCode,
   "invalid_credentials" | "inactive_subscription" | "insufficient_funds" | "quota_or_region_restriction">;
@@ -36,6 +37,10 @@ export interface AcpConfig {
 
 /** Per-CLI specifics plugged into the shared ACP runtime; `askTool` is the native tool `questionRequests` come from. */
 export interface AcpSupport extends AcpDriverHooks {
+  /** Work the agent goes on with after its turn: ended at Stop and when it wakes a turn between ours. */
+  backgroundWork?: AcpBackgroundWork;
+  /** mistral-vibe 3.1.2 loads its live session as a second open copy, and both stream every reply. */
+  closeBeforeLiveLoad?: boolean;
   questionRequests?: Readonly<Record<string, AcpQuestionRequest>>; askTool?: string;
   /** Verified native catalog parameters, applied before both new and restored sessions. */
   toolScopeSessionParams?(turn: SendTurnInput, initializeResult: unknown, hasMcp: boolean,
@@ -142,7 +147,7 @@ export interface AcpSupport extends AcpDriverHooks {
   /** Rewrites a session/request_permission's params (its options and tool call) before the card is built. */
   permissionRequest?(params: Record<string, any>): Record<string, any>;
   /** The agent reaches MCP servers by URL: OpenMausBot's own servers are this server's endpoints, no process each. */
-  ownMcpOverHttp?: boolean;
+  ownMcpOverHttp?: boolean | "advertised";
   /** The engine receives session/new's mcpServers. A bridge that drops them (codearts, meoo,
    *  mcode) declares false, and the workbench then offers the bot no MCP-class tools. */
   mcp?: boolean;
@@ -199,10 +204,12 @@ export interface AcpSupport extends AcpDriverHooks {
   /** Rewrite a picker id (`omlx::model`) into the CLI-native id before spawn and session/select. */
   resolveTurnModel?(model: string | undefined, env: Record<string, string | undefined>, catalog: ModelCatalog): string | undefined;
   /** Map a saved selection onto the live session's catalog (a retired model id), once session/new or load answers. */
-  normalizeSessionSelection?(turn: SendTurnInput, offeredModels: readonly string[]): SendTurnInput;
+  normalizeSessionSelection?(turn: SendTurnInput, offeredModels: readonly string[], catalog?: ModelCatalog): SendTurnInput;
   /** Per-session settings between session/new (or load) and the first prompt. Some CLIs ignore argv
    * and take the model/mode over the wire (droid); a throw fails the turn rather than run another model. */
   configureSession?(ctx: {
+    /** The session's effort, and where a live change to it is recorded. */
+    currentEffort?: EffortLevel; effortApplied?(effort: EffortLevel | undefined): void;
     request: (method: string, params: unknown, timeoutMs?: number) => Promise<any>;
     sessionId: string;
     env: Record<string, string | undefined>;

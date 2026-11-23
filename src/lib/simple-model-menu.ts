@@ -119,7 +119,9 @@ export function repeatedModelLabels(options: readonly ModelOption[]): Set<string
 function listedModels(instance: InstanceInfo, current: readonly (string | undefined)[] = []) {
   const signedOut = !isCustomOnly(instance) && needsSignIn(instance);
   const pickable = pickableModels(instance, current);
-  const own = isCustomOnly(instance) || signedOut ? [] : modelChoices(instance, pickable.filter((option) => !option.custom));
+  // A custom engine's own models are the ones it discovered, not the ones added by hand: those are the local ones
+  // below. Hidden models stay out unless one is the current selection (PLAN.md row 48).
+  const own = signedOut ? [] : modelChoices(instance, pickable.filter((option) => !option.custom));
   const local = partitionCustomModels(pickable.filter((option) => option.custom));
   return { signedOut, own, all: [...own, ...local.pinned, ...local.rest] };
 }

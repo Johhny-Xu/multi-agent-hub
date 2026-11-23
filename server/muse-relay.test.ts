@@ -336,6 +336,124 @@ describe("MuseRelayHub turns", () => {
   });
 });
 
+describe("MuseRelayHub limits", () => {
+  it("queues a system prompt past 256 KiB but refuses one byte over one MiB", () => {
+    const { hub } = harness({ queueTimeoutMs: 100_000 });
+    const queue = (system: string) => () => hub.queueTurn({ instanceId: "inst", threadId: "t", text: "hi", system, transcript: [] });
+    expect(statusOf(queue("s".repeat(256 * 1024 + 1)))).toBe(0);
+    expect(statusOf(queue("s".repeat(1 << 20)))).toBe(0);
+    expect(statusOf(queue("s".repeat((1 << 20) + 1)))).toBe(413);
+  });
+
+  it("counts file events against the per-turn event budget", async () => {
+    const { hub } = harness({ maxEventsPerTurn: 2, leaseMs: 10_000 });
+    const { connectionId } = hub.createConnection("inst");
+    const { turnId } = hub.queueTurn({ instanceId: "inst", threadId: "t", text: "hi", transcript: [] });
+    const delivery = (await hub.poll(connectionId, 0, 1)).deliveries[0]!;
+    const file = (eventId: string, seq: number) => ({
+      deliveryId: delivery.deliveryId, eventId, seq, kind: "file" as const,
+      path: `/tmp/${eventId}`, mime: "text/plain", bytes: 1, hash: createHash("sha256").update(eventId).digest("hex"),
+    });
+
+    hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f1", seq: 1 });
+    expect(hub.recordFile(connectionId, turnId, file("f1", 1))).toMatchObject({ accepted: true, duplicate: false });
+    hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f2", seq: 2 });
+    expect(hub.recordFile(connectionId, turnId, file("f2", 2))).toMatchObject({ accepted: true, duplicate: false });
+    expect(statusOf(() => hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f3", seq: 3 }))).toBe(429);
+  });
+
+  it("budgets text and file events together and still answers duplicates at the cap", async () => {
+    const { hub } = harness({ maxEventsPerTurn: 2, leaseMs: 10_000 });
+    const { connectionId } = hub.createConnection("inst");
+    const { turnId } = hub.queueTurn({ instanceId: "inst", threadId: "t", text: "hi", transcript: [] });
+    const delivery = (await hub.poll(connectionId, 0, 1)).deliveries[0]!;
+    const text = { deliveryId: delivery.deliveryId, eventId: "t1", seq: 1, type: "text" as const, itemId: "i1", text: "one" };
+    expect(hub.recordEvent(connectionId, turnId, text)).toMatchObject({ duplicate: false });
+    hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f1", seq: 2 });
+    const file = {
+      deliveryId: delivery.deliveryId, eventId: "f1", seq: 2, kind: "file" as const,
+      path: "/tmp/f1", mime: "text/plain", bytes: 1, hash: createHash("sha256").update("f1").digest("hex"),
+    };
+    expect(hub.recordFile(connectionId, turnId, file)).toMatchObject({ duplicate: false });
+    expect(statusOf(() => hub.recordEvent(connectionId, turnId, { ...text, eventId: "t2", seq: 3, text: "two" }))).toBe(429);
+    expect(hub.recordEvent(connectionId, turnId, text)).toMatchObject({ accepted: true, duplicate: true, seq: 1 });
+    expect(hub.recordFile(connectionId, turnId, file)).toMatchObject({ accepted: true, duplicate: true, seq: 2 });
+    expect(hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f1", seq: 2 })).toMatchObject({
+      uploadId: expect.any(String),
+    });
+  });
+
+  it("does not spend a second slot on a repeated begin", async () => {
+    const { hub } = harness({ maxEventsPerTurn: 2, leaseMs: 10_000 });
+    const { connectionId } = hub.createConnection("inst");
+    const { turnId } = hub.queueTurn({ instanceId: "inst", threadId: "t", text: "hi", transcript: [] });
+    const delivery = (await hub.poll(connectionId, 0, 1)).deliveries[0]!;
+    const first = hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f1", seq: 1 });
+    expect(hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f1", seq: 1 })).toEqual(first);
+    const file = (eventId: string, seq: number) => ({
+      deliveryId: delivery.deliveryId, eventId, seq, kind: "file" as const,
+      path: `/tmp/${eventId}`, mime: "text/plain", bytes: 1, hash: createHash("sha256").update(eventId).digest("hex"),
+    });
+    expect(hub.recordFile(connectionId, turnId, file("f1", 1))).toMatchObject({ duplicate: false });
+    hub.beginFile(connectionId, turnId, { deliveryId: delivery.deliveryId, eventId: "f2", seq: 2 });
+    expect(hub.recordFile(connectionId, turnId, file("f2", 2))).toMatchObject({ duplicate: false });
+  });
+});
+
+describe("MuseRelayHub upload keepalive", () => {
+  const setup = async (options: { leaseMs?: number; claimAckMs?: number; pickupMs?: number } = {}) => {
+    const built = harness({ leaseMs: 3_000, claimAckMs: 1_000, pickupMs: 1_000, queueTimeoutMs: 5_000, turnTimeoutMs: 60_000, ...options });
+    const { connectionId } = built.hub.createConnection("inst");
+    const { turnId } = built.hub.queueTurn({ instanceId: "inst", threadId: "t", text: "hi", transcript: [] });
+    const delivery = (await built.hub.poll(connectionId, 0, 1, { refMode: true })).deliveries[0]!;
+    return { ...built, connectionId, turnId, deliveryId: delivery.deliveryId };
+  };
+
+  it("extends the short acknowledgement lease when the upload starts", async () => {
+    const { clock, hub, connectionId, turnId, deliveryId } = await setup();
+    const begin = hub.beginFile(connectionId, turnId, { deliveryId, eventId: "f1", seq: 1 });
+    expect(begin.uploadId).toMatch(/^[0-9a-f-]{36}$/);
+    clock.advance(1_500);
+    // The claim's 1 s acknowledgement lease would be long gone; the upload's own ack granted 3 s.
+    expect(hub.heartbeat(connectionId, turnId, deliveryId)).toMatchObject({ ok: true });
+  });
+
+  it("keeps the delivery while a body arrives in chunks and lapses only after the last one", async () => {
+    const { clock, hub, connectionId, turnId, deliveryId } = await setup();
+    const { uploadId } = hub.beginFile(connectionId, turnId, { deliveryId, eventId: "f1", seq: 1 });
+    clock.advance(1_500);
+    hub.acknowledgeFileUpload(connectionId, turnId, deliveryId, uploadId);
+    clock.advance(2_000);
+    expect((await hub.poll(connectionId, 0, 1, { refMode: true })).deliveries).toHaveLength(0);
+    clock.advance(1_100);
+    const next = (await hub.poll(connectionId, 0, 1, { refMode: true })).deliveries[0]!;
+    expect(next).toMatchObject({ turnId, attempt: 2 });
+    expect(next.deliveryId).not.toBe(deliveryId);
+  });
+
+  it("renews once more when the file record is written", async () => {
+    const { clock, hub, connectionId, turnId, deliveryId } = await setup();
+    hub.beginFile(connectionId, turnId, { deliveryId, eventId: "f1", seq: 1 });
+    clock.advance(2_500);
+    hub.recordFile(connectionId, turnId, {
+      deliveryId, eventId: "f1", seq: 1, kind: "file", path: "/tmp/f1", mime: "text/plain", bytes: 1,
+      hash: createHash("sha256").update("f1").digest("hex"),
+    });
+    clock.advance(700);
+    expect((await hub.poll(connectionId, 0, 1, { refMode: true })).deliveries).toHaveLength(0);
+  });
+
+  it("refuses to renew an upload whose delivery was replaced", async () => {
+    const { clock, hub, connectionId, turnId, deliveryId } = await setup();
+    const { uploadId } = hub.beginFile(connectionId, turnId, { deliveryId, eventId: "f1", seq: 1 });
+    clock.advance(3_100);
+    const next = (await hub.poll(connectionId, 0, 1, { refMode: true })).deliveries[0]!;
+    expect(next.deliveryId).not.toBe(deliveryId);
+    expect(statusOf(() => hub.acknowledgeFileUpload(connectionId, turnId, deliveryId, uploadId))).toBe(409);
+    expect(statusOf(() => hub.acknowledgeFileUpload(connectionId, turnId, next.deliveryId, uploadId))).toBe(409);
+  });
+});
+
 describe("MuseRelayHub input slices", () => {
   const bigInput = () => ({
     instanceId: "inst",

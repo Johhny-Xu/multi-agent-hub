@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyProcesses, parseCgroupCpuMs, parseProcStat, parsePsLine, parsePsTime, parseReapedChildrenMs, type ProcessRow } from "./process-buckets.ts";
-import { createProcessSampler, linuxProcessList, type ProcessList } from "./process-sampler.ts";
+import { createProcessSampler, LATE_TIMER_MS, linuxProcessList, pausedNotStalled, type ProcessList } from "./process-sampler.ts";
 
 const SERVER = 100;
 const row = (pid: number, ppid: number, name: string, cpuMs = 0, rssBytes = 1_048_576): ProcessRow => ({ pid, ppid, name, cpuMs, rssBytes, start: `s${pid}` });
@@ -41,7 +41,7 @@ describe("process buckets, from the executable's name and parent only", () => {
   });
 
   it("parses /proc stat lines (a comm with spaces and parentheses), ps lines and CPU counters", () => {
-    expect(parseProcStat(42, statLine(42, "Web Content (x)", 7, 150, 50))).toEqual({ pid: 42, ppid: 7, name: "web content (x)", cpuMs: 2_000, rssBytes: 256 * 4096, start: "5555", threads: 1, state: "S" });
+    expect(parseProcStat(42, statLine(42, "Web Content (x)", 7, 150, 50))).toEqual({ pid: 42, ppid: 7, name: "web content (x)", cpuMs: 2_000, rssBytes: 256 * 4096, start: "5555", threads: 1, state: "S", pgid: 42, sid: 42 });
     expect(parseProcStat(1, "garbage")).toBeNull();
     expect(parseReapedChildrenMs(statLine(1, "node", 0, 0, 0, 1, 300, 200))).toBe(5_000);
     expect(parsePsTime("1:02.50")).toBe(62_500);
@@ -49,6 +49,8 @@ describe("process buckets, from the executable's name and parent only", () => {
     expect(parsePsTime("nope")).toBeNull();
     expect(parsePsLine("  812     1  20480   0:03.10 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome Helper (Renderer)"))
       .toEqual({ pid: 812, ppid: 1, name: "google chrome helper (renderer)", cpuMs: 3_100, rssBytes: 20480 * 1024, start: "ps:812" });
+    expect(parsePsLine("  812     1   640  20480   0:03.10 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome Helper (Renderer)"))
+      .toEqual({ pid: 812, ppid: 1, name: "google chrome helper (renderer)", cpuMs: 3_100, rssBytes: 20480 * 1024, start: "ps:812", pgid: 640 });
     expect(parseCgroupCpuMs("usage_usec 2500000\nuser_usec 1\n", null)).toBe(2_500);
     expect(parseCgroupCpuMs(null, "7000000000\n")).toBe(7_000);
     expect(parseCgroupCpuMs(null, null)).toBeNull();
@@ -113,6 +115,53 @@ describe("the sampler", () => {
     expect(report.buckets.find((bucket) => bucket.bucket === "commands")).toMatchObject({ cpu60mS: 8 });
     expect(report.browsers).toBe(2);
     expect(report.unseen60mS).toBeNull();
+  });
+});
+
+describe("a late sampler timer", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  const lateBy = async (lateMs: number, waitedMs: number | null) => {
+    vi.useFakeTimers();
+    let mono = 0, waited = 0;
+    const stalled: number[] = [], resumed: number[] = [];
+    const sampler = createProcessSampler({
+      list: () => ({ rows: [row(SERVER, 1, "node")], reapedMs: null, totalMs: null }), intervalMs: 60_000, scope: "tree", serverPid: SERVER,
+      now: () => 1_800_000_000_000 + mono, monotonic: () => mono, idle: () => (waitedMs === null ? null : waited),
+      stalled: (ms) => stalled.push(ms), resumed: (ms) => resumed.push(ms),
+    });
+    sampler.start();
+    await vi.advanceTimersByTimeAsync(0);
+    mono += 60_000 + lateMs; waited += waitedMs ?? 0;
+    await vi.advanceTimersByTimeAsync(60_000);
+    sampler.stop();
+    return { stalled, resumed, loop: sampler.report().loop };
+  };
+
+  it("is a sleep, not a stall, when the loop only waited through the gap, and stays out of the loop's lateness", async () => {
+    const hour = 3_600_000;
+    const slept = await lateBy(hour, 60_000 + hour - 40);
+    expect(slept).toMatchObject({ stalled: [], resumed: [hour], loop: { driftMaxMs: 0, driftP95Ms: 0 } });
+  });
+
+  it("is a stall when the loop worked through the lateness", async () => {
+    const held = await lateBy(5_000, 58_000);
+    expect(held).toMatchObject({ stalled: [5_000], resumed: [], loop: { driftMaxMs: 5_000 } });
+  });
+
+  it("is a stall where the loop's waiting time is not known", async () => {
+    expect(await lateBy(3_600_000, null)).toMatchObject({ stalled: [3_600_000], resumed: [] });
+  });
+
+  it("says nothing for a timer that is on time", async () => {
+    expect(await lateBy(40, 59_900)).toMatchObject({ stalled: [], resumed: [] });
+  });
+
+  it("needs the loop to have worked for at least half the lateness to call it a stall", () => {
+    expect(pausedNotStalled(60_000, 10_000, 65_001)).toBe(true);
+    expect(pausedNotStalled(60_000, 10_000, 65_000)).toBe(false);
+    expect(pausedNotStalled(60_000, LATE_TIMER_MS - 1, 60_000 + LATE_TIMER_MS - 1)).toBe(false);
+    expect(pausedNotStalled(60_000, 10_000, null)).toBe(false);
   });
 });
 

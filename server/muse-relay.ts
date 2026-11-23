@@ -438,6 +438,11 @@ export class MuseRelayHub {
   private readonly waiters = new Map<string, Set<Waiter>>();
   private readonly turnTimers = new Map<string, unknown>();
   private readonly inputCache = new Map<string, Buffer>();
+  /** Bodies still arriving: beginFile opens one, each chunk renews it, recordFile closes it. */
+  private readonly uploads = new Map<
+    string,
+    { turnId: string; deliveryId: string; eventId: string; connectionId: string; ackedAt: number }
+  >();
   private disposed = false;
 
   constructor(options: MuseRelayHubOptions) {
@@ -564,6 +569,11 @@ export class MuseRelayHub {
 
   private pendingCount(instanceId: string): number {
     return this.instanceTurns(instanceId).filter((turn) => !isTerminal(turn)).length;
+  }
+
+  /** Text and file events share one per-turn budget: both are persisted under the same turn record. */
+  private eventCount(turn: StoredTurn): number {
+    return Object.keys(turn.events).length + Object.keys(turn.files).length;
   }
 
   private online(connection: StoredConnection): boolean {
@@ -1034,7 +1044,7 @@ export class MuseRelayHub {
     if (turn.files[input.eventId]) throw new MuseRelayError(409, "This eventId was already used for a file");
     if (isTerminal(turn)) throw new MuseRelayError(409, "This turn has already finished");
     if (input.seq !== turn.lastSeq + 1) throw new MuseRelayError(409, "Events must arrive in sequence");
-    if (Object.keys(turn.events).length >= this.maxEventsPerTurn) {
+    if (this.eventCount(turn) >= this.maxEventsPerTurn) {
       throw new MuseRelayError(429, "This turn has too many events");
     }
 
@@ -1147,13 +1157,67 @@ export class MuseRelayHub {
     const existing = turn.files[input.eventId];
     if (existing) {
       if (existing.seq !== input.seq) throw new MuseRelayError(409, "This eventId was already used with a different sequence");
-      return { uploadId: museRelayUploadId(turn.turnId, input.eventId) };
+      return this.startUpload(connection, turn, input);
     }
     if (turn.events[input.eventId]) throw new MuseRelayError(409, "This eventId was already used for an event");
     if (isTerminal(turn)) throw new MuseRelayError(409, "This turn has already finished");
     if (input.seq !== turn.lastSeq + 1) throw new MuseRelayError(409, "Events must arrive in sequence");
-    if (Object.keys(turn.events).length >= this.maxEventsPerTurn) throw new MuseRelayError(429, "This turn has too many events");
-    return { uploadId: museRelayUploadId(turn.turnId, input.eventId) };
+    if (this.eventCount(turn) >= this.maxEventsPerTurn) throw new MuseRelayError(429, "This turn has too many events");
+    return this.startUpload(connection, turn, input);
+  }
+
+  /**
+   * The upload begins: it is proof of worker life too, so a body that arrives over a slow link keeps
+   * the delivery while it moves. A repeated begin renews the same upload id after the checks above.
+   */
+  private startUpload(
+    connection: StoredConnection,
+    turn: StoredTurn,
+    input: { deliveryId: string; eventId: string; seq: number },
+  ): { uploadId: string } {
+    const uploadId = museRelayUploadId(turn.turnId, input.eventId);
+    const now = this.clock.now();
+    this.uploads.set(uploadId, {
+      turnId: turn.turnId,
+      deliveryId: input.deliveryId,
+      eventId: input.eventId,
+      connectionId: connection.connectionId,
+      ackedAt: now,
+    });
+    const horizon = Math.max(this.leaseMs * 2, 60_000);
+    for (const [id, upload] of this.uploads) {
+      if (now - upload.ackedAt > horizon) this.uploads.delete(id);
+    }
+    if (turn.state === "delivered") this.acknowledge(turn, "event");
+    this.save();
+    return { uploadId };
+  }
+
+  /**
+   * One read of an upload body arrived. Renewing here, not only at beginFile and recordFile, is what
+   * keeps an upload that outlives the lease from being redelivered as a second attempt. Throttled so a
+   * fast body does not rewrite the state file on every socket read; a delivery that moved or ended
+   * answers 409, which ends the old attempt without granting it anything.
+   */
+  acknowledgeFileUpload(connectionId: string, turnId: string, deliveryId: string, uploadId: string): void {
+    this.assertReadable();
+    const connection = this.connection(connectionId);
+    if (!connection) throw new MuseRelayError(401, "Invalid connection token");
+    const upload = this.uploads.get(uploadId);
+    if (!upload || upload.turnId !== turnId || upload.connectionId !== connectionId) {
+      throw new MuseRelayError(409, "This upload is no longer current");
+    }
+    this.expireDue();
+    const turn = this.turnFor(connection, turnId);
+    if (turn.state !== "delivered" || turn.deliveryId !== deliveryId || upload.deliveryId !== deliveryId) {
+      this.uploads.delete(uploadId);
+      throw new MuseRelayError(409, "This delivery is no longer current");
+    }
+    const now = this.clock.now();
+    if (now - upload.ackedAt < Math.max(1_000, Math.floor(this.leaseMs / 3))) return;
+    upload.ackedAt = now;
+    this.acknowledge(turn, "event");
+    this.save();
   }
 
   recordFile(connectionId: string, turnId: string, input: MuseRelayFileInput): MuseRelayFileResult {
@@ -1172,7 +1236,8 @@ export class MuseRelayHub {
     if (turn.events[input.eventId]) throw new MuseRelayError(409, "This eventId was already used for an event");
     if (isTerminal(turn)) throw new MuseRelayError(409, "This turn has already finished");
     if (input.seq !== turn.lastSeq + 1) throw new MuseRelayError(409, "Events must arrive in sequence");
-    if (Object.keys(turn.events).length >= this.maxEventsPerTurn) throw new MuseRelayError(429, "This turn has too many events");
+    if (this.eventCount(turn) >= this.maxEventsPerTurn) throw new MuseRelayError(429, "This turn has too many events");
+    if (turn.state === "delivered") this.acknowledge(turn, "event");
     turn.files[input.eventId] = {
       seq: input.seq,
       eventId: input.eventId,
@@ -1184,6 +1249,7 @@ export class MuseRelayHub {
       hash: input.hash,
     };
     turn.lastSeq = input.seq;
+    this.uploads.delete(museRelayUploadId(turn.turnId, input.eventId));
     this.save();
     this.notify({
       type: "turn.file",
@@ -1230,6 +1296,7 @@ export class MuseRelayHub {
     for (const handle of this.turnTimers.values()) this.clock.clearTimeout(handle);
     this.turnTimers.clear();
     this.inputCache.clear();
+    this.uploads.clear();
     this.untouched.clear();
     for (const connectionId of this.waiters.keys()) this.wake(connectionId);
     this.listeners.clear();

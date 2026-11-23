@@ -39,6 +39,8 @@ from concurrent.futures import ThreadPoolExecutor
 SCHEMA_VERSION = 1
 
 MAX_JSON_BODY = 1 << 20
+# One inbound turn's text or system prompt, as the server queues it (MUSE_RELAY_MAX_TURN_TEXT_BYTES).
+MAX_TURN_TEXT = 1 << 20
 MAX_TEXT = 256 << 10
 MAX_POLL_RESPONSE = 16 << 20
 MAX_API_RESPONSE = 64 << 10
@@ -1074,10 +1076,10 @@ def _validate_delivery(delivery: dict) -> dict:
         raise ContractError("delivery input is invalid")
     thread_id = require_id(source.get("threadId"), "input threadId")
     text = source.get("text")
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_JSON_BODY:
+    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_TURN_TEXT:
         raise ContractError("input text is invalid")
     system = source.get("system", "")
-    if not isinstance(system, str) or len(system.encode("utf-8")) > MAX_TEXT:
+    if not isinstance(system, str) or len(system.encode("utf-8")) > MAX_TURN_TEXT:
         raise ContractError("input system is invalid")
     transcript = source.get("transcript", [])
     if not isinstance(transcript, list) or len(transcript) > MAX_TRANSCRIPT_ITEMS:
@@ -1724,6 +1726,8 @@ def cmd_heartbeat_loop(args, cfg: Config, store: StateStore) -> int:
     except OSError:
         pass
     started = time.monotonic()
+    # Tests shorten the beat through the environment; production keeps the 30 s above.
+    interval = _env_int("OMB_RELAY_HEARTBEAT_INTERVAL_S", HEARTBEAT_INTERVAL_SECONDS, 1, 3600)
     trace("heartbeat_loop_started", turn=turn_id[:8], pid=os.getpid())
     try:
         while True:
@@ -1755,7 +1759,7 @@ def cmd_heartbeat_loop(args, cfg: Config, store: StateStore) -> int:
                     trace("heartbeat_loop_stopped", turn=turn_id[:8], reason="cancelled")
                     return EXIT_OK
                 trace("heartbeat", turn=turn_id[:8], cancelled=False)
-            time.sleep(HEARTBEAT_INTERVAL_SECONDS)
+            time.sleep(interval)
     finally:
         # Remove our pid file so a later complete/fail does not read a stale pid.
         try:
@@ -1916,6 +1920,19 @@ def _mark_stale(store: StateStore, turn_id: str, delivery_id: str) -> None:
         store.detach_processing(turn_id, delivery_id, "stale")
 
 
+def _preflight(store: StateStore, turn_id: str) -> dict:
+    """The ledger as it stands before the pre-heartbeat.
+
+    A stored terminal, or the inflight record of a terminal whose response was lost, must reach the
+    idempotent event replay without a heartbeat: the server answers a heartbeat for a finished turn
+    with 409, so a beat first would turn a successful retry into a false "stale".
+    """
+    try:
+        return store.load_ledger(turn_id)
+    except StateError:
+        return {}
+
+
 def _run_event(
     cfg: Config,
     store: StateStore,
@@ -1928,15 +1945,27 @@ def _run_event(
     event_id: str | None = None,
     final: bool = False,
     validate=None,
+    heartbeat_before: bool = False,
 ) -> dict:
-    if final:
-        try:
-            heartbeat = _do_heartbeat(cfg, store, turn_id, delivery_id)
-        except StaleDelivery:
-            _mark_stale(store, turn_id, delivery_id)
-            raise
-        if heartbeat["cancelled"]:
-            raise Cancelled()
+    if final or heartbeat_before:
+        pre = _preflight(store, turn_id)
+        if not pre.get("terminal"):
+            # The lease must outlive an upload or a terminal retry: a loop that died (or was never
+            # started because claim's spawn failed) is restarted here, and this is idempotent.
+            try:
+                _spawn_heartbeat_loop(turn_id, delivery_id)
+            except Exception:
+                trace("heartbeat_spawn_failed", turn=turn_id[:8])
+            if not (final and pre.get("inflight")):
+                try:
+                    heartbeat = _do_heartbeat(cfg, store, turn_id, delivery_id)
+                except StaleDelivery:
+                    _stop_heartbeat(turn_id)
+                    _mark_stale(store, turn_id, delivery_id)
+                    raise
+                if heartbeat["cancelled"]:
+                    _stop_heartbeat(turn_id)
+                    raise Cancelled()
     with store.turn_guard(turn_id, blocking=True) as acquired:
         if not acquired:
             raise StateError("turn is locked by another process")
@@ -1949,10 +1978,12 @@ def _run_event(
         if processing and processing.get("deliveryId") != delivery_id:
             raise StaleDelivery()
         if store.is_cancelled(turn_id):
+            _stop_heartbeat(turn_id)
             raise Cancelled()
         terminal = ledger.get("terminal")
         if terminal:
             if terminal == kind and kind in TERMINAL_KINDS:
+                _stop_heartbeat(turn_id)
                 known = ledger["events"].get(ledger.get("terminalEventId") or "", {})
                 return {
                     "duplicate": True,
@@ -1990,6 +2021,7 @@ def _run_event(
             ledger["staleDeliveryId"] = delivery_id
             store.save_ledger(turn_id, ledger)
             store.detach_processing(turn_id, delivery_id, "stale")
+            _stop_heartbeat(turn_id)
             raise
         except (PermanentError, AuthError, ContractError, StateConflict):
             ledger["inflight"] = None
@@ -2016,6 +2048,9 @@ def _run_event(
         store.save_ledger(turn_id, ledger)
         if kind in TERMINAL_KINDS:
             store.detach_processing(turn_id, delivery_id, "done")
+            # Only now is the turn finished on the server: stopping any earlier would let a retriable
+            # failure drop a lease the worker still needs for its retry.
+            _stop_heartbeat(turn_id)
         return {"duplicate": checked["duplicate"], "eventId": event_id, "seq": seq}
 
 
@@ -2227,6 +2262,7 @@ def cmd_send_file(args, cfg: Config, store: StateStore) -> int:
         request,
         event_id=args.event_id,
         final=False,
+        heartbeat_before=True,
     )
     emit(status="ok", duplicate=result["duplicate"], eventId=result["eventId"], seq=result["seq"])
     return EXIT_OK
@@ -2235,8 +2271,6 @@ def cmd_send_file(args, cfg: Config, store: StateStore) -> int:
 def cmd_complete(args, cfg: Config, store: StateStore) -> int:
     turn_id = require_id(args.turn, "turnId", UsageError)
     delivery_id = require_id(args.delivery, "deliveryId", UsageError)
-    # Stop the background heartbeat loop before the terminal event, so no beat lands after complete.
-    _stop_heartbeat(turn_id)
     content_hash = hashlib.sha256(b"completed").hexdigest()
 
     def request(event_id: str, seq: int) -> dict:
@@ -2268,8 +2302,6 @@ def cmd_complete(args, cfg: Config, store: StateStore) -> int:
 def cmd_fail(args, cfg: Config, store: StateStore) -> int:
     turn_id = require_id(args.turn, "turnId", UsageError)
     delivery_id = require_id(args.delivery, "deliveryId", UsageError)
-    # Stop the background heartbeat loop before the terminal event, same as complete.
-    _stop_heartbeat(turn_id)
     text = _read_text(args.text_file) if args.text_file else ""
     if len(text.encode("utf-8")) > MAX_TEXT:
         raise PermanentError("too_large")
@@ -2367,6 +2399,7 @@ def cmd_retry_inflight(args, cfg: Config, store: StateStore) -> int:
             ledger["staleDeliveryId"] = delivery_id
             store.save_ledger(turn_id, ledger)
             store.detach_processing(turn_id, delivery_id, "stale")
+            _stop_heartbeat(turn_id)
             raise
         except (PermanentError, AuthError, ContractError, StateConflict):
             ledger["inflight"] = None

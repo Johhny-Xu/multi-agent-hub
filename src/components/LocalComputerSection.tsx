@@ -20,7 +20,7 @@ import { cn } from "@/lib/cn";
 import { localizeComputerProblem } from "@/lib/computer-messages";
 import { computerInventoryRequest, jsonPostRequest, type ComputerApiRequest } from "@/lib/computer-requests";
 import { useStore } from "@/state/store";
-import { VpsComputersCard, type VpsInstanceSection } from "./VpsComputersCard"; import { KeysLink } from "./keys/KeysLink";
+import { VpsComputersCard, type VpsInstanceSection } from "./VpsComputersCard"; import { KeysLink } from "./keys/KeysLink"; import { serverFetch } from "@/lib/relay-server";
 
 type Action = "pull" | "run" | "start" | "stop" | "remove" | "recreate";
 
@@ -802,7 +802,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
   const [announcement, setAnnouncement] = useState("");
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("status", signal));
+    const response = await serverFetch(...computerInventoryRequest("status", signal));
     const body = await response.json().catch(() => ({}));
     if (signal?.aborted) return;
     if (!response.ok) throw new Error(body.error ?? t("vm.err.status", { code: response.status }));
@@ -812,7 +812,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
   }, []);
 
   const refreshInventory = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("local-vms", signal));
+    const response = await serverFetch(...computerInventoryRequest("local-vms", signal));
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error ?? t("vm.err.inventory", { code: response.status }));
     const payload = body as LocalVmInventoryPayload;
@@ -823,7 +823,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
   }, []);
 
   const refreshCloudInventory = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("cloud", signal));
+    const response = await serverFetch(...computerInventoryRequest("cloud", signal));
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error ?? t("vm.err.cloudInventory", { code: response.status }));
     const payload = body as CloudComputerInventoryPayload;
@@ -845,7 +845,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
   }, []);
 
   const refreshVpsInventory = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("vps", signal));
+    const response = await serverFetch(...computerInventoryRequest("vps", signal));
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error ?? t("vm.err.vpsInventory", { code: response.status }));
     const payload = body as VpsComputerInventoryPayload & { sections?: VpsInstanceSection[] };
@@ -945,7 +945,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
   }, [privateOnly, refreshVpsInventory, vpsRefreshKey]);
 
   const post = async (action: Exclude<Action, "recreate">, signal: AbortSignal) => {
-    const response = await fetch(`/api/local-computer/${action}`, {
+    const response = await serverFetch(`/api/local-computer/${action}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -1012,7 +1012,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
     setPolicyPending(true);
     setError(null);
     try {
-      const response = await fetch("/api/config", {
+      const response = await serverFetch("/api/config", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ localVm: { mode, maxInstances } }),
@@ -1029,7 +1029,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
   };
 
   const saveIdleTimeout = async (idleTimeoutMinutes: number) => {
-    const response = await fetch("/api/config", {
+    const response = await serverFetch("/api/config", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ localVm: { idleTimeoutMinutes } }),
@@ -1052,7 +1052,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
     setDeletingBotId(instance.botId);
     setInventoryError(null);
     try {
-      const response = await fetch(...request);
+      const response = await serverFetch(...request);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? t("vm.deleteError"));
       await refreshInventory();
@@ -1074,7 +1074,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
     setCloudError(null);
     setAnnouncement("");
     try {
-      const response = await fetch(...request);
+      const response = await serverFetch(...request);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? t(action === "delete" ? "vm.cloud.deleteError" : "vm.cloud.sleepError"));
       const deletionPending = action === "delete" && body?.pending === true;
@@ -1158,7 +1158,7 @@ export function LocalComputerSection({ privateOnly = false }: { privateOnly?: bo
     setVpsRemovingName(instance.name);
     setVpsError(null);
     try {
-      const response = await fetch(...request);
+      const response = await serverFetch(...request);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error ?? t("vm.vpsRemoveError"));
       await refreshVpsInventory();

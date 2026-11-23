@@ -7,7 +7,7 @@ import { attachmentBasename, PREVIEW_MAX_BYTES, type TranscriptFileAttachment, t
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { windowsPathDestinations } from "../../shared/markdown-windows-paths";
-import { localFilePath } from "./ChatMarkdown";
+import { decodedLinkPath, localFilePath } from "./ChatMarkdown";
 import {
   AttachedFileChip,
   AttachmentPreviewDialog,
@@ -19,6 +19,8 @@ import {
   type PreviewImage,
 } from "./AttachmentPreview";
 import { useRevealOriginalMenu } from "./RevealOriginalMenu";
+import { WhatChangedButton } from "./WhatChangedButton";
+import { useEditSources } from "@/lib/use-edit-sources";
 
 export interface GalleryFile extends TranscriptFileAttachment {
   linked?: boolean;
@@ -34,8 +36,7 @@ type MarkdownNode = {
 export function fileIdentity(path: string): string {
   // Presentation deduplication only, never an authorization check.
   if (/^file:\/\//i.test(path)) return localFilePath(path) ?? path;
-  try { return decodeURIComponent(path.split(/[?#]/, 1)[0]!); }
-  catch { return path; }
+  return decodedLinkPath(path);
 }
 
 export function collectMessageFiles(text: string, existingPaths: readonly string[] = []): GalleryFile[] {
@@ -478,6 +479,7 @@ export function AttachmentGallery({ images = [], files = [], originals, message,
     return result;
   }, [images, files, originals, message]);
   const reveal = useRevealOriginalMenu();
+  const edits = useEditSources(message, files);
   if (!items.length) return null;
   const limit = beneath ? BENEATH_LIMIT : 4;
   const shown = expanded ? items : items.slice(0, limit);
@@ -515,7 +517,7 @@ export function AttachmentGallery({ images = [], files = [], originals, message,
           <div className="flex max-w-full flex-wrap items-start gap-1.5">
             {rest.map((item) => item.kind === "audio" && message
               ? <span key={`${message.threadId}:${message.messageId}:${item.key}`} className="contents" {...reveal.targetProps(item.source)}><AudioAttachment file={item.file} message={message} /></span>
-              : item.kind === "file" && <span key={item.key} className="contents" {...reveal.targetProps(item.source)}><AttachedFileChip file={item.file} linked={item.file.linked} message={message} compact /></span>)}
+              : item.kind === "file" && <span key={item.key} className="contents" {...reveal.targetProps(item.source)}><AttachedFileChip file={item.file} linked={item.file.linked} message={message} compact />{message && edits.has(item.file.path) && <WhatChangedButton path={item.file.path} name={item.file.name} message={message} source={edits.get(item.file.path)!} compact />}</span>)}
             {items.length > limit && (
               <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} className="inline-flex h-7 items-center rounded-full px-2.5 text-[13px] leading-none text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                 {expanded ? t("attach.showLess") : t("attach.moreCount", { count: items.length - limit })}
@@ -545,7 +547,7 @@ export function AttachmentGallery({ images = [], files = [], originals, message,
         <div className="flex flex-col items-start gap-1.5">
           {documents.map((item) => item.kind === "audio" && message
             ? <span key={`${message.threadId}:${message.messageId}:${item.key}`} className="contents" {...reveal.targetProps(item.source)}><AudioAttachment file={item.file} message={message} /></span>
-            : item.kind === "file" && <span key={item.key} className="contents" {...reveal.targetProps(item.source)}><AttachedFileChip file={item.file} linked={item.file.linked} message={message} className="max-w-none rounded-xl border-hairline/25 bg-transparent" /></span>)}
+            : item.kind === "file" && <span key={item.key} className={message && edits.has(item.file.path) ? "flex max-w-full items-center gap-1" : "contents"} {...reveal.targetProps(item.source)}><AttachedFileChip file={item.file} linked={item.file.linked} message={message} className="max-w-none rounded-xl border-hairline/25 bg-transparent" />{message && edits.has(item.file.path) && <WhatChangedButton path={item.file.path} name={item.file.name} message={message} source={edits.get(item.file.path)!} />}</span>)}
         </div>
       )}
       {items.length > limit && (

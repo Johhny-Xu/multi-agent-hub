@@ -7,7 +7,11 @@ import { setLocale, t } from "@/lib/i18n";
 
 const mocks = vi.hoisted(() => ({ fetchTraces: vi.fn() }));
 vi.mock("@/state/store", () => ({
-  api: vi.fn(async () => ({ groupBy: "bot", groups: [], budget: null })),
+  // The insights panel asks for its own endpoint; this test is about the native frames, so that call fails.
+  api: vi.fn(async (path: string) => {
+    if (String(path).startsWith("/api/usage/insights")) throw new Error("no insights in this test");
+    return { groupBy: "bot", groups: [], budget: null };
+  }),
   useStore: () => ({ state: { instances: [], bots: [] }, dispatch: vi.fn() }),
 }));
 vi.mock("@/lib/live-events", () => ({ listenLiveFrames: () => () => {} }));
@@ -23,6 +27,8 @@ vi.mock("./usage/TraceWaterfall", () => ({
 }));
 vi.mock("./usage/TraceView", () => ({ TraceView: () => null }));
 vi.mock("./PlanUsage", () => ({ PlanUsage: () => null }));
+// Upstream 177 insights panel (P1-1) fetches its own shape; this test frames the local blocks only.
+vi.mock("./usage/UsageInsights", async (original) => ({ ...await original<typeof import("./usage/UsageInsights")>(), UsageInsightsPanel: () => null }));
 vi.mock("./UsageBudget", () => ({ UsageBudgetCards: () => null }));
 import { UsageSection } from "./UsageSection";
 

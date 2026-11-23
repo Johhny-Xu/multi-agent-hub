@@ -18,9 +18,11 @@ vi.mock("@/lib/browser-pip", () => ({
   supportsBrowserPictureInPicture: () => false,
   useBrowserPictureInPicture: () => "",
 }));
+const surface = vi.hoisted(() => ({ props: null as null | { onMessage?: (message: Record<string, unknown>) => void; onConnectedChange?: (connected: boolean) => void } }));
 vi.mock("./browser/StreamSurface", async () => {
   const { useEffect } = await import("react");
-  return { StreamSurface: (props: { label: string }) => {
+  return { StreamSurface: (props: { label: string; onMessage?: (message: Record<string, unknown>) => void; onConnectedChange?: (connected: boolean) => void }) => {
+    surface.props = props;
     useEffect(() => { fixture.surfaceMounts++; }, []);
     return createElement("div", { "data-stub-surface": props.label });
   } };
@@ -190,5 +192,22 @@ describe("the browser panel when the conversation's browser moves", () => {
     flushSync(() => root.render(createElement(LiveBrowser, { bot: placed("cloud-a", "mychrome", true, "second") })));
     await settle();
     expect(fixture.surfaceMounts).toBe(before);
+  });
+});
+
+describe("input that does not reach the page", () => {
+  it("says so in the panel's status line, with Reconnect, until input gets through again", async () => {
+    flushSync(() => surface.props?.onConnectedChange?.(true));
+    flushSync(() => surface.props?.onMessage?.({ type: "inputHalted", halted: true }));
+    const status = () => host.querySelector('[role="alert"]');
+    expect(status()?.textContent).toContain("Your clicks and typing are not reaching the page.");
+    const reconnect = [...status()!.querySelectorAll("button")].find((button) => button.textContent === "Reconnect");
+    expect(reconnect).toBeTruthy();
+    flushSync(() => surface.props?.onMessage?.({ type: "inputHalted", halted: false }));
+    expect(status()).toBeNull();
+    flushSync(() => surface.props?.onMessage?.({ type: "inputHalted", halted: true }));
+    click(reconnect === undefined ? null : [...status()!.querySelectorAll("button")].find((button) => button.textContent === "Reconnect")!);
+    await settle();
+    expect(status()).toBeNull();
   });
 });

@@ -19,7 +19,11 @@
 //     unsupported, like any other control_request
 //   FAKE_CLAUDE_CONTEXT_USAGE_LATE  1: the first get_context_usage is answered only when the next control_request arrives
 //   FAKE_CLAUDE_CONTROL_LOG  JSON-lines file every control_response the host writes is appended to
+//   FAKE_CLAUDE_MCP_RECONNECT  JSON-lines file: an mcp_reconnect control_request is appended to it and answered with
+//     success, as Claude Code 2.1.321 answers once the server is connected again; "refuse" answers it as a failure
+//   FAKE_CLAUDE_LAUNCHES  JSON-lines file every stream-json process appends its {pid, argv} to as it starts
 //   FAKE_CLAUDE_EXIT_AFTER_TURN  1: exit once the turn is answered, so later turns relaunch with --resume
+//   FAKE_CLAUDE_SIGNED_OUT_FILE  path: while it exists, every turn answers as not-logged-in (a sign-in that lapses and comes back)
 //   FAKE_CLAUDE_AUTH_AFTER_TURN  1: from the second turn, answer as not-logged-in; FAKE_CLAUDE_AUTH_AFTER_WORK  1: not-logged-in
 //     calls a tool first
 //   FAKE_CLAUDE_GONE_AFTER_TURN  path: after the turn stop reading stdin, write <path>.closed, exit once <path> exists
@@ -1077,7 +1081,8 @@ const playTurn = (prompt: JsonValue, late = false) => {
   }
 
   // A signed-out CLI's frames, as Claude Code 2.1.296 sends them: only the frame's own error fields mark the failure.
-  if (mode === "not-logged-in" || process.env.FAKE_CLAUDE_AUTH_AFTER_TURN === "1" && turnsPlayed > 0 || signedInAs === null) {
+  const signedOutNow = Boolean(process.env.FAKE_CLAUDE_SIGNED_OUT_FILE && existsSync(process.env.FAKE_CLAUDE_SIGNED_OUT_FILE));
+  if (mode === "not-logged-in" || signedOutNow || process.env.FAKE_CLAUDE_AUTH_AFTER_TURN === "1" && turnsPlayed > 0 || signedInAs === null) {
     if (process.env.FAKE_CLAUDE_AUTH_AFTER_WORK === "1") out({
       type: "assistant", message: { model: "claude-fixture", content: [{ type: "tool_use", id: "before-sign-out", name: "Bash", input: { command: "pwd" } }] },
     });
@@ -1355,6 +1360,7 @@ const playTurn = (prompt: JsonValue, late = false) => {
   }
 };
 
+if (process.env.FAKE_CLAUDE_LAUNCHES) appendFileSync(process.env.FAKE_CLAUDE_LAUNCHES, `${JSON.stringify({ pid: process.pid, argv: process.argv.slice(2) })}\n`);
 let buf = "";
 process.stdin.on("data", (c) => {
   buf += c;
@@ -1374,6 +1380,12 @@ process.stdin.on("data", (c) => {
       continue;
     }
     const control = prompt as { type?: unknown; request_id?: unknown; request?: { subtype?: unknown } } | null;
+    if (control?.type === "control_request" && control.request?.subtype === "mcp_reconnect" && process.env.FAKE_CLAUDE_MCP_RECONNECT) {
+      const refused = process.env.FAKE_CLAUDE_MCP_RECONNECT === "refuse";
+      if (!refused) appendFileSync(process.env.FAKE_CLAUDE_MCP_RECONNECT, `${line}\n`);
+      out({ type: "control_response", response: refused ? { subtype: "error", request_id: control.request_id, error: "Server not connected" } : { subtype: "success", request_id: control.request_id } });
+      continue;
+    }
     if (control?.type === "control_request") {
       const usage = control.request?.subtype === "get_context_usage" ? process.env.FAKE_CLAUDE_CONTEXT_USAGE : undefined;
       const answer = { type: "control_response", response: usage

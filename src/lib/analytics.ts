@@ -13,6 +13,12 @@ export function initAnalytics(): Promise<void> {
 
 export function track(_event: string, _props?: Record<string, unknown>): void {}
 
+/** Which page this is: the desktop app's own page, or a server's. Telemetry is off either way; the export exists
+ * so upstream's call sites (the sign-in gate) keep their shape without a telemetry client. */
+export function analyticsSurface(): "local" | "server" {
+  return globalThis.window?.ogb?.environments ? "local" : "server";
+}
+
 const GATE_KEY = "omb-email-gate";
 export function emailGateDone(): boolean {
   return Boolean(localStorage.getItem(GATE_KEY));

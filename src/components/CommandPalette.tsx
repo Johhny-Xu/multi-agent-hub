@@ -1,11 +1,14 @@
 import { t } from "@/lib/i18n";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { MessageSquare, Search, Users } from "lucide-react";
 import { BotAvatar } from "./Avatar";
-import { api, openBot, useStore, type Bot, type Group } from "@/state/store";
-import { rankByName } from "@/lib/palette-rank";
+import { api, openBot } from "@/state/store";
+import { useBotsApartFromTurns, useGroupsApartFromTurns, type BotApartFromTurns, type GroupApartFromTurns } from "@/state/apart-from-turns";
+import { useStoreRef } from "@/state/store-ref";
+import { useActiveLocale } from "@/lib/use-active-locale";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { isDebugBot, isDebugSearchHit } from "@/lib/debug-zone";
+import { rankByName } from "@/lib/palette-rank";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { cn } from "@/lib/cn";
 import type { SearchHit } from "@/lib/search-hit";
@@ -13,8 +16,8 @@ import { landOnSearchHit } from "@/lib/focus-message";
 import { imeComposing } from "@/lib/send-key";
 
 type PaletteEntry =
-  | { kind: "bot"; bot: Bot }
-  | { kind: "room"; group: Group }
+  | { kind: "bot"; bot: BotApartFromTurns }
+  | { kind: "room"; group: GroupApartFromTurns }
   | { kind: "message"; hit: SearchHit };
 
 const OPEN_EVENT = "omb:open-command-palette";
@@ -23,14 +26,15 @@ export function openCommandPalette() {
   window.dispatchEvent(new Event(OPEN_EVENT));
 }
 
-export function CommandPalette({
+export const CommandPalette = memo(function CommandPalette({
   onOpenChange,
   initialOpen,
 }: {
   onOpenChange?: (open: boolean) => void;
   initialOpen?: boolean;
 }) {
-  const { state, dispatch } = useStore();
+  const store = useStoreRef(), dispatch = store.dispatch, allBots = useBotsApartFromTurns(), groups = useGroupsApartFromTurns();
+  useActiveLocale();
   const showThreads = useShowThreads();
   const advanced = useAdvancedMode();
   const [open, setOpen] = useState(initialOpen ?? false);
@@ -94,11 +98,11 @@ export function CommandPalette({
 
   if (!open) return null;
 
-  const bots = rankByName(state.bots.filter((b) => !b.hidden && (advanced || !isDebugBot(b))), q);
-  const rooms = rankByName(state.groups, q);
+  const bots = rankByName(allBots.filter((b) => !b.hidden && (advanced || !isDebugBot(b))), q);
   const visibleHits = q
-    ? (advanced ? messageHits : messageHits.filter((hit) => !isDebugSearchHit(hit, state.bots)))
+    ? (advanced ? messageHits : messageHits.filter((hit) => !isDebugSearchHit(hit, allBots)))
     : [];
+  const rooms = rankByName(groups, q);
   const entries: PaletteEntry[] = [
     ...bots.map((bot): PaletteEntry => ({ kind: "bot", bot })),
     ...rooms.map((group): PaletteEntry => ({ kind: "room", group })),
@@ -110,12 +114,13 @@ export function CommandPalette({
     if (entry.kind === "message") {
       const hit = entry.hit;
       try {
-        await landOnSearchHit(hit, state, dispatch, showThreads);
+        await landOnSearchHit(hit, store.state(), dispatch, showThreads);
       } catch (error) {
         dispatch({ type: "error", message: error instanceof Error ? error.message : String(error) });
       }
     } else if (entry.kind === "bot") {
-      openBot(dispatch, entry.bot, showThreads);
+      const bot = store.state().bots.find((candidate) => candidate.id === entry.bot.id);
+      if (bot) openBot(dispatch, bot, showThreads);
     } else {
       dispatch({ type: "select", id: entry.group.id });
     }
@@ -223,7 +228,7 @@ export function CommandPalette({
               roomOffset + i,
               () => void activate({ kind: "room", group }),
               <>
-                <Users size={16} strokeWidth={1.75} className="mx-[3px] shrink-0 text-ink-secondary" />
+                <Users size={16} className="mx-[3px] shrink-0 text-ink-secondary" />
                 <span className="truncate text-[14px] text-ink">{group.name}</span>
               </>,
             ),
@@ -259,4 +264,4 @@ export function CommandPalette({
       </div>
     </div>
   );
-}
+});

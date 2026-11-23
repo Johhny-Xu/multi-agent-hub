@@ -5,6 +5,9 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { isValidSshAlias } from "./config.ts";
 import type { ToolCall } from "./mcp-bridge.ts";
+import { containerExec, type ContainerExecResult } from "./container-computer.ts";
+import { defaultRunner, VpsHostUnreachableError, type VpsCommandRunner } from "./vps-command.ts";
+import { vpsDockerArgs } from "./vps-computer.ts";
 
 export const VPS_EXEC_DEFAULT_TIMEOUT_SECONDS = 120;
 export const VPS_EXEC_MAX_TIMEOUT_SECONDS = 600;
@@ -180,4 +183,35 @@ export function createVpsExecRelay(options: { alias: string; container: string; 
       }, Boolean(code) && Number(code![1]) !== 0);
     })();
   };
+}
+
+export interface VpsExecTarget {
+  sshAlias: string;
+  container: string;
+}
+
+/** vm_exec on a Self-hosted VPS desktop: the Local VM's exec, sent over the desktop's own Docker-over-SSH connection.
+ *  This is upstream's adapter, added next to the bridge's own exec tools above: the bridge serves a bot's own shell
+ *  commands, this one runs a command inside the desktop's container over SSH. */
+export function vpsContainerExec(
+  target: VpsExecTarget,
+  command: string,
+  options: { timeoutSeconds?: number; runner?: VpsCommandRunner } = {},
+): Promise<ContainerExecResult> {
+  const runner = options.runner ?? defaultRunner;
+  return containerExec({ containerName: target.container }, command, {
+    runtime: "docker",
+    timeoutSeconds: options.timeoutSeconds,
+    exec: async (_runtime, args, { timeout }) => {
+      try {
+        return { ...(await runner(vpsDockerArgs(target.sshAlias, args), { timeoutMs: timeout })), code: 0 };
+      } catch (error) {
+        const failure = error as { exitCode?: unknown; stdout?: string; stderr?: string };
+        if (!(error instanceof VpsHostUnreachableError) && typeof failure.exitCode === "number") {
+          return { stdout: failure.stdout ?? "", stderr: failure.stderr ?? "", code: failure.exitCode };
+        }
+        throw Object.assign(new Error(error instanceof Error ? error.message : String(error)), { status: 502 });
+      }
+    },
+  });
 }

@@ -4,6 +4,7 @@
 import {
   spawn,
   execFile,
+  execFileSync,
   type ChildProcess,
   type ChildProcessByStdio,
   type ExecFileOptions,
@@ -14,11 +15,13 @@ import { closeSync, existsSync, readdirSync, readFileSync, realpathSync } from "
 import type { Readable, Writable } from "node:stream";
 import { basename, dirname, join, resolve } from "node:path";
 import { botBox, type WrappedSpawn } from "./bot-box/box.ts";
-import type { BoxRequest } from "./bot-box/plan.ts";
+import { type BoxRequest, under } from "./bot-box/plan.ts";
 import { homeProgramsDistrusted, serverMayRunFrom, serverPath } from "./bot-box/program-trust.ts";
 import { engineMemory } from "./engine-memory.ts";
+import { engineOwners } from "./engine-owners.ts";
 import { ENGINE_TAG_ENV, engineRunTag, engineStopped, recordEngine } from "./engine-records.ts";
 import { engineHomes } from "./engine-homes/engine-homes.ts";
+import { currentTurn } from "./crash-guard.ts";
 import type { HomedSpawn } from "./engine-homes/layout.ts";
 import { resolveCliSpawn, type ResolvedSpawn } from "./env-path.ts";
 import { spawnBotWork } from "./oom-score.ts";
@@ -61,7 +64,35 @@ type LinuxProcess = { pid: number; parent: number; pgrp: number; session: number
 const linuxTrees = new WeakMap<ChildProcess, Map<number, string>>();
 const linuxGroups = new WeakMap<ChildProcess, Map<number, string>>();
 
+const PS_ROW = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/;
+
+/** macOS has no /proc: `ps` gives the same pid, parent, state and start time (`lstart`, the identity that survives PID reuse). */
+function psProcesses(pids?: readonly number[]): Map<number, LinuxProcess> {
+  const rows = new Map<number, LinuxProcess>();
+  if (pids?.length === 0) return rows;
+  let out: string;
+  try {
+    out = execFileSync("/bin/ps", [...(pids ? ["-p", pids.join(",")] : ["-A"]), "-o", "pid=,ppid=,stat=,lstart="], { encoding: "utf8", timeout: 2_000, windowsHide: true, env: { ...process.env, LC_ALL: "C" } });
+  } catch (error) {
+    if (pids && (error as { status?: number }).status === 1) return rows;
+    throw error;
+  }
+  for (const line of out.split(/\r?\n/)) {
+    const match = PS_ROW.exec(line);
+    if (match) rows.set(Number(match[1]), { pid: Number(match[1]), parent: Number(match[2]), pgrp: 0, session: 0, state: match[3][0], start: match[4].replace(/\s+/g, " ") });
+  }
+  return rows;
+}
+
+/** Reads the tracked pids: on macOS one `ps` for them all, not one per pid on each pass of a stop loop. */
+function treeReader(pids: readonly number[]): (pid: number) => LinuxProcess | null {
+  if (process.platform !== "darwin") return (pid) => linuxProcess(pid);
+  const rows = psProcesses(pids);
+  return (pid) => rows.get(pid) ?? null;
+}
+
 function linuxProcess(pid: number, file = `/proc/${pid}/stat`): LinuxProcess | null {
+  if (process.platform === "darwin") return psProcesses([pid]).get(pid) ?? null;
   let stat: string;
   try {
     stat = readFileSync(file, "utf8");
@@ -79,6 +110,30 @@ function linuxProcess(pid: number, file = `/proc/${pid}/stat`): LinuxProcess | n
     throw new Error("Unreadable Linux process identity");
   }
   return { pid, parent, pgrp, session, start, state };
+}
+
+/** /proc/<pid>/task/<tid>/children needs CONFIG_PROC_CHILDREN (CONFIG_CHECKPOINT_RESTORE before Linux 4.2); a kernel built without it, or gVisor, has no such file. */
+function linuxChildrenFiles(): boolean {
+  return existsSync(`/proc/self/task/${process.pid}/children`);
+}
+
+/** Every thread's children, or null when the list may miss one: Linux hides /proc/<pid>/task once the main thread has
+ * exited while others run, and a thread that exits hands its children to a sibling thread, after which its own
+ * children file reads empty. */
+function linuxChildren(pid: number): number[] | null {
+  let tasks: string[];
+  try { tasks = readdirSync(`/proc/${pid}/task`); } catch { return null; }
+  if (tasks.length === 0) return null;
+  const children: number[] = [];
+  for (const task of tasks) {
+    let listed: string;
+    try { listed = readFileSync(`/proc/${pid}/task/${task}/children`, "utf8"); } catch { return null; }
+    let thread: LinuxProcess | null;
+    try { thread = linuxProcess(pid, `/proc/${pid}/task/${task}/stat`); } catch { return null; }
+    if (!thread || thread.state === "Z" || thread.state === "X") return null;
+    for (const entry of listed.split(" ")) if (/^\d+$/.test(entry)) children.push(Number(entry));
+  }
+  return children;
 }
 
 function linuxGroupHasLiveMembers(pgid: number, leaderStart: string): boolean {
@@ -107,10 +162,53 @@ function linuxGroupHasLiveMembers(pgid: number, leaderStart: string): boolean {
   return false;
 }
 
-/** Linux sandbox helpers and adapter subtrees can leave the CLI's process group and reparent to PID 1. */
+/** A daemon a CLI starts on purpose to outlive it, in a session of its own: Hermes' shared gateway, which every other
+ * conversation's `hermes acp` on the same profile attaches to. A stop leaves it and its own children out of the tree. */
+function outlivesLauncher({ pid, session }: LinuxProcess): boolean {
+  if (session !== pid) return false;
+  try {
+    const argv = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
+    if (!argv.some((word, at) => word === "gateway" && argv[at + 1] === "run")) return false;
+    return readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").includes("HERMES_GATEWAY_DETACHED=1");
+  } catch {
+    return false;
+  }
+}
+
+/** Such a daemon, or a process in its session: its own children, even one recorded before the daemon's exec. */
+function leftRunning(current: LinuxProcess): boolean {
+  if (process.platform !== "linux") return false;
+  const { session } = current;
+  if (session === undefined || session === current.pid) return outlivesLauncher(current);
+  try {
+    const leader = linuxProcess(session);
+    return leader !== null && outlivesLauncher(leader);
+  } catch {
+    return false;
+  }
+}
+
+/** A child recorded between its fork and its exec still showed its launcher's command line and environment, so a
+ * gateway and its children can already be in the tree: forget them before walking the tree. */
+function forgetOutliving(tree: Map<number, string>): void {
+  for (const [pid, start] of tree) {
+    let current: LinuxProcess | null;
+    try { current = linuxProcess(pid); } catch { continue; }
+    if (current?.start === start && leftRunning(current)) tree.delete(pid);
+  }
+}
+
+function isLinuxProcess(pid: number, start: string): boolean {
+  try { return linuxProcess(pid)?.start === start; } catch { return false; }
+}
+
+/** Linux sandbox helpers and adapter subtrees can leave the CLI's process group and reparent to PID 1. Darwin has no
+ * /proc: the whole process list from `ps` is the snapshot there, the same one the group rules read. */
 export function captureCliTree(child: ChildProcess): void {
-  if (process.platform !== "linux" || !cliGroups.has(child) || !child.pid) return;
+  if ((process.platform !== "linux" && process.platform !== "darwin") || !child.pid) return;
   let tree = linuxTrees.get(child);
+  // A child of a CLI's own group, or one a tracked execFile run left behind: either way its tree is ours to walk.
+  if (!tree && !cliGroups.has(child)) return;
   if (!tree) {
     tree = new Map();
     linuxTrees.set(child, tree);
@@ -120,19 +218,58 @@ export function captureCliTree(child: ChildProcess): void {
     groups = new Map();
     linuxGroups.set(child, groups);
   }
-  const snapshot = new Map<number, LinuxProcess>();
-  let entries: string[];
-  try { entries = readdirSync("/proc"); } catch { return; }
-  for (const entry of entries) {
-    if (!/^\d+$/.test(entry)) continue;
-    const pid = Number(entry);
-    try {
-      const current = linuxProcess(pid);
-      if (current) snapshot.set(pid, current);
-    } catch {}
+  if (process.platform === "linux") {
+    forgetOutliving(tree);
+    // The per-task children files are the fast path; the full scan below is what finds the descendants that left the
+    // CLI's process group and reparented, so it runs either way.
+    if (linuxChildrenFiles()) {
+      try { addLinuxDescendants(tree); } catch {}
+    }
   }
-  const rootStart = tree.get(child.pid);
-  const rootMatches = Boolean(rootStart) && (!snapshot.has(child.pid) || snapshot.get(child.pid)?.start === rootStart);
+  addDescendantsFromEveryProcess(tree, child.pid, groups);
+}
+
+/** False when the walk may have missed a descendant; those it confirmed stay in the tree. A children file can skip a
+ * live child while a sibling listed before it is reaped (docs.kernel.org/filesystems/proc.html,
+ * "/proc/<pid>/task/<tid>/children"), and that sibling is then gone or reparented when its stat is read. */
+function addLinuxDescendants(tree: Map<number, string>): boolean {
+  const queue = [...tree].filter(([pid, start]) => isLinuxProcess(pid, start));
+  for (let next = 0; next < queue.length; next += 1) {
+    const [parent, parentStart] = queue[next];
+    const children = linuxChildren(parent);
+    if (!children || !isLinuxProcess(parent, parentStart)) return false;
+    for (const pid of children) {
+      if (pid === process.pid) continue;
+      let current: LinuxProcess | null;
+      try { current = linuxProcess(pid); } catch { return false; }
+      if (!current || current.parent !== parent) return false;
+      if (tree.get(pid) === current.start || leftRunning(current)) continue;
+      tree.set(pid, current.start);
+      queue.push([pid, current.start]);
+    }
+  }
+  return true;
+}
+
+/** Every process on this computer, so a descendant that left the CLI's process group and reparented to PID 1 is still
+ * found. A detached process group of ours and the CLI's own session count as ours. */
+function addDescendantsFromEveryProcess(tree: Map<number, string>, childPid: number, groups: Map<number, string>): void {
+  let snapshot = new Map<number, LinuxProcess>();
+  if (process.platform === "darwin") snapshot = psProcesses();
+  else {
+    let entries: string[];
+    try { entries = readdirSync("/proc"); } catch { return; }
+    for (const entry of entries) {
+      if (!/^\d+$/.test(entry)) continue;
+      const pid = Number(entry);
+      try {
+        const current = linuxProcess(pid);
+        if (current) snapshot.set(pid, current);
+      } catch {}
+    }
+  }
+  const rootStart = tree.get(childPid);
+  const rootMatches = Boolean(rootStart) && (!snapshot.has(childPid) || snapshot.get(childPid)?.start === rootStart);
   const parents = new Set([...tree].filter(([pid, start]) => snapshot.get(pid)?.start === start).map(([pid]) => pid));
   let discovered: boolean;
   do {
@@ -141,15 +278,16 @@ export function captureCliTree(child: ChildProcess): void {
       if (current.pid === process.pid || tree.get(current.pid) === current.start) continue;
       const inParentChain = parents.has(current.parent);
       const inDetachedGroup = groups.has(current.pgrp) && snapshot.get(current.pgrp)?.start === groups.get(current.pgrp);
-      const inRootSession = rootMatches && current.session === child.pid;
+      const inRootSession = rootMatches && current.session === childPid;
       if (!inParentChain && !inDetachedGroup && !inRootSession) continue;
+      if (leftRunning(current)) continue;
       tree.set(current.pid, current.start);
       parents.add(current.pid);
       discovered = true;
     }
   } while (discovered);
   for (const [pid, start] of tree) {
-    if (pid === child.pid || pid <= 1 || pid === process.pid) continue;
+    if (pid === childPid || pid <= 1 || pid === process.pid) continue;
     const current = snapshot.get(pid);
     if (current && current.start === start && current.pgrp === current.pid && !groups.has(current.pgrp)) {
       groups.set(current.pgrp, current.start);
@@ -158,16 +296,23 @@ export function captureCliTree(child: ChildProcess): void {
 }
 
 function linuxDescendantsStopped(child: ChildProcess): boolean {
-  for (const [pid, start] of linuxTrees.get(child) ?? []) {
-    if (pid === child.pid) continue;
+  const tree = [...linuxTrees.get(child) ?? []].filter(([pid]) => pid !== child.pid);
+  let read: (pid: number) => LinuxProcess | null;
+  try { read = treeReader(tree.map(([pid]) => pid)); } catch { return false; }
+  for (const [pid, start] of tree) {
     try {
-      const current = linuxProcess(pid);
-      if (current?.start === start && current.state !== "Z" && current.state !== "X") return false;
+      const current = read(pid);
+      if (current?.start === start && current.state !== "Z" && current.state !== "X" && !leftRunning(current)) return false;
     } catch { return false; }
   }
   const groups = linuxGroups.get(child);
   if (groups) {
-    for (const [pgid, leaderStart] of groups) {
+    for (const [pgid, leaderStart] of [...groups]) { // eslint-disable-line unicorn/no-useless-spread -- copy: the loop deletes from groups
+      // A daemon that starts itself to outlive its launcher (Hermes' shared gateway) keeps its group: it is left
+      // running on purpose, so its group is not a member that failed to stop.
+      let leader: LinuxProcess | null = null;
+      try { leader = linuxProcess(pgid); } catch {}
+      if (leader && leader.start === leaderStart && leftRunning(leader)) continue;
       if (linuxGroupHasLiveMembers(pgid, leaderStart)) return false;
       groups.delete(pgid);
     }
@@ -207,11 +352,16 @@ function signalLinuxDescendants(child: ChildProcess, value: NodeJS.Signals): voi
   const signaledGroups = new Set<number>();
   const groups = linuxGroups.get(child);
   if (groups) {
-    for (const [pgid, leaderStart] of groups) {
+    for (const [pgid, leaderStart] of [...groups]) { // eslint-disable-line unicorn/no-useless-spread -- copy: the loop deletes from groups
       if (!linuxGroupHasLiveMembers(pgid, leaderStart)) {
         groups.delete(pgid);
         continue;
       }
+      // A daemon that starts itself to outlive its launcher (Hermes' shared gateway) keeps its group: the tree
+      // walk leaves it out, so the group must not be signalled either.
+      let leader: LinuxProcess | null = null;
+      try { leader = linuxProcess(pgid); } catch {}
+      if (leader && leader.start === leaderStart && leftRunning(leader)) continue;
       try {
         process.kill(-pgid, value);
         signaledGroups.add(pgid);
@@ -220,12 +370,15 @@ function signalLinuxDescendants(child: ChildProcess, value: NodeJS.Signals): voi
       }
     }
   }
-  for (const [pid, start] of [...(linuxTrees.get(child) ?? [])].reverse()) {
-    if (pid === child.pid || pid <= 1 || pid === process.pid) continue;
+  const tree = [...(linuxTrees.get(child) ?? [])].reverse().filter(([pid]) => pid !== child.pid && pid > 1 && pid !== process.pid);
+  let read: (pid: number) => LinuxProcess | null;
+  try { read = treeReader(tree.map(([pid]) => pid)); } catch { return; }
+  for (const [pid, start] of tree) {
     try {
-      const current = linuxProcess(pid);
+      const current = read(pid);
       if (!current || current.start !== start || current.state === "Z" || current.state === "X") continue;
       if (signaledGroups.has(current.pgrp)) continue;
+      if (leftRunning(current)) continue;
       process.kill(pid, value);
     } catch {}
   }
@@ -286,7 +439,20 @@ export function boxedSpawn(resolved: ResolvedSpawn, opts: CliSpawnOptions, owner
   const request = typeof opts.box === "object" ? opts.box : {};
   const home = homed ? { home: homed.home, shared: homed.shared } : {};
   const threadId = engineHomes.thread(), conversationBot = engineHomes.bot();
-  return botBox.wrap({ command: resolved.command, args: resolved.args, cwd: typeof opts.cwd === "string" ? opts.cwd : undefined, env: opts.env ?? process.env, ...(threadId ? { threadId } : {}), ...(conversationBot ? { conversationBot } : {}), ...request, ...home });
+  const cwd = typeof opts.cwd === "string" ? opts.cwd : undefined;
+  const turn = projectFolderTurn(cwd);
+  return botBox.wrap({ command: resolved.command, args: resolved.args, cwd, env: opts.env ?? process.env, ...(threadId ? { threadId } : {}), ...(conversationBot ? { conversationBot } : {}), ...turn, ...request, ...home });
+}
+
+/** A configured project folder can lie inside another bot's folder, so a turn working there still needs its own bot's
+ * folder and conversation folder in its box. A turn in its bot's own folder (a room's) needs its conversation's too, for
+ * that conversation's uploads (server/box-attachments.ts). */
+function projectFolderTurn(cwd: string | undefined): { botId: string; conversationFolder: string } | null {
+  const dataDir = botBox.startOptions()?.dataDir, turn = currentTurn();
+  if (!cwd || !dataDir || !turn?.botId) return null;
+  const full = resolve(cwd), workspaces = join(resolve(dataDir), "workspaces"), conversations = join(resolve(dataDir), "task-workspaces");
+  if (under(full, conversations) || (dirname(full) === workspaces && basename(full) !== turn.botId) || full === workspaces) return null;
+  return { botId: turn.botId, conversationFolder: join(conversations, turn.botId, turn.threadId) };
 }
 
 /** What the audience rule gives a box in `cwd` now, as a key (null off a team or with the box off): a process kept
@@ -303,7 +469,13 @@ export function boxAudienceKey(cwd: string): string | null {
 export function sharedBoxScope(cwd: string): string | null {
   if (!botBox.enabled()) return null;
   const parent = dirname(resolve(cwd));
-  if (basename(dirname(parent)) !== "task-workspaces") return resolve(cwd);
+  if (basename(dirname(parent)) !== "task-workspaces") {
+    // Another bot's turn in the same project folder has that bot's folder in its box, so it never shares this process;
+    // nor does another conversation's turn in the bot's own folder, whose box has only its own conversation's uploads.
+    const turn = projectFolderTurn(cwd);
+    if (!turn) return resolve(cwd);
+    return `${resolve(cwd)}#${basename(resolve(cwd)) === turn.botId ? turn.conversationFolder : turn.botId}`;
+  }
   const threadId = engineHomes.thread(), conversationBot = engineHomes.bot();
   const threads = botBox.sharedThreadsKey({ cwd, ...(threadId ? { threadId } : {}), ...(conversationBot ? { conversationBot } : {}) });
   return threads ? `${parent}#${createHash("sha256").update(threads).digest("hex").slice(0, 16)}` : parent;
@@ -373,7 +545,7 @@ export function spawnCli(
   // The broker token minted for this process dies with it.
   if (boxed?.token) child.once("exit", boxed.release);
   if (process.platform !== "win32") cliGroups.add(child);
-  if (process.platform === "linux" && child.pid) {
+  if ((process.platform === "linux" || process.platform === "darwin") && child.pid) {
     const tree = new Map<number, string>();
     try {
       const root = linuxProcess(child.pid);
@@ -385,6 +557,8 @@ export function spawnCli(
   if (process.platform !== "win32" && owner === "bot") {
     rememberEngineSession(child);
     engineMemory.track(child);
+    // The perf sampler's rows carry a start tick only on Linux: elsewhere the engine is recorded without one, as before.
+    engineOwners.track(child, child.pid && process.platform === "linux" ? linuxTrees.get(child)?.get(child.pid) ?? null : null);
   }
 
   // On Windows a stdin write between taskkill and pipe close errors asynchronously; unlistened, that crashes the harness.
@@ -458,10 +632,16 @@ export function execCli(
     cb(err ?? (timedOut ? cutOffError(cli, opts.timeout) : null), stdout, stderr);
   });
   // Node (24) calls back only once the child exits, and a CLI wrapper that traps SIGTERM outlives the timeout's signal.
-  // Only the child is stopped: execFile starts no process group, so a grandchild that ignores SIGTERM can outlive it.
+  // execFile starts no process group: the child's descendants are tracked and signalled one by one.
   // When its timeout fires after the child exited but before Node saw the exit, Node (24) drops the output and still
   // reports success; this timer is queued just after Node's, so it marks that run as timed out.
   if (opts.timeout) {
+    if (child.pid && (process.platform === "linux" || process.platform === "darwin")) {
+      try {
+        const root = linuxProcess(child.pid);
+        if (root) linuxTrees.set(child, new Map([[root.pid, root.start]]));
+      } catch {}
+    }
     escalate = setTimeout(() => void killCliTree(child, 0), opts.timeout + EXEC_KILL_GRACE_MS);
     escalate.unref?.();
     deadline = setTimeout(() => {

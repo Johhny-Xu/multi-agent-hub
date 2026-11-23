@@ -5,19 +5,33 @@
 /** process_start: the server could not start another process (out of processes or file handles);
  * out_of_room: no memory to start an engine, or an engine that had started was stopped for memory, killed by the kernel,
  * or never sent its first output; disk_full: no room left to write; tool_server: an MCP server did not start, died or
- * needs its own sign-in; signed_out: the engine says the bot's AI needs signing in again. */
-export type HostFault = "process_start" | "out_of_room" | "disk_full" | "tool_server" | "signed_out";
+ * needs its own sign-in; signed_out: the engine says the bot's AI needs signing in again; bot_memory: the bot used more
+ * memory than this server allows one bot, and was stopped (bot-memory-cap.ts). */
+export type HostFault = "process_start" | "out_of_room" | "disk_full" | "tool_server" | "signed_out" | "bot_memory";
 
 const EXHAUSTED = String.raw`(?:EAGAIN|EMFILE|ENFILE)`;
+/** An engine that started but could not start its own threads, which counts against the same pids limit: grok 1.0.x's
+ * "grok: failed to start tokio runtime: blocking pool pre-warm stalled after 14 of 16 threads", Rust's "failed to spawn
+ * thread: Os { code: 11, kind: WouldBlock, … }", glibc's and Go's pthread_create or new-OS-thread failure with EAGAIN. */
+const THREAD_START = new RegExp(
+  String.raw`\bblocking pool pre-warm stalled\b` +
+  String.raw`|\b(?:failed to start tokio runtime|failed to (?:spawn|create) (?:a |new )?(?:OS )?thread|pthread_create)\b[^\n]*` +
+  String.raw`(?:\bresource temporarily unavailable\b|\bos error 11\b|\berrno=11\b|\bEAGAIN\b|\bWouldBlock\b)`, "i");
 const PROCESS_START = new RegExp(
   String.raw`\b(?:posix_)?spawn(?:Sync)?\b[^\n]*\b${EXHAUSTED}\b|\b${EXHAUSTED}\b[^\n]*\b(?:posix_)?spawn\b` +
   String.raw`|\bfork\b[^\n]*\bresource temporarily unavailable\b|\btoo many open files\b` +
-  String.raw`|^There is no room to start another program \(${EXHAUSTED}\)`, "i");
+  String.raw`|^There is no room to start another program \(${EXHAUSTED}\)|${THREAD_START.source}`, "i");
+
+/** Whether a line an engine wrote says it could not start its threads for want of room (the pids limit or RLIMIT_NPROC),
+ * as a refused spawn's EAGAIN does. */
+export const threadsRefused = (line: string): boolean => THREAD_START.test(line);
 const OUT_OF_ROOM = new RegExp(
   String.raw`\bENOMEM\b|\bcannot allocate memory\b|^There is no room to start another program \(ENOMEM\)` +
   String.raw`|^Ran out of room, so I (?:closed the browser|stopped this task)\b|\bran out of memory\b|\bout of memory\b|\bOOM[- ]kill` +
   String.raw`|\bexited null\b|\bexited 137\b|\(signal SIGKILL\)|\bkilled by (?:the kernel|signal SIGKILL)\b` +
   String.raw`|\b(?:never sent|sent nothing|did not send) (?:its|a|any) first (?:frame|event|output|message)\b`, "i");
+/** bot-memory-cap.ts's own line (chat.notice.botMemoryCap), after the bot's name. */
+const BOT_MEMORY = /\bused more memory than this computer allows for one bot\b/i;
 const DISK_FULL = /\bno space left on device\b|\bENOSPC\b|\bdisk quota exceeded\b|\bEDQUOT\b/i;
 const TOOL_SERVER = new RegExp(
   String.raw`\bMCP server\b[^\n]*\b(?:could not start|couldn't be set up|failed to start|exited|input closed|stdin (?:is )?closed|is not connected|session expired|needs (?:a sign-in|authentication)|refused the sign-in)\b` +
@@ -35,6 +49,7 @@ const ENGINE_EXIT = /^([\w.-]+ exited (?:-?\d+|null)(?: \(signal \w+\))? before 
 /** Which such fault a failure's own words name; null for anything else, the AI's own errors and its provider's among
  * them. Classify the system's failure text and stop reason only: never a name, a request or a model's reply. */
 export function hostFaultOf(failure: string, stopReason?: string | null): HostFault | null {
+  if (BOT_MEMORY.test(failure)) return "bot_memory";
   if (PROCESS_START.test(failure)) return "process_start";
   if (DISK_FULL.test(failure)) return "disk_full";
   if (OUT_OF_ROOM.test(failure)) return "out_of_room";
@@ -55,4 +70,5 @@ export const HOST_FAULT_WHY: Readonly<Record<HostFault, string>> = {
   disk_full: "this server's disk is full",
   tool_server: "one of its tool servers is not running or not signed in",
   signed_out: "its AI is signed out",
+  bot_memory: "it used more memory than this computer allows for one bot",
 };

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { chatNotice } from "../chat-notices.ts";
 import {
@@ -65,7 +65,18 @@ describe("what counts as activity", () => {
     const idle = sample(0, { ioBytes: 5, connections: 2, external: 0 });
     expect(TurnLiveness.activity(idle, idle, 30_000)).toEqual([]);
     const blind = { alive: true, cpuMs: 0, ioBytes: null, connections: 1, external: null };
-    expect(TurnLiveness.activity(blind, blind, 30_000)).toEqual(["network"]);
+    expect(TurnLiveness.activity(null, blind, 30_000), "one sample of grace").toEqual(["network"]);
+    expect(TurnLiveness.activity(blind, blind, 30_000), "an unchanged blind connection is not work").toEqual([]);
+    expect(TurnLiveness.activity(blind, { ...blind, connections: 2 }, 30_000), "a new connection is").toEqual(["network"]);
+  });
+
+  it("gives a remote connection one sample of grace, then only a change counts", () => {
+    const first = sample(0, { connections: 1, external: 1 });
+    expect(TurnLiveness.activity(null, first, 30_000)).toEqual(["network"]);
+    expect(TurnLiveness.activity(first, first, 30_000), "a keep-alive connection is not work").toEqual([]);
+    expect(TurnLiveness.activity(first, sample(0, { connections: 2, external: 2 }), 30_000)).toEqual(["network"]);
+    expect(TurnLiveness.activity(first, sample(0, { connections: 0, external: 0 }), 30_000), "closed is a change too").toEqual(["network"]);
+    expect(TurnLiveness.activity(first, sample(0, { ioBytes: 50, connections: 1, external: 1 }), 30_000), "bytes still count").toEqual(["io"]);
   });
 });
 
@@ -189,6 +200,50 @@ describe("watchTurn", () => {
     } finally {
       child.kill("SIGKILL");
     }
+  });
+});
+
+describe("watchTurn status timing", () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
+
+  it("takes the first and later notice timings from the environment", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OMB_TURN_STATUS_AFTER_MS", "3000");
+    vi.stubEnv("OMB_TURN_STATUS_EVERY_MS", "2000");
+    const statuses: string[] = [];
+    const watch = watchTurn({ name: "Test", stuckMs: 0, tickMs: 1_000, onStuck: () => {}, onStatus: (notice) => statuses.push(notice.message) });
+    await vi.advanceTimersByTimeAsync(2 * 60_000 - 1_000);
+    expect(statuses, "output this recent keeps it quiet").toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(statuses, "the env after time, not the ten-minute default").toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(statuses, "the env interval still spaces them").toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(statuses).toHaveLength(2);
+    watch.stop();
+  });
+
+  it("lets an explicit option override the environment", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OMB_TURN_STATUS_AFTER_MS", "1000");
+    const statuses: string[] = [];
+    const watch = watchTurn({ name: "Test", stuckMs: 0, tickMs: 1_000, statusAfterMs: 10 * 60_000, onStuck: () => {}, onStatus: (notice) => statuses.push(notice.message) });
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(statuses).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(8 * 60_000);
+    expect(statuses).toHaveLength(1);
+    watch.stop();
+  });
+
+  it("keeps both defaults at ten minutes without the variables", async () => {
+    vi.useFakeTimers();
+    const statuses: string[] = [];
+    const watch = watchTurn({ name: "Test", stuckMs: 0, tickMs: 30_000, onStuck: () => {}, onStatus: (notice) => statuses.push(notice.message) });
+    await vi.advanceTimersByTimeAsync(9 * 60_000);
+    expect(statuses).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(statuses).toHaveLength(1);
+    watch.stop();
   });
 });
 
